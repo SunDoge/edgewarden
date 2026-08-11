@@ -6,6 +6,7 @@ import {
 	BulkIdsSchema,
 	CipherImportSchema,
 	CipherSchema,
+	MoveCiphersSchema,
 } from "../schemas/ciphers";
 import {
 	executeBatch,
@@ -448,6 +449,22 @@ export const deleteCiphers = factory.createHandlers(
 				.where("user_id", "=", user.id)
 				.compile(),
 			revisionQuery(db, user.id, ts),
+		]);
+		return new Response(null, { status: 200 });
+	},
+);
+
+export const moveCiphers = factory.createHandlers(
+	vValidator("json", MoveCiphersSchema),
+	async (c) => {
+		const { ids, folderId } = c.req.valid("json");
+		const userId = c.get("user").id;
+		const db = c.get("db");
+		if (folderId && !(await foldersDb.getFolderById(db, folderId, userId))) return errorResponse("Folder not found", 404);
+		const ts = now();
+		await executeBatch(c.get("dbDialect"), [
+			db.updateTable("ciphers").set({ folder_id: folderId, updated_at: ts }).where("id", "in", ids).where("user_id", "=", userId).compile(),
+			revisionQuery(db, userId, ts),
 		]);
 		return new Response(null, { status: 200 });
 	},

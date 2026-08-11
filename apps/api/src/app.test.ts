@@ -391,8 +391,8 @@ describe("Edgewarden API", () => {
 		});
 		assert.equal(missing.status, 404);
 
-		const deleted = await request(`/api/ciphers/${cipherId}`, {
-			method: "DELETE",
+		const deleted = await request(`/api/ciphers/${cipherId}/delete`, {
+			method: "PUT",
 			headers: auth,
 		});
 		assert.equal(deleted.status, 200);
@@ -442,6 +442,33 @@ describe("Edgewarden API", () => {
 		const restored = await request(`/api/ciphers/${cipherId}/unarchive`, { method: "POST", headers: auth });
 		assert.equal(restored.status, 200, await restored.clone().text());
 		assert.equal((await restored.json<{ archivedDate: string | null }>()).archivedDate, null);
+	});
+
+	test("matches Vaultwarden cipher and folder method compatibility semantics", async () => {
+		const auth = { authorization: `Bearer ${accessToken}`, "content-type": "application/json" };
+		const folderResponse = await request("/api/folders", { method: "POST", headers: auth, body: JSON.stringify({ name: "encrypted-compat-folder" }) });
+		const folderId = (await folderResponse.json<{ id: string }>()).id;
+		assert.equal((await request(`/api/folders/${folderId}`, { method: "POST", headers: auth, body: JSON.stringify({ name: "encrypted-renamed-folder" }) })).status, 200);
+		assert.equal((await request("/api/ciphers/move", { method: "PUT", headers: auth, body: JSON.stringify({ ids: [cipherId], folderId }) })).status, 200);
+		assert.equal((await (await request(`/api/ciphers/${cipherId}`, { headers: auth })).json<{ folderId: string | null }>()).folderId, folderId);
+		assert.equal((await request("/api/ciphers/move", { method: "POST", headers: auth, body: JSON.stringify({ ids: [cipherId], folderId: null }) })).status, 200);
+
+		const createCipher = async (name: string) => {
+			const response = await request("/api/ciphers/create", { method: "POST", headers: auth, body: JSON.stringify({ type: 1, name, login: { username: "encrypted-user", password: "encrypted-password" } }) });
+			assert.equal(response.status, 200, await response.clone().text());
+			return (await response.json<{ id: string }>()).id;
+		};
+		const singleId = await createCipher("encrypted-single-delete");
+		assert.equal((await request(`/api/ciphers/${singleId}`, { method: "POST", headers: auth, body: JSON.stringify({ type: 1, name: "encrypted-updated", login: { username: "encrypted-user", password: "encrypted-password" } }) })).status, 200);
+		assert.equal((await request(`/api/ciphers/${singleId}`, { method: "DELETE", headers: auth })).status, 200);
+		assert.equal((await request(`/api/ciphers/${singleId}`, { headers: auth })).status, 404);
+
+		const softId = await createCipher("encrypted-bulk-soft-delete");
+		assert.equal((await request("/api/ciphers/delete", { method: "PUT", headers: auth, body: JSON.stringify({ ids: [softId] }) })).status, 200);
+		assert.ok((await (await request(`/api/ciphers/${softId}`, { headers: auth })).json<{ deletedDate: string | null }>()).deletedDate);
+		assert.equal((await request("/api/ciphers/delete", { method: "POST", headers: auth, body: JSON.stringify({ ids: [softId] }) })).status, 200);
+		assert.equal((await request(`/api/ciphers/${softId}`, { headers: auth })).status, 404);
+		assert.equal((await request(`/api/folders/${folderId}/delete`, { method: "POST", headers: auth })).status, 200);
 	});
 
 	test("uploads encrypted attachments with scoped short-lived URLs", async () => {

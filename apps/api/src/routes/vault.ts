@@ -61,6 +61,7 @@ import {
 	hardDeleteCiphers,
 	importCiphers,
 	listCiphers,
+	moveCiphers,
 	putDeleteCipher,
 	restoreCipher,
 	restoreCiphers,
@@ -175,17 +176,24 @@ const cipherRoutes = new Hono<HonoEnv>()
 	.post("/api/ciphers", ...createCipher)
 	.post("/api/ciphers/create", ...createCipher)
 	.post("/api/ciphers/import", ...importCiphers)
-	.post("/api/ciphers/delete", ...deleteCiphers)
+	.post("/api/ciphers/delete", ...hardDeleteCiphers)
+	.put("/api/ciphers/delete", ...deleteCiphers)
+	.delete("/api/ciphers", ...hardDeleteCiphers)
 	.post("/api/ciphers/delete-permanent", ...hardDeleteCiphers)
 	.post("/api/ciphers/restore", ...restoreCiphers)
+	.put("/api/ciphers/restore", ...restoreCiphers)
+	.put("/api/ciphers/move", ...moveCiphers)
+	.post("/api/ciphers/move", ...moveCiphers)
 	.put("/api/ciphers/archive", ...archiveCiphers)
 	.post("/api/ciphers/archive", ...archiveCiphers)
 	.put("/api/ciphers/unarchive", ...unarchiveCiphers)
 	.post("/api/ciphers/unarchive", ...unarchiveCiphers)
 	.get("/api/ciphers/:id", requireCipher, ...getCipher)
 	.put("/api/ciphers/:id", requireCipher, requireCipherWrite, ...updateCipher)
-	.delete("/api/ciphers/:id", requireCipher, requireCipherWrite, ...deleteCipher)
+	.post("/api/ciphers/:id", requireCipher, requireCipherWrite, ...updateCipher)
+	.delete("/api/ciphers/:id", requireCipher, requireCipherWrite, ...hardDeleteCipher)
 	.put("/api/ciphers/:id/delete", requireCipher, requireCipherWrite, ...putDeleteCipher)
+	.post("/api/ciphers/:id/delete", requireCipher, requireCipherWrite, ...hardDeleteCipher)
 	.delete("/api/ciphers/:id/delete", requireCipher, requireCipherWrite, ...hardDeleteCipher)
 	.put("/api/ciphers/:id/restore", requireCipher, requireCipherWrite, ...restoreCipher);
 
@@ -206,6 +214,8 @@ const folderAndDeviceRoutes = new Hono<HonoEnv>()
 	.post("/api/folders/delete", ...deleteFolders)
 	.get("/api/folders/:id", requireFolder, ...getFolder)
 	.put("/api/folders/:id", requireFolder, ...updateFolder)
+	.post("/api/folders/:id", requireFolder, ...updateFolder)
+	.post("/api/folders/:id/delete", requireFolder, ...deleteFolder)
 	.delete("/api/folders/:id", requireFolder, ...deleteFolder)
 	.get("/api/devices", ...listDevices)
 	.post("/api/devices/delete", ...deleteDevices)

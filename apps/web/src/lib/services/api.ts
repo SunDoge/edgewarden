@@ -417,7 +417,7 @@ export async function updateCipherApi(
  * 9. Delete a vault item (cipher)
  */
 export async function deleteCipherApi(id: string): Promise<void> {
-	await rpc.api.ciphers[":id"].$delete({ param: { id } });
+	await rpcJson(await rpc.api.ciphers[":id"].delete.$put({ param: { id } }));
 }
 
 export async function restoreCipherApi(id: string): Promise<void> {
@@ -433,11 +433,11 @@ export async function unarchiveCipherApi(id: string): Promise<void> {
 }
 
 export async function hardDeleteCipherApi(id: string): Promise<void> {
-	await rpcJson(await rpc.api.ciphers[":id"].delete.$delete({ param: { id } }));
+	await rpcJson(await rpc.api.ciphers[":id"].$delete({ param: { id } }));
 }
 
 export async function deleteCiphersApi(ids: string[]): Promise<void> {
-	await rpcJson(await rpc.api.ciphers.delete.$post({ json: { ids } }));
+	await rpcJson(await rpc.api.ciphers.delete.$put({ json: { ids } }));
 }
 
 export async function restoreCiphersApi(ids: string[]): Promise<void> {
