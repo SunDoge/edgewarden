@@ -183,6 +183,15 @@ describe("Edgewarden API", () => {
 		assert.match(csp, /script-src-attr 'none'/);
 	});
 
+	test("rejects oversized JSON bodies before parsing", async () => {
+		const response = await request("/api/accounts/register", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: "x".repeat(10 * 1024 * 1024 + 1),
+		});
+		assert.equal(response.status, 413);
+	});
+
 	test("serves the empty Fill Assist ruleset with public caching", async () => {
 		const manifest = await request("/fill-assist/manifest.json");
 		assert.equal(manifest.status, 200);
@@ -512,6 +521,33 @@ describe("Edgewarden API", () => {
 			"refresh_token" in (await refreshed.json<Record<string, unknown>>()),
 			false,
 		);
+	});
+
+	test("persists account login lockout across requests", async () => {
+		const payload = new URLSearchParams({
+			grant_type: "password",
+			username: "missing-account@example.com",
+			password: "invalid-password-hash",
+		});
+		for (let attempt = 0; attempt < 5; attempt++) {
+			const response = await request("/identity/connect/token", {
+				method: "POST",
+				headers: { "content-type": "application/x-www-form-urlencoded" },
+				body: payload,
+			});
+			assert.equal(response.status, 400);
+		}
+		const locked = await request("/identity/connect/token", {
+			method: "POST",
+			headers: { "content-type": "application/x-www-form-urlencoded" },
+			body: payload,
+		});
+		assert.equal(locked.status, 429);
+		const stored = await testDatabase
+			.prepare("SELECT identifier_hash FROM login_attempts LIMIT 1")
+			.first<{ identifier_hash: string }>();
+		assert.ok(stored);
+		assert.notEqual(stored.identifier_hash, "missing-account@example.com");
 	});
 
 	test("issues dedicated realtime tickets and rejects invalid websocket tickets", async () => {

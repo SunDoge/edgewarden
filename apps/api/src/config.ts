@@ -8,6 +8,14 @@ export const LIMITS = {
 		twoFactorRememberTtlSeconds: 30 * 24 * 60 * 60,
 		fileDownloadTokenTtlSeconds: 900,
 		sendAccessTokenTtlSeconds: 900,
+		loginFailureWindowSeconds: 15 * 60,
+		loginFailureLimit: 5,
+		loginLockoutSeconds: 15 * 60,
+	},
+	requestBody: {
+		jsonBytes: 10 * 1024 * 1024,
+		formBytes: 256 * 1024,
+		blobBytes: 105 * 1024 * 1024,
 	},
 	send: {
 		maxFileSizeBytes: 100 * 1024 * 1024, // 100MB
