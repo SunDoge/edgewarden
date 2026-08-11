@@ -164,6 +164,22 @@ describe("Edgewarden API", () => {
 			[0, 600_000],
 		);
 
+		const passwordPrelogin = await request(
+			"/identity/accounts/prelogin/password",
+			{
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ email: EMAIL }),
+			},
+		);
+		assert.equal(passwordPrelogin.status, 200);
+		assert.deepEqual(
+			await passwordPrelogin
+				.json<{ kdf: number; kdfIterations: number }>()
+				.then((body) => [body.kdf, body.kdfIterations]),
+			[0, 600_000],
+		);
+
 		const form = new URLSearchParams({
 			grant_type: "password",
 			username: EMAIL,

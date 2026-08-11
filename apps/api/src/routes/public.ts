@@ -31,6 +31,7 @@ import {
 
 export const publicRouter = new Hono<HonoEnv>()
 	.post("/identity/accounts/prelogin", ...prelogin)
+	.post("/identity/accounts/prelogin/password", ...prelogin)
 	.get(
 		"/identity/accounts/webauthn/assertion-options",
 		...getPasskeyAssertionOptions,
