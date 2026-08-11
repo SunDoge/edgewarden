@@ -137,7 +137,7 @@ async function handleSubmit(e: SubmitEvent) {
 			{:else}
 				{#if !configLoading && bootstrapRequired && !adminPasswordConfigured}
 					<div class="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm border border-destructive/20">
-						服务端尚未配置 ADMIN_PASSWORD，无法安全创建首个管理员账号。
+						服务端尚未配置 BOOTSTRAP_SECRET，无法安全创建首个管理员账号。
 					</div>
 				{:else if !configLoading && !registrationAvailable}
 					<div class="mb-4 p-3 rounded-lg bg-muted text-muted-foreground text-sm border">

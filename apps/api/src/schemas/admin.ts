@@ -4,5 +4,6 @@ export {
 	AuditLogSettingsSchema,
 	CreateInviteSchema,
 	DeleteInvitesQuerySchema,
+	RegistrationPolicySchema,
 	SetUserStatusSchema,
 } from "@edgewarden/shared";

@@ -200,6 +200,11 @@ export interface RegistrationConfig {
 	adminPasswordConfigured: boolean;
 }
 
+export type AdminRegistrationPolicy = Pick<
+	RegistrationConfig,
+	"signupsAllowed" | "invitationsAllowed"
+>;
+
 export async function getRegistrationConfigApi(): Promise<RegistrationConfig> {
 	const response = await fetch("/api/config", {
 		headers: { accept: "application/json" },
@@ -1203,6 +1208,22 @@ export async function listAdminUsersApi(): Promise<{ data: any[] }> {
 	return rpcJson(await rpc.api.admin.users.$get()) as Promise<{ data: any[] }>;
 }
 
+export async function getAdminRegistrationPolicyApi(): Promise<AdminRegistrationPolicy> {
+	return rpcJson(await rpc.api.admin.registration.$get());
+}
+
+export async function updateAdminRegistrationPolicyApi(
+	masterPasswordHash: string,
+	signupsAllowed: boolean,
+	invitationsAllowed: boolean,
+): Promise<AdminRegistrationPolicy> {
+	return rpcJson(
+		await rpc.api.admin.registration.$put({
+			json: { masterPasswordHash, signupsAllowed, invitationsAllowed },
+		}),
+	) as Promise<AdminRegistrationPolicy>;
+}
+
 export async function listAdminInvitesApi(
 	includeInactive = true,
 ): Promise<{ data: any[] }> {
@@ -1280,9 +1301,7 @@ export interface AuditLogQuery {
 	level?: string;
 	q?: string;
 }
-export async function listAuditLogsApi(
-	filters: AuditLogQuery = {},
-): Promise<{
+export async function listAuditLogsApi(filters: AuditLogQuery = {}): Promise<{
 	data: any[];
 	total: number;
 	limit: number;

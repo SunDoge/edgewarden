@@ -5,10 +5,14 @@ import { checkIpRateLimit } from "../middleware/rate-limit";
 import { RegisterSchema } from "../schemas/accounts";
 import { hashPasswordServer } from "../services/auth";
 import { executeBatch, revisionQuery } from "../services/db/batch";
+import { getConfigValue } from "../services/db/config";
 import * as usersDb from "../services/db/users";
 import {
-	registrationPolicy,
-	verifyAdminPassword,
+	adminPasswordConfigured,
+	BOOTSTRAP_LOCK_KEY,
+	inviteConsumptionLockKey,
+	loadRegistrationPolicy,
+	verifyBootstrapSecret,
 } from "../services/registration-policy";
 import { turnstileEnabled, turnstileSiteKey } from "../services/turnstile";
 import { errorResponse } from "../utils/response";
@@ -23,9 +27,13 @@ export const registerAccount = factory.createHandlers(
 		const body = c.req.valid("json");
 		const db = c.get("db");
 		const email = body.email.toLowerCase();
-		const policy = registrationPolicy(c.env);
-		const userCount = await usersDb.getUserCount(db);
-		const isBootstrap = userCount === 0;
+		const policy = await loadRegistrationPolicy(db, c.env);
+		const [userCount, bootstrapLock] = await Promise.all([
+			usersDb.getUserCount(db),
+			getConfigValue(db, BOOTSTRAP_LOCK_KEY),
+		]);
+		const isBootstrap = userCount === 0 && !bootstrapLock;
+		if (userCount === 0 && bootstrapLock) return errorResponse("Bootstrap has already been completed", 403);
 
 		const inviteCode = body.inviteCode?.trim();
 		const invite =
@@ -41,7 +49,7 @@ export const registerAccount = factory.createHandlers(
 		if (inviteCode && !invite)
 			return errorResponse("Invite is invalid or expired", 400);
 		if (isBootstrap) {
-			if (!(await verifyAdminPassword(c.env, body.adminPassword))) {
+			if (!(await verifyBootstrapSecret(c.env, body.adminPassword))) {
 				return errorResponse(
 					"Admin password is required to create the first account",
 					403,
@@ -91,8 +99,19 @@ export const registerAccount = factory.createHandlers(
 				.compile(),
 			revisionQuery(db, userId, ts),
 		];
+		if (isBootstrap)
+			statements.unshift(
+				db
+					.insertInto("config")
+					.values({ key: BOOTSTRAP_LOCK_KEY, value: userId })
+					.compile(),
+			);
 		if (invite)
 			statements.push(
+				db
+					.insertInto("config")
+					.values({ key: inviteConsumptionLockKey(invite.code), value: userId })
+					.compile(),
 				db
 					.updateTable("invites")
 					.set({ status: "used", used_by: userId, updated_at: ts })
@@ -100,7 +119,13 @@ export const registerAccount = factory.createHandlers(
 					.where("status", "=", "active")
 					.compile(),
 			);
-		await executeBatch(c.get("dbDialect"), statements);
+		try {
+			await executeBatch(c.get("dbDialect"), statements);
+		} catch (error) {
+			if (isBootstrap || invite)
+				return errorResponse("Registration was already completed", 409);
+			throw error;
+		}
 		return new Response(null, { status: 204 });
 	},
 );
@@ -113,8 +138,8 @@ function configPayload(
 	origin: string,
 	env: CloudflareBindings,
 	bootstrapRequired: boolean,
+	registration: Awaited<ReturnType<typeof loadRegistrationPolicy>>,
 ) {
-	const registration = registrationPolicy(env);
 	return {
 		version: LIMITS.compatibility.bitwardenServerVersion,
 		gitHash: null,
@@ -147,16 +172,27 @@ function configPayload(
 			signupsAllowed: registration.signupsAllowed,
 			invitationsAllowed: registration.invitationsAllowed,
 			bootstrapRequired,
-			adminPasswordConfigured: registration.adminPasswordConfigured,
+			adminPasswordConfigured: adminPasswordConfigured(env),
 		},
 		object: "config",
 	};
 }
 
 export const getConfig = factory.createHandlers(async (c) => {
-	const bootstrapRequired = (await usersDb.getUserCount(c.get("db"))) === 0;
+	const db = c.get("db");
+	const [userCount, bootstrapLock, registration] = await Promise.all([
+		usersDb.getUserCount(db),
+		getConfigValue(db, BOOTSTRAP_LOCK_KEY),
+		loadRegistrationPolicy(db, c.env),
+	]);
+	const bootstrapRequired = userCount === 0 && !bootstrapLock;
 	return c.json(
-		configPayload(new URL(c.req.url).origin, c.env, bootstrapRequired),
+		configPayload(
+			new URL(c.req.url).origin,
+			c.env,
+			bootstrapRequired,
+			registration,
+		),
 	);
 });
 

@@ -9,7 +9,11 @@ import {
 	updateAccountPasskeyEncryption,
 } from "../handlers/account-passkeys";
 import { deleteAccount } from "../handlers/account-deletion";
-import { createAttachment, deleteAttachment, downloadAttachment } from "../handlers/attachments";
+import {
+	createAttachment,
+	deleteAttachment,
+	downloadAttachment,
+} from "../handlers/attachments";
 import {
 	clearAuditLogs,
 	createAdminInvite,
@@ -20,7 +24,9 @@ import {
 	listAdminUsers,
 	listAuditLogs,
 	getAuditSettings,
+	getAdminRegistrationPolicy,
 	updateAuditSettings,
+	updateAdminRegistrationPolicy,
 	setAdminUserStatus,
 } from "../handlers/admin";
 import {
@@ -114,9 +120,35 @@ import {
 	getRecoveryCode,
 	listTwoFactor,
 } from "../handlers/two-factor";
-import { createTwoFactorPasskey, deleteTwoFactorPasskey, getTwoFactorPasskeyChallenge, getTwoFactorPasskeys } from "../handlers/two-factor-passkeys";
-import { disableYubikeys, getYubikeySettings, saveYubicoConfig, saveYubikeys } from "../handlers/yubikey";
-import { createCollection, createOrganization, deleteCollection, deleteOrganization, getInviteePublicKey, getOrganization, inviteOrganizationMember, listCollections, listUserCollections, listOrganizationMembers, listOrganizations, removeOrganizationMember, updateOrganizationMember, updateCollection, updateOrganization } from "../handlers/organizations";
+import {
+	createTwoFactorPasskey,
+	deleteTwoFactorPasskey,
+	getTwoFactorPasskeyChallenge,
+	getTwoFactorPasskeys,
+} from "../handlers/two-factor-passkeys";
+import {
+	disableYubikeys,
+	getYubikeySettings,
+	saveYubicoConfig,
+	saveYubikeys,
+} from "../handlers/yubikey";
+import {
+	createCollection,
+	createOrganization,
+	deleteCollection,
+	deleteOrganization,
+	getInviteePublicKey,
+	getOrganization,
+	inviteOrganizationMember,
+	listCollections,
+	listUserCollections,
+	listOrganizationMembers,
+	listOrganizations,
+	removeOrganizationMember,
+	updateOrganizationMember,
+	updateCollection,
+	updateOrganization,
+} from "../handlers/organizations";
 import { authMiddleware, requireAdmin } from "../middleware/auth";
 import { realtimeMutationMiddleware } from "../middleware/realtime";
 import { createRealtimeConnectionTicket } from "../handlers/realtime";
@@ -157,7 +189,10 @@ const accountRoutes = new Hono<HonoEnv>()
 	.post("/api/two-factor/disable", ...disableTwoFactor)
 	.post("/api/two-factor/get-recover", ...getRecoveryCode)
 	.post("/api/two-factor/get-webauthn", ...getTwoFactorPasskeys)
-	.post("/api/two-factor/get-webauthn-challenge", ...getTwoFactorPasskeyChallenge)
+	.post(
+		"/api/two-factor/get-webauthn-challenge",
+		...getTwoFactorPasskeyChallenge,
+	)
 	.put("/api/two-factor/webauthn", ...createTwoFactorPasskey)
 	.post("/api/two-factor/webauthn", ...createTwoFactorPasskey)
 	.delete("/api/two-factor/webauthn", ...deleteTwoFactorPasskey);
@@ -197,23 +232,87 @@ const cipherRoutes = new Hono<HonoEnv>()
 	.get("/api/ciphers/:id", requireCipher, ...getCipher)
 	.put("/api/ciphers/:id", requireCipher, requireCipherWrite, ...updateCipher)
 	.post("/api/ciphers/:id", requireCipher, requireCipherWrite, ...updateCipher)
-	.delete("/api/ciphers/:id", requireCipher, requireCipherWrite, ...hardDeleteCipher)
-	.put("/api/ciphers/:id/delete", requireCipher, requireCipherWrite, ...putDeleteCipher)
-	.post("/api/ciphers/:id/delete", requireCipher, requireCipherWrite, ...hardDeleteCipher)
-	.delete("/api/ciphers/:id/delete", requireCipher, requireCipherWrite, ...hardDeleteCipher)
-	.put("/api/ciphers/:id/restore", requireCipher, requireCipherWrite, ...restoreCipher);
+	.delete(
+		"/api/ciphers/:id",
+		requireCipher,
+		requireCipherWrite,
+		...hardDeleteCipher,
+	)
+	.put(
+		"/api/ciphers/:id/delete",
+		requireCipher,
+		requireCipherWrite,
+		...putDeleteCipher,
+	)
+	.post(
+		"/api/ciphers/:id/delete",
+		requireCipher,
+		requireCipherWrite,
+		...hardDeleteCipher,
+	)
+	.delete(
+		"/api/ciphers/:id/delete",
+		requireCipher,
+		requireCipherWrite,
+		...hardDeleteCipher,
+	)
+	.put(
+		"/api/ciphers/:id/restore",
+		requireCipher,
+		requireCipherWrite,
+		...restoreCipher,
+	);
 
 const cipherArchiveRoutes = new Hono<HonoEnv>()
-	.put("/api/ciphers/:id/archive", requireCipher, requireCipherWrite, ...archiveCipher)
-	.post("/api/ciphers/:id/archive", requireCipher, requireCipherWrite, ...archiveCipher)
-	.put("/api/ciphers/:id/unarchive", requireCipher, requireCipherWrite, ...unarchiveCipher)
-	.post("/api/ciphers/:id/unarchive", requireCipher, requireCipherWrite, ...unarchiveCipher);
+	.put(
+		"/api/ciphers/:id/archive",
+		requireCipher,
+		requireCipherWrite,
+		...archiveCipher,
+	)
+	.post(
+		"/api/ciphers/:id/archive",
+		requireCipher,
+		requireCipherWrite,
+		...archiveCipher,
+	)
+	.put(
+		"/api/ciphers/:id/unarchive",
+		requireCipher,
+		requireCipherWrite,
+		...unarchiveCipher,
+	)
+	.post(
+		"/api/ciphers/:id/unarchive",
+		requireCipher,
+		requireCipherWrite,
+		...unarchiveCipher,
+	);
 
 const attachmentRoutes = new Hono<HonoEnv>()
-	.post("/api/ciphers/:id/attachment/v2", requireCipher, requireCipherWrite, ...createAttachment)
-	.get("/api/ciphers/:id/attachment/:attachmentId", requireCipher, ...downloadAttachment)
-	.post("/api/ciphers/:id/attachment/:attachmentId/delete", requireCipher, requireCipherWrite, ...deleteAttachment)
-	.delete("/api/ciphers/:id/attachment/:attachmentId", requireCipher, requireCipherWrite, ...deleteAttachment);
+	.post(
+		"/api/ciphers/:id/attachment/v2",
+		requireCipher,
+		requireCipherWrite,
+		...createAttachment,
+	)
+	.get(
+		"/api/ciphers/:id/attachment/:attachmentId",
+		requireCipher,
+		...downloadAttachment,
+	)
+	.post(
+		"/api/ciphers/:id/attachment/:attachmentId/delete",
+		requireCipher,
+		requireCipherWrite,
+		...deleteAttachment,
+	)
+	.delete(
+		"/api/ciphers/:id/attachment/:attachmentId",
+		requireCipher,
+		requireCipherWrite,
+		...deleteAttachment,
+	);
 
 const folderAndDeviceRoutes = new Hono<HonoEnv>()
 	.get("/api/folders", ...listFolders)
@@ -250,25 +349,103 @@ const organizationBaseRoutes = new Hono<HonoEnv>()
 	.get("/api/organizations", ...listOrganizations)
 	.post("/api/organizations", ...createOrganization)
 	.get("/api/organizations/:orgId", requireOrgMember, ...getOrganization)
-	.put("/api/organizations/:orgId", requireOrgMember, requireOrgOwner, ...updateOrganization)
-	.post("/api/organizations/:orgId", requireOrgMember, requireOrgOwner, ...updateOrganization)
-	.delete("/api/organizations/:orgId", requireOrgMember, requireOrgOwner, ...deleteOrganization)
-	.post("/api/organizations/:orgId/delete", requireOrgMember, requireOrgOwner, ...deleteOrganization);
+	.put(
+		"/api/organizations/:orgId",
+		requireOrgMember,
+		requireOrgOwner,
+		...updateOrganization,
+	)
+	.post(
+		"/api/organizations/:orgId",
+		requireOrgMember,
+		requireOrgOwner,
+		...updateOrganization,
+	)
+	.delete(
+		"/api/organizations/:orgId",
+		requireOrgMember,
+		requireOrgOwner,
+		...deleteOrganization,
+	)
+	.post(
+		"/api/organizations/:orgId/delete",
+		requireOrgMember,
+		requireOrgOwner,
+		...deleteOrganization,
+	);
 
 const organizationMemberRoutes = new Hono<HonoEnv>()
-	.get("/api/organizations/:orgId/invitee", requireOrgMember, requireOrgManager, ...getInviteePublicKey)
-	.get("/api/organizations/:orgId/members", requireOrgMember, requireOrgManager, ...listOrganizationMembers)
-	.post("/api/organizations/:orgId/members", requireOrgMember, requireOrgManager, ...inviteOrganizationMember)
-	.put("/api/organizations/:orgId/members/:memberId", requireOrgMember, requireOrgManager, ...updateOrganizationMember)
-	.delete("/api/organizations/:orgId/members/:memberId", requireOrgMember, requireOrgManager, ...removeOrganizationMember);
+	.get(
+		"/api/organizations/:orgId/invitee",
+		requireOrgMember,
+		requireOrgManager,
+		...getInviteePublicKey,
+	)
+	.get(
+		"/api/organizations/:orgId/members",
+		requireOrgMember,
+		requireOrgManager,
+		...listOrganizationMembers,
+	)
+	.post(
+		"/api/organizations/:orgId/members",
+		requireOrgMember,
+		requireOrgManager,
+		...inviteOrganizationMember,
+	)
+	.put(
+		"/api/organizations/:orgId/members/:memberId",
+		requireOrgMember,
+		requireOrgManager,
+		...updateOrganizationMember,
+	)
+	.delete(
+		"/api/organizations/:orgId/members/:memberId",
+		requireOrgMember,
+		requireOrgManager,
+		...removeOrganizationMember,
+	);
 
 const organizationCollectionRoutes = new Hono<HonoEnv>()
-	.get("/api/organizations/:orgId/collections", requireOrgMember, ...listCollections)
-	.post("/api/organizations/:orgId/collections", requireOrgMember, requireOrgManager, ...createCollection)
-	.put("/api/organizations/:orgId/collections/:collectionId", requireOrgMember, requireOrgManager, requireCollection, ...updateCollection)
-	.post("/api/organizations/:orgId/collections/:collectionId", requireOrgMember, requireOrgManager, requireCollection, ...updateCollection)
-	.delete("/api/organizations/:orgId/collections/:collectionId", requireOrgMember, requireOrgManager, requireCollection, ...deleteCollection)
-	.post("/api/organizations/:orgId/collections/:collectionId/delete", requireOrgMember, requireOrgManager, requireCollection, ...deleteCollection);
+	.get(
+		"/api/organizations/:orgId/collections",
+		requireOrgMember,
+		...listCollections,
+	)
+	.post(
+		"/api/organizations/:orgId/collections",
+		requireOrgMember,
+		requireOrgManager,
+		...createCollection,
+	)
+	.put(
+		"/api/organizations/:orgId/collections/:collectionId",
+		requireOrgMember,
+		requireOrgManager,
+		requireCollection,
+		...updateCollection,
+	)
+	.post(
+		"/api/organizations/:orgId/collections/:collectionId",
+		requireOrgMember,
+		requireOrgManager,
+		requireCollection,
+		...updateCollection,
+	)
+	.delete(
+		"/api/organizations/:orgId/collections/:collectionId",
+		requireOrgMember,
+		requireOrgManager,
+		requireCollection,
+		...deleteCollection,
+	)
+	.post(
+		"/api/organizations/:orgId/collections/:collectionId/delete",
+		requireOrgMember,
+		requireOrgManager,
+		requireCollection,
+		...deleteCollection,
+	);
 
 const backupRoutes = new Hono<HonoEnv>()
 	.use("/api/admin/backup/*", requireAdmin)
@@ -287,6 +464,8 @@ const backupRoutes = new Hono<HonoEnv>()
 const adminRoutes = new Hono<HonoEnv>()
 	.use("/api/admin/*", requireAdmin)
 	.get("/api/admin/users", ...listAdminUsers)
+	.get("/api/admin/registration", ...getAdminRegistrationPolicy)
+	.put("/api/admin/registration", ...updateAdminRegistrationPolicy)
 	.put("/api/admin/users/:id/status", ...setAdminUserStatus)
 	.delete("/api/admin/users/:id", ...deleteAdminUser)
 	.get("/api/admin/invites", ...listAdminInvites)

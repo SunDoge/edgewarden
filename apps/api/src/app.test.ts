@@ -1304,6 +1304,32 @@ describe("Edgewarden API", () => {
 		});
 		assert.equal(wrongPassword.status, 400);
 
+		const wrongPolicyPassword = await request("/api/admin/registration", {
+			method: "PUT",
+			headers: { ...adminAuth, "content-type": "application/json" },
+			body: JSON.stringify({
+				masterPasswordHash: "wrong",
+				signupsAllowed: false,
+				invitationsAllowed: true,
+			}),
+		});
+		assert.equal(wrongPolicyPassword.status, 400);
+		const savedPolicy = await request("/api/admin/registration", {
+			method: "PUT",
+			headers: { ...adminAuth, "content-type": "application/json" },
+			body: JSON.stringify({
+				masterPasswordHash: MASTER_PASSWORD_HASH,
+				signupsAllowed: false,
+				invitationsAllowed: true,
+			}),
+		});
+		assert.equal(savedPolicy.status, 200, await savedPolicy.clone().text());
+		assert.deepEqual(await savedPolicy.json(), {
+			signupsAllowed: false,
+			invitationsAllowed: true,
+			object: "registrationPolicy",
+		});
+
 		const created = await request("/api/admin/invites", {
 			method: "POST",
 			headers: { ...adminAuth, "content-type": "application/json" },
@@ -1324,8 +1350,15 @@ describe("Edgewarden API", () => {
 			new RegExp(`/register\\?invite=${invite.code}$`),
 		);
 
-		(bindings as unknown as Record<string, unknown>).INVITATIONS_ALLOWED =
-			"false";
+		await request("/api/admin/registration", {
+			method: "PUT",
+			headers: { ...adminAuth, "content-type": "application/json" },
+			body: JSON.stringify({
+				masterPasswordHash: MASTER_PASSWORD_HASH,
+				signupsAllowed: false,
+				invitationsAllowed: false,
+			}),
+		});
 		const disabledInvite = await request("/api/accounts/register", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
@@ -1339,29 +1372,46 @@ describe("Edgewarden API", () => {
 			}),
 		});
 		assert.equal(disabledInvite.status, 400);
-		(bindings as unknown as Record<string, unknown>).INVITATIONS_ALLOWED =
-			"true";
-
-		(bindings as unknown as Record<string, unknown>).SIGNUPS_ALLOWED = "false";
-		const invitedRegistration = await request("/api/accounts/register", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
+		await request("/api/admin/registration", {
+			method: "PUT",
+			headers: { ...adminAuth, "content-type": "application/json" },
 			body: JSON.stringify({
-				email: "invited-api-test@example.com",
-				name: "Invited Test",
 				masterPasswordHash: MASTER_PASSWORD_HASH,
-				key: "encrypted-invited-key",
-				kdf: 0,
-				kdfIterations: 600_000,
-				inviteCode: invite.code,
+				signupsAllowed: false,
+				invitationsAllowed: true,
 			}),
 		});
-		assert.equal(
-			invitedRegistration.status,
-			204,
-			await invitedRegistration.clone().text(),
+		const invitedPayload = (email: string) => ({
+			email,
+			name: "Invited Test",
+			masterPasswordHash: MASTER_PASSWORD_HASH,
+			key: "encrypted-invited-key",
+			kdf: 0,
+			kdfIterations: 600_000,
+			inviteCode: invite.code,
+		});
+		const competingRegistrations = await Promise.all([
+			request("/api/accounts/register", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify(invitedPayload("invited-api-test@example.com")),
+			}),
+			request("/api/accounts/register", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify(invitedPayload("invite-race@example.com")),
+			}),
+		]);
+		const competingStatuses = competingRegistrations.map(
+			(response) => response.status,
 		);
-		(bindings as unknown as Record<string, unknown>).SIGNUPS_ALLOWED = "true";
+		assert.equal(
+			competingStatuses.filter((status) => status === 204).length,
+			1,
+		);
+		assert.ok(
+			competingStatuses.every((status) => [204, 400, 409].includes(status)),
+		);
 
 		const replayInvite = await request("/api/accounts/register", {
 			method: "POST",
@@ -1376,6 +1426,15 @@ describe("Edgewarden API", () => {
 			}),
 		});
 		assert.equal(replayInvite.status, 400);
+		await request("/api/admin/registration", {
+			method: "PUT",
+			headers: { ...adminAuth, "content-type": "application/json" },
+			body: JSON.stringify({
+				masterPasswordHash: MASTER_PASSWORD_HASH,
+				signupsAllowed: true,
+				invitationsAllowed: true,
+			}),
+		});
 
 		const banned = await request(`/api/admin/users/${member.id}/status`, {
 			method: "PUT",

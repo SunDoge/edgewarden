@@ -18,11 +18,14 @@ npm run cf-typegen
 The first account is always the administrator and requires a deployment secret:
 
 ```sh
-wrangler secret put ADMIN_PASSWORD
+wrangler secret put BOOTSTRAP_SECRET
 ```
 
-`ADMIN_PASSWORD` is compared in constant time, is never stored in D1, and is
+`BOOTSTRAP_SECRET` is compared in constant time, is never stored in D1, and is
 never returned by `/api/config`. Use a unique, randomly generated secret.
+
+`ADMIN_PASSWORD` remains accepted as a compatibility alias for existing
+deployments. New deployments should use `BOOTSTRAP_SECRET`.
 
 `SIGNUPS_ALLOWED` controls registration without an invite and defaults to
 `false`. `INVITATIONS_ALLOWED` controls registration with an active, unexpired
