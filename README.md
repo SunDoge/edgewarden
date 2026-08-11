@@ -60,3 +60,18 @@ bun run db:migrate:remote
 ```
 
 `bun run deploy` intentionally runs the remote migration command before `wrangler deploy`. Applied migrations are tracked by D1 and are not executed again.
+
+## Development and operations
+
+```sh
+bun run check
+bun run test
+bun run test:compat:bw   # requires BW_SERVER, BW_EMAIL, BW_PASSWORD
+bun run domains:sync     # refresh generated Bitwarden global domain rules
+```
+
+The release number is shared by the API, Web Vault, and backup manifests through `packages/shared/version.ts`. Bitwarden's advertised compatibility version is deliberately separate because official clients use it for capability negotiation.
+
+- [Client compatibility and test matrix](docs/compatibility.md)
+- [Upgrade, restore, and troubleshooting guide](docs/operations.md)
+- [Security boundaries](docs/security.md)

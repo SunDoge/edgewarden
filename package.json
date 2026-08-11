@@ -16,7 +16,7 @@
 		"db:migrate:remote:kv": "bun run --filter @edgewarden/api db:apply:remote:kv",
 		"deploy": "bun run db:migrate:remote && bun run --filter @edgewarden/api deploy",
 		"deploy:kv": "bun run db:migrate:remote:kv && bun run --filter @edgewarden/api deploy:kv",
-		"test": "bun run --parallel --filter './apps/*' --if-present test",
+		"test": "bun run --filter @edgewarden/api test && bun run --filter @edgewarden/web test",
 		"test:compat:bw": "bun scripts/bw-compat-smoke.ts",
 		"test:integration:cloudflare": "bun scripts/cloudflare-integration-smoke.ts",
 		"domains:sync": "bun scripts/sync-bitwarden-domains.ts",

@@ -380,6 +380,9 @@ async function importPreparedBackupRows(
 		users: cloneRows(payload.users || []).map((row) => ({
 			...row,
 			verify_devices: row.verify_devices ?? 1,
+			// A restore is a security boundary: do not let access tokens signed
+			// before the restore remain usable against the replaced database.
+			security_stamp: crypto.randomUUID(),
 		})),
 		domain_settings: cloneRows(payload.domain_settings || []),
 		user_revisions: cloneRows(payload.user_revisions || []),
