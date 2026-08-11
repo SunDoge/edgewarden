@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
 
 const ref = process.env.BITWARDEN_SERVER_REF ?? "main";
 const enumPath = "src/Core/Enums/GlobalEquivalentDomainsType.cs";
@@ -6,11 +7,11 @@ const storePath = "src/Core/Utilities/StaticStore.cs";
 const rawUrl = (path: string) =>
 	`https://raw.githubusercontent.com/bitwarden/server/${encodeURIComponent(ref)}/${path}`;
 const outputPath = resolve(
-	import.meta.dir,
+	import.meta.dirname,
 	"../apps/api/src/static/global_domains.bitwarden.json",
 );
 const metadataPath = resolve(
-	import.meta.dir,
+	import.meta.dirname,
 	"../apps/api/src/static/global_domains.bitwarden.meta.json",
 );
 
@@ -66,7 +67,7 @@ async function fetchSource(path: string): Promise<string> {
 
 async function readJson(path: string): Promise<unknown> {
 	try {
-		return await Bun.file(path).json();
+		return JSON.parse(await readFile(path, "utf8"));
 	} catch {
 		return null;
 	}
@@ -90,8 +91,8 @@ async function main(): Promise<void> {
 	}
 	if (process.argv.includes("--check"))
 		throw new Error("Bitwarden domain rules are out of date");
-	await Bun.write(outputPath, `${JSON.stringify(rules, null, "\t")}\n`);
-	await Bun.write(
+	await writeFile(outputPath, `${JSON.stringify(rules, null, "\t")}\n`, "utf8");
+	await writeFile(
 		metadataPath,
 		`${JSON.stringify(
 			{
@@ -109,6 +110,7 @@ async function main(): Promise<void> {
 			null,
 			"\t",
 		)}\n`,
+		"utf8",
 	);
 	console.log(`Updated ${rules.length} Bitwarden global domain rules.`);
 }

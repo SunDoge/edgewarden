@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import {
-	afterAll as after,
-	beforeAll as before,
-	describe,
-	test,
-} from "bun:test";
+import { afterAll as after, beforeAll as before, describe, test } from "vitest";
 import { fileURLToPath } from "node:url";
 import { unzipSync } from "fflate";
 import { Miniflare } from "miniflare";

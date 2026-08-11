@@ -9,8 +9,8 @@ Edgewarden is a Bitwarden-compatible password manager designed for Cloudflare Wo
 Click the button above, connect GitHub, and accept the detected build and deploy commands:
 
 ```text
-Build command:  bun run build
-Deploy command: bun run deploy
+Build command:  pnpm build
+Deploy command: pnpm deploy
 ```
 
 Cloudflare automatically provisions and binds the required D1 database and R2 bucket. The deploy command applies every pending D1 migration through the `DB` binding before publishing the Worker.
@@ -34,40 +34,43 @@ To enable Turnstile for both login and registration, also configure the optional
 R2 is the recommended storage backend for encrypted attachments and backup files. If the Cloudflare account cannot enable R2, select the same repository from Workers Builds and change only the deploy command to:
 
 ```text
-bun run deploy:kv
+pnpm deploy:kv
 ```
 
 The KV deployment uses `wrangler.kv.jsonc`, provisions D1 and KV only, and never declares or provisions an R2 bucket. KV limits each encrypted object to 25 MiB. Do not switch an existing deployment between R2 and KV without first migrating or backing up its stored objects.
 
 ## Manual deployment
 
-Install dependencies, create `.dev.vars` from `.dev.vars.example`, then run:
+The repository pins Node.js 26 and installs the latest pnpm release through `mise.toml`. For local development, install the toolchain and dependencies, create `.dev.vars` from `.dev.vars.example`, then run:
 
 ```sh
-bun install
-bun run build
-bun run deploy
+mise install
+pnpm install --frozen-lockfile
+pnpm build
+pnpm deploy
 ```
+
+Cloudflare Workers Builds does not need `mise`; the committed pnpm lockfile identifies the package manager.
 
 Useful migration commands:
 
 ```sh
 # Local D1 used by wrangler dev
-bun run db:migrate:local
+pnpm db:migrate:local
 
 # Bound production D1; safe to run repeatedly
-bun run db:migrate:remote
+pnpm db:migrate:remote
 ```
 
-`bun run deploy` intentionally runs the remote migration command before `wrangler deploy`. Applied migrations are tracked by D1 and are not executed again.
+`pnpm deploy` intentionally runs the remote migration command before `wrangler deploy`. Applied migrations are tracked by D1 and are not executed again.
 
 ## Development and operations
 
 ```sh
-bun run check
-bun run test
-bun run test:compat:bw   # requires BW_SERVER, BW_EMAIL, BW_PASSWORD
-bun run domains:sync     # refresh generated Bitwarden global domain rules
+pnpm check
+pnpm test
+pnpm test:compat:bw   # requires BW_SERVER, BW_EMAIL, BW_PASSWORD
+pnpm domains:sync     # refresh generated Bitwarden global domain rules
 ```
 
 The release number is shared by the API, Web Vault, and backup manifests through `packages/shared/version.ts`. Bitwarden's advertised compatibility version is deliberately separate because official clients use it for capability negotiation.

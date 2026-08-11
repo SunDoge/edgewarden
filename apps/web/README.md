@@ -15,12 +15,12 @@ To recreate this project with the same configuration:
 
 ```sh
 # recreate this project
-bunx sv@0.16.1 create --template minimal --types ts --add tailwindcss="plugins:typography,forms" sveltekit-adapter="adapter:static" --install bun web
+pnpm dlx sv@0.16.1 create --template minimal --types ts --add tailwindcss="plugins:typography,forms" sveltekit-adapter="adapter:static" --install pnpm web
 ```
 
 ## Developing
 
-Once you've created a project and installed dependencies with `bun install`, start a development server:
+Once you've created a project and installed dependencies with `pnpm install`, start a development server:
 
 ```sh
 npm run dev

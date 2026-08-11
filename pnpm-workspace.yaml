@@ -1,0 +1,16 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+allowBuilds:
+  "@tailwindcss/oxide": true
+  better-sqlite3: true
+  esbuild: true
+  sharp: true
+  workerd: true
+
+minimumReleaseAgeExclude:
+  - miniflare@5.20260804.0-alpha
+  # This Wrangler version already existed in the reviewed Bun lockfile before
+  # the pnpm migration, so it is not a newly introduced dependency update.
+  - wrangler@4.120.1

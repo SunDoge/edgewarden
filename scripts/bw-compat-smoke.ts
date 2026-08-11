@@ -1,4 +1,6 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -23,28 +25,18 @@ type BwOptions = {
 	quiet?: boolean;
 };
 
+const execFileAsync = promisify(execFile);
+
 async function bw(args: string[], options: BwOptions = {}): Promise<string> {
-	const child = Bun.spawn(["bw", ...args], {
+	const { stdout, stderr } = await execFileAsync("bw", args, {
 		env: {
 			...process.env,
 			BITWARDENCLI_APPDATA_DIR: appDataDirectory,
 			BW_PASSWORD: password,
 			...(options.session ? { BW_SESSION: options.session } : {}),
 		},
-		stdin: "ignore",
-		stdout: "pipe",
-		stderr: "pipe",
+		maxBuffer: 10 * 1024 * 1024,
 	});
-	const [stdout, stderr, exitCode] = await Promise.all([
-		new Response(child.stdout).text(),
-		new Response(child.stderr).text(),
-		child.exited,
-	]);
-	if (exitCode !== 0) {
-		throw new Error(
-			`bw ${args[0] ?? "command"} failed: ${stderr.trim() || stdout.trim() || `exit ${exitCode}`}`,
-		);
-	}
 	if (!options.quiet && stderr.trim()) process.stderr.write(stderr);
 	return stdout.trim();
 }
@@ -145,7 +137,7 @@ try {
 
 	attachmentPath = join(appDataDirectory, "encrypted-smoke-attachment.bin");
 	const attachmentBytes = crypto.getRandomValues(new Uint8Array(64));
-	await Bun.write(attachmentPath, attachmentBytes);
+	await writeFile(attachmentPath, attachmentBytes);
 	await bw(
 		["create", "attachment", "--file", attachmentPath, "--itemid", itemId],
 		{
@@ -169,9 +161,7 @@ try {
 		],
 		{ session, quiet: true },
 	);
-	const downloaded = new Uint8Array(
-		await Bun.file(downloadedPath).arrayBuffer(),
-	);
+	const downloaded = new Uint8Array(await readFile(downloadedPath));
 	if (!downloaded.every((byte, index) => byte === attachmentBytes[index])) {
 		throw new Error("CLI attachment bytes did not round-trip");
 	}

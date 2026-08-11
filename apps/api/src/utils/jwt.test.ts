@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { describe, test } from "bun:test";
+import { describe, test } from "vitest";
 import {
 	createJWT,
 	verifyJWT,
@@ -110,23 +110,48 @@ describe("jwt utils", () => {
 
 	describe("attachmentUploadToken", () => {
 		test("binds an upload URL to the user, cipher and attachment", async () => {
-			const token = await createAttachmentUploadToken("user-id", "cipher-id", "attachment-id", secret);
+			const token = await createAttachmentUploadToken(
+				"user-id",
+				"cipher-id",
+				"attachment-id",
+				secret,
+			);
 			const verified = await verifyAttachmentUploadToken(token, secret);
 			assert.deepEqual(
-				verified && [verified.userId, verified.cipherId, verified.attachmentId, verified.typ],
+				verified && [
+					verified.userId,
+					verified.cipherId,
+					verified.attachmentId,
+					verified.typ,
+				],
 				["user-id", "cipher-id", "attachment-id", "attachment_upload"],
 			);
 		});
 
 		test("rejects a token signed by another server", async () => {
-			const token = await createAttachmentUploadToken("user-id", "cipher-id", "attachment-id", secret);
-			assert.strictEqual(await verifyAttachmentUploadToken(token, "another-long-secret-key-that-is-invalid"), null);
+			const token = await createAttachmentUploadToken(
+				"user-id",
+				"cipher-id",
+				"attachment-id",
+				secret,
+			);
+			assert.strictEqual(
+				await verifyAttachmentUploadToken(
+					token,
+					"another-long-secret-key-that-is-invalid",
+				),
+				null,
+			);
 		});
 	});
 
 	describe("realtime tickets", () => {
 		test("creates a short-lived user and security-stamp bound ticket", async () => {
-			const token = await createRealtimeTicket("user-id", "security-stamp", secret);
+			const token = await createRealtimeTicket(
+				"user-id",
+				"security-stamp",
+				secret,
+			);
 			const verified = await verifyRealtimeTicket(token, secret);
 			assert.deepEqual(
 				verified && [verified.sub, verified.sstamp, verified.typ],
@@ -136,8 +161,18 @@ describe("jwt utils", () => {
 		});
 
 		test("rejects a realtime ticket signed by another server", async () => {
-			const token = await createRealtimeTicket("user-id", "security-stamp", secret);
-			assert.equal(await verifyRealtimeTicket(token, "another-long-secret-key-that-is-invalid"), null);
+			const token = await createRealtimeTicket(
+				"user-id",
+				"security-stamp",
+				secret,
+			);
+			assert.equal(
+				await verifyRealtimeTicket(
+					token,
+					"another-long-secret-key-that-is-invalid",
+				),
+				null,
+			);
 		});
 	});
 });
