@@ -26,11 +26,28 @@ import {
 	downloadAttachmentApi,
 	deleteAttachmentApi,
 } from "$lib/services/api";
-import { vault, syncVaultData, logout, getOrganizationKey } from "$lib/stores/vault.svelte";
+import {
+	vault,
+	syncVaultData,
+	logout,
+	getOrganizationKey,
+} from "$lib/stores/vault.svelte";
 import { encryptCipher, calcTotpNow, encryptStr } from "$lib/services/crypto";
-import { filterAndSortVaultItems, findDuplicateCipherIds, type DuplicateMode, type VaultCategory, type VaultSort } from "$lib/services/vault-filter";
+import {
+	filterAndSortVaultItems,
+	findDuplicateCipherIds,
+	type DuplicateMode,
+	type VaultCategory,
+	type VaultSort,
+} from "$lib/services/vault-filter";
 import { buildCipherPayload } from "$lib/services/cipher-draft";
-import { decryptAttachmentFile, prepareAttachment, safeAttachmentFileName, type AttachmentKeys } from "$lib/services/attachment-crypto";
+import {
+	decryptAttachmentFile,
+	prepareAttachment,
+	safeAttachmentFileName,
+	type AttachmentKeys,
+} from "$lib/services/attachment-crypto";
+import { scanTotpQrFile } from "$lib/services/totp-qr";
 import { match } from "ts-pattern";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
@@ -77,6 +94,7 @@ import {
 	UserRoundCog,
 	ScrollText,
 	Building2,
+	ScanLine,
 } from "@lucide/svelte";
 
 // UI state
@@ -233,9 +251,28 @@ let editCollectionIds = $state<string[]>([]);
 let loginUsername = $state("");
 let loginPassword = $state("");
 let loginUri = $state("");
-let loginUris = $state<Array<{ uri: string; match: number | null }>>([{ uri: "", match: null }]);
+let loginUris = $state<Array<{ uri: string; match: number | null }>>([
+	{ uri: "", match: null },
+]);
 let loginTotp = $state("");
-let customFields = $state<Array<{ name: string; value: string; type: number }>>([]);
+let totpQrError = $state("");
+let totpQrInput = $state<HTMLInputElement | null>(null);
+
+async function importTotpQr(event: Event) {
+	const input = event.currentTarget as HTMLInputElement;
+	const file = input.files?.[0];
+	input.value = "";
+	if (!file) return;
+	totpQrError = "";
+	try {
+		loginTotp = await scanTotpQrFile(file);
+	} catch (error) {
+		totpQrError = error instanceof Error ? error.message : "无法识别二维码";
+	}
+}
+let customFields = $state<Array<{ name: string; value: string; type: number }>>(
+	[],
+);
 let extraData = $state("{}");
 
 let cardholderName = $state("");
@@ -257,14 +294,27 @@ onMount(async () => {
 	await syncVaultData();
 	const requestedCipherId = page.url.searchParams.get("cipher");
 	if (requestedCipherId) {
-		selectedItem = vault.ciphers.find((cipher) => cipher.id === requestedCipherId) ?? null;
+		selectedItem =
+			vault.ciphers.find((cipher) => cipher.id === requestedCipherId) ?? null;
 	}
 });
 
 // Derived filtering
-let filteredItems = $derived(filterAndSortVaultItems(vault.ciphers, { category: activeCategory, folderId: activeFolder, query: searchQuery, sort: sortMode, duplicateMode }));
-let selectedIdList = $derived(Object.keys(selectedIds).filter((id) => selectedIds[id]));
-let duplicateCount = $derived(findDuplicateCipherIds(vault.ciphers, duplicateMode).size);
+let filteredItems = $derived(
+	filterAndSortVaultItems(vault.ciphers, {
+		category: activeCategory,
+		folderId: activeFolder,
+		query: searchQuery,
+		sort: sortMode,
+		duplicateMode,
+	}),
+);
+let selectedIdList = $derived(
+	Object.keys(selectedIds).filter((id) => selectedIds[id]),
+);
+let duplicateCount = $derived(
+	findDuplicateCipherIds(vault.ciphers, duplicateMode).size,
+);
 
 async function handleLogout() {
 	await logout();
@@ -282,7 +332,11 @@ async function handleAttachmentUpload(event: Event) {
 	const cipher = selectedItem;
 	input.value = "";
 	if (!file || !cipher || cipher.deletedDate || cipher.readOnly) return;
-	const ownerKey = cipher.organizationId ? getOrganizationKey(cipher.organizationId) : (vault.symEncKey && vault.symMacKey ? { encKey: vault.symEncKey, macKey: vault.symMacKey } : null);
+	const ownerKey = cipher.organizationId
+		? getOrganizationKey(cipher.organizationId)
+		: vault.symEncKey && vault.symMacKey
+			? { encKey: vault.symEncKey, macKey: vault.symMacKey }
+			: null;
 	if (!ownerKey) {
 		alert("密钥未就绪，请重新解锁保险库");
 		return;
@@ -290,16 +344,27 @@ async function handleAttachmentUpload(event: Event) {
 	attachmentBusy = "upload";
 	let createdId: string | null = null;
 	try {
-		const prepared = await prepareAttachment(cipher, file, ownerKey.encKey, ownerKey.macKey);
+		const prepared = await prepareAttachment(
+			cipher,
+			file,
+			ownerKey.encKey,
+			ownerKey.macKey,
+		);
 		const created = await createAttachmentApi(cipher.id, prepared.metadata);
 		createdId = created.attachmentId;
 		await uploadAttachmentApi(created.url, prepared.encryptedData);
 		await refreshSelectedItem(cipher.id);
 	} catch (error) {
 		if (createdId) {
-			try { await deleteAttachmentApi(cipher.id, createdId); } catch { /* best-effort metadata cleanup */ }
+			try {
+				await deleteAttachmentApi(cipher.id, createdId);
+			} catch {
+				/* best-effort metadata cleanup */
+			}
 		}
-		alert(`附件上传失败：${error instanceof Error ? error.message : String(error)}`);
+		alert(
+			`附件上传失败：${error instanceof Error ? error.message : String(error)}`,
+		);
 	} finally {
 		attachmentBusy = null;
 	}
@@ -309,9 +374,18 @@ async function handleAttachmentDownload(attachment: any) {
 	if (!selectedItem || !attachment?._keys) return;
 	attachmentBusy = attachment.id;
 	try {
-		const encrypted = await downloadAttachmentApi(selectedItem.id, attachment.id);
-		const plain = await decryptAttachmentFile(encrypted, attachment._keys as AttachmentKeys);
-		const bytes = plain.buffer.slice(plain.byteOffset, plain.byteOffset + plain.byteLength) as ArrayBuffer;
+		const encrypted = await downloadAttachmentApi(
+			selectedItem.id,
+			attachment.id,
+		);
+		const plain = await decryptAttachmentFile(
+			encrypted,
+			attachment._keys as AttachmentKeys,
+		);
+		const bytes = plain.buffer.slice(
+			plain.byteOffset,
+			plain.byteOffset + plain.byteLength,
+		) as ArrayBuffer;
 		const url = URL.createObjectURL(new Blob([bytes]));
 		const anchor = document.createElement("a");
 		anchor.href = url;
@@ -319,7 +393,9 @@ async function handleAttachmentDownload(attachment: any) {
 		anchor.click();
 		setTimeout(() => URL.revokeObjectURL(url), 0);
 	} catch (error) {
-		alert(`附件下载失败：${error instanceof Error ? error.message : String(error)}`);
+		alert(
+			`附件下载失败：${error instanceof Error ? error.message : String(error)}`,
+		);
 	} finally {
 		attachmentBusy = null;
 	}
@@ -327,14 +403,19 @@ async function handleAttachmentDownload(attachment: any) {
 
 async function handleAttachmentDelete(attachment: any) {
 	const cipher = selectedItem;
-	if (cipher?.readOnly) { alert("该组织条目为只读"); return; }
+	if (cipher?.readOnly) {
+		alert("该组织条目为只读");
+		return;
+	}
 	if (!cipher || !confirm(`确定删除附件“${attachment.fileName}”吗？`)) return;
 	attachmentBusy = attachment.id;
 	try {
 		await deleteAttachmentApi(cipher.id, attachment.id);
 		await refreshSelectedItem(cipher.id);
 	} catch (error) {
-		alert(`附件删除失败：${error instanceof Error ? error.message : String(error)}`);
+		alert(
+			`附件删除失败：${error instanceof Error ? error.message : String(error)}`,
+		);
 	} finally {
 		attachmentBusy = null;
 	}
@@ -449,7 +530,10 @@ function startCreate() {
 
 function startEdit() {
 	if (!selectedItem) return;
-	if (selectedItem.readOnly) { alert("该组织条目为只读"); return; }
+	if (selectedItem.readOnly) {
+		alert("该组织条目为只读");
+		return;
+	}
 	isCreating = false;
 	isEditing = true;
 
@@ -466,7 +550,13 @@ function startEdit() {
 	loginUri = "";
 	loginUris = [{ uri: "", match: null }];
 	loginTotp = "";
-	customFields = Array.isArray(selectedItem.fields) ? selectedItem.fields.map((field: any) => ({ name: field.name ?? "", value: field.value ?? "", type: Number(field.type ?? 0) })) : [];
+	customFields = Array.isArray(selectedItem.fields)
+		? selectedItem.fields.map((field: any) => ({
+				name: field.name ?? "",
+				value: field.value ?? "",
+				type: Number(field.type ?? 0),
+			}))
+		: [];
 	extraData = "{}";
 	cardholderName = "";
 	cardNumber = "";
@@ -479,7 +569,13 @@ function startEdit() {
 		loginUsername = login.username ?? "";
 		loginPassword = login.password ?? "";
 		loginUri = login.uri ?? "";
-		loginUris = Array.isArray(login.uris) && login.uris.length ? login.uris.map((entry: any) => ({ uri: entry.uri ?? "", match: entry.match ?? null })) : [{ uri: login.uri ?? "", match: null }];
+		loginUris =
+			Array.isArray(login.uris) && login.uris.length
+				? login.uris.map((entry: any) => ({
+						uri: entry.uri ?? "",
+						match: entry.match ?? null,
+					}))
+				: [{ uri: login.uri ?? "", match: null }];
 		loginTotp = login.totp ?? "";
 	} else if (editType === CipherType.Card) {
 		const card = selectedItem.card || {};
@@ -514,19 +610,45 @@ function toggleEditCollection(collectionId: string, checked: boolean) {
 
 async function handleSaveCipher() {
 	try {
-		const payload = buildCipherPayload({
-			type: editType, name: editName, notes: editNotes, favorite: editFavorite, folderId: editFolderId,
-			login: { username: loginUsername, password: loginPassword, uri: loginUri, uris: loginUris, totp: loginTotp },
-			card: { cardholderName, number: cardNumber }, identity: { firstName, lastName, number: identityNumber },
-			customFields, extraData,
-		}, selectedItem, isEditing);
-		const ownerKey = editOrganizationId ? getOrganizationKey(editOrganizationId) : (vault.symEncKey && vault.symMacKey ? { encKey: vault.symEncKey, macKey: vault.symMacKey } : null);
+		const payload = buildCipherPayload(
+			{
+				type: editType,
+				name: editName,
+				notes: editNotes,
+				favorite: editFavorite,
+				folderId: editFolderId,
+				login: {
+					username: loginUsername,
+					password: loginPassword,
+					uri: loginUri,
+					uris: loginUris,
+					totp: loginTotp,
+				},
+				card: { cardholderName, number: cardNumber },
+				identity: { firstName, lastName, number: identityNumber },
+				customFields,
+				extraData,
+			},
+			selectedItem,
+			isEditing,
+		);
+		const ownerKey = editOrganizationId
+			? getOrganizationKey(editOrganizationId)
+			: vault.symEncKey && vault.symMacKey
+				? { encKey: vault.symEncKey, macKey: vault.symMacKey }
+				: null;
 		if (!ownerKey) {
 			throw new Error("密钥未就绪，请重新解锁保险库");
 		}
-		if (editOrganizationId && !editCollectionIds.length) throw new Error("组织条目至少需要选择一个集合");
+		if (editOrganizationId && !editCollectionIds.length)
+			throw new Error("组织条目至少需要选择一个集合");
 		const encryptedPayload = await encryptCipher(
-			{ ...payload, folderId: editOrganizationId ? null : payload.folderId, organizationId: editOrganizationId, collectionIds: editOrganizationId ? editCollectionIds : [] },
+			{
+				...payload,
+				folderId: editOrganizationId ? null : payload.folderId,
+				organizationId: editOrganizationId,
+				collectionIds: editOrganizationId ? editCollectionIds : [],
+			},
 			ownerKey.encKey,
 			ownerKey.macKey,
 		);
@@ -547,7 +669,10 @@ async function handleSaveCipher() {
 
 function handleDeleteCipher() {
 	if (!selectedItem) return;
-	if (selectedItem.readOnly) { alert("该组织条目为只读"); return; }
+	if (selectedItem.readOnly) {
+		alert("该组织条目为只读");
+		return;
+	}
 	deleteDialogOpen = true;
 }
 
@@ -570,38 +695,74 @@ async function confirmDeleteCipher() {
 
 async function restoreSelectedCipher() {
 	if (!selectedItem?.deletedDate) return;
-	if (selectedItem.readOnly) { alert("该组织条目为只读"); return; }
+	if (selectedItem.readOnly) {
+		alert("该组织条目为只读");
+		return;
+	}
 	deleteLoading = true;
-	try { await restoreCipherApi(selectedItem.id); selectedItem = null; await syncVaultData(); } catch (e: any) { alert("恢复失败：" + (e.message || e)); } finally { deleteLoading = false; }
+	try {
+		await restoreCipherApi(selectedItem.id);
+		selectedItem = null;
+		await syncVaultData();
+	} catch (e: any) {
+		alert("恢复失败：" + (e.message || e));
+	} finally {
+		deleteLoading = false;
+	}
 }
 
 async function toggleArchiveSelected() {
 	if (!selectedItem || selectedItem.deletedDate) return;
-	if (selectedItem.readOnly) { alert("该组织条目为只读"); return; }
+	if (selectedItem.readOnly) {
+		alert("该组织条目为只读");
+		return;
+	}
 	deleteLoading = true;
 	try {
 		if (selectedItem.archivedDate) await unarchiveCipherApi(selectedItem.id);
 		else await archiveCipherApi(selectedItem.id);
 		selectedItem = null;
 		await syncVaultData();
-	} catch (e: any) { alert("归档操作失败：" + (e.message || e)); }
-	finally { deleteLoading = false; }
+	} catch (e: any) {
+		alert("归档操作失败：" + (e.message || e));
+	} finally {
+		deleteLoading = false;
+	}
 }
 
 function toggleSelection(id: string) {
 	selectedIds = { ...selectedIds, [id]: !selectedIds[id] };
 }
 
-function clearSelection() { selectedIds = {}; }
+function clearSelection() {
+	selectedIds = {};
+}
 
-async function runBulkAction(action: "delete" | "restore" | "permanent" | "archive" | "unarchive") {
+async function runBulkAction(
+	action: "delete" | "restore" | "permanent" | "archive" | "unarchive",
+) {
 	if (!selectedIdList.length) return;
-	const items = selectedIdList.map((id) => vault.ciphers.find((cipher) => cipher.id === id)).filter(Boolean) as any[];
-	if (items.some((item) => item.readOnly)) { alert("选择中包含只读组织条目"); return; }
-	if ((action === "delete" || action === "permanent") && !confirm(action === "permanent" ? `永久删除选中的 ${selectedIdList.length} 项？此操作无法撤销。` : `将选中的 ${selectedIdList.length} 项移到回收站？`)) return;
+	const items = selectedIdList
+		.map((id) => vault.ciphers.find((cipher) => cipher.id === id))
+		.filter(Boolean) as any[];
+	if (items.some((item) => item.readOnly)) {
+		alert("选择中包含只读组织条目");
+		return;
+	}
+	if (
+		(action === "delete" || action === "permanent") &&
+		!confirm(
+			action === "permanent"
+				? `永久删除选中的 ${selectedIdList.length} 项？此操作无法撤销。`
+				: `将选中的 ${selectedIdList.length} 项移到回收站？`,
+		)
+	)
+		return;
 	deleteLoading = true;
 	try {
-		const personalIds = items.filter((item) => !item.organizationId).map((item) => item.id);
+		const personalIds = items
+			.filter((item) => !item.organizationId)
+			.map((item) => item.id);
 		const organizationItems = items.filter((item) => item.organizationId);
 		if (personalIds.length) {
 			if (action === "restore") await restoreCiphersApi(personalIds);
@@ -617,15 +778,32 @@ async function runBulkAction(action: "delete" | "restore" | "permanent" | "archi
 			else if (action === "permanent") await hardDeleteCipherApi(item.id);
 			else await deleteCipherApi(item.id);
 		}
-		clearSelection(); selectedItem = null; await syncVaultData();
-	} catch (e: any) { alert("批量操作失败：" + (e.message || e)); } finally { deleteLoading = false; }
+		clearSelection();
+		selectedItem = null;
+		await syncVaultData();
+	} catch (e: any) {
+		alert("批量操作失败：" + (e.message || e));
+	} finally {
+		deleteLoading = false;
+	}
 }
 
-async function encryptAndUpdateItem(item: any, changes: Record<string, unknown>) {
+async function encryptAndUpdateItem(
+	item: any,
+	changes: Record<string, unknown>,
+) {
 	if (item.readOnly) throw new Error("该组织条目为只读");
-	const ownerKey = item.organizationId ? getOrganizationKey(item.organizationId) : (vault.symEncKey && vault.symMacKey ? { encKey: vault.symEncKey, macKey: vault.symMacKey } : null);
+	const ownerKey = item.organizationId
+		? getOrganizationKey(item.organizationId)
+		: vault.symEncKey && vault.symMacKey
+			? { encKey: vault.symEncKey, macKey: vault.symMacKey }
+			: null;
 	if (!ownerKey) throw new Error("保险库密钥不可用");
-	const encrypted = await encryptCipher({ ...item, ...changes }, ownerKey.encKey, ownerKey.macKey);
+	const encrypted = await encryptCipher(
+		{ ...item, ...changes },
+		ownerKey.encKey,
+		ownerKey.macKey,
+	);
 	await updateCipherApi(item.id, encrypted);
 }
 
@@ -634,16 +812,33 @@ async function moveSelectedItems() {
 	try {
 		for (const id of selectedIdList) {
 			const item = vault.ciphers.find((cipher) => cipher.id === id);
-			if (item?.organizationId) throw new Error("组织条目使用集合，不能移动到个人文件夹");
-			if (item && !item.deletedDate) await encryptAndUpdateItem(item, { folderId: moveFolderId });
+			if (item?.organizationId)
+				throw new Error("组织条目使用集合，不能移动到个人文件夹");
+			if (item && !item.deletedDate)
+				await encryptAndUpdateItem(item, { folderId: moveFolderId });
 		}
-		moveDialogOpen = false; clearSelection(); await syncVaultData();
-	} catch (e: any) { alert("移动失败：" + (e.message || e)); } finally { deleteLoading = false; }
+		moveDialogOpen = false;
+		clearSelection();
+		await syncVaultData();
+	} catch (e: any) {
+		alert("移动失败：" + (e.message || e));
+	} finally {
+		deleteLoading = false;
+	}
 }
 
 async function toggleFavorite(item: any) {
 	deleteLoading = true;
-	try { await encryptAndUpdateItem(item, { favorite: !item.favorite }); await syncVaultData(); selectedItem = vault.ciphers.find((cipher) => cipher.id === item.id) ?? null; } catch (e: any) { alert("收藏操作失败：" + (e.message || e)); } finally { deleteLoading = false; }
+	try {
+		await encryptAndUpdateItem(item, { favorite: !item.favorite });
+		await syncVaultData();
+		selectedItem =
+			vault.ciphers.find((cipher) => cipher.id === item.id) ?? null;
+	} catch (e: any) {
+		alert("收藏操作失败：" + (e.message || e));
+	} finally {
+		deleteLoading = false;
+	}
 }
 
 // Virtual Scroll state for performance with large password lists (similar to nodewarden)
@@ -1111,7 +1306,12 @@ $effect(() => {
 									<Input type="password" bind:value={loginPassword} placeholder="密码" />
 								</div>
 								<div class="space-y-2"><div class="flex items-center justify-between"><span class="text-xs font-semibold text-slate-400 font-bold">网页链接</span><Button type="button" size="xs" variant="ghost" onclick={() => loginUris = [...loginUris, { uri: "", match: null }]}><Plus />添加</Button></div>{#each loginUris as uri, index}<div class="flex gap-2"><Input bind:value={uri.uri} placeholder="https://example.com" /><select bind:value={uri.match} aria-label="匹配方式" class="w-28 rounded-md border bg-background px-2 text-xs"><option value={null}>默认</option><option value={0}>根域</option><option value={1}>主机</option><option value={3}>完全匹配</option><option value={2}>前缀</option><option value={4}>正则</option><option value={5}>从不</option></select>{#if loginUris.length > 1}<Button type="button" variant="ghost" size="icon-sm" onclick={() => loginUris = loginUris.filter((_, itemIndex) => itemIndex !== index)} aria-label="删除网址"><Trash2 /></Button>{/if}</div>{/each}</div>
-								<div class="space-y-1.5"><span class="text-xs font-semibold text-slate-400 font-bold">TOTP 密钥或 otpauth URI</span><Input bind:value={loginTotp} autocomplete="off" /></div>
+								<div class="space-y-1.5">
+									<div class="flex items-center justify-between"><span class="text-xs font-semibold text-slate-400 font-bold">TOTP 密钥、otpauth 或 steam URI</span><Button type="button" size="xs" variant="ghost" onclick={() => totpQrInput?.click()}><ScanLine />扫描二维码</Button></div>
+									<Input bind:value={loginTotp} autocomplete="off" />
+									<input bind:this={totpQrInput} type="file" accept="image/*" class="hidden" onchange={importTotpQr} />
+									{#if totpQrError}<p class="text-xs text-destructive" role="alert">{totpQrError}</p>{/if}
+								</div>
 							</div>
 						{/if}
 

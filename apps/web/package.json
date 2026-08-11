@@ -45,6 +45,7 @@
 		"@edgewarden/shared": "workspace:*",
 		"dexie": "^4.4.4",
 		"hono": "^4.12.26",
+		"qr-scanner": "^1.4.2",
 		"ts-pattern": "^5.9.0",
 		"valibot": "^1.4.1"
 	}
