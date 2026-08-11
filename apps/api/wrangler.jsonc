@@ -39,6 +39,15 @@
 			"id": "edgewarden-kv"
 		}
 	],
+	"r2_buckets": [
+		{
+			"binding": "ATTACHMENTS_R2",
+			"bucket_name": "edgewarden-attachments"
+		}
+	],
+	"vars": {
+		"ATTACHMENT_STORAGE": "r2"
+	},
 	// "ai": {
 	//   "binding": "AI"
 	// },

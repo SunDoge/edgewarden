@@ -21,8 +21,8 @@ export interface PutBlobOptions {
 
 function hasR2Storage(
 	env: CloudflareBindings,
-): env is CloudflareBindings & { ATTACHMENTS: any } {
-	return "ATTACHMENTS" in env && !!(env as any).ATTACHMENTS;
+): env is CloudflareBindings & { ATTACHMENTS_R2: R2Bucket } {
+	return !!(env as any).ATTACHMENTS_R2 || !!(env as any).ATTACHMENTS;
 }
 
 function hasKvStorage(
@@ -34,9 +34,16 @@ function hasKvStorage(
 export function getBlobStorageKind(
 	env: CloudflareBindings,
 ): "r2" | "kv" | null {
+	const configured = String((env as any).ATTACHMENT_STORAGE || "").toLowerCase();
+	if (configured === "kv" && hasKvStorage(env)) return "kv";
+	if (configured === "r2" && hasR2Storage(env)) return "r2";
 	if (hasR2Storage(env)) return "r2";
 	if (hasKvStorage(env)) return "kv";
 	return null;
+}
+
+function getR2Storage(env: CloudflareBindings): R2Bucket {
+	return ((env as any).ATTACHMENTS_R2 || (env as any).ATTACHMENTS) as R2Bucket;
 }
 
 export function getBlobStorageMaxBytes(
@@ -65,15 +72,15 @@ export async function putBlobObject(
 ): Promise<void> {
 	const contentType = options.contentType || DEFAULT_CONTENT_TYPE;
 
-	if (hasR2Storage(env)) {
-		await (env as any).ATTACHMENTS.put(key, value, {
+	if (getBlobStorageKind(env) === "r2") {
+		await getR2Storage(env).put(key, value, {
 			httpMetadata: { contentType },
 			customMetadata: options.customMetadata,
 		});
 		return;
 	}
 
-	if (hasKvStorage(env)) {
+	if (getBlobStorageKind(env) === "kv" && hasKvStorage(env)) {
 		if (options.size > KV_MAX_OBJECT_BYTES) {
 			throw new Error("KV object too large");
 		}
@@ -93,17 +100,19 @@ export async function getBlobObject(
 	env: CloudflareBindings,
 	key: string,
 ): Promise<BlobObject | null> {
-	if (hasR2Storage(env)) {
-		const object = await (env as any).ATTACHMENTS.get(key);
-		if (!object) return null;
-		return {
-			body: object.body,
-			size: Number(object.size) || 0,
-			contentType: object.httpMetadata?.contentType || DEFAULT_CONTENT_TYPE,
-		};
-	}
-
-	if (hasKvStorage(env)) {
+	const readR2 = async (): Promise<BlobObject | null> => {
+		if (!hasR2Storage(env)) return null;
+		const object = await getR2Storage(env).get(key);
+		return object
+			? {
+					body: object.body,
+					size: Number(object.size) || 0,
+					contentType: object.httpMetadata?.contentType || DEFAULT_CONTENT_TYPE,
+				}
+			: null;
+	};
+	const readKv = async (): Promise<BlobObject | null> => {
+		if (!hasKvStorage(env)) return null;
 		const result = await env.ATTACHMENTS_KV.getWithMetadata<KVBlobMetadata>(
 			key,
 			"arrayBuffer",
@@ -119,8 +128,11 @@ export async function getBlobObject(
 			size,
 			contentType: result.metadata?.contentType || DEFAULT_CONTENT_TYPE,
 		};
-	}
+	};
 
+	const primary = getBlobStorageKind(env);
+	if (primary === "kv") return (await readKv()) ?? readR2();
+	if (primary === "r2") return (await readR2()) ?? readKv();
 	return null;
 }
 
@@ -128,12 +140,8 @@ export async function deleteBlobObject(
 	env: CloudflareBindings,
 	key: string,
 ): Promise<void> {
-	if (hasR2Storage(env)) {
-		await (env as any).ATTACHMENTS.delete(key);
-		return;
-	}
-	if (hasKvStorage(env)) {
-		await env.ATTACHMENTS_KV.delete(key);
-		return;
-	}
+	await Promise.all([
+		hasR2Storage(env) ? getR2Storage(env).delete(key) : Promise.resolve(),
+		hasKvStorage(env) ? env.ATTACHMENTS_KV.delete(key) : Promise.resolve(),
+	]);
 }
