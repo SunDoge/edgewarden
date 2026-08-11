@@ -13,7 +13,7 @@ Build command:  bun run build
 Deploy command: bun run deploy
 ```
 
-Cloudflare automatically provisions and binds the required D1 database, R2 bucket, and KV namespace. The deploy command applies every pending D1 migration through the `DB` binding before publishing the Worker.
+Cloudflare automatically provisions and binds the required D1 database and R2 bucket. The deploy command applies every pending D1 migration through the `DB` binding before publishing the Worker.
 
 Configure these required secrets in the deployment form:
 
@@ -28,6 +28,16 @@ openssl rand -hex 32
 ```
 
 To enable Turnstile for both login and registration, also configure the optional `TURNSTILE_SECRET_KEY` secret and the `TURNSTILE_SITE_KEY` Worker variable. Restrict the widget to the deployed hostname.
+
+### Accounts without R2
+
+R2 is the recommended storage backend for encrypted attachments and backup files. If the Cloudflare account cannot enable R2, select the same repository from Workers Builds and change only the deploy command to:
+
+```text
+bun run deploy:kv
+```
+
+The KV deployment uses `wrangler.kv.jsonc`, provisions D1 and KV only, and never declares or provisions an R2 bucket. KV limits each encrypted object to 25 MiB. Do not switch an existing deployment between R2 and KV without first migrating or backing up its stored objects.
 
 ## Manual deployment
 

@@ -10,9 +10,11 @@
 	"scripts": {
 		"dev": "mkdir -p ../web/build && wrangler dev --config ../../wrangler.jsonc",
 		"deploy": "wrangler deploy --config ../../wrangler.jsonc --minify",
+		"deploy:kv": "wrangler deploy --config ../../wrangler.kv.jsonc --minify",
 		"cf-typegen": "wrangler types worker-configuration.d.ts --config ../../wrangler.jsonc --env-interface CloudflareBindings",
 		"db:apply:local": "wrangler d1 migrations apply DB --config ../../wrangler.jsonc --local",
 		"db:apply:remote": "wrangler d1 migrations apply DB --config ../../wrangler.jsonc --remote",
+		"db:apply:remote:kv": "wrangler d1 migrations apply DB --config ../../wrangler.kv.jsonc --remote",
 		"db:codegen": "bun scripts/codegen.mjs",
 		"rpc:types": "tsc --project tsconfig.rpc.json",
 		"check": "tsc --noEmit",

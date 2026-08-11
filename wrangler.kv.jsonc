@@ -14,16 +14,16 @@
 			"migrations_dir": "apps/api/migrations"
 		}
 	],
-	"r2_buckets": [
+	"kv_namespaces": [
 		{
-			"binding": "ATTACHMENTS_R2"
+			"binding": "ATTACHMENTS_KV"
 		}
 	],
 	"secrets": {
 		"required": ["JWT_SECRET", "DATA_ENCRYPTION_SECRET", "BOOTSTRAP_SECRET"]
 	},
 	"vars": {
-		"ATTACHMENT_STORAGE": "r2",
+		"ATTACHMENT_STORAGE": "kv",
 		"SIGNUPS_ALLOWED": "false",
 		"INVITATIONS_ALLOWED": "true"
 	},
