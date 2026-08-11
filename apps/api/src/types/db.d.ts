@@ -37,7 +37,8 @@ export interface AuditLogs {
 }
 
 export interface AuthRequests {
-  access_code: string;
+  access_code_encrypted: string;
+  access_code_hash: string;
   approved: number | null;
   authentication_date: number | null;
   creation_date: number;
@@ -144,6 +145,7 @@ export interface Folders {
 
 export interface Invites {
   code: string;
+  code_encrypted: string;
   created_at: number;
   created_by: string;
   email: string;

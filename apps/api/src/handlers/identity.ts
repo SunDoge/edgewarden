@@ -300,7 +300,10 @@ export const connectToken = factory.createHandlers(async (c) => {
 				ar.response_date &&
 				!ar.authentication_date &&
 				!authRequestsDb.isAuthRequestExpired(ar) &&
-				ar.access_code === passwordHash
+				constantTimeCredentialEqual(
+					ar.access_code_hash,
+					await hashCredential(passwordHash),
+				)
 			);
 			if (valid) validatedAuthRequestId = ar!.id;
 		} else {

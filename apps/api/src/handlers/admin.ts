@@ -13,6 +13,11 @@ import {
 } from "../schemas/admin";
 import { verifyPassword } from "../services/auth";
 import {
+	decryptCredential,
+	encryptCredential,
+	hashCredential,
+} from "../services/credential-protection";
+import {
 	deleteBlobObject,
 	getAttachmentObjectKey,
 	getSendFileObjectKey,
@@ -42,10 +47,12 @@ async function verifyAdminPassword(
 		: errorResponse("Invalid password", 400);
 }
 
-function inviteResponse(
+async function inviteResponse(
 	request: Request,
+	dataEncryptionSecret: string,
 	invite: {
 		code: string;
+		code_encrypted: string;
 		email: string | null;
 		created_by: string;
 		used_by: string | null;
@@ -55,8 +62,13 @@ function inviteResponse(
 		updated_at: number;
 	},
 ) {
+	const code = await decryptCredential(
+		invite.code_encrypted,
+		dataEncryptionSecret,
+		"invite-code",
+	);
 	return {
-		code: invite.code,
+		code,
 		email: invite.email,
 		status: invite.status,
 		createdBy: invite.created_by,
@@ -64,7 +76,7 @@ function inviteResponse(
 		createdAt: toIso(invite.created_at),
 		updatedAt: toIso(invite.updated_at),
 		expiresAt: toIso(invite.expires_at),
-		inviteLink: `${new URL(request.url).origin}/register?invite=${encodeURIComponent(invite.code)}`,
+		inviteLink: `${new URL(request.url).origin}/register?invite=${encodeURIComponent(code)}`,
 		object: "invite",
 	};
 }
@@ -164,7 +176,11 @@ export const listAdminInvites = factory.createHandlers(async (c) => {
 			.where("expires_at", ">", now());
 	const invites = await query.orderBy("created_at", "desc").execute();
 	return c.json({
-		data: invites.map((invite) => inviteResponse(c.req.raw, invite)),
+		data: await Promise.all(
+			invites.map((invite) =>
+				inviteResponse(c.req.raw, c.env.DATA_ENCRYPTION_SECRET, invite),
+			),
+		),
 		object: "list",
 		continuationToken: null,
 	});
@@ -180,15 +196,21 @@ export const createAdminInvite = factory.createHandlers(
 		);
 		if (passwordError) return passwordError;
 		const ts = now();
-		const code = Array.from(
+		const rawCode = Array.from(
 			crypto.getRandomValues(new Uint8Array(20)),
 			(byte) => byte.toString(16).padStart(2, "0"),
 		).join("");
+		const code = await hashCredential(rawCode);
 		await c
 			.get("db")
 			.insertInto("invites")
 			.values({
 				code,
+				code_encrypted: await encryptCredential(
+					rawCode,
+					c.env.DATA_ENCRYPTION_SECRET,
+					"invite-code",
+				),
 				email: body.email.trim().toLowerCase(),
 				created_by: c.get("user").id,
 				used_by: null,
@@ -215,7 +237,10 @@ export const createAdminInvite = factory.createHandlers(
 				email: body.email.trim().toLowerCase(),
 			},
 		});
-		return c.json(inviteResponse(c.req.raw, invite), 201);
+		return c.json(
+			await inviteResponse(c.req.raw, c.env.DATA_ENCRYPTION_SECRET, invite),
+			201,
+		);
 	},
 );
 
@@ -227,8 +252,9 @@ export const deleteAdminInvite = factory.createHandlers(
 			c.req.valid("json").masterPasswordHash,
 		);
 		if (passwordError) return passwordError;
-		const code = c.req.param("code");
-		if (!code) return errorResponse("Invite code required", 400);
+		const rawCode = c.req.param("code");
+		if (!rawCode) return errorResponse("Invite code required", 400);
+		const code = await hashCredential(rawCode);
 		const result = await c
 			.get("db")
 			.deleteFrom("invites")

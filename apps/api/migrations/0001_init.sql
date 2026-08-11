@@ -222,11 +222,11 @@ CREATE TABLE IF NOT EXISTS ciphers (
   -- client-encrypted (NOT NULL for integrity)
   notes TEXT,
   -- Client-encrypted custom fields and password history use Bitwarden wire JSON.
-  fields TEXT,
-  password_history TEXT,
+  fields TEXT CHECK (fields IS NULL OR (json_valid(fields) AND json_type(fields, '$') = 'array')),
+  password_history TEXT CHECK (password_history IS NULL OR (json_valid(password_history) AND json_type(password_history, '$') = 'array')),
   favorite INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1)),
   -- All type-specific fields are in data (client-encrypted JSON blob)
-  data TEXT NOT NULL,
+  data TEXT NOT NULL CHECK (json_valid(data) AND json_type(data, '$') = 'object'),
   reprompt INTEGER NOT NULL DEFAULT 0 CHECK (reprompt IN (0, 1)),
   -- Per-item encryption key (Bitwarden cipher key rotation support)
   key TEXT,
@@ -400,7 +400,8 @@ CREATE TABLE IF NOT EXISTS auth_requests (
   request_ip_address TEXT,
   request_country_name TEXT,
   response_device_identifier TEXT,
-  access_code TEXT NOT NULL,
+  access_code_hash TEXT NOT NULL,
+  access_code_encrypted TEXT NOT NULL CHECK (json_valid(access_code_encrypted)),
   public_key TEXT NOT NULL,
   key TEXT,
   master_password_hash TEXT,
@@ -409,6 +410,11 @@ CREATE TABLE IF NOT EXISTS auth_requests (
   -- Unix seconds
   response_date INTEGER,
   authentication_date INTEGER,
+	CHECK (
+		(approved IS NULL AND response_date IS NULL)
+		OR (approved IS NOT NULL AND response_date IS NOT NULL)
+	),
+	CHECK (authentication_date IS NULL OR (approved = 1 AND response_date IS NOT NULL)),
   FOREIGN KEY (user_id)           REFERENCES users(id)         ON DELETE CASCADE,
   FOREIGN KEY (organization_id)   REFERENCES organizations(id) ON DELETE SET NULL
 );
@@ -450,10 +456,10 @@ CREATE TABLE IF NOT EXISTS webauthn_credentials (
   name TEXT NOT NULL,
   public_key TEXT NOT NULL,
   credential_id TEXT NOT NULL,
-  counter INTEGER NOT NULL DEFAULT 0,
+  counter INTEGER NOT NULL DEFAULT 0 CHECK (counter >= 0),
   type TEXT,
   aa_guid TEXT,
-  transports TEXT,
+  transports TEXT CHECK (transports IS NULL OR (json_valid(transports) AND json_type(transports, '$') = 'array')),
   -- JSON array
   encrypted_user_key TEXT,
   encrypted_public_key TEXT,
@@ -500,6 +506,9 @@ CREATE INDEX IF NOT EXISTS idx_attachment_download_tokens_expires ON attachment_
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS invites (
   code TEXT PRIMARY KEY NOT NULL,
+  -- code stores SHA-256(raw code); the encrypted envelope is only decrypted
+  -- for authenticated admin responses.
+  code_encrypted TEXT NOT NULL CHECK (json_valid(code_encrypted)),
   -- Lowercase normalized registration address bound to this one-time code.
   email TEXT NOT NULL,
   created_by TEXT NOT NULL,
@@ -535,7 +544,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   target_type TEXT,
   -- e.g. 'cipher', 'user', 'org', 'send'
   target_id TEXT,
-  metadata TEXT,
+  metadata TEXT CHECK (metadata IS NULL OR (json_valid(metadata) AND json_type(metadata, '$') = 'object')),
   -- JSON blob for extra context
   created_at INTEGER NOT NULL,
   -- Unix seconds

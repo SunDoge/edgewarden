@@ -4,6 +4,7 @@ import { factory } from "../http/factory";
 import { checkIpRateLimit } from "../middleware/rate-limit";
 import { RegisterSchema } from "../schemas/accounts";
 import { hashPasswordServer } from "../services/auth";
+import { hashCredential } from "../services/credential-protection";
 import { executeBatch, revisionQuery } from "../services/db/batch";
 import { getConfigValue } from "../services/db/config";
 import * as usersDb from "../services/db/users";
@@ -53,12 +54,13 @@ export const registerAccount = factory.createHandlers(
 			return errorResponse("Bootstrap has already been completed", 403);
 
 		const inviteCode = body.inviteCode?.trim();
+		const inviteCodeHash = inviteCode ? await hashCredential(inviteCode) : null;
 		const invite =
-			inviteCode && policy.invitationsAllowed
+			inviteCodeHash && policy.invitationsAllowed
 				? await db
 						.selectFrom("invites")
 						.selectAll()
-						.where("code", "=", inviteCode)
+						.where("code", "=", inviteCodeHash)
 						.where("status", "=", "active")
 						.where("expires_at", ">", now())
 						.executeTakeFirst()
