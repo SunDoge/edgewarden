@@ -1,7 +1,7 @@
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
-import { bodyLimit } from "hono/body-limit";
 import { LIMITS } from "./config";
 import type { HonoEnv } from "./env";
 import { dbMiddleware } from "./middleware/db";
@@ -133,6 +133,7 @@ export type AppType = typeof app;
 app.notFound((c) => c.json({ message: "Not found", object: "error" }, 404));
 
 import { runScheduledBackupIfDue } from "./services/backup/scheduler";
+import { runScheduledMaintenance } from "./services/maintenance";
 
 export { VaultRealtime } from "./durable-objects/vault-realtime";
 
@@ -143,6 +144,11 @@ export default {
 		env: CloudflareBindings,
 		ctx: ExecutionContext,
 	) {
-		ctx.waitUntil(runScheduledBackupIfDue(env));
+		ctx.waitUntil(
+			Promise.all([
+				runScheduledBackupIfDue(env),
+				runScheduledMaintenance(env),
+			]).then(() => undefined),
+		);
 	},
 };

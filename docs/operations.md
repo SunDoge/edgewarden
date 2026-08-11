@@ -23,6 +23,10 @@ Restore uses shadow tables and validates row counts before replacing live allowl
 
 Keep `DATA_ENCRYPTION_SECRET` separately: portable backup settings may require it, and losing it cannot be repaired from D1.
 
+## Scheduled maintenance
+
+Both deployment configurations install an hourly Cron Trigger at minute 17. The handler runs due backups and bounded cleanup: expired sessions, challenges and download tokens are removed; old login/auth-request records are pruned; expired invitations are closed; and deleted ciphers or expired Sends are removed together with their R2/KV objects. Each invocation processes at most 100 ciphers and 100 Sends so a large backlog is drained over subsequent runs without exceeding a Worker invocation.
+
 ## Troubleshooting
 
 - `JWT_SECRET must be at least 32 characters`: configure an independent random Worker secret.

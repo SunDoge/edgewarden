@@ -1,20 +1,21 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { afterAll as after, beforeAll as before, describe, test } from "vitest";
 import { fileURLToPath } from "node:url";
 import { unzipSync } from "fflate";
 import { Miniflare } from "miniflare";
+import { afterAll as after, beforeAll as before, describe, test } from "vitest";
 import { app } from "./index";
 import { createDatabase } from "./middleware/db";
-import { executeBatch } from "./services/db/batch";
-import { loadYubicoCredentials } from "./services/yubico-config";
+import { invalidateUserCache } from "./services/auth";
 import { importBackupArchiveBytes } from "./services/backup/import";
 import {
 	encryptCredential,
 	hashCredential,
 } from "./services/credential-protection";
-import { invalidateUserCache } from "./services/auth";
+import { executeBatch } from "./services/db/batch";
+import { runMaintenance } from "./services/maintenance";
+import { loadYubicoCredentials } from "./services/yubico-config";
 
 const JWT_SECRET = "test-secret-that-is-at-least-thirty-two-characters";
 const DATA_ENCRYPTION_SECRET =
@@ -2230,6 +2231,136 @@ describe("Edgewarden API", () => {
 						type: 9,
 					})
 					.execute(),
+			);
+		} finally {
+			await db.destroy();
+		}
+	});
+
+	test("scheduled maintenance removes expired rows and blob objects", async () => {
+		const { db } = await createDatabase(testDatabase);
+		const timestamp = Math.floor(Date.now() / 1000);
+		const user = await db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const cipherId = crypto.randomUUID();
+		const attachmentId = crypto.randomUUID();
+		const sendId = crypto.randomUUID();
+		const fileId = crypto.randomUUID();
+		const refreshToken = `expired-${crypto.randomUUID()}`;
+		try {
+			await db
+				.insertInto("refresh_tokens")
+				.values({
+					token: refreshToken,
+					user_id: user.id,
+					expires_at: timestamp - 1,
+					device_identifier: null,
+					device_session_stamp: null,
+				})
+				.execute();
+			await db
+				.insertInto("ciphers")
+				.values({
+					id: cipherId,
+					user_id: user.id,
+					org_id: null,
+					type: 1,
+					folder_id: null,
+					name: "expired-cipher",
+					notes: null,
+					fields: null,
+					password_history: null,
+					favorite: 0,
+					data: "{}",
+					reprompt: 0,
+					key: null,
+					created_at: timestamp - 2,
+					updated_at: timestamp - 2,
+					archived_at: null,
+					deleted_at: timestamp - 2,
+					purge_after: timestamp - 1,
+				})
+				.execute();
+			await db
+				.insertInto("attachments")
+				.values({
+					id: attachmentId,
+					cipher_id: cipherId,
+					file_name: "encrypted-name",
+					size: 3,
+					size_name: "3 bytes",
+					key: null,
+					created_at: timestamp - 2,
+				})
+				.execute();
+			await db
+				.insertInto("sends")
+				.values({
+					id: sendId,
+					user_id: user.id,
+					org_id: null,
+					type: 1,
+					name: "expired-send",
+					notes: null,
+					data: JSON.stringify({ id: fileId }),
+					key: "encrypted-key",
+					password_hash: null,
+					password_salt: null,
+					password_iterations: null,
+					password_algorithm: null,
+					auth_type: 2,
+					emails: null,
+					max_access_count: null,
+					access_count: 0,
+					disabled: 0,
+					hide_email: null,
+					created_at: timestamp - 2,
+					updated_at: timestamp - 2,
+					expiration_date: null,
+					deletion_date: timestamp - 1,
+				})
+				.execute();
+
+			r2Values.set(
+				`attachments/${cipherId}/${attachmentId}.bin`,
+				new Uint8Array([1]),
+			);
+			r2Values.set(`sends/${sendId}/${fileId}`, new Uint8Array([2]));
+			const result = await runMaintenance(db, bindings, timestamp);
+			assert.ok(result.refreshTokens >= 1);
+			assert.ok(result.purgedCiphers >= 1);
+			assert.ok(result.purgedSends >= 1);
+			assert.equal(
+				r2Values.has(`attachments/${cipherId}/${attachmentId}.bin`),
+				false,
+			);
+			assert.equal(r2Values.has(`sends/${sendId}/${fileId}`), false);
+			assert.equal(
+				await db
+					.selectFrom("refresh_tokens")
+					.select("token")
+					.where("token", "=", refreshToken)
+					.executeTakeFirst(),
+				undefined,
+			);
+			assert.equal(
+				await db
+					.selectFrom("ciphers")
+					.select("id")
+					.where("id", "=", cipherId)
+					.executeTakeFirst(),
+				undefined,
+			);
+			assert.equal(
+				await db
+					.selectFrom("sends")
+					.select("id")
+					.where("id", "=", sendId)
+					.executeTakeFirst(),
+				undefined,
 			);
 		} finally {
 			await db.destroy();
