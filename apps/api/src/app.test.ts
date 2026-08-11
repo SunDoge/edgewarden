@@ -252,6 +252,8 @@ describe("Edgewarden API", () => {
 
 	test("creates a folder and cipher through authenticated batch-backed handlers", async () => {
 		const auth = { authorization: `Bearer ${accessToken}` };
+		const profileAlias = await request("/api/accounts/profile", { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ name: "API Test", masterPasswordHint: null }) });
+		assert.equal(profileAlias.status, 200, await profileAlias.clone().text());
 		const folderResponse = await request("/api/folders", {
 			method: "POST",
 			headers: { ...auth, "content-type": "application/json" },
@@ -524,7 +526,7 @@ describe("Edgewarden API", () => {
 		assert.equal(attachment.fileName, "2.encrypted-file-name");
 		assert.equal(attachment.key, "2.encrypted-attachment-key");
 
-		const removed = await request(`/api/ciphers/${cipherId}/attachment/${metadata.attachmentId}`, { method: "DELETE", headers: auth });
+		const removed = await request(`/api/ciphers/${cipherId}/attachment/${metadata.attachmentId}/delete`, { method: "POST", headers: auth });
 		assert.equal(removed.status, 204, await removed.clone().text());
 		const gone = await request(`/api/ciphers/${cipherId}/attachment/${metadata.attachmentId}`, { headers: auth });
 		assert.equal(gone.status, 404);
@@ -774,6 +776,12 @@ describe("Edgewarden API", () => {
 			testDatabase.prepare("INSERT INTO collections (id,org_id,name,created_at,updated_at) VALUES (?,?,?,?,?)").bind(collectionId, orgId, "encrypted-collection", timestamp, timestamp),
 			testDatabase.prepare("INSERT INTO collection_members (collection_id,org_member_id,read_only,hide_passwords) VALUES (?,?,1,0)").bind(collectionId, restrictedMemberId),
 		]);
+		const restrictedCollections = await request("/api/collections", { headers: { authorization: `Bearer ${memberAccessToken}` } });
+		assert.equal(restrictedCollections.status, 200, await restrictedCollections.clone().text());
+		assert.deepEqual((await restrictedCollections.json<{ data: Array<{ id: string; readOnly: boolean }> }>()).data.map((collection) => [collection.id, collection.readOnly]), [[collectionId, true]]);
+		const ownerCollections = await request("/api/collections", { headers: { authorization: `Bearer ${accessToken}` } });
+		assert.deepEqual((await ownerCollections.json<{ data: Array<{ id: string; readOnly: boolean }> }>()).data.map((collection) => [collection.id, collection.readOnly]), [[collectionId, false]]);
+		assert.equal((await request(`/api/organizations/${orgId}`, { method: "POST", headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ name: "Renamed organization" }) })).status, 200);
 
 		const payload = { type: 1, name: "encrypted-name", notes: null, favorite: false, folderId: null, organizationId: orgId, collectionIds: [collectionId], key: "encrypted-item-key", login: { username: "encrypted-user", password: "encrypted-password" } };
 		const created = await request("/api/ciphers", { method: "POST", headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" }, body: JSON.stringify(payload) });
@@ -789,10 +797,12 @@ describe("Edgewarden API", () => {
 		const deniedWrite = await request(`/api/ciphers/${cipher.id}`, { method: "PUT", headers: { authorization: `Bearer ${memberAccessToken}`, "content-type": "application/json" }, body: JSON.stringify(payload) });
 		assert.equal(deniedWrite.status, 403);
 		await testDatabase.prepare("UPDATE org_members SET role = 'manager' WHERE id = ?").bind(restrictedMemberId).run();
+		assert.equal((await request(`/api/organizations/${orgId}/collections/${collectionId}`, { method: "POST", headers: { authorization: `Bearer ${memberAccessToken}`, "content-type": "application/json" }, body: JSON.stringify({ name: "encrypted-renamed-collection" }) })).status, 200);
 		const escalation = await request(`/api/organizations/${orgId}/members`, { method: "POST", headers: { authorization: `Bearer ${memberAccessToken}`, "content-type": "application/json" }, body: JSON.stringify({ email: "nobody@example.com", role: "admin", accessAll: true, collections: [], key: "encrypted-key" }) });
 		assert.equal(escalation.status, 403);
 
 		await testDatabase.prepare("DELETE FROM collection_members WHERE collection_id = ? AND org_member_id = ?").bind(collectionId, restrictedMemberId).run();
+		assert.deepEqual((await (await request("/api/collections", { headers: { authorization: `Bearer ${memberAccessToken}` } })).json<{ data: unknown[] }>()).data, []);
 		const hidden = await request(`/api/ciphers/${cipher.id}`, { headers: { authorization: `Bearer ${memberAccessToken}` } });
 		assert.equal(hidden.status, 404);
 	});

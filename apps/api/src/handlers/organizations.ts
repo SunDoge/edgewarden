@@ -155,6 +155,19 @@ export const listCollections = factory.createHandlers(async (c) => {
 	return c.json({ data: rows.map((row) => collectionResponse(row, Boolean(row.read_only), Boolean(row.hide_passwords))), object: "list", continuationToken: null });
 });
 
+export const listUserCollections = factory.createHandlers(async (c) => {
+	const rows = await c.get("db")
+		.selectFrom("org_members as member")
+		.innerJoin("collections as collection", "collection.org_id", "member.org_id")
+		.leftJoin("collection_members as access", (join) => join.onRef("access.collection_id", "=", "collection.id").onRef("access.org_member_id", "=", "member.id"))
+		.select(["collection.id", "collection.org_id", "collection.name", "collection.created_at", "collection.updated_at", "access.read_only", "access.hide_passwords"])
+		.where("member.user_id", "=", c.get("user").id)
+		.where("member.status", "=", "confirmed")
+		.where((eb) => eb.or([eb("member.access_all", "=", 1), eb("access.org_member_id", "=", eb.ref("member.id"))]))
+		.execute();
+	return c.json({ data: rows.map((row) => collectionResponse(row, Boolean(row.read_only), Boolean(row.hide_passwords))), object: "list", continuationToken: null });
+});
+
 export const createCollection = factory.createHandlers(vValidator("json", CreateCollectionSchema), async (c) => {
 	const db = c.get("db");
 	const orgId = c.get("orgMember").org_id;
