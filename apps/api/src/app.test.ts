@@ -131,6 +131,20 @@ after(async () => {
 });
 
 describe("Edgewarden API", () => {
+	test("declares every TEXT primary-key column as NOT NULL", () => {
+		const migration = readFileSync(
+			resolve(
+				dirname(fileURLToPath(import.meta.url)),
+				"../migrations/0001_init.sql",
+			),
+			"utf8",
+		);
+		const nullableTextPrimaryKeys = migration.match(
+			/^\s*[a-z_][a-z0-9_]*\s+TEXT\s+PRIMARY KEY(?!\s+NOT NULL).*$/gim,
+		);
+		assert.deepEqual(nullableTextPrimaryKeys, null);
+	});
+
 	test("advertises same-origin Fill Assist compatibility", async () => {
 		const response = await request("https://vault.example.test/config");
 		assert.equal(response.status, 200);
