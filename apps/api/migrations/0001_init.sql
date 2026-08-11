@@ -52,28 +52,49 @@ CREATE TABLE IF NOT EXISTS users (
   -- Require 2FA device-trust verification for new devices
   verify_devices INTEGER NOT NULL DEFAULT 1 CHECK (verify_devices IN (0, 1)),
   -- AES-GCM envelopes protected by DATA_ENCRYPTION_SECRET.
-  totp_secret TEXT CHECK (totp_secret IS NULL OR json_valid(totp_secret)),
-  totp_recovery_code TEXT CHECK (totp_recovery_code IS NULL OR json_valid(totp_recovery_code)),
+  totp_secret TEXT CHECK (
+    totp_secret IS NULL OR (
+      json_valid(totp_secret)
+      AND COALESCE(json_extract(totp_secret, '$.v'), 0) = 1
+      AND COALESCE(json_type(totp_secret, '$.iv') = 'text', 0)
+      AND COALESCE(json_type(totp_secret, '$.data') = 'text', 0)
+    )
+  ),
+  totp_recovery_code TEXT CHECK (
+    totp_recovery_code IS NULL OR (
+      json_valid(totp_recovery_code)
+      AND COALESCE(json_extract(totp_recovery_code, '$.v'), 0) = 1
+      AND COALESCE(json_type(totp_recovery_code, '$.iv') = 'text', 0)
+      AND COALESCE(json_type(totp_recovery_code, '$.data') = 'text', 0)
+    )
+  ),
   -- JSON keeps the five public IDs and NFC policy atomic and extensible.
   -- Yubico API credentials are encrypted separately in the config table.
   yubikey_config TEXT NOT NULL DEFAULT '{"keys":[],"nfc":false}' CHECK (
     json_valid(yubikey_config)
-    AND json_type(yubikey_config, '$') = 'object'
-    AND json_type(yubikey_config, '$.keys') = 'array'
+    AND COALESCE(json_type(yubikey_config, '$') = 'object', 0)
+    AND COALESCE(json_type(yubikey_config, '$.keys') = 'array', 0)
     AND json_array_length(yubikey_config, '$.keys') <= 5
-    AND json_type(yubikey_config, '$.nfc') IN ('true', 'false')
+    AND COALESCE(json_type(yubikey_config, '$.nfc') IN ('true', 'false'), 0)
   ),
   -- Machine-account / CLI token: hash verifies authentication while the
   -- encrypted envelope preserves Bitwarden's authenticated retrieval API.
   api_key_hash TEXT,
-  api_key_encrypted TEXT CHECK (api_key_encrypted IS NULL OR json_valid(api_key_encrypted)),
+  api_key_encrypted TEXT CHECK (
+    api_key_encrypted IS NULL OR (
+      json_valid(api_key_encrypted)
+      AND COALESCE(json_extract(api_key_encrypted, '$.v'), 0) = 1
+      AND COALESCE(json_type(api_key_encrypted, '$.iv') = 'text', 0)
+      AND COALESCE(json_type(api_key_encrypted, '$.data') = 'text', 0)
+    )
+  ),
   created_at INTEGER NOT NULL,
   -- Unix seconds
   updated_at INTEGER NOT NULL,
 	CHECK (
 		(kdf_type = 0 AND kdf_iterations >= 100000 AND kdf_memory IS NULL AND kdf_parallelism IS NULL)
 		OR
-		(kdf_type = 1 AND kdf_iterations >= 2 AND kdf_memory >= 8 AND kdf_parallelism >= 1)
+		(kdf_type = 1 AND kdf_iterations >= 2 AND kdf_memory IS NOT NULL AND kdf_memory >= 8 AND kdf_parallelism IS NOT NULL AND kdf_parallelism >= 1)
 	),
 	CHECK ((api_key_hash IS NULL) = (api_key_encrypted IS NULL))
 );
@@ -329,7 +350,7 @@ CREATE TABLE IF NOT EXISTS sends (
   -- Unix seconds; hard deadline
   -- password fields must all be present or all absent together with auth_type=1
   CHECK (
-    (auth_type = 1 AND password_hash IS NOT NULL AND password_salt IS NOT NULL AND password_iterations > 0 AND password_algorithm IS NOT NULL)
+    (auth_type = 1 AND password_hash IS NOT NULL AND password_salt IS NOT NULL AND password_iterations IS NOT NULL AND password_iterations > 0 AND password_algorithm IS NOT NULL)
     OR (auth_type != 1 AND password_hash IS NULL AND password_salt IS NULL AND password_iterations IS NULL AND password_algorithm IS NULL)
   ),
 	CHECK (max_access_count IS NULL OR access_count <= max_access_count),
@@ -401,7 +422,12 @@ CREATE TABLE IF NOT EXISTS auth_requests (
   request_country_name TEXT,
   response_device_identifier TEXT,
   access_code_hash TEXT NOT NULL,
-  access_code_encrypted TEXT NOT NULL CHECK (json_valid(access_code_encrypted)),
+  access_code_encrypted TEXT NOT NULL CHECK (
+    json_valid(access_code_encrypted)
+    AND COALESCE(json_extract(access_code_encrypted, '$.v'), 0) = 1
+    AND COALESCE(json_type(access_code_encrypted, '$.iv') = 'text', 0)
+    AND COALESCE(json_type(access_code_encrypted, '$.data') = 'text', 0)
+  ),
   public_key TEXT NOT NULL,
   key TEXT,
   master_password_hash TEXT,
@@ -508,7 +534,12 @@ CREATE TABLE IF NOT EXISTS invites (
   code TEXT PRIMARY KEY NOT NULL,
   -- code stores SHA-256(raw code); the encrypted envelope is only decrypted
   -- for authenticated admin responses.
-  code_encrypted TEXT NOT NULL CHECK (json_valid(code_encrypted)),
+  code_encrypted TEXT NOT NULL CHECK (
+    json_valid(code_encrypted)
+    AND COALESCE(json_extract(code_encrypted, '$.v'), 0) = 1
+    AND COALESCE(json_type(code_encrypted, '$.iv') = 'text', 0)
+    AND COALESCE(json_type(code_encrypted, '$.data') = 'text', 0)
+  ),
   -- Lowercase normalized registration address bound to this one-time code.
   email TEXT NOT NULL,
   created_by TEXT NOT NULL,
