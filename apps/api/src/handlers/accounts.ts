@@ -12,6 +12,11 @@ import {
 	verifyPassword,
 } from "../services/auth";
 import { executeBatch, revisionQuery } from "../services/db/batch";
+import {
+	decryptCredential,
+	encryptCredential,
+	hashCredential,
+} from "../services/credential-protection";
 import * as revisionsDb from "../services/db/revisions";
 import * as usersDb from "../services/db/users";
 import * as webauthnDb from "../services/db/webauthn";
@@ -32,7 +37,10 @@ function buildProfileResponse(
 		premiumFromOrganization: false,
 		masterPasswordHint: user.master_password_hint,
 		culture: "en-US",
-		twoFactorEnabled: !!user.totp_secret || twoFactorPasskeys > 0 || userYubicoPublicIds(user as any).length > 0,
+		twoFactorEnabled:
+			!!user.totp_secret ||
+			twoFactorPasskeys > 0 ||
+			userYubicoPublicIds(user as any).length > 0,
 		key: user.key,
 		privateKey: user.private_key,
 		publicKey: user.public_key,
@@ -52,7 +60,11 @@ function buildProfileResponse(
 // GET /api/accounts/profile
 export const getProfile = factory.createHandlers(async (c) => {
 	const user = c.get("user");
-	const count = await webauthnDb.countAccountPasskeyCredentialsByUserId(c.get("db"), user.id, "twoFactor");
+	const count = await webauthnDb.countAccountPasskeyCredentialsByUserId(
+		c.get("db"),
+		user.id,
+		"twoFactor",
+	);
 	return c.json(buildProfileResponse(user, count));
 });
 
@@ -74,7 +86,11 @@ export const updateProfile = factory.createHandlers(
 
 		const updated = await usersDb.getUserById(db, user.id);
 		if (!updated) return errorResponse("Profile not found", 404);
-		const count = await webauthnDb.countAccountPasskeyCredentialsByUserId(db, user.id, "twoFactor");
+		const count = await webauthnDb.countAccountPasskeyCredentialsByUserId(
+			db,
+			user.id,
+			"twoFactor",
+		);
 		return c.json(buildProfileResponse(updated, count));
 	},
 );
@@ -178,9 +194,29 @@ export const requestPasswordHint = factory.createHandlers(async () => {
 export const getApiKey = factory.createHandlers(async (c) => {
 	const user = c.get("user");
 	const db = c.get("db");
-	const key = user.api_key ?? crypto.randomUUID().replace(/-/g, "");
-	if (!user.api_key) {
-		await usersDb.updateUser(db, user.id, { api_key: key, updated_at: now() });
+	let key: string;
+	if (user.api_key_encrypted) {
+		try {
+			key = await decryptCredential(
+				user.api_key_encrypted,
+				c.env.DATA_ENCRYPTION_SECRET,
+				"api-key",
+			);
+		} catch {
+			return errorResponse("Stored API key cannot be decrypted", 500);
+		}
+	} else {
+		key = crypto.randomUUID().replace(/-/g, "");
+		await usersDb.updateUser(db, user.id, {
+			api_key_hash: await hashCredential(key),
+			api_key_encrypted: await encryptCredential(
+				key,
+				c.env.DATA_ENCRYPTION_SECRET,
+				"api-key",
+			),
+			updated_at: now(),
+		});
+		invalidateUserCache(user.id);
 	}
 	return c.json({ apiKey: key, object: "apiKey" });
 });
@@ -189,7 +225,15 @@ export const rotateApiKey = factory.createHandlers(async (c) => {
 	const user = c.get("user");
 	const db = c.get("db");
 	const key = crypto.randomUUID().replace(/-/g, "");
-	await usersDb.updateUser(db, user.id, { api_key: key, updated_at: now() });
+	await usersDb.updateUser(db, user.id, {
+		api_key_hash: await hashCredential(key),
+		api_key_encrypted: await encryptCredential(
+			key,
+			c.env.DATA_ENCRYPTION_SECRET,
+			"api-key",
+		),
+		updated_at: now(),
+	});
 	invalidateUserCache(user.id);
 	return c.json({ apiKey: key, object: "apiKey" });
 });

@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS config (
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY NOT NULL,
-  email TEXT NOT NULL UNIQUE,
+  email TEXT NOT NULL UNIQUE CHECK (email = lower(trim(email))),
   name TEXT,
   master_password_hint TEXT,
   master_password_hash TEXT NOT NULL,
@@ -51,9 +51,9 @@ CREATE TABLE IF NOT EXISTS users (
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'banned')),
   -- Require 2FA device-trust verification for new devices
   verify_devices INTEGER NOT NULL DEFAULT 1 CHECK (verify_devices IN (0, 1)),
-  -- TOTP second factor (kept in users for zero-knowledge simplicity)
-  totp_secret TEXT,
-  totp_recovery_code TEXT,
+  -- AES-GCM envelopes protected by DATA_ENCRYPTION_SECRET.
+  totp_secret TEXT CHECK (totp_secret IS NULL OR json_valid(totp_secret)),
+  totp_recovery_code TEXT CHECK (totp_recovery_code IS NULL OR json_valid(totp_recovery_code)),
   -- JSON keeps the five public IDs and NFC policy atomic and extensible.
   -- Yubico API credentials are encrypted separately in the config table.
   yubikey_config TEXT NOT NULL DEFAULT '{"keys":[],"nfc":false}' CHECK (
@@ -63,16 +63,24 @@ CREATE TABLE IF NOT EXISTS users (
     AND json_array_length(yubikey_config, '$.keys') <= 5
     AND json_type(yubikey_config, '$.nfc') IN ('true', 'false')
   ),
-  -- Machine-account / CLI token
-  api_key TEXT,
+  -- Machine-account / CLI token: hash verifies authentication while the
+  -- encrypted envelope preserves Bitwarden's authenticated retrieval API.
+  api_key_hash TEXT,
+  api_key_encrypted TEXT CHECK (api_key_encrypted IS NULL OR json_valid(api_key_encrypted)),
   created_at INTEGER NOT NULL,
   -- Unix seconds
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+	CHECK (
+		(kdf_type = 0 AND kdf_iterations >= 100000 AND kdf_memory IS NULL AND kdf_parallelism IS NULL)
+		OR
+		(kdf_type = 1 AND kdf_iterations >= 2 AND kdf_memory >= 8 AND kdf_parallelism >= 1)
+	),
+	CHECK ((api_key_hash IS NULL) = (api_key_encrypted IS NULL))
 );
 -- email is already UNIQUE; add a plain index for case-insensitive prefix lookups
 -- if needed (SQLite UNIQUE is case-sensitive for ASCII by default)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_api_key
-  ON users(api_key) WHERE api_key IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_api_key_hash
+  ON users(api_key_hash) WHERE api_key_hash IS NOT NULL;
 -- ---------------------------------------------------------------------------
 -- 3. LOGIN ATTEMPTS
 -- ---------------------------------------------------------------------------
@@ -91,9 +99,9 @@ CREATE INDEX IF NOT EXISTS idx_login_attempts_updated ON login_attempts(updated_
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS domain_settings (
   user_id TEXT PRIMARY KEY NOT NULL,
-  equivalent_domains TEXT NOT NULL DEFAULT '[]',
-  custom_equivalent_domains TEXT NOT NULL DEFAULT '[]',
-  excluded_global_equivalent_domains TEXT NOT NULL DEFAULT '[]',
+  equivalent_domains TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(equivalent_domains) AND json_type(equivalent_domains, '$') = 'array'),
+  custom_equivalent_domains TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(custom_equivalent_domains) AND json_type(custom_equivalent_domains, '$') = 'array'),
+  excluded_global_equivalent_domains TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(excluded_global_equivalent_domains) AND json_type(excluded_global_equivalent_domains, '$') = 'array'),
   updated_at INTEGER NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -307,10 +315,10 @@ CREATE TABLE IF NOT EXISTS sends (
   ),
   auth_type INTEGER NOT NULL DEFAULT 2 CHECK (auth_type IN (0, 1, 2)),
   -- 0=Email, 1=Password, 2=None
-  emails TEXT,
+  emails TEXT CHECK (emails IS NULL OR (json_valid(emails) AND json_type(emails, '$') = 'array')),
   -- JSON array of allowed email addresses
-  max_access_count INTEGER,
-  access_count INTEGER NOT NULL DEFAULT 0,
+  max_access_count INTEGER CHECK (max_access_count IS NULL OR max_access_count >= 0),
+  access_count INTEGER NOT NULL DEFAULT 0 CHECK (access_count >= 0),
   disabled INTEGER NOT NULL DEFAULT 0 CHECK (disabled IN (0, 1)),
   hide_email INTEGER CHECK (hide_email IN (0, 1)),
   created_at INTEGER NOT NULL,
@@ -321,9 +329,10 @@ CREATE TABLE IF NOT EXISTS sends (
   -- Unix seconds; hard deadline
   -- password fields must all be present or all absent together with auth_type=1
   CHECK (
-    (auth_type = 1 AND password_hash IS NOT NULL AND password_algorithm IS NOT NULL)
-    OR (auth_type != 1 AND password_hash IS NULL)
+    (auth_type = 1 AND password_hash IS NOT NULL AND password_salt IS NOT NULL AND password_iterations > 0 AND password_algorithm IS NOT NULL)
+    OR (auth_type != 1 AND password_hash IS NULL AND password_salt IS NULL AND password_iterations IS NULL AND password_algorithm IS NULL)
   ),
+	CHECK (max_access_count IS NULL OR access_count <= max_access_count),
   CHECK (
     (user_id IS NOT NULL AND org_id IS NULL)
     OR (user_id IS NULL AND org_id IS NOT NULL)

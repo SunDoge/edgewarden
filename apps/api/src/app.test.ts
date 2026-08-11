@@ -10,6 +10,8 @@ import { createDatabase } from "./middleware/db";
 import { executeBatch } from "./services/db/batch";
 import { loadYubicoCredentials } from "./services/yubico-config";
 import { importBackupArchiveBytes } from "./services/backup/import";
+import { encryptCredential } from "./services/credential-protection";
+import { invalidateUserCache } from "./services/auth";
 
 const JWT_SECRET = "test-secret-that-is-at-least-thirty-two-characters";
 const DATA_ENCRYPTION_SECRET =
@@ -860,7 +862,7 @@ describe("Edgewarden API", () => {
 		});
 		assert.equal(deleted.status, 204, await deleted.clone().text());
 
-		assert.equal(
+		assert.deepEqual(
 			await testDatabase
 				.prepare("SELECT COUNT(*) AS count FROM folders WHERE id IN (?, ?)")
 				.bind(firstId, secondId)
@@ -1996,10 +1998,15 @@ describe("Edgewarden API", () => {
 
 		// Instance backups must preserve the complete organization graph while
 		// excluding machine credentials such as API keys.
-		await testDatabase
-			.prepare("UPDATE users SET api_key = ? WHERE id = ?")
-			.bind("must-not-enter-backup", owner.id)
-			.run();
+		const apiKeyResponse = await request("/api/accounts/rotate-api-key", {
+			method: "POST",
+			headers: { authorization: `Bearer ${accessToken}` },
+		});
+		assert.equal(
+			apiKeyResponse.status,
+			200,
+			await apiKeyResponse.clone().text(),
+		);
 		const backupResponse = await request("/api/admin/backup/export", {
 			method: "POST",
 			headers: {
@@ -2023,7 +2030,9 @@ describe("Edgewarden API", () => {
 			cipher_collections: Array<{ cipher_id: string; collection_id: string }>;
 		};
 		assert.equal(
-			backupDb.users.some((row) => "api_key" in row),
+			backupDb.users.some(
+				(row) => "api_key_hash" in row || "api_key_encrypted" in row,
+			),
 			false,
 		);
 		assert.ok(backupDb.organizations.some((row) => row.id === orgId));
@@ -2137,12 +2146,25 @@ describe("Edgewarden API", () => {
 
 	test("recovers two-factor authentication with two independent secrets", async () => {
 		const recoveryCode = "A1B2C3D4E5F60718";
+		const [encryptedTotpSecret, encryptedRecoveryCode] = await Promise.all([
+			encryptCredential(
+				"JBSWY3DPEHPK3PXP",
+				DATA_ENCRYPTION_SECRET,
+				"totp-secret",
+			),
+			encryptCredential(recoveryCode, DATA_ENCRYPTION_SECRET, "totp-recovery"),
+		]);
 		await testDatabase
 			.prepare(
 				"UPDATE users SET totp_secret = ?, totp_recovery_code = ? WHERE email = ?",
 			)
-			.bind("JBSWY3DPEHPK3PXP", recoveryCode, EMAIL)
+			.bind(encryptedTotpSecret, encryptedRecoveryCode, EMAIL)
 			.run();
+		const recoveryUser = await testDatabase
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(EMAIL)
+			.first<{ id: string }>();
+		if (recoveryUser) invalidateUserCache(recoveryUser.id);
 		const owner = await testDatabase
 			.prepare("SELECT id FROM users WHERE email = ?")
 			.bind(EMAIL)
@@ -2302,6 +2324,11 @@ describe("Edgewarden API", () => {
 			.prepare("UPDATE users SET yubikey_config = ? WHERE email = ?")
 			.bind(JSON.stringify({ keys: ["ccccccbbbbbb"], nfc: true }), EMAIL)
 			.run();
+		const yubikeyUser = await testDatabase
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(EMAIL)
+			.first<{ id: string }>();
+		if (yubikeyUser) invalidateUserCache(yubikeyUser.id);
 		const session = await request("/identity/connect/token", {
 			method: "POST",
 			headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -2317,6 +2344,7 @@ describe("Edgewarden API", () => {
 			.prepare("UPDATE users SET yubikey_config = ? WHERE email = ?")
 			.bind(JSON.stringify({ keys: [], nfc: false }), EMAIL)
 			.run();
+		if (yubikeyUser) invalidateUserCache(yubikeyUser.id);
 		const authenticated = await request("/identity/connect/token", {
 			method: "POST",
 			headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -2334,6 +2362,7 @@ describe("Edgewarden API", () => {
 			.prepare("UPDATE users SET yubikey_config = ? WHERE email = ?")
 			.bind(JSON.stringify({ keys: ["ccccccbbbbbb"], nfc: true }), EMAIL)
 			.run();
+		if (yubikeyUser) invalidateUserCache(yubikeyUser.id);
 		const secretKey = btoa("01234567890123456789");
 		const configured = await request("/api/yubico-control/config", {
 			method: "PUT",
@@ -2395,6 +2424,7 @@ describe("Edgewarden API", () => {
 			.prepare("UPDATE users SET yubikey_config = ? WHERE email = ?")
 			.bind(JSON.stringify({ keys: [], nfc: false }), EMAIL)
 			.run();
+		if (yubikeyUser) invalidateUserCache(yubikeyUser.id);
 	});
 
 	test("deletes an account only after password verification and blocks organization owners", async () => {
@@ -2551,13 +2581,21 @@ describe("Edgewarden API", () => {
 				.bind(backedUpCollectionId)
 				.first(),
 		);
-		assert.equal(
+		assert.deepEqual(
 			await testDatabase
-				.prepare("SELECT api_key FROM users WHERE id = ?")
+				.prepare(
+					"SELECT api_key_hash, api_key_encrypted FROM users WHERE id = ?",
+				)
 				.bind(owner.id)
-				.first<{ api_key: string | null }>()
-				.then((row) => row?.api_key ?? null),
-			null,
+				.first<{
+					api_key_hash: string | null;
+					api_key_encrypted: string | null;
+				}>()
+				.then((row) => [
+					row?.api_key_hash ?? null,
+					row?.api_key_encrypted ?? null,
+				]),
+			[null, null],
 		);
 		assert.equal(
 			(

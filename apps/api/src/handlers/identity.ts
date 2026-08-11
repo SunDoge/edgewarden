@@ -9,6 +9,11 @@ import {
 import { PreloginSchema } from "../schemas/identity";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import {
+	constantTimeCredentialEqual,
+	decryptCredential,
+	hashCredential,
+} from "../services/credential-protection";
+import {
 	createRefreshToken,
 	generateAccessToken,
 	verifyPassword,
@@ -62,7 +67,14 @@ async function twoFactorRequiredResponse(
 	user: any,
 ): Promise<Response> {
 	const providers: string[] = [];
-	if (isTotpEnabled(user.totp_secret))
+	const totpSecret = user.totp_secret
+		? await decryptCredential(
+				user.totp_secret,
+				env.DATA_ENCRYPTION_SECRET,
+				"totp-secret",
+			)
+		: null;
+	if (isTotpEnabled(totpSecret))
 		providers.push(String(TWO_FACTOR_AUTHENTICATOR));
 	if (userYubicoPublicIds(user).length)
 		providers.push(String(TWO_FACTOR_YUBIKEY));
@@ -317,8 +329,32 @@ export const connectToken = factory.createHandlers(async (c) => {
 			);
 		const yubicoIds = userYubicoPublicIds(user);
 		// Verify any configured second-factor provider.
+		let totpSecret: string | null = null;
+		let recoveryCode: string | null = null;
+		try {
+			totpSecret = user.totp_secret
+				? await decryptCredential(
+						user.totp_secret,
+						c.env.DATA_ENCRYPTION_SECRET,
+						"totp-secret",
+					)
+				: null;
+			recoveryCode = user.totp_recovery_code
+				? await decryptCredential(
+						user.totp_recovery_code,
+						c.env.DATA_ENCRYPTION_SECRET,
+						"totp-recovery",
+					)
+				: null;
+		} catch {
+			return identityErrorResponse(
+				"Two-step configuration could not be decrypted",
+				"server_error",
+				500,
+			);
+		}
 		if (
-			isTotpEnabled(user.totp_secret) ||
+			isTotpEnabled(totpSecret) ||
 			twoFactorPasskeys > 0 ||
 			yubicoIds.length > 0
 		) {
@@ -328,7 +364,7 @@ export const connectToken = factory.createHandlers(async (c) => {
 				return await twoFactorRequiredResponse(c.req.raw, c.env, db, user);
 
 			if (provider === String(TWO_FACTOR_AUTHENTICATOR)) {
-				const ok = await verifyTotpToken(user.totp_secret ?? "", token);
+				const ok = await verifyTotpToken(totpSecret ?? "", token);
 				if (!ok)
 					return identityErrorResponse(
 						"Two-step token is invalid. Try again.",
@@ -372,7 +408,7 @@ export const connectToken = factory.createHandlers(async (c) => {
 				provider === "-1" ||
 				provider === "100"
 			) {
-				if (!user.totp_recovery_code || token !== user.totp_recovery_code) {
+				if (!recoveryCode || token !== recoveryCode) {
 					return identityErrorResponse(
 						"Recovery code is invalid.",
 						"invalid_grant",
@@ -684,7 +720,13 @@ export const connectToken = factory.createHandlers(async (c) => {
 			);
 		}
 		const user = await usersDb.getUserById(db, match[1]);
-		if (!user || user.status !== "active" || user.api_key !== clientSecret) {
+		const suppliedHash = clientSecret ? await hashCredential(clientSecret) : "";
+		if (
+			!user ||
+			user.status !== "active" ||
+			!user.api_key_hash ||
+			!constantTimeCredentialEqual(user.api_key_hash, suppliedHash)
+		) {
 			return identityErrorResponse(
 				"Invalid client credentials",
 				"invalid_client",

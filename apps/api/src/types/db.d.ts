@@ -223,7 +223,8 @@ export interface UserRevisions {
 }
 
 export interface Users {
-  api_key: string | null;
+  api_key_encrypted: string | null;
+  api_key_hash: string | null;
   created_at: number;
   email: string;
   id: string;
