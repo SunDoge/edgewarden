@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { describe, test } from "bun:test";
+import { describe, test } from "vitest";
 import { now, toIso } from "./time";
 
 describe("time utils", () => {

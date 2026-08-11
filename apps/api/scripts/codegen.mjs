@@ -1,12 +1,11 @@
 /**
  * Codegen script: apply migration to a temp SQLite, run kysely-codegen, clean up.
  */
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
 import { readFileSync, unlinkSync, existsSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Kysely } from "kysely";
-import { BunSqliteDialect } from "kysely-bun-worker/normal";
+import { Kysely, SqliteDialect as KyselySqliteDialect } from "kysely";
 import {
 	generate,
 	SqliteDialect as CodegenSqliteDialect,
@@ -24,15 +23,17 @@ const migrationFiles = readdirSync(resolve(root, "migrations"))
 	.filter((file) => /^\d+.*\.sql$/.test(file))
 	.sort();
 for (const file of migrationFiles) {
-	const sql = readFileSync(resolve(root, "migrations", file), "utf8").replace(/^PRAGMA.*/gm, "");
+	const sql = readFileSync(resolve(root, "migrations", file), "utf8").replace(
+		/^PRAGMA.*/gm,
+		"",
+	);
 	rawDb.exec(sql);
 }
-rawDb.close();
 console.log(`✓ ${migrationFiles.length} migrations applied to temp db`);
 
-// 2. Open a fresh Bun-native Kysely connection for introspection.
+// 2. Reuse the Node-native SQLite connection for Kysely introspection.
 const kyselyDb = new Kysely({
-	dialect: new BunSqliteDialect({ url: tmpDb }),
+	dialect: new KyselySqliteDialect({ database: rawDb }),
 });
 
 const dialect = new CodegenSqliteDialect();

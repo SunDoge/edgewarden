@@ -4,16 +4,16 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"predev": "bun run --cwd ../api rpc:types",
+		"predev": "pnpm --filter @edgewarden/api run rpc:types",
 		"dev": "vite dev",
-		"prebuild": "bun run --cwd ../api rpc:types",
+		"prebuild": "pnpm --filter @edgewarden/api run rpc:types",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
-		"precheck": "bun run --cwd ../api rpc:types",
+		"precheck": "pnpm --filter @edgewarden/api run rpc:types",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"pretest": "bun run --cwd ../api rpc:types",
+		"pretest": "pnpm --filter @edgewarden/api run rpc:types",
 		"test": "vitest run"
 	},
 	"devDependencies": {

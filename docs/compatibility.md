@@ -12,7 +12,7 @@ Install the official `bw` binary with mise (`mise install`), point the test at a
 BW_SERVER=https://edgewarden.example.com \
 BW_EMAIL=compat@example.com \
 BW_PASSWORD='disposable-password' \
-bun run test:compat:bw
+pnpm test:compat:bw
 ```
 
 The TypeScript test uses an isolated temporary CLI profile and covers password login, lock/unlock, sync, folder and item CRUD, and attachment upload/download. It deletes created data in a `finally` block. Never target an important account.
