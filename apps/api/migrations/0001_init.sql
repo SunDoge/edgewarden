@@ -1,6 +1,10 @@
 -- =============================================================================
--- REDESIGNED SCHEMA — edgewarden (modelled after Vaultwarden domains)
+-- EDGEWARDEN INITIAL SCHEMA (modelled after Vaultwarden domains)
 -- =============================================================================
+-- This is the complete baseline for a fresh deployment. Once a release has
+-- been deployed, keep this file immutable and add a numbered migration for
+-- every schema change instead of editing this file in place.
+--
 -- Principles:
 --   1. All timestamps are INTEGER (Unix seconds). No more TEXT/INTEGER mix.
 --   2. CHECK constraints on every enum-like column.
@@ -10,6 +14,8 @@
 --   6. audit_logs has a reverse-lookup index on (target_type, target_id).
 --   7. sends tracks password hash algorithm so it is upgradeable.
 --   8. Cipher ownership is enforced: personal XOR org, never both.
+--   9. Every TEXT primary-key column explicitly declares NOT NULL because
+--      SQLite does not imply it for non-INTEGER primary keys in rowid tables.
 -- =============================================================================
 PRAGMA foreign_keys = ON;
 -- ---------------------------------------------------------------------------
@@ -48,6 +54,8 @@ CREATE TABLE IF NOT EXISTS users (
   -- TOTP second factor (kept in users for zero-knowledge simplicity)
   totp_secret TEXT,
   totp_recovery_code TEXT,
+  -- JSON keeps the five public IDs and NFC policy atomic and extensible.
+  -- Yubico API credentials are encrypted separately in the config table.
   yubikey_config TEXT NOT NULL DEFAULT '{"keys":[],"nfc":false}' CHECK (
     json_valid(yubikey_config)
     AND json_type(yubikey_config, '$') = 'object'
@@ -93,6 +101,7 @@ CREATE TABLE IF NOT EXISTS user_revisions (
 CREATE TABLE IF NOT EXISTS organizations (
   id TEXT PRIMARY KEY NOT NULL,
   name TEXT NOT NULL,
+  -- Organization key pair generated and encrypted by Bitwarden-compatible clients.
   public_key TEXT,
   private_key TEXT,
   -- client-encrypted
@@ -114,6 +123,7 @@ CREATE TABLE IF NOT EXISTS org_members (
   -- NULL while status = 'invited'
   email TEXT NOT NULL,
   -- invitation target; kept for audit
+  -- Client-encrypted organization key granted to this member.
   key TEXT,
   role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'admin', 'manager', 'member')),
   status TEXT NOT NULL DEFAULT 'invited' CHECK (
@@ -190,7 +200,7 @@ CREATE TABLE IF NOT EXISTS ciphers (
   name TEXT NOT NULL,
   -- client-encrypted (NOT NULL for integrity)
   notes TEXT,
-  -- client-encrypted
+  -- Client-encrypted custom fields and password history use Bitwarden wire JSON.
   fields TEXT,
   password_history TEXT,
   favorite INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1)),
@@ -427,6 +437,7 @@ CREATE TABLE IF NOT EXISTS webauthn_credentials (
   encrypted_public_key TEXT,
   encrypted_private_key TEXT,
   supports_prf INTEGER NOT NULL DEFAULT 0 CHECK (supports_prf IN (0, 1)),
+  -- Prevent login passkeys and second-factor credentials from being interchanged.
   purpose TEXT NOT NULL DEFAULT 'login' CHECK (purpose IN ('login', 'twoFactor')),
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
@@ -467,6 +478,7 @@ CREATE INDEX IF NOT EXISTS idx_attachment_download_tokens_expires ON attachment_
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS invites (
   code TEXT PRIMARY KEY NOT NULL,
+  -- Lowercase normalized registration address bound to this one-time code.
   email TEXT NOT NULL,
   created_by TEXT NOT NULL,
   used_by TEXT,
