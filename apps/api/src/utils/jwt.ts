@@ -2,6 +2,8 @@ import { sign, verify } from "hono/jwt";
 import { LIMITS } from "../config";
 
 export interface JWTPayload {
+	typ: "access";
+	aud: "edgewarden-api";
 	sub: string;
 	email: string;
 	name: string | null;
@@ -19,7 +21,14 @@ export interface JWTPayload {
 export async function createJWT(
 	payload: Omit<
 		JWTPayload,
-		"iat" | "exp" | "iss" | "premium" | "email_verified" | "amr"
+		| "typ"
+		| "aud"
+		| "iat"
+		| "exp"
+		| "iss"
+		| "premium"
+		| "email_verified"
+		| "amr"
 	>,
 	secret: string,
 	expiresIn: number = LIMITS.auth.accessTokenTtlSeconds,
@@ -28,6 +37,8 @@ export async function createJWT(
 	// Build as plain object — hono/jwt sign expects Record<string, unknown>
 	const full: Record<string, unknown> = {
 		...payload,
+		typ: "access",
+		aud: "edgewarden-api",
 		email_verified: true,
 		amr: ["Application"],
 		iat,
@@ -45,6 +56,27 @@ export async function verifyJWT(
 	try {
 		// hono/jwt verify throws on bad signature, expiration, or malformed token
 		const payload = await verify(token, secret, "HS256");
+		if (
+			payload.typ !== "access" ||
+			payload.aud !== "edgewarden-api" ||
+			payload.iss !== "edgewarden" ||
+			typeof payload.sub !== "string" ||
+			!payload.sub ||
+			typeof payload.email !== "string" ||
+			typeof payload.sstamp !== "string" ||
+			!payload.sstamp ||
+			typeof payload.iat !== "number" ||
+			typeof payload.exp !== "number" ||
+			payload.email_verified !== true ||
+			payload.premium !== true ||
+			!Array.isArray(payload.amr) ||
+			payload.amr.length !== 1 ||
+			payload.amr[0] !== "Application" ||
+			(payload.did !== undefined && typeof payload.did !== "string") ||
+			(payload.dstamp !== undefined && typeof payload.dstamp !== "string")
+		) {
+			return null;
+		}
 		return payload as unknown as JWTPayload;
 	} catch {
 		return null;

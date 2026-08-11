@@ -37,7 +37,7 @@ describe("jwt utils", () => {
 	});
 
 	describe("createJWT / verifyJWT", () => {
-		test("can sign and verify token", async () => {
+			test("can sign and verify token", async () => {
 			const inputPayload = {
 				sub: "user-123",
 				email: "user@example.com",
@@ -54,6 +54,17 @@ describe("jwt utils", () => {
 			assert.strictEqual(verified.name, "Alice");
 			assert.strictEqual(verified.sstamp, "security-stamp");
 			assert.strictEqual(verified.premium, true);
+			assert.strictEqual(verified.typ, "access");
+			assert.strictEqual(verified.aud, "edgewarden-api");
+		});
+
+		test("rejects a valid realtime ticket as an API access token", async () => {
+			const token = await createRealtimeTicket(
+				"user-123",
+				"security-stamp",
+				secret,
+			);
+			assert.strictEqual(await verifyJWT(token, secret), null);
 		});
 
 		test("returns null for invalid signature", async () => {
