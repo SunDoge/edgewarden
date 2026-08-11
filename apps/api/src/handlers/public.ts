@@ -64,6 +64,9 @@ export const registerAccount = factory.createHandlers(
 				: null;
 		if (inviteCode && !invite)
 			return errorResponse("Invite is invalid or expired", 400);
+		if (invite && invite.email?.trim().toLowerCase() !== email) {
+			return errorResponse("Invite does not match this email address", 400);
+		}
 		if (isBootstrap) {
 			if (!(await verifyBootstrapSecret(c.env, body.adminPassword))) {
 				return errorResponse(

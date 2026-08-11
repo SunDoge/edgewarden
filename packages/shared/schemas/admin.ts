@@ -6,6 +6,7 @@ export const AdminPasswordSchema = v.object({
 
 export const CreateInviteSchema = v.object({
 	masterPasswordHash: v.pipe(v.string(), v.minLength(1)),
+	email: v.pipe(v.string(), v.email(), v.maxLength(254)),
 	expiresInHours: v.optional(
 		v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(720)),
 		168,

@@ -1424,16 +1424,19 @@ describe("Edgewarden API", () => {
 			headers: { ...adminAuth, "content-type": "application/json" },
 			body: JSON.stringify({
 				masterPasswordHash: MASTER_PASSWORD_HASH,
+				email: "invited-api-test@example.com",
 				expiresInHours: 24,
 			}),
 		});
 		assert.equal(created.status, 201, await created.clone().text());
 		const invite = await created.json<{
 			code: string;
+			email: string;
 			status: string;
 			inviteLink: string;
 		}>();
 		assert.equal(invite.status, "active");
+		assert.equal(invite.email, "invited-api-test@example.com");
 		assert.match(
 			invite.inviteLink,
 			new RegExp(`/register\\?invite=${invite.code}$`),
@@ -1479,6 +1482,16 @@ describe("Edgewarden API", () => {
 			kdfIterations: 600_000,
 			inviteCode: invite.code,
 		});
+		const wrongEmail = await request("/api/accounts/register", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify(invitedPayload("invite-race@example.com")),
+		});
+		assert.equal(wrongEmail.status, 400);
+		assert.equal(
+			(await wrongEmail.json<{ message: string }>()).message,
+			"Invite does not match this email address",
+		);
 		const competingRegistrations = await Promise.all([
 			request("/api/accounts/register", {
 				method: "POST",
@@ -1488,7 +1501,7 @@ describe("Edgewarden API", () => {
 			request("/api/accounts/register", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
-				body: JSON.stringify(invitedPayload("invite-race@example.com")),
+				body: JSON.stringify(invitedPayload("INVITED-API-TEST@EXAMPLE.COM")),
 			}),
 		]);
 		const competingStatuses = competingRegistrations.map(

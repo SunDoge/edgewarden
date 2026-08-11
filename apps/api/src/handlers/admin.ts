@@ -46,6 +46,7 @@ function inviteResponse(
 	request: Request,
 	invite: {
 		code: string;
+		email: string | null;
 		created_by: string;
 		used_by: string | null;
 		expires_at: number;
@@ -56,6 +57,7 @@ function inviteResponse(
 ) {
 	return {
 		code: invite.code,
+		email: invite.email,
 		status: invite.status,
 		createdBy: invite.created_by,
 		usedBy: invite.used_by,
@@ -187,6 +189,7 @@ export const createAdminInvite = factory.createHandlers(
 			.insertInto("invites")
 			.values({
 				code,
+				email: body.email.trim().toLowerCase(),
 				created_by: c.get("user").id,
 				used_by: null,
 				expires_at: ts + body.expiresInHours * 3600,
@@ -206,7 +209,11 @@ export const createAdminInvite = factory.createHandlers(
 			action: "admin.invite.create",
 			category: "admin",
 			targetType: "invite",
-			metadata: { ...auditRequestMetadata(c.req.raw), status: "active" },
+			metadata: {
+				...auditRequestMetadata(c.req.raw),
+				status: "active",
+				email: body.email.trim().toLowerCase(),
+			},
 		});
 		return c.json(inviteResponse(c.req.raw, invite), 201);
 	},

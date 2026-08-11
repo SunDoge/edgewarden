@@ -146,6 +146,7 @@ export interface Invites {
   code: string;
   created_at: number;
   created_by: string;
+  email: string | null;
   expires_at: number;
   status: string;
   updated_at: number;

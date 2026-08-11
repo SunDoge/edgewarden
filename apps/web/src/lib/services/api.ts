@@ -1238,11 +1238,12 @@ export async function listAdminInvitesApi(
 
 export async function createAdminInviteApi(
 	masterPasswordHash: string,
+	email: string,
 	expiresInHours: number,
 ): Promise<any> {
 	return rpcJson(
 		await rpc.api.admin.invites.$post({
-			json: { masterPasswordHash, expiresInHours },
+			json: { masterPasswordHash, email, expiresInHours },
 		}),
 	);
 }
