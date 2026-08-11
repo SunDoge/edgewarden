@@ -1,4 +1,5 @@
 import { vValidator } from "@hono/valibot-validator";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import {
@@ -31,9 +32,17 @@ import {
 } from "./account-passkeys";
 import { hashRefreshToken } from "../utils/jwt";
 import * as webauthnDb from "../services/db/webauthn";
-import { assertTwoFactorPasskey, buildTwoFactorPasskeyAssertion } from "./two-factor-passkeys";
+import {
+	assertTwoFactorPasskey,
+	buildTwoFactorPasskeyAssertion,
+} from "./two-factor-passkeys";
 import { loadYubicoCredentials } from "../services/yubico-config";
-import { parseYubikeyConfig, userYubicoPublicIds, verifyYubicoOtp, yubicoPublicId } from "../utils/yubico";
+import {
+	parseYubikeyConfig,
+	userYubicoPublicIds,
+	verifyYubicoOtp,
+	yubicoPublicId,
+} from "../utils/yubico";
 import { turnstileEnabled, verifyTurnstileToken } from "../services/turnstile";
 
 const TWO_FACTOR_AUTHENTICATOR = 0;
@@ -41,16 +50,36 @@ const TWO_FACTOR_RECOVERY = 8;
 const TWO_FACTOR_WEBAUTHN = 7;
 const TWO_FACTOR_YUBIKEY = 3;
 
-async function twoFactorRequiredResponse(request: Request, env: CloudflareBindings, db: any, user: any): Promise<Response> {
+async function twoFactorRequiredResponse(
+	request: Request,
+	env: CloudflareBindings,
+	db: any,
+	user: any,
+): Promise<Response> {
 	const providers: string[] = [];
-	if (isTotpEnabled(user.totp_secret)) providers.push(String(TWO_FACTOR_AUTHENTICATOR));
-	if (userYubicoPublicIds(user).length) providers.push(String(TWO_FACTOR_YUBIKEY));
-	const webAuthn = await buildTwoFactorPasskeyAssertion(request, env, db, user.id);
+	if (isTotpEnabled(user.totp_secret))
+		providers.push(String(TWO_FACTOR_AUTHENTICATOR));
+	if (userYubicoPublicIds(user).length)
+		providers.push(String(TWO_FACTOR_YUBIKEY));
+	const webAuthn = await buildTwoFactorPasskeyAssertion(
+		request,
+		env,
+		db,
+		user.id,
+	);
 	if (webAuthn) providers.push(String(TWO_FACTOR_WEBAUTHN));
 	const providers2: Record<string, Record<string, unknown>> = {};
 	for (const p of providers) providers2[p] = { Email: null };
-	if (webAuthn) providers2[String(TWO_FACTOR_WEBAUTHN)] = { Email: null, Challenge: webAuthn };
-	if (userYubicoPublicIds(user).length) providers2[String(TWO_FACTOR_YUBIKEY)] = { Email: null, Nfc: parseYubikeyConfig(user.yubikey_config).nfc };
+	if (webAuthn)
+		providers2[String(TWO_FACTOR_WEBAUTHN)] = {
+			Email: null,
+			Challenge: webAuthn,
+		};
+	if (userYubicoPublicIds(user).length)
+		providers2[String(TWO_FACTOR_YUBIKEY)] = {
+			Email: null,
+			Nfc: parseYubikeyConfig(user.yubikey_config).nfc,
+		};
 	return jsonResponse(
 		{
 			error: "invalid_grant",
@@ -87,12 +116,13 @@ function buildTokenResponse(
 	user: Awaited<ReturnType<typeof usersDb.getUserById>> & object,
 	twoFactorToken?: string,
 	webAuthnPrfOption: any = null,
+	exposeRefreshToken = true,
 ) {
 	return {
 		access_token: accessToken,
 		expires_in: LIMITS.auth.accessTokenTtlSeconds,
 		token_type: "Bearer",
-		refresh_token: refreshToken,
+		...(exposeRefreshToken ? { refresh_token: refreshToken } : {}),
 		...(twoFactorToken ? { TwoFactorToken: twoFactorToken } : {}),
 		Key: user.key,
 		PrivateKey: user.private_key,
@@ -111,6 +141,29 @@ function buildTokenResponse(
 		UserDecryptionOptions: buildUserDecryptionOptions(user, webAuthnPrfOption),
 		userDecryptionOptions: buildUserDecryptionOptions(user, webAuthnPrfOption),
 	};
+}
+
+function webRefreshCookieName(requestUrl: string): string {
+	return new URL(requestUrl).protocol === "https:"
+		? "__Host-edgewarden_refresh"
+		: "edgewarden_refresh";
+}
+
+function isWebClient(body: Record<string, unknown>): boolean {
+	return String(body.client_id ?? "").trim() === "web";
+}
+
+function setWebRefreshCookie(
+	c: Parameters<typeof setCookie>[0],
+	token: string,
+): void {
+	setCookie(c, webRefreshCookieName(c.req.url), token, {
+		httpOnly: true,
+		secure: new URL(c.req.url).protocol === "https:",
+		sameSite: "Strict",
+		path: "/",
+		maxAge: LIMITS.auth.refreshTokenTtlSeconds,
+	});
 }
 
 // POST /identity/accounts/prelogin
@@ -170,7 +223,8 @@ export const connectToken = factory.createHandlers(async (c) => {
 			body.twoFactorProvider ?? body.TwoFactorProvider ?? "";
 		const deviceInfo = readDeviceInfo(body);
 		if (turnstileEnabled(c.env)) {
-			const captchaResponse = body.captchaResponse ?? body.CaptchaResponse ?? "";
+			const captchaResponse =
+				body.captchaResponse ?? body.CaptchaResponse ?? "";
 			const remoteIp = c.req.header("CF-Connecting-IP") ?? undefined;
 			if (!(await verifyTurnstileToken(c.env, captchaResponse, remoteIp))) {
 				return identityErrorResponse(
@@ -238,13 +292,23 @@ export const connectToken = factory.createHandlers(async (c) => {
 			);
 		}
 
-		const twoFactorPasskeys = await webauthnDb.countAccountPasskeyCredentialsByUserId(db, user.id, "twoFactor");
+		const twoFactorPasskeys =
+			await webauthnDb.countAccountPasskeyCredentialsByUserId(
+				db,
+				user.id,
+				"twoFactor",
+			);
 		const yubicoIds = userYubicoPublicIds(user);
 		// Verify any configured second-factor provider.
-		if (isTotpEnabled(user.totp_secret) || twoFactorPasskeys > 0 || yubicoIds.length > 0) {
+		if (
+			isTotpEnabled(user.totp_secret) ||
+			twoFactorPasskeys > 0 ||
+			yubicoIds.length > 0
+		) {
 			const provider = twoFactorProvider.trim();
 			const token = twoFactorToken.trim();
-			if (!provider || !token) return await twoFactorRequiredResponse(c.req.raw, c.env, db, user);
+			if (!provider || !token)
+				return await twoFactorRequiredResponse(c.req.raw, c.env, db, user);
 
 			if (provider === String(TWO_FACTOR_AUTHENTICATOR)) {
 				const ok = await verifyTotpToken(user.totp_secret ?? "", token);
@@ -256,16 +320,35 @@ export const connectToken = factory.createHandlers(async (c) => {
 					);
 			} else if (provider === String(TWO_FACTOR_WEBAUTHN)) {
 				try {
-					const parsed = JSON.parse(token) as { token?: string; deviceResponse?: unknown };
-					await assertTwoFactorPasskey(c.req.raw, c.env, db, user.id, { token: String(parsed.token ?? ""), deviceResponse: parsed.deviceResponse });
+					const parsed = JSON.parse(token) as {
+						token?: string;
+						deviceResponse?: unknown;
+					};
+					await assertTwoFactorPasskey(c.req.raw, c.env, db, user.id, {
+						token: String(parsed.token ?? ""),
+						deviceResponse: parsed.deviceResponse,
+					});
 				} catch {
-					return identityErrorResponse("Two-step passkey is invalid. Try again.", "invalid_grant", 400);
+					return identityErrorResponse(
+						"Two-step passkey is invalid. Try again.",
+						"invalid_grant",
+						400,
+					);
 				}
 			} else if (provider === String(TWO_FACTOR_YUBIKEY)) {
 				const credentials = await loadYubicoCredentials(db, c.env);
 				const publicId = yubicoPublicId(token);
-				if (!credentials || !publicId || !yubicoIds.includes(publicId) || !(await verifyYubicoOtp(token, credentials))) {
-					return identityErrorResponse("YubiKey OTP is invalid. Try again.", "invalid_grant", 400);
+				if (
+					!credentials ||
+					!publicId ||
+					!yubicoIds.includes(publicId) ||
+					!(await verifyYubicoOtp(token, credentials))
+				) {
+					return identityErrorResponse(
+						"YubiKey OTP is invalid. Try again.",
+						"invalid_grant",
+						400,
+					);
 				}
 			} else if (
 				provider === String(TWO_FACTOR_RECOVERY) ||
@@ -339,7 +422,17 @@ export const connectToken = factory.createHandlers(async (c) => {
 			revisionQuery(db, user.id, sessionTime),
 		]);
 
-		return c.json(buildTokenResponse(accessToken, refreshToken, user));
+		if (isWebClient(body)) setWebRefreshCookie(c, refreshToken);
+		return c.json(
+			buildTokenResponse(
+				accessToken,
+				refreshToken,
+				user,
+				undefined,
+				null,
+				!isWebClient(body),
+			),
+		);
 
 		// ── webauthn grant ──────────────────────────────────────────────────────
 	} else if (grantType === "webauthn") {
@@ -453,6 +546,7 @@ export const connectToken = factory.createHandlers(async (c) => {
 			},
 		});
 
+		if (isWebClient(body)) setWebRefreshCookie(c, refreshToken);
 		return c.json(
 			buildTokenResponse(
 				accessToken,
@@ -460,12 +554,16 @@ export const connectToken = factory.createHandlers(async (c) => {
 				user,
 				undefined,
 				webAuthnPrfOption,
+				!isWebClient(body),
 			),
 		);
 
 		// ── refresh_token grant ─────────────────────────────────────────────────
 	} else if (grantType === "refresh_token") {
-		const rawToken = body.refresh_token;
+		const webClient = isWebClient(body);
+		const rawToken =
+			body.refresh_token ||
+			(webClient ? getCookie(c, webRefreshCookieName(c.req.url)) : undefined);
 		if (!rawToken) {
 			return identityErrorResponse(
 				"Refresh token is required",
@@ -543,7 +641,17 @@ export const connectToken = factory.createHandlers(async (c) => {
 		]);
 
 		const accessToken = await generateAccessToken(user, deviceSession, secret);
-		return c.json(buildTokenResponse(accessToken, newRefreshToken, user));
+		if (webClient) setWebRefreshCookie(c, newRefreshToken);
+		return c.json(
+			buildTokenResponse(
+				accessToken,
+				newRefreshToken,
+				user,
+				undefined,
+				null,
+				!webClient,
+			),
+		);
 
 		// ── client_credentials grant ────────────────────────────────────────────
 	} else if (grantType === "client_credentials") {
@@ -586,7 +694,13 @@ export const connectToken = factory.createHandlers(async (c) => {
 // POST /identity/connect/revoke
 export const revokeToken = factory.createHandlers(async (c) => {
 	const db = c.get("db");
-	const token = c.get("revocationToken");
+	const token =
+		c.get("revocationToken") ||
+		getCookie(c, webRefreshCookieName(c.req.url));
 	if (token) await refreshTokensDb.deleteRefreshToken(db, token);
+	deleteCookie(c, webRefreshCookieName(c.req.url), {
+		path: "/",
+		secure: new URL(c.req.url).protocol === "https:",
+	});
 	return new Response(null, { status: 200 });
 });

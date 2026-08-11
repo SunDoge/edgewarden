@@ -18,7 +18,12 @@ import {
 	KdfType,
 } from "@edgewarden/shared";
 import type { InferRequestType } from "hono/client";
-import { rpc, rpcJson } from "./rpc";
+import {
+	getMemoryAccessToken,
+	rpc,
+	rpcJson,
+	setMemoryAccessToken,
+} from "./rpc";
 import { ApiError } from "./rpc";
 import {
 	assertAccountPasskey,
@@ -38,7 +43,7 @@ export { KdfType };
 
 export function getAccessToken(): string | null {
 	if (typeof window === "undefined") return null;
-	return localStorage.getItem("access_token");
+	return getMemoryAccessToken();
 }
 
 export function isLoggedIn(): boolean {
@@ -47,18 +52,12 @@ export function isLoggedIn(): boolean {
 
 export async function logout(): Promise<void> {
 	if (typeof window === "undefined") return;
-	const refreshToken = localStorage.getItem("refresh_token");
-	localStorage.removeItem("access_token");
-	localStorage.removeItem("refresh_token");
+	setMemoryAccessToken(null);
 	sessionStorage.removeItem("master_key");
-	if (refreshToken) {
-		try {
-			await rpc.identity.connect.revocation.$post({
-				form: { token: refreshToken },
-			});
-		} catch {
-			// Local logout must still complete while offline.
-		}
+	try {
+		await rpc.identity.connect.revocation.$post({ form: { token: "" } });
+	} catch {
+		// Local logout must still complete while offline.
 	}
 }
 
@@ -169,9 +168,7 @@ export async function login(
 	});
 	const tokenResponse = (await rpcJson(response)) as TokenResponse;
 
-	localStorage.setItem("access_token", tokenResponse.access_token);
-	if (tokenResponse.refresh_token)
-		localStorage.setItem("refresh_token", tokenResponse.refresh_token);
+	setMemoryAccessToken(tokenResponse.access_token);
 
 	return { masterKey };
 }
@@ -535,9 +532,7 @@ export async function loginWithPasskeyApi(): Promise<{
 			assertion.prfKey,
 			prfOption,
 		);
-	localStorage.setItem("access_token", token.access_token);
-	if (token.refresh_token)
-		localStorage.setItem("refresh_token", token.refresh_token);
+	setMemoryAccessToken(token.access_token);
 	if (keys) {
 		return {
 			accessToken: token.access_token,

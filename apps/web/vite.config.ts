@@ -8,6 +8,25 @@ export default defineConfig({
 	plugins: [
 		tailwindcss(),
 		sveltekit({
+			csp: {
+				mode: "hash",
+				directives: {
+					"default-src": ["self"],
+					"base-uri": ["none"],
+					"connect-src": ["self", "wss:", "https://challenges.cloudflare.com", "https://api.pwnedpasswords.com"],
+					"font-src": ["self"],
+					"form-action": ["self"],
+					"frame-ancestors": ["none"],
+					"frame-src": ["https://challenges.cloudflare.com"],
+					"img-src": ["self", "data:", "blob:"],
+					"manifest-src": ["self"],
+					"object-src": ["none"],
+					"script-src": ["self", "https://challenges.cloudflare.com"],
+					"script-src-attr": ["none"],
+					"style-src": ["self", "unsafe-inline"],
+					"worker-src": ["self", "blob:"],
+				},
+			},
 			compilerOptions: {
 				// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
 				runes: ({ filename }) =>

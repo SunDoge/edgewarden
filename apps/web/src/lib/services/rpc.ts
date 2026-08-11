@@ -13,9 +13,58 @@ export class ApiError extends Error {
 	}
 }
 
-function getAccessToken(): string | null {
+let accessTokenInMemory: string | null = null;
+let refreshInFlight: Promise<string | null> | null = null;
+
+export function getMemoryAccessToken(): string | null {
+	return accessTokenInMemory;
+}
+export function setMemoryAccessToken(token: string | null): void {
+	accessTokenInMemory = token;
+}
+
+async function refreshWebAccessToken(
+	fetchImpl: typeof fetch,
+	requestUrl: URL,
+): Promise<string | null> {
 	if (typeof window === "undefined") return null;
-	return localStorage.getItem("access_token");
+	if (!refreshInFlight) {
+		refreshInFlight = (async () => {
+			const response = await fetchImpl(
+				new URL("/identity/connect/token", requestUrl),
+				{
+					method: "POST",
+					headers: { "content-type": "application/x-www-form-urlencoded" },
+					credentials: "include",
+					body: new URLSearchParams({
+						grant_type: "refresh_token",
+						client_id: "web",
+					}),
+				},
+			);
+			if (!response.ok) {
+				accessTokenInMemory = null;
+				return null;
+			}
+			const body = (await response.json()) as { access_token?: string };
+			accessTokenInMemory = body.access_token ?? null;
+			return accessTokenInMemory;
+		})().finally(() => {
+			refreshInFlight = null;
+		});
+	}
+	return refreshInFlight;
+}
+
+export async function restoreWebSession(): Promise<boolean> {
+	if (accessTokenInMemory) return true;
+	if (typeof window === "undefined") return false;
+	// One-time cleanup for sessions created before tokens moved to HttpOnly cookies.
+	localStorage.removeItem("access_token");
+	localStorage.removeItem("refresh_token");
+	return Boolean(
+		await refreshWebAccessToken(fetch, new URL(window.location.origin)),
+	);
 }
 
 async function readErrorPayload(response: Response): Promise<unknown> {
@@ -53,10 +102,33 @@ async function authenticatedFetch(
 	if (token && !headers.has("authorization")) {
 		headers.set("authorization", `Bearer ${token}`);
 	}
-	if (typeof window !== "undefined" && !headers.has("X-Device-Identifier")) headers.set("X-Device-Identifier", getOrCreateDeviceIdentifier());
+	if (typeof window !== "undefined" && !headers.has("X-Device-Identifier"))
+		headers.set("X-Device-Identifier", getOrCreateDeviceIdentifier());
 
-	const response = await fetchImpl(input, { ...init, headers });
+	const response = await fetchImpl(input, {
+		...init,
+		headers,
+		credentials: "same-origin",
+	});
 	if (response.ok) return response;
+	const requestUrl = new URL(
+		typeof input === "string"
+			? input
+			: input instanceof URL
+				? input.href
+				: input.url,
+		typeof window === "undefined" ? "http://localhost" : window.location.origin,
+	);
+	if (
+		response.status === 401 &&
+		!requestUrl.pathname.endsWith("/identity/connect/token")
+	) {
+		const refreshed = await refreshWebAccessToken(fetchImpl, requestUrl);
+		if (refreshed) {
+			headers.set("authorization", `Bearer ${refreshed}`);
+			return fetchImpl(input, { ...init, headers, credentials: "same-origin" });
+		}
+	}
 
 	const payload = await readErrorPayload(response);
 	throw new ApiError(
@@ -77,7 +149,7 @@ export function createRpcClient(
 	} = {},
 ) {
 	const fetchImpl = options.fetch ?? ((input, init) => fetch(input, init));
-	const accessToken = options.accessToken ?? getAccessToken;
+	const accessToken = options.accessToken ?? getMemoryAccessToken;
 	return hc<AppType>(baseUrl, {
 		fetch: (input: RequestInfo | URL, init?: RequestInit) =>
 			authenticatedFetch(input, init, fetchImpl, accessToken),

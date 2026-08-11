@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRpcClient } from "./rpc";
+import {
+	createRpcClient,
+	getMemoryAccessToken,
+	setMemoryAccessToken,
+} from "./rpc";
 
 describe("Hono RPC client", () => {
 	it("builds typed path parameters and JSON requests", async () => {
@@ -50,5 +54,19 @@ describe("Hono RPC client", () => {
 				payload: { message: "Invalid request payload" },
 			}),
 		);
+	});
+
+	it("keeps the access token in memory and sends same-origin credentials", async () => {
+		setMemoryAccessToken("memory-only-token");
+		const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json({ version: "test" }));
+		const client = createRpcClient("http://localhost", { fetch: fetchMock });
+		await client.api.version.$get();
+		const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+		expect(getMemoryAccessToken()).toBe("memory-only-token");
+		expect(new Headers(init.headers).get("authorization")).toBe(
+			"Bearer memory-only-token",
+		);
+		expect(init.credentials).toBe("same-origin");
+		setMemoryAccessToken(null);
 	});
 });

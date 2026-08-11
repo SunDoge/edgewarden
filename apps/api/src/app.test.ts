@@ -141,6 +141,17 @@ describe("Edgewarden API", () => {
 		assert.equal(body.featureStates["fill-assist-targeting-rules"], true);
 	});
 
+	test("sets strict browser security headers and rejects unknown CORS origins", async () => {
+		const response = await request("/api/version", {
+			headers: { origin: "https://evil.example" },
+		});
+		assert.equal(response.headers.get("access-control-allow-origin"), null);
+		const csp = response.headers.get("content-security-policy") ?? "";
+		assert.match(csp, /default-src 'self'/);
+		assert.match(csp, /object-src 'none'/);
+		assert.match(csp, /script-src-attr 'none'/);
+	});
+
 	test("serves the empty Fill Assist ruleset with public caching", async () => {
 		const manifest = await request("/fill-assist/manifest.json");
 		assert.equal(manifest.status, 200);
@@ -433,6 +444,43 @@ describe("Edgewarden API", () => {
 			}),
 		});
 		assert.equal(replay.status, 400);
+	});
+
+	test("keeps web refresh tokens out of JavaScript-readable responses", async () => {
+		const login = await request("/identity/connect/token", {
+			method: "POST",
+			headers: { "content-type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				grant_type: "password",
+				client_id: "web",
+				username: EMAIL,
+				password: MASTER_PASSWORD_HASH,
+			}),
+		});
+		assert.equal(login.status, 200, await login.clone().text());
+		const body = await login.json<Record<string, unknown>>();
+		assert.equal("refresh_token" in body, false);
+		const cookie = login.headers.get("set-cookie") ?? "";
+		assert.match(cookie, /edgewarden_refresh=/);
+		assert.match(cookie, /HttpOnly/i);
+		assert.match(cookie, /SameSite=Strict/i);
+
+		const refreshed = await request("/identity/connect/token", {
+			method: "POST",
+			headers: {
+				"content-type": "application/x-www-form-urlencoded",
+				cookie: cookie.split(";")[0],
+			},
+			body: new URLSearchParams({
+				grant_type: "refresh_token",
+				client_id: "web",
+			}),
+		});
+		assert.equal(refreshed.status, 200, await refreshed.clone().text());
+		assert.equal(
+			"refresh_token" in (await refreshed.json<Record<string, unknown>>()),
+			false,
+		);
 	});
 
 	test("issues dedicated realtime tickets and rejects invalid websocket tickets", async () => {

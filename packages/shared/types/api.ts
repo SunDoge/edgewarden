@@ -57,7 +57,7 @@ export interface TokenResponse {
 	access_token: string;
 	expires_in: number;
 	token_type: string;
-	refresh_token: string;
+	refresh_token?: string;
 	Key: string;
 	PrivateKey: string | null;
 	Kdf: KdfType;

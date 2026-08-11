@@ -31,7 +31,23 @@ baseApp.use("*", async (c, next) => {
 baseApp.use(
 	"*",
 	cors({
-		origin: (origin) => origin,
+		origin: (origin, c) => {
+			const sameOrigin = origin === new URL(c.req.url).origin;
+			const extensionOrigin =
+				/^(chrome-extension|moz-extension|safari-web-extension):\/\//.test(
+					origin,
+				);
+			const configured = String(
+				(c.env as CloudflareBindings & { CORS_ALLOWED_ORIGINS?: string })
+					.CORS_ALLOWED_ORIGINS ?? "",
+			)
+				.split(",")
+				.map((value) => value.trim())
+				.filter(Boolean);
+			return sameOrigin || extensionOrigin || configured.includes(origin)
+				? origin
+				: "";
+		},
 		credentials: true,
 		allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 		allowHeaders: [
@@ -48,6 +64,27 @@ baseApp.use(
 baseApp.use(
 	"*",
 	secureHeaders({
+		contentSecurityPolicy: {
+			defaultSrc: ["'self'"],
+			baseUri: ["'none'"],
+			connectSrc: [
+				"'self'",
+				"wss:",
+				"https://challenges.cloudflare.com",
+				"https://api.pwnedpasswords.com",
+			],
+			fontSrc: ["'self'"],
+			formAction: ["'self'"],
+			frameAncestors: ["'none'"],
+			frameSrc: ["https://challenges.cloudflare.com"],
+			imgSrc: ["'self'", "data:", "blob:"],
+			manifestSrc: ["'self'"],
+			objectSrc: ["'none'"],
+			scriptSrc: ["'self'", "https://challenges.cloudflare.com"],
+			scriptSrcAttr: ["'none'"],
+			styleSrc: ["'self'", "'unsafe-inline'"],
+			workerSrc: ["'self'", "blob:"],
+		},
 		xFrameOptions: "DENY",
 		xContentTypeOptions: "nosniff",
 		referrerPolicy: "no-referrer",

@@ -2,8 +2,10 @@
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
 import { isLoggedIn } from "$lib/services/api";
+import { restoreWebSession } from "$lib/services/rpc";
 
-onMount(() => {
+onMount(async () => {
+	await restoreWebSession();
 	if (isLoggedIn()) {
 		goto("/vault");
 	} else {
