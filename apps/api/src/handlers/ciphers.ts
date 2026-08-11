@@ -16,7 +16,10 @@ import {
 import * as ciphersDb from "../services/db/ciphers";
 import * as attachmentsDb from "../services/db/attachments";
 import * as foldersDb from "../services/db/folders";
-import { deleteBlobObject, getAttachmentObjectKey } from "../services/blob-store";
+import {
+	deleteBlobObject,
+	getAttachmentObjectKey,
+} from "../services/blob-store";
 import type { Attachments, Ciphers } from "../types/db";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
@@ -31,6 +34,9 @@ function cipherToResponse(
 ) {
 	const data = JSON.parse(cipher.data) as Record<string, unknown>;
 	return {
+		// Preserve future top-level fields introduced by official clients. Values
+		// managed by this server are deliberately written below and take precedence.
+		...data,
 		id: cipher.id,
 		organizationId: cipher.org_id ?? null,
 		folderId: cipher.folder_id ?? null,
@@ -49,7 +55,14 @@ function cipherToResponse(
 		favorite: cipher.favorite === 1,
 		reprompt: cipher.reprompt ?? 0,
 		key: cipher.key ?? null,
-		attachments: attachments.map((attachment) => ({ id: attachment.id, fileName: attachment.file_name, size: attachment.size, sizeName: attachment.size_name, key: attachment.key, object: "attachment" })),
+		attachments: attachments.map((attachment) => ({
+			id: attachment.id,
+			fileName: attachment.file_name,
+			size: attachment.size,
+			sizeName: attachment.size_name,
+			key: attachment.key,
+			object: "attachment",
+		})),
 		organizationUseTotp: false,
 		edit: permissions.edit,
 		viewPassword: permissions.viewPassword,
@@ -69,8 +82,17 @@ function cipherToResponse(
 	};
 }
 
-async function getCipherCollectionIds(db: any, cipherId: string): Promise<string[]> {
-	return (await db.selectFrom("cipher_collections").select("collection_id").where("cipher_id", "=", cipherId).execute()).map((row: any) => row.collection_id);
+async function getCipherCollectionIds(
+	db: any,
+	cipherId: string,
+): Promise<string[]> {
+	return (
+		await db
+			.selectFrom("cipher_collections")
+			.select("collection_id")
+			.where("cipher_id", "=", cipherId)
+			.execute()
+	).map((row: any) => row.collection_id);
 }
 
 async function getCipherPermissions(
@@ -79,7 +101,12 @@ async function getCipherPermissions(
 	member: any,
 	collectionIds: string[],
 ): Promise<CipherPermissions> {
-	if (!cipher.org_id || !member || member.access_all === 1 || ["manager", "admin", "owner"].includes(member.role)) {
+	if (
+		!cipher.org_id ||
+		!member ||
+		member.access_all === 1 ||
+		["manager", "admin", "owner"].includes(member.role)
+	) {
 		return { edit: true, viewPassword: true };
 	}
 	const access = collectionIds.length
@@ -91,37 +118,89 @@ async function getCipherPermissions(
 				.execute()
 		: [];
 	return {
-		edit: access.length === collectionIds.length && access.every((row: any) => row.read_only !== 1),
-		viewPassword: access.length === collectionIds.length && access.every((row: any) => row.hide_passwords !== 1),
+		edit:
+			access.length === collectionIds.length &&
+			access.every((row: any) => row.read_only !== 1),
+		viewPassword:
+			access.length === collectionIds.length &&
+			access.every((row: any) => row.hide_passwords !== 1),
 	};
 }
 
-async function revisionQueriesForCipher(db: any, cipher: Pick<Selectable<Ciphers>, "user_id" | "org_id">, timestamp = now()): Promise<CompiledQuery[]> {
+async function revisionQueriesForCipher(
+	db: any,
+	cipher: Pick<Selectable<Ciphers>, "user_id" | "org_id">,
+	timestamp = now(),
+): Promise<CompiledQuery[]> {
 	if (cipher.user_id) return [revisionQuery(db, cipher.user_id, timestamp)];
-	const members = await db.selectFrom("org_members").select("user_id").where("org_id", "=", cipher.org_id!).where("status", "=", "confirmed").where("user_id", "is not", null).execute();
-	return members.map((member: any) => revisionQuery(db, member.user_id, timestamp));
+	const members = await db
+		.selectFrom("org_members")
+		.select("user_id")
+		.where("org_id", "=", cipher.org_id!)
+		.where("status", "=", "confirmed")
+		.where("user_id", "is not", null)
+		.execute();
+	return members.map((member: any) =>
+		revisionQuery(db, member.user_id, timestamp),
+	);
 }
 
-async function validateOrganizationCollections(db: any, userId: string, organizationId: string, collectionIds: string[]) {
+async function validateOrganizationCollections(
+	db: any,
+	userId: string,
+	organizationId: string,
+	collectionIds: string[],
+) {
 	const uniqueIds = [...new Set(collectionIds)];
-	if (!uniqueIds.length) return { error: "At least one collection is required" } as const;
-	const member = await db.selectFrom("org_members").selectAll().where("org_id", "=", organizationId).where("user_id", "=", userId).where("status", "=", "confirmed").executeTakeFirst();
+	if (!uniqueIds.length)
+		return { error: "At least one collection is required" } as const;
+	const member = await db
+		.selectFrom("org_members")
+		.selectAll()
+		.where("org_id", "=", organizationId)
+		.where("user_id", "=", userId)
+		.where("status", "=", "confirmed")
+		.executeTakeFirst();
 	if (!member) return { error: "Organization not found" } as const;
-	const collections = await db.selectFrom("collections").select("id").where("org_id", "=", organizationId).where("id", "in", uniqueIds).execute();
-	if (collections.length !== uniqueIds.length) return { error: "Collection not found" } as const;
+	const collections = await db
+		.selectFrom("collections")
+		.select("id")
+		.where("org_id", "=", organizationId)
+		.where("id", "in", uniqueIds)
+		.execute();
+	if (collections.length !== uniqueIds.length)
+		return { error: "Collection not found" } as const;
 	const elevated = ["manager", "admin", "owner"].includes(member.role);
 	if (!elevated && !member.access_all) {
-		const writable = await db.selectFrom("collection_members").select("collection_id").where("org_member_id", "=", member.id).where("collection_id", "in", uniqueIds).where("read_only", "=", 0).execute();
-		if (writable.length !== uniqueIds.length) return { error: "Collection is read-only" } as const;
+		const writable = await db
+			.selectFrom("collection_members")
+			.select("collection_id")
+			.where("org_member_id", "=", member.id)
+			.where("collection_id", "in", uniqueIds)
+			.where("read_only", "=", 0)
+			.execute();
+		if (writable.length !== uniqueIds.length)
+			return { error: "Collection is read-only" } as const;
 	}
 	return { member, collectionIds: uniqueIds } as const;
 }
 
-async function deleteAttachmentObjects(env: CloudflareBindings, attachments: Selectable<Attachments>[]) {
-	await Promise.allSettled(attachments.map((attachment) => deleteBlobObject(env, getAttachmentObjectKey(attachment.cipher_id, attachment.id))));
+async function deleteAttachmentObjects(
+	env: CloudflareBindings,
+	attachments: Selectable<Attachments>[],
+) {
+	await Promise.allSettled(
+		attachments.map((attachment) =>
+			deleteBlobObject(
+				env,
+				getAttachmentObjectKey(attachment.cipher_id, attachment.id),
+			),
+		),
+	);
 }
 
 type CipherBody = {
+	[key: string]: unknown;
 	login?: Record<string, unknown> | null;
 	secureNote?: Record<string, unknown> | null;
 	card?: Record<string, unknown> | null;
@@ -134,17 +213,39 @@ type CipherBody = {
 	passwordHistory?: unknown[] | null;
 };
 
+const SERVER_MANAGED_CIPHER_FIELDS = new Set([
+	"id",
+	"organizationId",
+	"folderId",
+	"type",
+	"name",
+	"notes",
+	"collectionIds",
+	"favorite",
+	"reprompt",
+	"key",
+	"fields",
+	"passwordHistory",
+	"attachments",
+	"revisionDate",
+	"creationDate",
+	"deletedDate",
+	"archivedDate",
+	"object",
+	"edit",
+	"viewPassword",
+	"permissions",
+	"organizationUseTotp",
+	"lastKnownRevisionDate",
+]);
+
 function buildCipherData(body: CipherBody) {
-	// Store everything except server-managed fields in the JSON data column
 	const data: Record<string, unknown> = {};
-	if (body.login) data.login = body.login;
-	if (body.secureNote) data.secureNote = body.secureNote;
-	if (body.card) data.card = body.card;
-	if (body.identity) data.identity = body.identity;
-	if (body.sshKey) data.sshKey = body.sshKey;
-	if (body.bankAccount) data.bankAccount = body.bankAccount;
-	if (body.driversLicense) data.driversLicense = body.driversLicense;
-	if (body.passport) data.passport = body.passport;
+	for (const [key, value] of Object.entries(body)) {
+		if (!SERVER_MANAGED_CIPHER_FIELDS.has(key) && value !== undefined) {
+			data[key] = value;
+		}
+	}
 	return JSON.stringify(data);
 }
 
@@ -153,10 +254,18 @@ export const listCiphers = factory.createHandlers(async (c) => {
 	const user = c.get("user");
 	const db = c.get("db");
 	const ciphers = await ciphersDb.getCiphersByUserId(db, user.id);
-	const attachments = await attachmentsDb.listByCipherIds(db, ciphers.map((cipher) => cipher.id));
-	const attachmentsByCipher = Map.groupBy(attachments, (attachment) => attachment.cipher_id);
+	const attachments = await attachmentsDb.listByCipherIds(
+		db,
+		ciphers.map((cipher) => cipher.id),
+	);
+	const attachmentsByCipher = Map.groupBy(
+		attachments,
+		(attachment) => attachment.cipher_id,
+	);
 	return c.json({
-		data: ciphers.map((cipher) => cipherToResponse(cipher, attachmentsByCipher.get(cipher.id))),
+		data: ciphers.map((cipher) =>
+			cipherToResponse(cipher, attachmentsByCipher.get(cipher.id)),
+		),
 		object: "list",
 		continuationToken: null,
 	});
@@ -174,17 +283,31 @@ export const createCipher = factory.createHandlers(
 		const ts = now();
 		const organizationId = body.organizationId ?? null;
 		const collectionIds = body.collectionIds ?? [];
-		if (!organizationId && collectionIds.length) return errorResponse("Personal ciphers cannot use collections", 400);
-		if (organizationId && body.folderId) return errorResponse("Organization ciphers cannot use folders", 400);
-		if (!organizationId &&
+		if (!organizationId && collectionIds.length)
+			return errorResponse("Personal ciphers cannot use collections", 400);
+		if (organizationId && body.folderId)
+			return errorResponse("Organization ciphers cannot use folders", 400);
+		if (
+			!organizationId &&
 			body.folderId &&
 			!(await foldersDb.getFolderById(db, body.folderId, user.id))
 		) {
 			return errorResponse("Folder not found", 400);
 		}
 
-		const access = organizationId ? await validateOrganizationCollections(db, user.id, organizationId, collectionIds) : null;
-		if (access && "error" in access && access.error) return errorResponse(access.error, access.error.includes("not found") ? 404 : 403);
+		const access = organizationId
+			? await validateOrganizationCollections(
+					db,
+					user.id,
+					organizationId,
+					collectionIds,
+				)
+			: null;
+		if (access && "error" in access && access.error)
+			return errorResponse(
+				access.error,
+				access.error.includes("not found") ? 404 : 403,
+			);
 		const values = {
 			id,
 			user_id: organizationId ? null : user.id,
@@ -204,10 +327,18 @@ export const createCipher = factory.createHandlers(
 			created_at: ts,
 			updated_at: ts,
 		};
-		const owner = { user_id: organizationId ? null : user.id, org_id: organizationId };
+		const owner = {
+			user_id: organizationId ? null : user.id,
+			org_id: organizationId,
+		};
 		await executeBatch(c.get("dbDialect"), [
 			db.insertInto("ciphers").values(values).compile(),
-			...collectionIds.map((collectionId) => db.insertInto("cipher_collections").values({ cipher_id: id, collection_id: collectionId }).compile()),
+			...collectionIds.map((collectionId) =>
+				db
+					.insertInto("cipher_collections")
+					.values({ cipher_id: id, collection_id: collectionId })
+					.compile(),
+			),
 			...(await revisionQueriesForCipher(db, owner, ts)),
 		]);
 
@@ -327,8 +458,20 @@ export const getCipher = factory.createHandlers(async (c) => {
 	const cipher = c.get("cipher");
 	const db = c.get("db");
 	const collectionIds = await getCipherCollectionIds(db, cipher.id);
-	const permissions = await getCipherPermissions(db, cipher, c.get("orgMember"), collectionIds);
-	return c.json(cipherToResponse(cipher, await attachmentsDb.listByCipherIds(db, [cipher.id]), collectionIds, permissions));
+	const permissions = await getCipherPermissions(
+		db,
+		cipher,
+		c.get("orgMember"),
+		collectionIds,
+	);
+	return c.json(
+		cipherToResponse(
+			cipher,
+			await attachmentsDb.listByCipherIds(db, [cipher.id]),
+			collectionIds,
+			permissions,
+		),
+	);
 });
 
 // PUT /api/ciphers/:id
@@ -339,49 +482,99 @@ export const updateCipher = factory.createHandlers(
 		const user = c.get("user");
 		const db = c.get("db");
 		const cipher = c.get("cipher");
-		if ((body.organizationId ?? null) !== (cipher.org_id ?? null)) return errorResponse("Cipher ownership cannot be changed", 400);
+		if ((body.organizationId ?? null) !== (cipher.org_id ?? null))
+			return errorResponse("Cipher ownership cannot be changed", 400);
 		const collectionIds = body.collectionIds ?? [];
-		if (cipher.org_id && body.folderId) return errorResponse("Organization ciphers cannot use folders", 400);
-		if (!cipher.org_id && collectionIds.length) return errorResponse("Personal ciphers cannot use collections", 400);
-		if (!cipher.org_id &&
+		if (cipher.org_id && body.folderId)
+			return errorResponse("Organization ciphers cannot use folders", 400);
+		if (!cipher.org_id && collectionIds.length)
+			return errorResponse("Personal ciphers cannot use collections", 400);
+		if (
+			!cipher.org_id &&
 			body.folderId &&
 			!(await foldersDb.getFolderById(db, body.folderId, user.id))
 		) {
 			return errorResponse("Folder not found", 400);
 		}
 		if (cipher.org_id) {
-			const access = await validateOrganizationCollections(db, user.id, cipher.org_id, collectionIds);
-			if ("error" in access && access.error) return errorResponse(access.error, access.error.includes("not found") ? 404 : 403);
+			const access = await validateOrganizationCollections(
+				db,
+				user.id,
+				cipher.org_id,
+				collectionIds,
+			);
+			if ("error" in access && access.error)
+				return errorResponse(
+					access.error,
+					access.error.includes("not found") ? 404 : 403,
+				);
+		}
+		if (body.lastKnownRevisionDate) {
+			const expectedRevision = Math.floor(
+				Date.parse(body.lastKnownRevisionDate) / 1000,
+			);
+			if (expectedRevision !== cipher.updated_at) {
+				return errorResponse(
+					"Cipher has been modified since it was last retrieved",
+					409,
+				);
+			}
 		}
 
-		const ts = now();
+		// Keep revisions monotonic even when two writes happen in the same second.
+		const ts = Math.max(now(), cipher.updated_at + 1);
+		const updateQuery = db
+			.updateTable("ciphers")
+			.set({
+				type: body.type,
+				folder_id: cipher.org_id ? null : (body.folderId ?? null),
+				name: body.name,
+				notes: body.notes ?? null,
+				favorite: body.favorite ? 1 : 0,
+				reprompt: body.reprompt ?? 0,
+				key: body.key ?? null,
+				data: buildCipherData(body),
+				fields: body.fields ? JSON.stringify(body.fields) : null,
+				password_history: body.passwordHistory
+					? JSON.stringify(body.passwordHistory)
+					: null,
+				updated_at: ts,
+			})
+			.where("id", "=", cipher.id)
+			.$if(Boolean(body.lastKnownRevisionDate), (query) =>
+				query.where("updated_at", "=", cipher.updated_at),
+			)
+			.compile();
+		const [updateResult] = await c.get("dbDialect").batch([updateQuery]);
+		if (updateResult.numAffectedRows === 0n) {
+			return errorResponse(
+				"Cipher has been modified since it was last retrieved",
+				409,
+			);
+		}
+
 		await executeBatch(c.get("dbDialect"), [
 			db
-				.updateTable("ciphers")
-				.set({
-					type: body.type,
-					folder_id: cipher.org_id ? null : (body.folderId ?? null),
-					name: body.name,
-					notes: body.notes ?? null,
-					favorite: body.favorite ? 1 : 0,
-					reprompt: body.reprompt ?? 0,
-					key: body.key ?? null,
-					data: buildCipherData(body),
-					fields: body.fields ? JSON.stringify(body.fields) : null,
-					password_history: body.passwordHistory
-						? JSON.stringify(body.passwordHistory)
-						: null,
-					updated_at: ts,
-				})
-				.where("id", "=", cipher.id)
+				.deleteFrom("cipher_collections")
+				.where("cipher_id", "=", cipher.id)
 				.compile(),
-			db.deleteFrom("cipher_collections").where("cipher_id", "=", cipher.id).compile(),
-			...collectionIds.map((collectionId) => db.insertInto("cipher_collections").values({ cipher_id: cipher.id, collection_id: collectionId }).compile()),
+			...collectionIds.map((collectionId) =>
+				db
+					.insertInto("cipher_collections")
+					.values({ cipher_id: cipher.id, collection_id: collectionId })
+					.compile(),
+			),
 			...(await revisionQueriesForCipher(db, cipher, ts)),
 		]);
 
 		const updated = await ciphersDb.getCipherById(db, cipher.id);
-		return c.json(cipherToResponse(updated!, await attachmentsDb.listByCipherIds(db, [updated!.id]), collectionIds));
+		return c.json(
+			cipherToResponse(
+				updated!,
+				await attachmentsDb.listByCipherIds(db, [updated!.id]),
+				collectionIds,
+			),
+		);
 	},
 );
 
@@ -415,10 +608,7 @@ export const hardDeleteCipher = factory.createHandlers(async (c) => {
 	const cipherId = cipher.id;
 	const attachments = await attachmentsDb.listByCipherIds(db, [cipherId]);
 	await executeBatch(c.get("dbDialect"), [
-		db
-			.deleteFrom("ciphers")
-			.where("id", "=", cipherId)
-			.compile(),
+		db.deleteFrom("ciphers").where("id", "=", cipherId).compile(),
 		...(await revisionQueriesForCipher(db, cipher)),
 	]);
 	await deleteAttachmentObjects(c.env, attachments);
@@ -440,20 +630,37 @@ export const restoreCipher = factory.createHandlers(async (c) => {
 		...(await revisionQueriesForCipher(db, existing, ts)),
 	]);
 	const cipher = await ciphersDb.getCipherById(db, id);
-	return c.json(cipherToResponse(cipher!, await attachmentsDb.listByCipherIds(db, [cipher!.id]), await getCipherCollectionIds(db, id)));
+	return c.json(
+		cipherToResponse(
+			cipher!,
+			await attachmentsDb.listByCipherIds(db, [cipher!.id]),
+			await getCipherCollectionIds(db, id),
+		),
+	);
 });
 
 export const archiveCipher = factory.createHandlers(async (c) => {
 	const db = c.get("db");
 	const cipher = c.get("cipher");
-	if (cipher.deleted_at) return errorResponse("Cannot archive a deleted cipher", 400);
+	if (cipher.deleted_at)
+		return errorResponse("Cannot archive a deleted cipher", 400);
 	const ts = now();
 	await executeBatch(c.get("dbDialect"), [
-		db.updateTable("ciphers").set({ archived_at: ts, updated_at: ts }).where("id", "=", cipher.id).compile(),
+		db
+			.updateTable("ciphers")
+			.set({ archived_at: ts, updated_at: ts })
+			.where("id", "=", cipher.id)
+			.compile(),
 		...(await revisionQueriesForCipher(db, cipher, ts)),
 	]);
 	const updated = await ciphersDb.getCipherById(db, cipher.id);
-	return c.json(cipherToResponse(updated!, await attachmentsDb.listByCipherIds(db, [cipher.id]), await getCipherCollectionIds(db, cipher.id)));
+	return c.json(
+		cipherToResponse(
+			updated!,
+			await attachmentsDb.listByCipherIds(db, [cipher.id]),
+			await getCipherCollectionIds(db, cipher.id),
+		),
+	);
 });
 
 export const unarchiveCipher = factory.createHandlers(async (c) => {
@@ -461,11 +668,21 @@ export const unarchiveCipher = factory.createHandlers(async (c) => {
 	const cipher = c.get("cipher");
 	const ts = now();
 	await executeBatch(c.get("dbDialect"), [
-		db.updateTable("ciphers").set({ archived_at: null, updated_at: ts }).where("id", "=", cipher.id).compile(),
+		db
+			.updateTable("ciphers")
+			.set({ archived_at: null, updated_at: ts })
+			.where("id", "=", cipher.id)
+			.compile(),
 		...(await revisionQueriesForCipher(db, cipher, ts)),
 	]);
 	const updated = await ciphersDb.getCipherById(db, cipher.id);
-	return c.json(cipherToResponse(updated!, await attachmentsDb.listByCipherIds(db, [cipher.id]), await getCipherCollectionIds(db, cipher.id)));
+	return c.json(
+		cipherToResponse(
+			updated!,
+			await attachmentsDb.listByCipherIds(db, [cipher.id]),
+			await getCipherCollectionIds(db, cipher.id),
+		),
+	);
 });
 
 // POST /api/ciphers/delete (bulk soft delete)
@@ -499,10 +716,16 @@ export const moveCiphers = factory.createHandlers(
 		const { ids, folderId } = c.req.valid("json");
 		const userId = c.get("user").id;
 		const db = c.get("db");
-		if (folderId && !(await foldersDb.getFolderById(db, folderId, userId))) return errorResponse("Folder not found", 404);
+		if (folderId && !(await foldersDb.getFolderById(db, folderId, userId)))
+			return errorResponse("Folder not found", 404);
 		const ts = now();
 		await executeBatch(c.get("dbDialect"), [
-			db.updateTable("ciphers").set({ folder_id: folderId, updated_at: ts }).where("id", "in", ids).where("user_id", "=", userId).compile(),
+			db
+				.updateTable("ciphers")
+				.set({ folder_id: folderId, updated_at: ts })
+				.where("id", "in", ids)
+				.where("user_id", "=", userId)
+				.compile(),
 			revisionQuery(db, userId, ts),
 		]);
 		return new Response(null, { status: 200 });
@@ -516,7 +739,14 @@ export const hardDeleteCiphers = factory.createHandlers(
 		const { ids } = c.req.valid("json");
 		const user = c.get("user");
 		const db = c.get("db");
-		const ownedIds = (await db.selectFrom("ciphers").select("id").where("id", "in", ids).where("user_id", "=", user.id).execute()).map((cipher) => cipher.id);
+		const ownedIds = (
+			await db
+				.selectFrom("ciphers")
+				.select("id")
+				.where("id", "in", ids)
+				.where("user_id", "=", user.id)
+				.execute()
+		).map((cipher) => cipher.id);
 		const attachments = await attachmentsDb.listByCipherIds(db, ownedIds);
 		await executeBatch(c.get("dbDialect"), [
 			db
@@ -539,7 +769,13 @@ export const archiveCiphers = factory.createHandlers(
 		const db = c.get("db");
 		const ts = now();
 		await executeBatch(c.get("dbDialect"), [
-			db.updateTable("ciphers").set({ archived_at: ts, updated_at: ts }).where("id", "in", ids).where("user_id", "=", user.id).where("deleted_at", "is", null).compile(),
+			db
+				.updateTable("ciphers")
+				.set({ archived_at: ts, updated_at: ts })
+				.where("id", "in", ids)
+				.where("user_id", "=", user.id)
+				.where("deleted_at", "is", null)
+				.compile(),
 			revisionQuery(db, user.id, ts),
 		]);
 		return new Response(null, { status: 200 });
@@ -554,7 +790,12 @@ export const unarchiveCiphers = factory.createHandlers(
 		const db = c.get("db");
 		const ts = now();
 		await executeBatch(c.get("dbDialect"), [
-			db.updateTable("ciphers").set({ archived_at: null, updated_at: ts }).where("id", "in", ids).where("user_id", "=", user.id).compile(),
+			db
+				.updateTable("ciphers")
+				.set({ archived_at: null, updated_at: ts })
+				.where("id", "in", ids)
+				.where("user_id", "=", user.id)
+				.compile(),
 			revisionQuery(db, user.id, ts),
 		]);
 		return new Response(null, { status: 200 });

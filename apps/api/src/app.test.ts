@@ -679,6 +679,7 @@ describe("Edgewarden API", () => {
 				favorite: true,
 				login: { username: "encrypted-user", password: "encrypted-pass" },
 				fields: [{ name: "encrypted-field", value: "encrypted-value" }],
+				futureClientField: { encrypted: "opaque-value" },
 			}),
 		});
 		assert.equal(
@@ -694,11 +695,14 @@ describe("Edgewarden API", () => {
 			edit: boolean;
 			viewPassword: boolean;
 			object: string;
+			revisionDate: string;
+			futureClientField: { encrypted: string };
 		}>();
 		cipherId = cipher.id;
 		assert.equal(cipher.folderId, folder.id);
 		assert.equal(cipher.favorite, true);
 		assert.equal(cipher.fields.length, 1);
+		assert.deepEqual(cipher.futureClientField, { encrypted: "opaque-value" });
 		assert.deepEqual(
 			[cipher.edit, cipher.viewPassword, cipher.object],
 			[true, true, "cipherDetails"],
@@ -712,6 +716,49 @@ describe("Edgewarden API", () => {
 		}>();
 		assert.equal(syncBody.folders.length, 1);
 		assert.equal(syncBody.ciphers.length, 1);
+
+		const updatePayload = {
+			type: 1,
+			name: "newer-encrypted-name",
+			folderId: folder.id,
+			login: { username: "encrypted-user", password: "encrypted-pass" },
+			fields: [{ name: "encrypted-field", value: "encrypted-value" }],
+			lastKnownRevisionDate: cipher.revisionDate,
+			futureClientField: { encrypted: "opaque-value" },
+		};
+		const updatedResponse = await request(`/api/ciphers/${cipher.id}`, {
+			method: "PUT",
+			headers: { ...auth, "content-type": "application/json" },
+			body: JSON.stringify(updatePayload),
+		});
+		assert.equal(
+			updatedResponse.status,
+			200,
+			await updatedResponse.clone().text(),
+		);
+		const updated = await updatedResponse.json<{
+			name: string;
+			revisionDate: string;
+			futureClientField: { encrypted: string };
+		}>();
+		assert.equal(updated.name, "newer-encrypted-name");
+		assert.notEqual(updated.revisionDate, cipher.revisionDate);
+		assert.deepEqual(updated.futureClientField, { encrypted: "opaque-value" });
+
+		const staleResponse = await request(`/api/ciphers/${cipher.id}`, {
+			method: "PUT",
+			headers: { ...auth, "content-type": "application/json" },
+			body: JSON.stringify({ ...updatePayload, name: "stale-encrypted-name" }),
+		});
+		assert.equal(staleResponse.status, 409);
+		const currentResponse = await request(`/api/ciphers/${cipher.id}`, {
+			headers: auth,
+		});
+		assert.equal(currentResponse.status, 200);
+		assert.equal(
+			(await currentResponse.json<{ name: string }>()).name,
+			"newer-encrypted-name",
+		);
 	});
 
 	test("rejects cross-user or missing folder ids at the database boundary", async () => {
