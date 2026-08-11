@@ -1072,7 +1072,9 @@ export async function changeMasterPasswordApi(args: {
 }
 
 export async function fetchApiKeyApi(): Promise<{ apiKey: string }> {
-	return rpcJson(await rpc.api.accounts["api-key"].$get());
+	return rpcJson(await rpc.api.accounts["api-key"].$get()) as Promise<{
+		apiKey: string;
+	}>;
 }
 
 export async function rotateApiKeyApi(): Promise<{ apiKey: string }> {
@@ -1121,7 +1123,9 @@ export async function getAuthenticatorApi(): Promise<{
 	key: string;
 	enabled: boolean;
 }> {
-	return rpcJson(await rpc.api["two-factor"]["get-authenticator"].$post());
+	return rpcJson(
+		await rpc.api["two-factor"]["get-authenticator"].$post(),
+	) as Promise<{ key: string; enabled: boolean }>;
 }
 
 export async function enableAuthenticatorApi(
@@ -1144,7 +1148,9 @@ export async function disableTwoFactorApi(
 }
 
 export async function fetchRecoveryCodeApi(): Promise<{ code: string | null }> {
-	return rpcJson(await rpc.api["two-factor"]["get-recover"].$post());
+	return rpcJson(
+		await rpc.api["two-factor"]["get-recover"].$post(),
+	) as Promise<{ code: string | null }>;
 }
 
 export async function listAccountPasskeysApi(): Promise<{ data: any[] }> {
