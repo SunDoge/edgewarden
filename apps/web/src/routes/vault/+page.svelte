@@ -20,6 +20,7 @@ import {
 	createFolderApi,
 	updateFolderApi,
 	deleteFolderApi,
+	deleteFoldersApi,
 	createAttachmentApi,
 	uploadAttachmentApi,
 	downloadAttachmentApi,
@@ -107,6 +108,7 @@ let targetFolder = $state<any | null>(null);
 
 let deleteFolderDialogOpen = $state(false);
 let deleteFolderLoading = $state(false);
+let deleteAllFoldersDialogOpen = $state(false);
 
 function openCreateFolder() {
 	folderDialogMode = "create";
@@ -167,6 +169,21 @@ async function confirmDeleteFolder() {
 		deleteFolderDialogOpen = false;
 	} catch (e: any) {
 		alert("删除文件夹失败: " + (e.message || e));
+	} finally {
+		deleteFolderLoading = false;
+	}
+}
+
+async function confirmDeleteAllFolders() {
+	if (!vault.folders.length) return;
+	deleteFolderLoading = true;
+	try {
+		await deleteFoldersApi(vault.folders.map((folder) => folder.id));
+		activeFolder = null;
+		await syncVaultData();
+		deleteAllFoldersDialogOpen = false;
+	} catch (e: any) {
+		alert("删除全部文件夹失败: " + (e.message || e));
 	} finally {
 		deleteFolderLoading = false;
 	}
@@ -857,13 +874,17 @@ $effect(() => {
 			<div class="mt-6 space-y-1">
 				<div class="flex items-center justify-between px-3 mb-2">
 					<p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">文件夹</p>
-					<button
+					<div class="flex items-center gap-1">{#if vault.folders.length}<button
+						class="text-slate-400 hover:text-red-600 transition-colors p-0.5 rounded"
+						onclick={() => deleteAllFoldersDialogOpen = true}
+						title="删除全部文件夹"
+					><Trash2 class="size-3.5" /></button>{/if}<button
 						class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-0.5 rounded"
 						onclick={openCreateFolder}
 						title="新建文件夹"
 					>
 						<Plus class="size-3.5" />
-					</button>
+					</button></div>
 				</div>
 				{#each vault.folders as folder}
 					<div class="w-full flex items-center justify-between group rounded-lg text-sm font-medium transition-colors text-left
@@ -1615,6 +1636,13 @@ $effect(() => {
 			</AlertDialog.Footer>
 		</AlertDialog.Content>
 	</AlertDialog.Portal>
+</AlertDialog.Root>
+
+<AlertDialog.Root bind:open={deleteAllFoldersDialogOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header><AlertDialog.Title>删除全部文件夹</AlertDialog.Title><AlertDialog.Description>将删除全部 {vault.folders.length} 个文件夹。保险库项目不会被删除，而会移至“无文件夹”。此操作不可撤销。</AlertDialog.Description></AlertDialog.Header>
+		<AlertDialog.Footer><AlertDialog.Cancel disabled={deleteFolderLoading}>取消</AlertDialog.Cancel><AlertDialog.Action onclick={confirmDeleteAllFolders} disabled={deleteFolderLoading} class="bg-destructive text-white hover:bg-destructive/90">确认删除全部</AlertDialog.Action></AlertDialog.Footer>
+	</AlertDialog.Content>
 </AlertDialog.Root>
 
 <Dialog.Root bind:open={moveDialogOpen}><Dialog.Content><Dialog.Header><Dialog.Title>移动所选条目</Dialog.Title><Dialog.Description>选择目标文件夹；选择“无文件夹”会移出当前文件夹。</Dialog.Description></Dialog.Header><select bind:value={moveFolderId} class="h-9 rounded-md border bg-background px-3 text-sm"><option value={null}>无文件夹</option>{#each vault.folders as folder}<option value={folder.id}>{folder.name}</option>{/each}</select><Dialog.Footer><Button variant="outline" onclick={() => moveDialogOpen = false}>取消</Button><Button onclick={moveSelectedItems} disabled={deleteLoading}>移动 {selectedIdList.length} 项</Button></Dialog.Footer></Dialog.Content></Dialog.Root>

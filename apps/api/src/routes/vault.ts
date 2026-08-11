@@ -84,6 +84,7 @@ import { getDomains, updateDomains } from "../handlers/domains";
 import {
 	createFolder,
 	deleteFolder,
+	deleteFolders,
 	getFolder,
 	listFolders,
 	updateFolder,
@@ -201,6 +202,7 @@ const attachmentRoutes = new Hono<HonoEnv>()
 const folderAndDeviceRoutes = new Hono<HonoEnv>()
 	.get("/api/folders", ...listFolders)
 	.post("/api/folders", ...createFolder)
+	.post("/api/folders/delete", ...deleteFolders)
 	.get("/api/folders/:id", requireFolder, ...getFolder)
 	.put("/api/folders/:id", requireFolder, ...updateFolder)
 	.delete("/api/folders/:id", requireFolder, ...deleteFolder)

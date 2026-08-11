@@ -318,6 +318,27 @@ describe("Edgewarden API", () => {
 		assert.equal(response.status, 400);
 	});
 
+	test("bulk deletes only owned folders and moves their ciphers to no folder", async () => {
+		const createFolder = async (token: string, name: string) => {
+			const response = await request("/api/folders", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ name }) });
+			assert.equal(response.status, 200, await response.clone().text());
+			return (await response.json<{ id: string }>()).id;
+		};
+		const firstId = await createFolder(accessToken, "encrypted-bulk-one");
+		const secondId = await createFolder(accessToken, "encrypted-bulk-two");
+		const otherUserId = await createFolder(memberAccessToken, "encrypted-other-user");
+		await testDatabase.prepare("UPDATE ciphers SET folder_id = ? WHERE id = ?").bind(firstId, cipherId).run();
+
+		const invalid = await request("/api/folders/delete", { method: "POST", headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ ids: [] }) });
+		assert.equal(invalid.status, 400);
+		const deleted = await request("/api/folders/delete", { method: "POST", headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ ids: [firstId, secondId, secondId, otherUserId] }) });
+		assert.equal(deleted.status, 204, await deleted.clone().text());
+
+		assert.equal(await testDatabase.prepare("SELECT COUNT(*) AS count FROM folders WHERE id IN (?, ?)").bind(firstId, secondId).first<{ count: number }>().then((row) => Number(row?.count)), 0);
+		assert.equal(await testDatabase.prepare("SELECT COUNT(*) AS count FROM folders WHERE id = ?").bind(otherUserId).first<{ count: number }>().then((row) => Number(row?.count)), 1);
+		assert.equal(await testDatabase.prepare("SELECT folder_id FROM ciphers WHERE id = ?").bind(cipherId).first<{ folder_id: string | null }>().then((row) => row?.folder_id), null);
+	});
+
 	test("validates device updates and hides resources outside the user scope", async () => {
 		const auth = { authorization: `Bearer ${accessToken}` };
 		const ownDevice = await request("/api/devices/api-test-device", {
@@ -571,6 +592,20 @@ describe("Edgewarden API", () => {
 			1,
 		);
 		assert.ok(sync.sends.some((send) => send.id === sendId));
+	});
+
+	test("bulk deletes only Sends owned by the authenticated user", async () => {
+		const createSend = async (token: string, name: string) => {
+			const response = await request("/api/sends", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ type: 0, name, key: "encrypted-key", text: { text: "encrypted-text", hidden: false }, deletionDate: new Date(Date.now() + 86_400_000).toISOString() }) });
+			assert.equal(response.status, 200, await response.clone().text());
+			return (await response.json<{ id: string }>()).id;
+		};
+		const ownedId = await createSend(accessToken, "encrypted-bulk-send");
+		const otherUserId = await createSend(memberAccessToken, "encrypted-other-send");
+		const deleted = await request("/api/sends/delete", { method: "POST", headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ ids: [ownedId, otherUserId] }) });
+		assert.equal(deleted.status, 200, await deleted.clone().text());
+		assert.equal(await testDatabase.prepare("SELECT COUNT(*) AS count FROM sends WHERE id = ?").bind(ownedId).first<{ count: number }>().then((row) => Number(row?.count)), 0);
+		assert.equal(await testDatabase.prepare("SELECT COUNT(*) AS count FROM sends WHERE id = ?").bind(otherUserId).first<{ count: number }>().then((row) => Number(row?.count)), 1);
 	});
 
 	test("validates backup settings before normalization", async () => {

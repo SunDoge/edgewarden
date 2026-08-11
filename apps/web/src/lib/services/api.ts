@@ -694,6 +694,10 @@ export async function deleteFolderApi(id: string): Promise<void> {
 	await rpc.api.folders[":id"].$delete({ param: { id } });
 }
 
+export async function deleteFoldersApi(ids: string[]): Promise<void> {
+	await rpcJson(await rpc.api.folders.delete.$post({ json: { ids } }));
+}
+
 // ── Account and security APIs ──────────────────────────────────────────────
 
 export async function fetchProfileApi(): Promise<any> {
