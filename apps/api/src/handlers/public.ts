@@ -87,6 +87,18 @@ export const registerAccount = factory.createHandlers(
 		if (body.kdf === 1 && body.kdfIterations < 2) {
 			return errorResponse("Argon2id iterations must be at least 2", 400);
 		}
+		if (
+			body.kdf === 1 &&
+			(!Number.isInteger(body.kdfMemory) ||
+				(body.kdfMemory ?? 0) < 8 ||
+				!Number.isInteger(body.kdfParallelism) ||
+				(body.kdfParallelism ?? 0) < 1)
+		) {
+			return errorResponse(
+				"Argon2id memory must be at least 8 MiB and parallelism at least 1",
+				400,
+			);
+		}
 
 		const passwordHash = await hashPasswordServer(
 			body.masterPasswordHash,

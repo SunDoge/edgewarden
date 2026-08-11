@@ -64,7 +64,13 @@ export interface BackupPayload {
 }
 
 function sanitizeUserRowsForExport(rows: SqlRow[]): SqlRow[] {
-	return rows.map(({ api_key: _apiKey, ...row }) => row);
+	return rows.map(
+		({
+			api_key_hash: _apiKeyHash,
+			api_key_encrypted: _apiKeyEncrypted,
+			...row
+		}) => row,
+	);
 }
 
 export interface BackupArchiveBundle {
