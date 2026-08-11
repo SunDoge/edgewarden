@@ -1,0 +1,67 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "api",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-06-22",
+	"assets": {
+		"directory": "../web/build",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application"
+	},
+	// "compatibility_flags": [
+	//   "nodejs_compat"
+	// ],
+	// "vars": {
+	//   "MY_VAR": "my-variable"
+	// },
+	// "kv_namespaces": [
+	//   {
+	//     "binding": "MY_KV_NAMESPACE",
+	//     "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+	//   }
+	// ],
+	// "r2_buckets": [
+	//   {
+	//     "binding": "MY_BUCKET",
+	//     "bucket_name": "my-bucket"
+	//   }
+	// ],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "edgewarden-db",
+			"migrations_dir": "./migrations"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "ATTACHMENTS_KV",
+			"id": "edgewarden-kv"
+		}
+	],
+	// "ai": {
+	//   "binding": "AI"
+	// },
+	// "observability": {
+	//   "enabled": true,
+	//   "head_sampling_rate": 1
+	// }
+	"ratelimits": [
+		{
+			"name": "RL_IP",
+			"namespace_id": "1",
+			"simple": {
+				"limit": 10,
+				"period": 60
+			} // 60秒内10次
+		},
+		{
+			"name": "RL_ACCOUNT",
+			"namespace_id": "2",
+			"simple": {
+				"limit": 10,
+				"period": 60
+			}
+		}
+	]
+}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+	<title>Edgewarden</title>
+	<rect width="512" height="512" rx="112" fill="#0f172a"/>
+	<path d="M256 72 408 132v108c0 98-58 166-152 200C162 406 104 338 104 240V132l152-60Z" fill="#2563eb"/>
+	<path d="M256 126 354 165v73c0 64-34 111-98 142-64-31-98-78-98-142v-73l98-39Z" fill="#f8fafc"/>
+	<circle cx="256" cy="238" r="42" fill="#0f172a"/>
+	<path d="M234 266h44v68h-44z" fill="#0f172a"/>
+</svg>

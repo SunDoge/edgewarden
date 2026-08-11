@@ -1,0 +1,38 @@
+{
+	"name": "@edgewarden/api",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./src/index.ts"
+		}
+	},
+	"scripts": {
+		"dev": "mkdir -p ../web/build && wrangler dev",
+		"deploy": "wrangler deploy --minify",
+		"cf-typegen": "wrangler types --env-interface CloudflareBindings",
+		"db:apply:local": "wrangler d1 migrations apply edgewarden-db --local",
+		"db:codegen": "bun scripts/codegen.mjs",
+		"rpc:types": "tsc --project tsconfig.rpc.json",
+		"check": "tsc --noEmit",
+		"test": "bun test src"
+	},
+	"dependencies": {
+		"@edgewarden/shared": "workspace:*",
+		"@hono/valibot-validator": "^0.6.1",
+		"@simplewebauthn/server": "^13.3.1",
+		"@sundoge/kysely-d1": "^0.2.0",
+		"hono": "^4.12.26",
+		"kysely": "0.28.11",
+		"otpauth": "^9.5.1",
+		"valibot": "^1.4.1"
+	},
+	"devDependencies": {
+		"@types/node": "^26.0.0",
+		"kysely-bun-worker": "^1.2.1",
+		"kysely-codegen": "^0.20.0",
+		"miniflare": "5.20260804.0-alpha",
+		"typescript": "^6.0.3",
+		"wrangler": "^4.4.0"
+	}
+}
