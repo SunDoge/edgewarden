@@ -13,7 +13,7 @@
 		"build": "bun run --filter @edgewarden/web build",
 		"deploy": "bun run build && bun run --filter @edgewarden/api deploy",
 		"test": "bun run --parallel --filter './apps/*' --if-present test",
-		"test:compat:bw": "bash scripts/bw-compat-smoke.sh",
+		"test:compat:bw": "bun scripts/bw-compat-smoke.ts",
 		"check": "bun run --parallel --filter './apps/*' --if-present check",
 		"lint": "biome lint .",
 		"format": "biome format --write ."
