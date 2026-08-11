@@ -970,6 +970,25 @@ describe("Edgewarden API", () => {
 		await testDatabase.prepare("UPDATE users SET yubikey_config = ? WHERE email = ?").bind(JSON.stringify({ keys: [], nfc: false }), EMAIL).run();
 	});
 
+	test("deletes an account only after password verification and blocks organization owners", async () => {
+		const ownerLogin = await request("/identity/connect/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "password", username: EMAIL, password: MASTER_PASSWORD_HASH }) });
+		assert.equal(ownerLogin.status, 200, await ownerLogin.clone().text());
+		const ownerToken = (await ownerLogin.json<{ access_token: string }>()).access_token;
+		const blocked = await request("/api/accounts/delete", { method: "POST", headers: { authorization: `Bearer ${ownerToken}`, "content-type": "application/json" }, body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }) });
+		assert.equal(blocked.status, 409, await blocked.clone().text());
+
+		const email = "delete-me@example.com";
+		assert.equal((await request("/api/accounts/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, name: "Delete Me", masterPasswordHash: MASTER_PASSWORD_HASH, key: "encrypted-delete-key", kdf: 0, kdfIterations: 600_000 }) })).status, 204);
+		const login = await request("/identity/connect/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "password", username: email, password: MASTER_PASSWORD_HASH, deviceIdentifier: "delete-device", deviceName: "Delete Device", deviceType: "14" }) });
+		const token = (await login.json<{ access_token: string }>()).access_token;
+		const wrongPassword = await request("/api/accounts/delete", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ masterPasswordHash: "wrong" }) });
+		assert.equal(wrongPassword.status, 400);
+		const deleted = await request("/api/accounts", { method: "DELETE", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }) });
+		assert.equal(deleted.status, 204, await deleted.clone().text());
+		assert.equal(await testDatabase.prepare("SELECT COUNT(*) AS count FROM users WHERE email = ?").bind(email).first<{ count: number }>().then((row) => Number(row?.count)), 0);
+		assert.equal((await request("/api/accounts/profile", { headers: { authorization: `Bearer ${token}` } })).status, 401);
+	});
+
 	test("requires password verification and invalidates every session when removing all devices", async () => {
 		const login = await request("/identity/connect/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "password", username: EMAIL, password: MASTER_PASSWORD_HASH, deviceIdentifier: "final-device", deviceName: "Final device", deviceType: "0" }) });
 		assert.equal(login.status, 200, await login.clone().text());

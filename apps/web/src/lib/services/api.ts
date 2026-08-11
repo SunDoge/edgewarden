@@ -768,6 +768,10 @@ export async function deleteAllDevicesApi(masterPasswordHash: string): Promise<v
 	await rpcJson(await rpc.api.devices.$delete({ json: { masterPasswordHash } }));
 }
 
+export async function deleteAccountApi(masterPasswordHash: string): Promise<void> {
+	await rpcJson(await rpc.api.accounts.delete.$post({ json: { masterPasswordHash } }));
+}
+
 export async function fetchTwoFactorApi(): Promise<{ data: any[] }> {
 	return rpcJson(await rpc.api["two-factor"].$get());
 }

@@ -8,6 +8,7 @@ import {
 	listAccountPasskeys,
 	updateAccountPasskeyEncryption,
 } from "../handlers/account-passkeys";
+import { deleteAccount } from "../handlers/account-deletion";
 import { createAttachment, deleteAttachment, downloadAttachment } from "../handlers/attachments";
 import {
 	clearAuditLogs,
@@ -143,6 +144,8 @@ const accountRoutes = new Hono<HonoEnv>()
 	.get("/api/accounts/api-key", ...getApiKey)
 	.post("/api/accounts/api-key", ...getApiKey)
 	.post("/api/accounts/rotate-api-key", ...rotateApiKey)
+	.delete("/api/accounts", ...deleteAccount)
+	.post("/api/accounts/delete", ...deleteAccount)
 	.get("/api/two-factor", ...listTwoFactor)
 	.post("/api/two-factor/get-authenticator", ...getAuthenticator)
 	.put("/api/two-factor/authenticator", ...enableAuthenticator)
