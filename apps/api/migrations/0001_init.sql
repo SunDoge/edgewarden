@@ -48,6 +48,13 @@ CREATE TABLE IF NOT EXISTS users (
   -- TOTP second factor (kept in users for zero-knowledge simplicity)
   totp_secret TEXT,
   totp_recovery_code TEXT,
+  yubikey_config TEXT NOT NULL DEFAULT '{"keys":[],"nfc":false}' CHECK (
+    json_valid(yubikey_config)
+    AND json_type(yubikey_config, '$') = 'object'
+    AND json_type(yubikey_config, '$.keys') = 'array'
+    AND json_array_length(yubikey_config, '$.keys') <= 5
+    AND json_type(yubikey_config, '$.nfc') IN ('true', 'false')
+  ),
   -- Machine-account / CLI token
   api_key TEXT,
   created_at INTEGER NOT NULL,
@@ -86,6 +93,8 @@ CREATE TABLE IF NOT EXISTS user_revisions (
 CREATE TABLE IF NOT EXISTS organizations (
   id TEXT PRIMARY KEY NOT NULL,
   name TEXT NOT NULL,
+  public_key TEXT,
+  private_key TEXT,
   -- client-encrypted
   owner_id TEXT NOT NULL,
   -- must also have a row in org_members
@@ -105,6 +114,7 @@ CREATE TABLE IF NOT EXISTS org_members (
   -- NULL while status = 'invited'
   email TEXT NOT NULL,
   -- invitation target; kept for audit
+  key TEXT,
   role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'admin', 'manager', 'member')),
   status TEXT NOT NULL DEFAULT 'invited' CHECK (
     status IN ('invited', 'accepted', 'confirmed', 'revoked')
@@ -119,6 +129,7 @@ CREATE TABLE IF NOT EXISTS org_members (
 );
 CREATE INDEX IF NOT EXISTS idx_org_members_org_status ON org_members(org_id, status);
 CREATE INDEX IF NOT EXISTS idx_org_members_user ON org_members(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_org_members_org_email ON org_members(org_id, email);
 -- ---------------------------------------------------------------------------
 -- 7. COLLECTIONS  (org-level folder for shared ciphers)
 -- ---------------------------------------------------------------------------
@@ -180,6 +191,8 @@ CREATE TABLE IF NOT EXISTS ciphers (
   -- client-encrypted (NOT NULL for integrity)
   notes TEXT,
   -- client-encrypted
+  fields TEXT,
+  password_history TEXT,
   favorite INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1)),
   -- All type-specific fields are in data (client-encrypted JSON blob)
   data TEXT NOT NULL,
@@ -414,6 +427,7 @@ CREATE TABLE IF NOT EXISTS webauthn_credentials (
   encrypted_public_key TEXT,
   encrypted_private_key TEXT,
   supports_prf INTEGER NOT NULL DEFAULT 0 CHECK (supports_prf IN (0, 1)),
+  purpose TEXT NOT NULL DEFAULT 'login' CHECK (purpose IN ('login', 'twoFactor')),
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -421,6 +435,7 @@ CREATE TABLE IF NOT EXISTS webauthn_credentials (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_webauthn_credentials_credential_id ON webauthn_credentials(credential_id);
 -- idx_webauthn_credentials_user is omitted: (user_id, updated_at) covers user_id lookups via prefix
 CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_updated ON webauthn_credentials(user_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_purpose ON webauthn_credentials(user_id, purpose, created_at);
 -- ---------------------------------------------------------------------------
 -- 19. WEBAUTHN CHALLENGES
 -- ---------------------------------------------------------------------------
@@ -452,6 +467,7 @@ CREATE INDEX IF NOT EXISTS idx_attachment_download_tokens_expires ON attachment_
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS invites (
   code TEXT PRIMARY KEY NOT NULL,
+  email TEXT NOT NULL,
   created_by TEXT NOT NULL,
   used_by TEXT,
   expires_at INTEGER NOT NULL,
@@ -467,6 +483,7 @@ CREATE TABLE IF NOT EXISTS invites (
 );
 CREATE INDEX IF NOT EXISTS idx_invites_status_expires ON invites(status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_invites_created_by ON invites(created_by, created_at);
+CREATE INDEX IF NOT EXISTS idx_invites_email_status ON invites(email, status);
 -- ---------------------------------------------------------------------------
 -- 22. AUDIT LOGS
 -- ---------------------------------------------------------------------------
