@@ -7,6 +7,7 @@ import { executeBatch, revisionQuery } from "../services/db/batch";
 import * as usersDb from "../services/db/users";
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
+import { turnstileEnabled, turnstileSiteKey } from "../services/turnstile";
 
 export const registerAccount = factory.createHandlers(
 	vValidator("json", RegisterSchema),
@@ -71,7 +72,7 @@ export const publicPasswordHint = factory.createHandlers(
 	async () => new Response(null, { status: 204 }),
 );
 
-function configPayload(origin: string) { return {
+function configPayload(origin: string, env: CloudflareBindings) { return {
 	version: LIMITS.compatibility.bitwardenServerVersion,
 	gitHash: null,
 	server: { name: "edgewarden", url: origin },
@@ -95,11 +96,15 @@ function configPayload(origin: string) { return {
 		"pm-19051-send-email-verification": false,
 		"pm-19148-innovation-archive": true,
 	},
+	turnstile: {
+		enabled: turnstileEnabled(env),
+		siteKey: turnstileSiteKey(env),
+	},
 	object: "config",
 }; }
 
 export const getConfig = factory.createHandlers(async (c) =>
-	c.json(configPayload(new URL(c.req.url).origin)),
+	c.json(configPayload(new URL(c.req.url).origin, c.env)),
 );
 
 export const getVersion = factory.createHandlers(async (c) =>

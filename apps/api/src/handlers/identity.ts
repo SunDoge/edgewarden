@@ -34,6 +34,7 @@ import * as webauthnDb from "../services/db/webauthn";
 import { assertTwoFactorPasskey, buildTwoFactorPasskeyAssertion } from "./two-factor-passkeys";
 import { loadYubicoCredentials } from "../services/yubico-config";
 import { parseYubikeyConfig, userYubicoPublicIds, verifyYubicoOtp, yubicoPublicId } from "../utils/yubico";
+import { turnstileEnabled, verifyTurnstileToken } from "../services/turnstile";
 
 const TWO_FACTOR_AUTHENTICATOR = 0;
 const TWO_FACTOR_RECOVERY = 8;
@@ -168,6 +169,17 @@ export const connectToken = factory.createHandlers(async (c) => {
 		const twoFactorProvider =
 			body.twoFactorProvider ?? body.TwoFactorProvider ?? "";
 		const deviceInfo = readDeviceInfo(body);
+		if (turnstileEnabled(c.env)) {
+			const captchaResponse = body.captchaResponse ?? body.CaptchaResponse ?? "";
+			const remoteIp = c.req.header("CF-Connecting-IP") ?? undefined;
+			if (!(await verifyTurnstileToken(c.env, captchaResponse, remoteIp))) {
+				return identityErrorResponse(
+					"Human verification failed. Please try again.",
+					"CaptchaRequired",
+					400,
+				);
+			}
+		}
 
 		if (!email || !passwordHash) {
 			return identityErrorResponse(

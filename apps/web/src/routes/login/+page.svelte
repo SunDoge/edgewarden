@@ -1,7 +1,8 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
+import { onMount } from "svelte";
 import { deriveMasterKey } from "$lib/services/crypto";
-import { isTwoFactorRequiredError, login, loginWithPasskeyApi, twoFactorPasskeyChallengeFromError, twoFactorProvidersFromError } from "$lib/services/api";
+import { getTurnstileConfigApi, isTwoFactorRequiredError, login, loginWithPasskeyApi, twoFactorPasskeyChallengeFromError, twoFactorProvidersFromError } from "$lib/services/api";
 import { setMasterKey, setSymmetricKeys, syncVaultData } from "$lib/stores/vault.svelte";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
@@ -9,6 +10,7 @@ import { Label } from "$lib/components/ui/label/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
 import { assertTwoFactorPasskeyCredential } from "$lib/services/passkeys";
 import { Eye, EyeOff, ShieldAlert, KeyRound, Mail, Fingerprint } from "@lucide/svelte";
+import TurnstileWidget from "$lib/components/turnstile-widget.svelte";
 
 let email = $state("");
 let password = $state("");
@@ -22,6 +24,22 @@ let availableTwoFactorProviders = $state<string[]>([]);
 let passkeyUnlock = $state<{ email: string; iterations: number; profileKey: string } | null>(null);
 let passkeyPassword = $state("");
 let twoFactorPasskeyChallenge = $state<{ options: unknown; token: string } | null>(null);
+let turnstileEnabled = $state(false);
+let turnstileSiteKey = $state<string | null>(null);
+let turnstileToken = $state("");
+let turnstileLoading = $state(true);
+let turnstileWidget = $state<{ reset(): void } | null>(null);
+
+onMount(() => {
+	void getTurnstileConfigApi()
+		.then((config) => {
+			turnstileEnabled = config.enabled;
+			turnstileSiteKey = config.siteKey;
+			if (config.enabled && !config.siteKey) error = "Turnstile 已启用，但服务器没有配置站点密钥。";
+		})
+		.catch(() => { error = "无法加载登录安全配置。"; })
+		.finally(() => { turnstileLoading = false; });
+});
 
 async function handleSubmit(e: SubmitEvent) {
 	e.preventDefault();
@@ -29,12 +47,16 @@ async function handleSubmit(e: SubmitEvent) {
 		error = "请输入电子邮件和主密码。";
 		return;
 	}
+	if (turnstileEnabled && !turnstileToken) {
+		error = "请先完成人机验证。";
+		return;
+	}
 
 	loading = true;
 	error = "";
 
 	try {
-		const { masterKey } = await login(email, password, twoFactorRequired ? { token: twoFactorToken, provider: twoFactorProvider } : undefined);
+		const { masterKey } = await login(email, password, twoFactorRequired ? { token: twoFactorToken, provider: twoFactorProvider } : undefined, turnstileToken || undefined);
 		setMasterKey(masterKey);
 		await syncVaultData(); // saves snapshot to IndexedDB for future offline use
 		goto("/vault");
@@ -46,6 +68,7 @@ async function handleSubmit(e: SubmitEvent) {
 			if (!availableTwoFactorProviders.includes("0") && availableTwoFactorProviders.includes("3")) twoFactorProvider = "3";
 				error = "请输入身份验证器验证码或恢复代码。";
 		} else error = err.message || "登录失败，请检查您的凭据。";
+		if (turnstileEnabled) turnstileWidget?.reset();
 	} finally {
 		loading = false;
 	}
@@ -57,11 +80,14 @@ async function completeTwoFactorPasskey() {
 	error = "";
 	try {
 		const assertion = await assertTwoFactorPasskeyCredential(twoFactorPasskeyChallenge);
-		const { masterKey } = await login(email, password, { provider: "7", token: JSON.stringify(assertion) });
+		const { masterKey } = await login(email, password, { provider: "7", token: JSON.stringify(assertion) }, turnstileToken || undefined);
 		setMasterKey(masterKey);
 		await syncVaultData();
 		await goto("/vault");
-	} catch (value) { error = value instanceof Error ? value.message : "安全密钥验证失败"; } finally { loading = false; }
+	} catch (value) {
+		error = value instanceof Error ? value.message : "安全密钥验证失败";
+		if (turnstileEnabled) turnstileWidget?.reset();
+	} finally { loading = false; }
 }
 
 async function handlePasskeyLogin() {
@@ -136,7 +162,7 @@ async function completePasskeyUnlock() {
 
 				{#if twoFactorRequired}
 					<div class="space-y-2"><div class="flex items-center justify-between"><Label for="two-factor-token">{twoFactorProvider === "0" ? "两步验证码" : twoFactorProvider === "3" ? "YubiKey OTP" : "恢复代码"}</Label><div class="flex gap-2">{#if availableTwoFactorProviders.includes("3")}<button type="button" class="text-xs text-primary hover:underline" onclick={() => { twoFactorProvider = "3"; twoFactorToken = ""; }}>YubiKey</button>{/if}<button type="button" class="text-xs text-primary hover:underline" onclick={() => { twoFactorProvider = twoFactorProvider === "0" ? "8" : "0"; twoFactorToken = ""; }}>{twoFactorProvider === "0" ? "使用恢复代码" : "使用身份验证器"}</button></div></div><Input id="two-factor-token" bind:value={twoFactorToken} inputmode={twoFactorProvider === "0" ? "numeric" : "text"} autocomplete="one-time-code" maxlength={64} required /></div>
-					{#if twoFactorPasskeyChallenge}<Button type="button" variant="outline" class="w-full" onclick={completeTwoFactorPasskey} disabled={loading}><Fingerprint />使用安全密钥验证</Button>{/if}
+					{#if twoFactorPasskeyChallenge}<Button type="button" variant="outline" class="w-full" onclick={completeTwoFactorPasskey} disabled={loading || (turnstileEnabled && !turnstileToken)}><Fingerprint />使用安全密钥验证</Button>{/if}
 				{/if}
 
 				<div class="space-y-2">
@@ -170,7 +196,16 @@ async function completePasskeyUnlock() {
 					</div>
 				</div>
 
-				<Button type="submit" class="w-full mt-2" disabled={loading}>
+				{#if turnstileEnabled && turnstileSiteKey}
+					<TurnstileWidget
+						bind:this={turnstileWidget}
+						siteKey={turnstileSiteKey}
+						onToken={(token) => { turnstileToken = token; }}
+						onError={() => { error = "人机验证加载失败，请刷新后重试。"; }}
+					/>
+				{/if}
+
+				<Button type="submit" class="w-full mt-2" disabled={loading || turnstileLoading || (turnstileEnabled && !turnstileToken)}>
 					{#if loading}
 						<div class="size-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2"></div>
 						正在进行安全解密...

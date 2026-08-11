@@ -287,6 +287,52 @@ describe("Edgewarden API", () => {
 		}
 	});
 
+	test("enforces Turnstile on password login when configured", async () => {
+		(bindings as any).TURNSTILE_SECRET_KEY = "turnstile-test-secret";
+		(bindings as any).TURNSTILE_SITE_KEY = "turnstile-test-site-key";
+		const originalFetch = globalThis.fetch;
+		try {
+			const config = await request("/api/config");
+			const configBody = await config.json<{ turnstile: { enabled: boolean; siteKey: string | null } }>();
+			assert.deepEqual(configBody.turnstile, { enabled: true, siteKey: "turnstile-test-site-key" });
+			assert.equal(JSON.stringify(configBody).includes("turnstile-test-secret"), false);
+
+			const form = new URLSearchParams({
+				grant_type: "password",
+				username: EMAIL,
+				password: MASTER_PASSWORD_HASH,
+				deviceIdentifier: "turnstile-test-device",
+				deviceName: "Turnstile Test Device",
+				deviceType: "14",
+			});
+			const missing = await request("/identity/connect/token", {
+				method: "POST",
+				headers: { "content-type": "application/x-www-form-urlencoded" },
+				body: form,
+			});
+			assert.equal(missing.status, 400);
+			assert.equal((await missing.json<{ error: string }>()).error, "CaptchaRequired");
+
+			globalThis.fetch = async (_input, init) => {
+				const submitted = init?.body as FormData;
+				assert.equal(submitted.get("secret"), "turnstile-test-secret");
+				assert.equal(submitted.get("response"), "valid-turnstile-token");
+				return Response.json({ success: true, action: "login" });
+			};
+			form.set("captchaResponse", "valid-turnstile-token");
+			const accepted = await request("/identity/connect/token", {
+				method: "POST",
+				headers: { "content-type": "application/x-www-form-urlencoded", "CF-Connecting-IP": "203.0.113.10" },
+				body: form,
+			});
+			assert.equal(accepted.status, 200, await accepted.clone().text());
+		} finally {
+			globalThis.fetch = originalFetch;
+			delete (bindings as any).TURNSTILE_SECRET_KEY;
+			delete (bindings as any).TURNSTILE_SITE_KEY;
+		}
+	});
+
 	test("creates a folder and cipher through authenticated batch-backed handlers", async () => {
 		const auth = { authorization: `Bearer ${accessToken}` };
 		const profileAlias = await request("/api/accounts/profile", { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ name: "API Test", masterPasswordHint: null }) });

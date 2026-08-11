@@ -13,6 +13,8 @@ export const TokenFormSchema = v.object({
 	]),
 	username: v.optional(v.string()),
 	password: v.optional(v.string()),
+	captchaResponse: v.optional(v.pipe(v.string(), v.maxLength(2048))),
+	CaptchaResponse: v.optional(v.pipe(v.string(), v.maxLength(2048))),
 	refresh_token: v.optional(v.string()),
 	// 2FA fields
 	twoFactorToken: v.optional(v.string()),

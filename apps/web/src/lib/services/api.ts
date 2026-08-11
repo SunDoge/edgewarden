@@ -109,6 +109,7 @@ export async function login(
 	email: string,
 	password: string,
 	twoFactor?: { token: string; provider?: string },
+	captchaResponse?: string,
 ): Promise<{ masterKey: ArrayBuffer }> {
 	const kdfSettings = await prelogin(email);
 
@@ -131,6 +132,7 @@ export async function login(
 			deviceIdentifier: getOrCreateDeviceIdentifier(),
 			deviceName: browserDeviceName(),
 			deviceType: String(WEB_DEVICE_TYPE),
+			...(captchaResponse ? { captchaResponse } : {}),
 			...(twoFactor ? {
 				twoFactorToken: twoFactor.token.trim(),
 				twoFactorProvider: twoFactor.provider ?? "0",
@@ -143,6 +145,16 @@ export async function login(
 	if (tokenResponse.refresh_token) localStorage.setItem("refresh_token", tokenResponse.refresh_token);
 
 	return { masterKey };
+}
+
+export async function getTurnstileConfigApi(): Promise<{ enabled: boolean; siteKey: string | null }> {
+	const response = await fetch("/api/config", { headers: { accept: "application/json" } });
+	if (!response.ok) throw new Error("无法加载人机验证配置");
+	const config = await response.json() as { turnstile?: { enabled?: boolean; siteKey?: string | null } };
+	return {
+		enabled: config.turnstile?.enabled === true,
+		siteKey: config.turnstile?.siteKey ?? null,
+	};
 }
 
 export function isTwoFactorRequiredError(error: unknown): boolean {
