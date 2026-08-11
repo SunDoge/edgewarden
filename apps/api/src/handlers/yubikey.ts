@@ -6,7 +6,7 @@ import { executeBatch } from "../services/db/batch";
 import { loadYubicoCredentials, saveYubicoCredentials } from "../services/yubico-config";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import { errorResponse } from "../utils/response";
-import { parseYubikeyConfig, serializeYubikeyConfig, userYubicoPublicIds, verifyYubicoOtp, yubicoPublicId } from "../utils/yubico";
+import { parseYubikeyConfig, serializeYubikeyConfig, verifyYubicoOtp, yubicoPublicId } from "../utils/yubico";
 import { now } from "../utils/time";
 
 function recoveryCode(): string {

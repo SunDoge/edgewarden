@@ -62,7 +62,7 @@ export const createTwoFactorPasskey = factory.createHandlers(vValidator("json", 
 	const response = normalizeRegistrationResponse(body.deviceResponse);
 	if (!response) return errorResponse("Invalid passkey registration response", 400);
 	const { origins } = getAccountPasskeyRpConfig(c.req.raw, c.env);
-	let verification;
+	let verification: Awaited<ReturnType<typeof verifyRegistrationResponse>>;
 	try { verification = await verifyRegistrationResponse({ response, expectedChallenge: payload.challenge, expectedOrigin: origins, expectedRPID: payload.rpId, requireUserPresence: true, requireUserVerification: true }); }
 	catch { return errorResponse("Passkey registration could not be verified", 400); }
 	if (!verification.verified) return errorResponse("Passkey registration could not be verified", 400);

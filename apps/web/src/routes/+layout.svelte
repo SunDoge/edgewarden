@@ -6,6 +6,7 @@ import { applyThemePreference, clientPreferencesStorageKey, loadClientPreference
 import { NetworkStatusMonitor, type NetworkStatus } from "$lib/services/network-status";
 import { Badge } from "$lib/components/ui/badge/index.js";
 import { Wifi, WifiOff } from "@lucide/svelte";
+import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 
 let { children } = $props();
 let networkStatus = $state<NetworkStatus>("checking");
@@ -63,4 +64,5 @@ onMount(() => {
 	<Badge variant={networkStatus === "offline" ? "destructive" : "outline"}>
 		{#if networkStatus === "offline"}<WifiOff class="size-3" />离线{:else}<Wifi class="size-3" />{networkStatus === "checking" ? "检查连接" : "在线"}{/if}
 	</Badge>
+	<span class="sr-only">Edgewarden {EDGEWARDEN_VERSION}</span>
 </div>

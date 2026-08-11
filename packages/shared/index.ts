@@ -7,3 +7,4 @@ export * from "./schemas/organizations.ts";
 export * from "./types/api.ts";
 export * from "./domain-normalize.ts";
 export * from "./backup-schema.ts";
+export * from "./version.ts";

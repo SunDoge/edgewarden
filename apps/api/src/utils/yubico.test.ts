@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
+import { describe, test } from "bun:test";
 import { normalizeYubicoOtp, parseYubikeyConfig, serializeYubikeyConfig, verifyYubicoOtp, yubicoPublicId } from "./yubico";
 
 function base64(value: Uint8Array): string {

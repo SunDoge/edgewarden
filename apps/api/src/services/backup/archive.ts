@@ -3,6 +3,7 @@ import type { Kysely } from "kysely";
 import type { DB } from "../../types/db";
 import type { BlobStore } from "../blob-store";
 import { BACKUP_SETTINGS_CONFIG_KEY } from "./config";
+import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 import { exportPortableBackupSettingsEnvelope } from "./settings-crypto";
 
 type SqlRow = Record<string, string | number | null>;
@@ -412,7 +413,7 @@ export async function buildBackupArchive(
 	const manifestBase = {
 		formatVersion: BACKUP_FORMAT_VERSION,
 		exportedAt: date.toISOString(),
-		appVersion: "1.0.0",
+		appVersion: EDGEWARDEN_VERSION,
 		storageKind: includeAttachments ? (options.blobStore?.kind ?? null) : null,
 		tableCounts: {
 			config: exportedConfigRows.length,

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { after, before, describe, test } from "node:test";
+import {
+	afterAll as after,
+	beforeAll as before,
+	describe,
+	test,
+} from "bun:test";
 import { fileURLToPath } from "node:url";
 import { unzipSync } from "fflate";
 import { Miniflare } from "miniflare";
@@ -2558,6 +2563,14 @@ describe("Edgewarden API", () => {
 				.first<{ api_key: string | null }>()
 				.then((row) => row?.api_key ?? null),
 			null,
+		);
+		assert.equal(
+			(
+				await request("/api/accounts/profile", {
+					headers: { authorization: `Bearer ${accessToken}` },
+				})
+			).status,
+			401,
 		);
 	});
 });

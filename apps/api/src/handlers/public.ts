@@ -21,6 +21,7 @@ import {
 } from "../services/turnstile";
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
+import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 
 export const registerAccount = factory.createHandlers(
 	vValidator("json", RegisterSchema),
@@ -161,6 +162,7 @@ function configPayload(
 ) {
 	return {
 		version: LIMITS.compatibility.bitwardenServerVersion,
+		edgewardenVersion: EDGEWARDEN_VERSION,
 		gitHash: null,
 		server: { name: "edgewarden", url: origin },
 		environment: {
@@ -216,5 +218,8 @@ export const getConfig = factory.createHandlers(async (c) => {
 });
 
 export const getVersion = factory.createHandlers(async (c) =>
-	c.json({ version: LIMITS.compatibility.bitwardenServerVersion }),
+	c.json({
+		version: LIMITS.compatibility.bitwardenServerVersion,
+		edgewardenVersion: EDGEWARDEN_VERSION,
+	}),
 );
