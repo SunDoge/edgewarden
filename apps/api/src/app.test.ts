@@ -841,6 +841,35 @@ describe("Edgewarden API", () => {
 		);
 	});
 
+	test("fails closed on malformed local account invariants", async () => {
+		await assert.rejects(() =>
+			testDatabase
+				.prepare("UPDATE users SET email = ? WHERE email = ?")
+				.bind(EMAIL.toUpperCase(), EMAIL)
+				.run(),
+		);
+		await assert.rejects(() =>
+			testDatabase
+				.prepare(
+					"UPDATE users SET kdf_type = 1, kdf_iterations = 2, kdf_memory = NULL, kdf_parallelism = NULL WHERE email = ?",
+				)
+				.bind(EMAIL)
+				.run(),
+		);
+		await assert.rejects(() =>
+			testDatabase
+				.prepare("UPDATE users SET yubikey_config = '{}' WHERE email = ?")
+				.bind(EMAIL)
+				.run(),
+		);
+		await assert.rejects(() =>
+			testDatabase
+				.prepare("UPDATE users SET totp_secret = '{}' WHERE email = ?")
+				.bind(EMAIL)
+				.run(),
+		);
+	});
+
 	test("rejects cross-user or missing folder ids at the database boundary", async () => {
 		const response = await request("/api/ciphers", {
 			method: "POST",
