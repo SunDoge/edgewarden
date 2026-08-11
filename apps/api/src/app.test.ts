@@ -9,6 +9,7 @@ import { app } from "./index";
 import { createDatabase } from "./middleware/db";
 import { executeBatch } from "./services/db/batch";
 import { loadYubicoCredentials } from "./services/yubico-config";
+import { importBackupArchiveBytes } from "./services/backup/import";
 
 const JWT_SECRET = "test-secret-that-is-at-least-thirty-two-characters";
 const DATA_ENCRYPTION_SECRET =
@@ -27,6 +28,9 @@ let cipherId = "";
 let sendId = "";
 let sendAccessId = "";
 let memberAccessToken = "";
+let organizationBackup = new Uint8Array();
+let backedUpOrganizationId = "";
+let backedUpCollectionId = "";
 const r2Values = new Map<string, Uint8Array>();
 
 async function request(
@@ -1989,6 +1993,63 @@ describe("Edgewarden API", () => {
 			headers: { authorization: `Bearer ${memberAccessToken}` },
 		});
 		assert.equal(hidden.status, 404);
+
+		// Instance backups must preserve the complete organization graph while
+		// excluding machine credentials such as API keys.
+		await testDatabase
+			.prepare("UPDATE users SET api_key = ? WHERE id = ?")
+			.bind("must-not-enter-backup", owner.id)
+			.run();
+		const backupResponse = await request("/api/admin/backup/export", {
+			method: "POST",
+			headers: {
+				authorization: `Bearer ${accessToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({ includeAttachments: false }),
+		});
+		assert.equal(
+			backupResponse.status,
+			200,
+			await backupResponse.clone().text(),
+		);
+		organizationBackup = new Uint8Array(await backupResponse.arrayBuffer());
+		const backupDb = JSON.parse(
+			new TextDecoder().decode(unzipSync(organizationBackup)["db.json"]),
+		) as {
+			users: Array<Record<string, unknown>>;
+			organizations: Array<{ id: string }>;
+			collections: Array<{ id: string }>;
+			cipher_collections: Array<{ cipher_id: string; collection_id: string }>;
+		};
+		assert.equal(
+			backupDb.users.some((row) => "api_key" in row),
+			false,
+		);
+		assert.ok(backupDb.organizations.some((row) => row.id === orgId));
+		assert.ok(backupDb.collections.some((row) => row.id === collectionId));
+		assert.ok(
+			backupDb.cipher_collections.some(
+				(row) =>
+					row.cipher_id === cipher.id && row.collection_id === collectionId,
+			),
+		);
+		backedUpOrganizationId = orgId;
+		backedUpCollectionId = collectionId;
+
+		const removed = await request(
+			`/api/organizations/${orgId}/members/${restrictedMemberId}`,
+			{ method: "DELETE", headers: { authorization: `Bearer ${accessToken}` } },
+		);
+		assert.equal(removed.status, 204, await removed.clone().text());
+		assert.equal(
+			(
+				await request(`/api/organizations/${orgId}`, {
+					headers: { authorization: `Bearer ${memberAccessToken}` },
+				})
+			).status,
+			404,
+		);
 	});
 
 	test("database enforces cipher ownership and type invariants", async () => {
@@ -2457,6 +2518,46 @@ describe("Edgewarden API", () => {
 				})
 			).status,
 			401,
+		);
+	});
+
+	test("restores a complete organization backup without API credentials", async () => {
+		assert.ok(organizationBackup.byteLength > 0);
+		const owner = await testDatabase
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(EMAIL)
+			.first<{ id: string }>();
+		assert.ok(owner?.id);
+		const restored = await importBackupArchiveBytes(
+			organizationBackup,
+			testDatabase,
+			null,
+			DATA_ENCRYPTION_SECRET,
+			owner.id,
+			true,
+		);
+		assert.ok(restored.result.imported.organizations > 0);
+		assert.ok(restored.result.imported.organizationMembers > 0);
+		assert.ok(restored.result.imported.cipherCollections > 0);
+		assert.ok(
+			await testDatabase
+				.prepare("SELECT id FROM organizations WHERE id = ?")
+				.bind(backedUpOrganizationId)
+				.first(),
+		);
+		assert.ok(
+			await testDatabase
+				.prepare("SELECT id FROM collections WHERE id = ?")
+				.bind(backedUpCollectionId)
+				.first(),
+		);
+		assert.equal(
+			await testDatabase
+				.prepare("SELECT api_key FROM users WHERE id = ?")
+				.bind(owner.id)
+				.first<{ api_key: string | null }>()
+				.then((row) => row?.api_key ?? null),
+			null,
 		);
 	});
 });
