@@ -74,6 +74,7 @@ import { getEmptyCompatibilityList } from "../handlers/compatibility";
 import {
 	deleteAllDevices,
 	deleteDevice,
+	deleteDevices,
 	getDevice,
 	getKnownDevice,
 	listDevices,
@@ -207,6 +208,7 @@ const folderAndDeviceRoutes = new Hono<HonoEnv>()
 	.put("/api/folders/:id", requireFolder, ...updateFolder)
 	.delete("/api/folders/:id", requireFolder, ...deleteFolder)
 	.get("/api/devices", ...listDevices)
+	.post("/api/devices/delete", ...deleteDevices)
 	.get("/api/devices/knowndevice", ...getKnownDevice)
 	.get("/api/devices/identifier/:id", requireDevice, ...getDevice)
 	.get("/api/devices/:id", requireDevice, ...getDevice)

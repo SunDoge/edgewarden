@@ -4,6 +4,7 @@
 	import {
 		deleteAllDevicesApi,
 		deleteDeviceApi,
+		deleteDevicesApi,
 		disableTwoFactorApi,
 		enableAuthenticatorApi,
 		changeMasterPasswordApi,
@@ -48,6 +49,7 @@
 	import { applyThemePreference, loadClientPreferences, saveClientPreferences, type SessionTimeoutAction, type ThemePreference } from "$lib/services/client-preferences";
 	import { ArrowLeft, Copy, Fingerprint, KeyRound, LoaderCircle, Pencil, RefreshCw, ShieldCheck, Trash2 } from "@lucide/svelte";
 	import { match } from "ts-pattern";
+	import { getCurrentDeviceIdentifier } from "$lib/services/client-device";
 
 	let loading = $state(true);
 	let busy = $state("");
@@ -64,6 +66,8 @@
 	let deviceName = $state("");
 	let removeAllDevicesOpen = $state(false);
 	let removeAllDevicesPassword = $state("");
+	let selectedDeviceIds = $state<Record<string, boolean>>({});
+	let selectedDeviceIdList = $derived(devices.filter((device) => selectedDeviceIds[device.id]).map((device) => device.id));
 	let totpOpen = $state(false);
 	let totpKey = $state("");
 	let totpToken = $state("");
@@ -182,6 +186,23 @@
 		if (!confirm(`移除设备“${device.name}”？`)) return;
 		busy = `device-${device.id}`;
 		try { await deleteDeviceApi(device.id); devices = devices.filter((item) => item.id !== device.id); } catch (e) { fail(e); } finally { busy = ""; }
+	}
+
+	async function removeSelectedDevices() {
+		if (!selectedDeviceIdList.length || !confirm(`移除选中的 ${selectedDeviceIdList.length} 台设备并撤销其会话？`)) return;
+		const removesCurrent = selectedDeviceIdList.includes(getCurrentDeviceIdentifier());
+		busy = "selected-devices";
+		try {
+			await deleteDevicesApi(selectedDeviceIdList);
+			devices = devices.filter((device) => !selectedDeviceIds[device.id]);
+			selectedDeviceIds = {};
+			message = "已移除选中设备";
+			if (removesCurrent) { await logout(); await goto("/login?reason=device-removed"); }
+		} catch (e) { fail(e); } finally { busy = ""; }
+	}
+
+	function toggleAllDevices(checked: boolean) {
+		selectedDeviceIds = checked ? Object.fromEntries(devices.map((device) => [device.id, true])) : {};
 	}
 
 	async function removeAllDevices() {
@@ -510,10 +531,10 @@
 		</Card.Root>
 
 		<Card.Root>
-			<Card.Header class="flex-row items-start justify-between"><div><Card.Title>设备</Card.Title><Card.Description>查看并撤销已登录设备。</Card.Description></div><Button variant="destructive" size="sm" onclick={() => removeAllDevicesOpen = true} disabled={!devices.length || busy === "devices"}>移除全部</Button></Card.Header>
+			<Card.Header class="flex-row items-start justify-between"><div><Card.Title>设备</Card.Title><Card.Description>查看并撤销已登录设备。</Card.Description></div><div class="flex gap-2">{#if selectedDeviceIdList.length}<Button variant="destructive" size="sm" onclick={removeSelectedDevices} disabled={busy === "selected-devices"}>移除已选（{selectedDeviceIdList.length}）</Button>{/if}<Button variant="destructive" size="sm" onclick={() => removeAllDevicesOpen = true} disabled={!devices.length || busy === "devices"}>移除全部</Button></div></Card.Header>
 			<Card.Content>
-				<Table.Root><Table.Header><Table.Row><Table.Head>名称</Table.Head><Table.Head>最近登录</Table.Head><Table.Head>状态</Table.Head><Table.Head class="text-right">操作</Table.Head></Table.Row></Table.Header><Table.Body>
-					{#each devices as device (device.id)}<Table.Row><Table.Cell><div class="font-medium">{device.name}</div><div class="text-xs text-muted-foreground">{device.identifier}</div></Table.Cell><Table.Cell>{device.lastLoginDate ? new Date(device.lastLoginDate).toLocaleString() : "—"}</Table.Cell><Table.Cell><Badge variant="outline">{device.isTrusted ? "受信任" : "普通"}</Badge></Table.Cell><Table.Cell><div class="flex justify-end gap-1"><Button variant="ghost" size="icon-sm" onclick={() => startRename(device)} aria-label="重命名设备"><Pencil /></Button><Button variant="ghost" size="icon-sm" onclick={() => removeDevice(device)} disabled={busy === `device-${device.id}`} aria-label="移除设备"><Trash2 /></Button></div></Table.Cell></Table.Row>{:else}<Table.Row><Table.Cell colspan={4} class="py-8 text-center text-muted-foreground">暂无设备记录</Table.Cell></Table.Row>{/each}
+				<Table.Root><Table.Header><Table.Row><Table.Head class="w-10"><input type="checkbox" aria-label="选择全部设备" checked={devices.length > 0 && selectedDeviceIdList.length === devices.length} onchange={(event) => toggleAllDevices(event.currentTarget.checked)} /></Table.Head><Table.Head>名称</Table.Head><Table.Head>最近登录</Table.Head><Table.Head>密钥状态</Table.Head><Table.Head class="text-right">操作</Table.Head></Table.Row></Table.Header><Table.Body>
+					{#each devices as device (device.id)}<Table.Row><Table.Cell><input type="checkbox" aria-label={`选择设备 ${device.name}`} checked={!!selectedDeviceIds[device.id]} onchange={(event) => selectedDeviceIds = { ...selectedDeviceIds, [device.id]: event.currentTarget.checked }} /></Table.Cell><Table.Cell><div class="font-medium">{device.name}{device.id === getCurrentDeviceIdentifier() ? "（当前）" : ""}</div><div class="text-xs text-muted-foreground">{device.identifier}</div></Table.Cell><Table.Cell>{device.lastLoginDate ? new Date(device.lastLoginDate).toLocaleString() : "—"}</Table.Cell><Table.Cell><Badge variant="outline">{device.isTrusted ? "已保存设备密钥" : "未保存设备密钥"}</Badge></Table.Cell><Table.Cell><div class="flex justify-end gap-1"><Button variant="ghost" size="icon-sm" onclick={() => startRename(device)} aria-label="重命名设备"><Pencil /></Button><Button variant="ghost" size="icon-sm" onclick={() => removeDevice(device)} disabled={busy === `device-${device.id}`} aria-label="移除设备"><Trash2 /></Button></div></Table.Cell></Table.Row>{:else}<Table.Row><Table.Cell colspan={5} class="py-8 text-center text-muted-foreground">暂无设备记录</Table.Cell></Table.Row>{/each}
 				</Table.Body></Table.Root>
 			</Card.Content>
 		</Card.Root>

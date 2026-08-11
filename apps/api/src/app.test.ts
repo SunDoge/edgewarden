@@ -361,6 +361,15 @@ describe("Edgewarden API", () => {
 		const unverifiedDeleteAll = await request("/api/devices", { method: "DELETE", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ masterPasswordHash: "wrong-password" }) });
 		assert.equal(unverifiedDeleteAll.status, 400);
 		assert.equal((await request("/api/devices/api-test-device", { headers: auth })).status, 200);
+
+		const secondaryLogin = await request("/identity/connect/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "password", username: EMAIL, password: MASTER_PASSWORD_HASH, deviceIdentifier: "secondary-device", deviceName: "Secondary", deviceType: "14" }) });
+		assert.equal(secondaryLogin.status, 200, await secondaryLogin.clone().text());
+		const secondaryToken = (await secondaryLogin.json<{ access_token: string }>()).access_token;
+		const bulkRemoved = await request("/api/devices/delete", { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ ids: ["secondary-device", "member-test-device"] }) });
+		assert.equal(bulkRemoved.status, 200, await bulkRemoved.clone().text());
+		assert.equal((await bulkRemoved.json<{ deleted: number }>()).deleted, 1);
+		assert.equal((await request("/api/accounts/profile", { headers: { authorization: `Bearer ${secondaryToken}` } })).status, 401);
+		assert.equal(await testDatabase.prepare("SELECT COUNT(*) AS count FROM devices WHERE device_identifier = 'member-test-device'").first<{ count: number }>().then((row) => Number(row?.count)), 1);
 	});
 
 	test("validates domain settings before persistence", async () => {

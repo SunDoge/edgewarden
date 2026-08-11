@@ -1,5 +1,6 @@
 import type { AppType } from "@edgewarden/api";
 import { hc } from "hono/client";
+import { getOrCreateDeviceIdentifier } from "./client-device";
 
 export class ApiError extends Error {
 	constructor(
@@ -52,6 +53,7 @@ async function authenticatedFetch(
 	if (token && !headers.has("authorization")) {
 		headers.set("authorization", `Bearer ${token}`);
 	}
+	if (typeof window !== "undefined" && !headers.has("X-Device-Identifier")) headers.set("X-Device-Identifier", getOrCreateDeviceIdentifier());
 
 	const response = await fetchImpl(input, { ...init, headers });
 	if (response.ok) return response;

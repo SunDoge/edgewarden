@@ -3,11 +3,13 @@ import type { Selectable } from "kysely";
 import { factory } from "../http/factory";
 import { DeviceKeysSchema, DeviceNameSchema } from "../schemas/requests";
 import { VerifyPasswordSchema } from "../schemas/accounts";
+import { BulkIdsSchema } from "../schemas/ciphers";
 import { invalidateUserCache, verifyPassword } from "../services/auth";
 import { executeBatch } from "../services/db/batch";
 import * as devicesDb from "../services/db/devices";
 import type { Devices } from "../types/db";
 import { toIso } from "../utils/time";
+import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 
 function deviceToResponse(device: Selectable<Devices>) {
 	return {
@@ -78,6 +80,22 @@ export const deleteDevice = factory.createHandlers(async (c) => {
 	]);
 	invalidateUserCache(userId);
 	return new Response(null, { status: 200 });
+});
+
+export const deleteDevices = factory.createHandlers(vValidator("json", BulkIdsSchema), async (c) => {
+	const db = c.get("db");
+	const userId = c.get("user").id;
+	const ids = [...new Set(c.req.valid("json").ids)];
+	const ownedIds = (await db.selectFrom("devices").select("device_identifier").where("user_id", "=", userId).where("device_identifier", "in", ids).execute()).map((device) => device.device_identifier);
+	if (ownedIds.length) {
+		await executeBatch(c.get("dbDialect"), [
+			db.deleteFrom("refresh_tokens").where("user_id", "=", userId).where("device_identifier", "in", ownedIds).compile(),
+			db.deleteFrom("devices").where("user_id", "=", userId).where("device_identifier", "in", ownedIds).compile(),
+		]);
+		invalidateUserCache(userId);
+		await safeWriteAuditEvent(db, { actorUserId: userId, action: "device.delete.bulk", category: "auth", level: "warning", targetType: "device", metadata: { ...auditRequestMetadata(c.req.raw), size: ownedIds.length } });
+	}
+	return c.json({ deleted: ownedIds.length });
 });
 
 export const updateDeviceName = factory.createHandlers(

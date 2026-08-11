@@ -21,6 +21,7 @@ import type { InferRequestType } from "hono/client";
 import { rpc, rpcJson } from "./rpc";
 import { ApiError } from "./rpc";
 import { assertAccountPasskey, unlockVaultKeyWithAccountPasskeyPrf } from "./passkeys";
+import { browserDeviceName, getOrCreateDeviceIdentifier, WEB_DEVICE_TYPE } from "./client-device";
 
 // Re-export shared types that consumers of this module may need
 export type { PreloginResponse, RegisterPayload, TokenResponse, SyncResponse };
@@ -127,6 +128,9 @@ export async function login(
 			username: email.toLowerCase().trim(),
 			password: masterPasswordHash,
 			client_id: "web",
+			deviceIdentifier: getOrCreateDeviceIdentifier(),
+			deviceName: browserDeviceName(),
+			deviceType: String(WEB_DEVICE_TYPE),
 			...(twoFactor ? {
 				twoFactorToken: twoFactor.token.trim(),
 				twoFactorProvider: twoFactor.provider ?? "0",
@@ -754,6 +758,10 @@ export async function renameDeviceApi(id: string, name: string): Promise<any> {
 
 export async function deleteDeviceApi(id: string): Promise<void> {
 	await rpcJson(await rpc.api.devices[":id"].$delete({ param: { id } }));
+}
+
+export async function deleteDevicesApi(ids: string[]): Promise<void> {
+	await rpcJson(await rpc.api.devices.delete.$post({ json: { ids } }));
 }
 
 export async function deleteAllDevicesApi(masterPasswordHash: string): Promise<void> {
