@@ -1,0 +1,9 @@
+# Generate independent values with: openssl rand -hex 32
+JWT_SECRET=
+DATA_ENCRYPTION_SECRET=
+
+# Enter this value once when creating the first administrator account.
+BOOTSTRAP_SECRET=
+
+# Optional Cloudflare Turnstile protection for login and registration.
+# TURNSTILE_SECRET_KEY=

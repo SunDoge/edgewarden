@@ -1,50 +1,32 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "api",
-	"main": "src/index.ts",
+	"name": "edgewarden",
+	"main": "apps/api/src/index.ts",
 	"compatibility_date": "2026-06-22",
 	"assets": {
-		"directory": "../web/build",
+		"directory": "apps/web/build",
 		"binding": "ASSETS",
 		"not_found_handling": "single-page-application"
 	},
-	// "compatibility_flags": [
-	//   "nodejs_compat"
-	// ],
-	// "vars": {
-	//   "MY_VAR": "my-variable"
-	// },
-	// "kv_namespaces": [
-	//   {
-	//     "binding": "MY_KV_NAMESPACE",
-	//     "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-	//   }
-	// ],
-	// "r2_buckets": [
-	//   {
-	//     "binding": "MY_BUCKET",
-	//     "bucket_name": "my-bucket"
-	//   }
-	// ],
 	"d1_databases": [
 		{
 			"binding": "DB",
-			"database_name": "edgewarden-db",
-			"migrations_dir": "./migrations"
+			"migrations_dir": "apps/api/migrations"
 		}
 	],
 	"kv_namespaces": [
 		{
-			"binding": "ATTACHMENTS_KV",
-			"id": "edgewarden-kv"
+			"binding": "ATTACHMENTS_KV"
 		}
 	],
 	"r2_buckets": [
 		{
-			"binding": "ATTACHMENTS_R2",
-			"bucket_name": "edgewarden-attachments"
+			"binding": "ATTACHMENTS_R2"
 		}
 	],
+	"secrets": {
+		"required": ["JWT_SECRET", "DATA_ENCRYPTION_SECRET", "BOOTSTRAP_SECRET"]
+	},
 	"vars": {
 		"ATTACHMENT_STORAGE": "r2",
 		"SIGNUPS_ALLOWED": "false",
@@ -64,9 +46,6 @@
 			"new_sqlite_classes": ["VaultRealtime"]
 		}
 	],
-	// "ai": {
-	//   "binding": "AI"
-	// },
 	"observability": {
 		"enabled": true,
 		"head_sampling_rate": 0.1
@@ -78,7 +57,7 @@
 			"simple": {
 				"limit": 10,
 				"period": 60
-			} // 60秒内10次
+			}
 		},
 		{
 			"name": "RL_ACCOUNT",

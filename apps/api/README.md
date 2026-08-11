@@ -18,7 +18,7 @@ npm run cf-typegen
 The first account is always the administrator and requires a deployment secret:
 
 ```sh
-wrangler secret put BOOTSTRAP_SECRET
+bunx wrangler secret put BOOTSTRAP_SECRET --config ../../wrangler.jsonc
 ```
 
 `BOOTSTRAP_SECRET` is compared in constant time, is never stored in D1, and is
@@ -52,7 +52,7 @@ default) and deletes remove both copies.
 
 # Observability
 
-Workers Logs is enabled in `wrangler.jsonc` with 10% head sampling. Invocation
+Workers Logs is enabled in the root `wrangler.jsonc` with 10% head sampling. Invocation
 logs are operational diagnostics only. Security audit events remain in D1. Do
 not add email addresses, credentials, tokens, vault ciphertext, or raw request
 bodies to `console` output.
@@ -64,13 +64,13 @@ plan retains seven days of history. Before a risky migration, record the current
 bookmark:
 
 ```sh
-wrangler d1 time-travel info edgewarden-db
+bunx wrangler d1 time-travel info DB --config ../../wrangler.jsonc
 ```
 
 To inspect the bookmark for a UTC/RFC3339 timestamp:
 
 ```sh
-wrangler d1 time-travel info edgewarden-db \
+bunx wrangler d1 time-travel info DB --config ../../wrangler.jsonc \
   --timestamp="2026-08-11T05:00:00Z"
 ```
 
@@ -79,8 +79,8 @@ Stop application writes, record the current bookmark so the restore can be
 undone, verify the target timestamp, and then run one of:
 
 ```sh
-wrangler d1 time-travel restore edgewarden-db --bookmark=BOOKMARK
-wrangler d1 time-travel restore edgewarden-db --timestamp=UNIX_TIMESTAMP
+bunx wrangler d1 time-travel restore DB --config ../../wrangler.jsonc --bookmark=BOOKMARK
+bunx wrangler d1 time-travel restore DB --config ../../wrangler.jsonc --timestamp=UNIX_TIMESTAMP
 ```
 
 Afterward, verify user, cipher, attachment metadata, and audit-log counts before
@@ -92,7 +92,7 @@ attachment-inclusive Edgewarden backup when blob data also needs recovery.
 Password login and account registration support optional Cloudflare Turnstile verification with separate widget actions. Configure both values in the Worker environment:
 
 ```sh
-wrangler secret put TURNSTILE_SECRET_KEY
+bunx wrangler secret put TURNSTILE_SECRET_KEY --config ../../wrangler.jsonc
 ```
 
 Set `TURNSTILE_SITE_KEY` as a Worker variable in Cloudflare. Turnstile is enforced only when `TURNSTILE_SECRET_KEY` is present; when enabled, the public site key is returned by `/api/config`. Restrict the production widget to the deployed hostname. For local testing, use Cloudflare's documented Turnstile test keys rather than production keys.
@@ -102,8 +102,8 @@ Set `TURNSTILE_SITE_KEY` as a Worker variable in Cloudflare. Turnstile is enforc
 Configure independent secrets for token signing and persisted configuration encryption:
 
 ```sh
-wrangler secret put JWT_SECRET
-wrangler secret put DATA_ENCRYPTION_SECRET
+bunx wrangler secret put JWT_SECRET --config ../../wrangler.jsonc
+bunx wrangler secret put DATA_ENCRYPTION_SECRET --config ../../wrangler.jsonc
 ```
 
 Each value must be an independently generated random string of at least 32 characters. `JWT_SECRET` signs access and other short-lived tokens. `DATA_ENCRYPTION_SECRET` encrypts persisted backup destination credentials and Yubico validation credentials. Rotating `JWT_SECRET` therefore does not make persisted configuration unreadable. Keep `DATA_ENCRYPTION_SECRET` stable and backed up securely; losing it makes those encrypted settings unrecoverable.

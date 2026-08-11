@@ -2,7 +2,7 @@
 	"name": "edgewarden",
 	"version": "1.0.0",
 	"private": true,
-	"description": "",
+	"description": "A Bitwarden-compatible password manager for Cloudflare Workers",
 	"workspaces": [
 		"apps/*",
 		"packages/*"
@@ -11,7 +11,9 @@
 		"rpc:types": "bun run --filter @edgewarden/api rpc:types",
 		"dev": "bun run --parallel --filter './apps/*' dev",
 		"build": "bun run --filter @edgewarden/web build",
-		"deploy": "bun run build && bun run --filter @edgewarden/api deploy",
+		"db:migrate:local": "bun run --filter @edgewarden/api db:apply:local",
+		"db:migrate:remote": "bun run --filter @edgewarden/api db:apply:remote",
+		"deploy": "bun run db:migrate:remote && bun run --filter @edgewarden/api deploy",
 		"test": "bun run --parallel --filter './apps/*' --if-present test",
 		"test:compat:bw": "bun scripts/bw-compat-smoke.ts",
 		"test:integration:cloudflare": "bun scripts/cloudflare-integration-smoke.ts",
@@ -33,6 +35,19 @@
 		"workerd"
 	],
 	"type": "module",
+	"cloudflare": {
+		"bindings": {
+			"JWT_SECRET": {
+				"description": "用于签名登录和短期令牌。请生成独立的随机值，例如 `openssl rand -hex 32`。"
+			},
+			"DATA_ENCRYPTION_SECRET": {
+				"description": "用于加密持久化配置。必须独立生成并安全备份，例如 `openssl rand -hex 32`。"
+			},
+			"BOOTSTRAP_SECRET": {
+				"description": "首次创建管理员账户时输入的部署密码。请使用高强度随机值。"
+			}
+		}
+	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.0"
 	},
