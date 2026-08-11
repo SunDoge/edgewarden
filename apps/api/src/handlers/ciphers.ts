@@ -21,7 +21,14 @@ import type { Attachments, Ciphers } from "../types/db";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
 
-function cipherToResponse(cipher: Selectable<Ciphers>, attachments: Selectable<Attachments>[] = [], collectionIds: string[] = []) {
+type CipherPermissions = { edit: boolean; viewPassword: boolean };
+
+function cipherToResponse(
+	cipher: Selectable<Ciphers>,
+	attachments: Selectable<Attachments>[] = [],
+	collectionIds: string[] = [],
+	permissions: CipherPermissions = { edit: true, viewPassword: true },
+) {
 	const data = JSON.parse(cipher.data) as Record<string, unknown>;
 	return {
 		id: cipher.id,
@@ -44,6 +51,12 @@ function cipherToResponse(cipher: Selectable<Ciphers>, attachments: Selectable<A
 		key: cipher.key ?? null,
 		attachments: attachments.map((attachment) => ({ id: attachment.id, fileName: attachment.file_name, size: attachment.size, sizeName: attachment.size_name, key: attachment.key, object: "attachment" })),
 		organizationUseTotp: false,
+		edit: permissions.edit,
+		viewPassword: permissions.viewPassword,
+		permissions: {
+			delete: permissions.edit,
+			restore: permissions.edit,
+		},
 		collectionIds,
 		revisionDate: toIso(cipher.updated_at),
 		creationDate: toIso(cipher.created_at),
@@ -52,12 +65,35 @@ function cipherToResponse(cipher: Selectable<Ciphers>, attachments: Selectable<A
 		passwordHistory: cipher.password_history
 			? JSON.parse(cipher.password_history)
 			: (data.passwordHistory ?? null),
-		object: "cipher",
+		object: "cipherDetails",
 	};
 }
 
 async function getCipherCollectionIds(db: any, cipherId: string): Promise<string[]> {
 	return (await db.selectFrom("cipher_collections").select("collection_id").where("cipher_id", "=", cipherId).execute()).map((row: any) => row.collection_id);
+}
+
+async function getCipherPermissions(
+	db: any,
+	cipher: Selectable<Ciphers>,
+	member: any,
+	collectionIds: string[],
+): Promise<CipherPermissions> {
+	if (!cipher.org_id || !member || member.access_all === 1 || ["manager", "admin", "owner"].includes(member.role)) {
+		return { edit: true, viewPassword: true };
+	}
+	const access = collectionIds.length
+		? await db
+				.selectFrom("collection_members")
+				.select(["read_only", "hide_passwords"])
+				.where("org_member_id", "=", member.id)
+				.where("collection_id", "in", collectionIds)
+				.execute()
+		: [];
+	return {
+		edit: access.length === collectionIds.length && access.every((row: any) => row.read_only !== 1),
+		viewPassword: access.length === collectionIds.length && access.every((row: any) => row.hide_passwords !== 1),
+	};
 }
 
 async function revisionQueriesForCipher(db: any, cipher: Pick<Selectable<Ciphers>, "user_id" | "org_id">, timestamp = now()): Promise<CompiledQuery[]> {
@@ -289,7 +325,10 @@ export const importCiphers = factory.createHandlers(
 // GET /api/ciphers/:id
 export const getCipher = factory.createHandlers(async (c) => {
 	const cipher = c.get("cipher");
-	return c.json(cipherToResponse(cipher, await attachmentsDb.listByCipherIds(c.get("db"), [cipher.id]), await getCipherCollectionIds(c.get("db"), cipher.id)));
+	const db = c.get("db");
+	const collectionIds = await getCipherCollectionIds(db, cipher.id);
+	const permissions = await getCipherPermissions(db, cipher, c.get("orgMember"), collectionIds);
+	return c.json(cipherToResponse(cipher, await attachmentsDb.listByCipherIds(db, [cipher.id]), collectionIds, permissions));
 });
 
 // PUT /api/ciphers/:id

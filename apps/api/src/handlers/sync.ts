@@ -16,7 +16,12 @@ import { toIso } from "../utils/time";
 import { buildUserDecryptionOptions } from "../utils/user-decryption";
 import { userYubicoPublicIds } from "../utils/yubico";
 
-function cipherToResponse(cipher: Selectable<Ciphers>, attachments: Selectable<Attachments>[] = [], collectionIds: string[] = []) {
+function cipherToResponse(
+	cipher: Selectable<Ciphers>,
+	attachments: Selectable<Attachments>[] = [],
+	collectionIds: string[] = [],
+	permissions = { edit: true, viewPassword: true },
+) {
 	const data = JSON.parse(cipher.data) as Record<string, unknown>;
 	return {
 		id: cipher.id,
@@ -40,6 +45,12 @@ function cipherToResponse(cipher: Selectable<Ciphers>, attachments: Selectable<A
 		key: cipher.key ?? null,
 		attachments: attachments.map((attachment) => ({ id: attachment.id, fileName: attachment.file_name, size: attachment.size, sizeName: attachment.size_name, key: attachment.key, object: "attachment" })),
 		organizationUseTotp: false,
+		edit: permissions.edit,
+		viewPassword: permissions.viewPassword,
+		permissions: {
+			delete: permissions.edit,
+			restore: permissions.edit,
+		},
 		collectionIds,
 		revisionDate: toIso(cipher.updated_at),
 		creationDate: toIso(cipher.created_at),
@@ -48,7 +59,7 @@ function cipherToResponse(cipher: Selectable<Ciphers>, attachments: Selectable<A
 		passwordHistory: cipher.password_history
 			? JSON.parse(cipher.password_history)
 			: null,
-		object: "cipher",
+		object: "cipherDetails",
 	};
 }
 
@@ -186,7 +197,23 @@ export const sync = factory.createHandlers(async (c) => {
 		profile,
 		folders: folders.map(folderToResponse),
 		collections: visibleCollections.map((collection) => { const access = restrictedAccessByCollection.get(collection.id); return { id: collection.id, organizationId: collection.org_id, name: collection.name, readOnly: Boolean(access?.read_only), hidePasswords: Boolean(access?.hide_passwords), creationDate: toIso(collection.created_at), revisionDate: toIso(collection.updated_at), object: "collectionDetails" }; }),
-		ciphers: allCiphers.map((cipher) => cipherToResponse(cipher, attachmentsByCipher.get(cipher.id), collectionIdsByCipher.get(cipher.id)?.map((link) => link.collection_id) ?? [])),
+		ciphers: allCiphers.map((cipher) => {
+			const collectionIds = collectionIdsByCipher
+				.get(cipher.id)
+				?.map((link) => link.collection_id) ?? [];
+			const restrictedAccess = cipher.org_id && !allAccessOrgIds.includes(cipher.org_id)
+				? collectionIds.map((id) => restrictedAccessByCollection.get(id))
+				: [];
+			return cipherToResponse(
+				cipher,
+				attachmentsByCipher.get(cipher.id),
+				collectionIds,
+				{
+					edit: !restrictedAccess.some((access) => access?.read_only === 1),
+					viewPassword: !restrictedAccess.some((access) => access?.hide_passwords === 1),
+				},
+			);
+		}),
 		domains,
 		policies: [],
 

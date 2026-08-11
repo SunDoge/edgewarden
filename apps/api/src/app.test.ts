@@ -304,11 +304,18 @@ describe("Edgewarden API", () => {
 			folderId: string | null;
 			favorite: boolean;
 			fields: unknown[];
+			edit: boolean;
+			viewPassword: boolean;
+			object: string;
 		}>();
 		cipherId = cipher.id;
 		assert.equal(cipher.folderId, folder.id);
 		assert.equal(cipher.favorite, true);
 		assert.equal(cipher.fields.length, 1);
+		assert.deepEqual(
+			[cipher.edit, cipher.viewPassword, cipher.object],
+			[true, true, "cipherDetails"],
+		);
 
 		const sync = await request("/api/sync", { headers: auth });
 		assert.equal(sync.status, 200);
@@ -810,6 +817,10 @@ describe("Edgewarden API", () => {
 
 		const visible = await request(`/api/ciphers/${cipher.id}`, { headers: { authorization: `Bearer ${memberAccessToken}` } });
 		assert.equal(visible.status, 200, await visible.clone().text());
+		assert.deepEqual(
+			await visible.json<{ edit: boolean; viewPassword: boolean; permissions: { delete: boolean; restore: boolean } }>().then((value) => [value.edit, value.viewPassword, value.permissions.delete, value.permissions.restore]),
+			[false, true, false, false],
+		);
 		const deniedWrite = await request(`/api/ciphers/${cipher.id}`, { method: "PUT", headers: { authorization: `Bearer ${memberAccessToken}`, "content-type": "application/json" }, body: JSON.stringify(payload) });
 		assert.equal(deniedWrite.status, 403);
 		await testDatabase.prepare("UPDATE org_members SET role = 'manager' WHERE id = ?").bind(restrictedMemberId).run();
