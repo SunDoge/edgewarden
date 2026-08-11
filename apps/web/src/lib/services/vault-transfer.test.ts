@@ -1,12 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { CipherType } from "@edgewarden/shared";
-import { decryptCipher, decryptStr } from "./crypto";
+import { argon2id } from "hash-wasm";
+import {
+	decryptCipher,
+	decryptStr,
+	encryptBw,
+	hkdfExpand,
+	pbkdf2,
+} from "./crypto";
 import {
 	buildBitwardenCsv,
 	buildBitwardenJson,
 	buildPlainExportDocument,
 	encryptTransferDocument,
 	parseVaultImport,
+	parseVaultImportFile,
 } from "./vault-transfer";
 
 describe("vault import and export", () => {
@@ -120,8 +128,110 @@ describe("vault import and export", () => {
 			items: [{ type: 1, name: "Site" }],
 		});
 		expect(() => parseVaultImport('{"encrypted":true,"items":[]}')).toThrow(
-			/不支持.*加密 JSON/,
+			/账户限制型加密 JSON/,
 		);
+	});
+
+	it("decrypts password-protected Bitwarden JSON and preserves stored passkeys", async () => {
+		const password = "correct horse battery staple";
+		const salt = "base64-export-salt";
+		const iterations = 100_000;
+		const material = await pbkdf2(password, salt, iterations, 32);
+		const encKey = await hkdfExpand(material, "enc", 32);
+		const macKey = await hkdfExpand(material, "mac", 32);
+		const clearText = JSON.stringify({
+			encrypted: false,
+			folders: [{ id: "folder", name: "Passkeys" }],
+			items: [
+				{
+					id: "item",
+					folderId: "folder",
+					type: CipherType.Login,
+					name: "Example",
+					login: {
+						username: "alice",
+						fido2Credentials: [
+							{
+								credentialId: "credential-id",
+								keyValue: "private-key",
+								rpId: "example.com",
+							},
+						],
+					},
+				},
+			],
+		});
+		const document = JSON.stringify({
+			encrypted: true,
+			passwordProtected: true,
+			salt,
+			kdfType: 0,
+			kdfIterations: iterations,
+			encKeyValidation_DO_NOT_EDIT: await encryptBw(
+				new TextEncoder().encode("validation"),
+				encKey,
+				macKey,
+			),
+			data: await encryptBw(
+				new TextEncoder().encode(clearText),
+				encKey,
+				macKey,
+			),
+		});
+
+		const imported = await parseVaultImportFile(document, "json", password);
+		expect(imported.folders).toEqual([{ id: "folder", name: "Passkeys" }]);
+		expect(imported.items[0].login.fido2Credentials[0]).toMatchObject({
+			credentialId: "credential-id",
+			keyValue: "private-key",
+			rpId: "example.com",
+		});
+		await expect(
+			parseVaultImportFile(document, "json", "wrong password"),
+		).rejects.toThrow(/密码错误|已损坏/);
+	});
+
+	it("decrypts Bitwarden password-protected exports using Argon2id parameters", async () => {
+		const password = "argon export password";
+		const salt = "argon-export-salt";
+		const material = await argon2id({
+			password,
+			salt,
+			iterations: 2,
+			parallelism: 1,
+			memorySize: 8 * 1024,
+			hashLength: 32,
+			outputType: "binary",
+		});
+		const encKey = await hkdfExpand(material, "enc", 32);
+		const macKey = await hkdfExpand(material, "mac", 32);
+		const clearText = JSON.stringify({
+			encrypted: false,
+			folders: [],
+			items: [{ type: 1, name: "Argon item" }],
+		});
+		const document = JSON.stringify({
+			encrypted: true,
+			passwordProtected: true,
+			salt,
+			kdfType: 1,
+			kdfIterations: 2,
+			kdfMemory: 8,
+			kdfParallelism: 1,
+			encKeyValidation_DO_NOT_EDIT: await encryptBw(
+				new TextEncoder().encode("validation"),
+				encKey,
+				macKey,
+			),
+			data: await encryptBw(
+				new TextEncoder().encode(clearText),
+				encKey,
+				macKey,
+			),
+		});
+		expect(
+			(await parseVaultImportFile(document, "json", password)).items[0].name,
+		).toBe("Argon item");
 	});
 
 	it("encrypts every sensitive import value before building the API payload", async () => {
