@@ -1,15 +1,12 @@
 import * as v from "valibot";
 
-export const CipherSchema = v.object({
+export const CipherSchema = v.looseObject({
 	type: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(8)),
 	name: v.pipe(v.string(), v.minLength(1)),
 	notes: v.optional(v.nullable(v.string())),
 	folderId: v.optional(v.nullable(v.string())),
 	organizationId: v.optional(v.nullable(v.string())),
-	collectionIds: v.optional(
-		v.array(v.pipe(v.string(), v.minLength(1))),
-		[],
-	),
+	collectionIds: v.optional(v.array(v.pipe(v.string(), v.minLength(1))), []),
 	favorite: v.optional(v.boolean()),
 	reprompt: v.optional(
 		v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(1)),
@@ -28,6 +25,10 @@ export const CipherSchema = v.object({
 	passwordHistory: v.optional(
 		v.nullable(v.array(v.record(v.string(), v.unknown()))),
 	),
+	// Official clients send the revision they last observed. The API uses it for
+	// optimistic concurrency control so an offline client cannot silently replace
+	// a newer edit.
+	lastKnownRevisionDate: v.optional(v.pipe(v.string(), v.isoTimestamp())),
 });
 
 export const BulkIdsSchema = v.object({
@@ -46,7 +47,7 @@ export const CipherImportSchema = v.object({
 	),
 	ciphers: v.optional(
 		v.array(
-			v.object({
+			v.looseObject({
 				...CipherSchema.entries,
 				id: v.optional(v.nullable(v.string())),
 			}),
