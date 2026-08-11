@@ -9,7 +9,7 @@
 --   1. All timestamps are INTEGER (Unix seconds). No more TEXT/INTEGER mix.
 --   2. CHECK constraints on every enum-like column.
 --   3. Organisation + collection model for vault sharing (first-class).
---   4. Rate limiting is handled by Cloudflare Workers Rate Limiting binding.
+--   4. Edge rate limiting is complemented by persisted account lockouts.
 --   5. Full set of cleanup-friendly indexes (expires_at, deleted_at, purge_after).
 --   6. audit_logs has a reverse-lookup index on (target_type, target_id).
 --   7. sends tracks password hash algorithm so it is upgradeable.
@@ -74,7 +74,20 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_api_key
   ON users(api_key) WHERE api_key IS NOT NULL;
 -- ---------------------------------------------------------------------------
--- 3. DOMAIN SETTINGS  (one row per user)
+-- 3. LOGIN ATTEMPTS
+-- ---------------------------------------------------------------------------
+-- Account identifiers are SHA-256 hashes, never plaintext email addresses.
+-- Persisting failures prevents an attacker from bypassing lockout by changing IP.
+CREATE TABLE IF NOT EXISTS login_attempts (
+  identifier_hash TEXT PRIMARY KEY NOT NULL,
+  failure_count INTEGER NOT NULL DEFAULT 0 CHECK (failure_count >= 0),
+  window_started_at INTEGER NOT NULL,
+  locked_until INTEGER,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_updated ON login_attempts(updated_at);
+-- ---------------------------------------------------------------------------
+-- 4. DOMAIN SETTINGS  (one row per user)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS domain_settings (
   user_id TEXT PRIMARY KEY NOT NULL,

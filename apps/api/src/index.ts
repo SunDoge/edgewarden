@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
+import { bodyLimit } from "hono/body-limit";
 import { LIMITS } from "./config";
 import type { HonoEnv } from "./env";
 import { dbMiddleware } from "./middleware/db";
@@ -8,6 +9,25 @@ import { publicRouter } from "./routes/public";
 import { vaultRouter } from "./routes/vault";
 
 const baseApp = new Hono<HonoEnv>();
+
+// Bound request buffering before validators or handlers parse attacker-controlled
+// bodies. File endpoints retain their documented 100 MiB allowance.
+baseApp.use("*", async (c, next) => {
+	const contentType = c.req.header("content-type")?.toLowerCase() ?? "";
+	const maxSize = contentType.includes("application/json")
+		? LIMITS.requestBody.jsonBytes
+		: contentType.includes("application/x-www-form-urlencoded")
+			? LIMITS.requestBody.formBytes
+			: LIMITS.requestBody.blobBytes;
+	return bodyLimit({
+		maxSize,
+		onError: (context) =>
+			context.json(
+				{ message: "Request body is too large", object: "error" },
+				413,
+			),
+	})(c, next);
+});
 
 // Validate independent token-signing and persisted-data encryption secrets.
 baseApp.use("*", async (c, next) => {

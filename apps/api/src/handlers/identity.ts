@@ -44,6 +44,11 @@ import {
 	yubicoPublicId,
 } from "../utils/yubico";
 import { turnstileEnabled, verifyTurnstileToken } from "../services/turnstile";
+import {
+	clearLoginFailures,
+	isLoginLocked,
+	recordLoginFailure,
+} from "../services/login-attempts";
 
 const TWO_FACTOR_AUTHENTICATOR = 0;
 const TWO_FACTOR_RECOVERY = 8;
@@ -251,9 +256,17 @@ export const connectToken = factory.createHandlers(async (c) => {
 				429,
 			);
 		}
+		if (await isLoginLocked(db, email)) {
+			return identityErrorResponse(
+				"Too many failed login attempts.",
+				"TooManyRequests",
+				429,
+			);
+		}
 
 		const user = await usersDb.getUserByEmail(db, email);
 		if (!user || user.status !== "active") {
+			await recordLoginFailure(db, email);
 			return identityErrorResponse(
 				"Username or password is incorrect. Try again",
 				"invalid_grant",
@@ -287,12 +300,14 @@ export const connectToken = factory.createHandlers(async (c) => {
 		}
 
 		if (!valid) {
+			await recordLoginFailure(db, email);
 			return identityErrorResponse(
 				"Username or password is incorrect. Try again",
 				"invalid_grant",
 				400,
 			);
 		}
+		await clearLoginFailures(db, email);
 
 		const twoFactorPasskeys =
 			await webauthnDb.countAccountPasskeyCredentialsByUserId(
