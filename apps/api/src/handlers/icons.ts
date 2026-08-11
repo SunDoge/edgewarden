@@ -97,7 +97,16 @@ export const getWebsiteIcon = factory.createHandlers(async (c) => {
 				"X-Content-Type-Options": "nosniff",
 			},
 		});
-		await edgeCache?.put(cacheKey, response.clone()).catch(() => undefined);
+		if (edgeCache) {
+			const cacheWrite = edgeCache
+				.put(cacheKey, response.clone())
+				.catch(() => undefined);
+			try {
+				c.executionCtx.waitUntil(cacheWrite);
+			} catch {
+				await cacheWrite;
+			}
+		}
 		return response;
 	} catch {
 		return fallbackIcon();

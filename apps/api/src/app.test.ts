@@ -25,8 +25,12 @@ let sendAccessId = "";
 let memberAccessToken = "";
 const r2Values = new Map<string, Uint8Array>();
 
-async function request(path: string, init: RequestInit = {}) {
-	return app.request(path, init, bindings);
+async function request(
+	path: string,
+	init: RequestInit = {},
+	executionCtx?: ExecutionContext,
+) {
+	return app.request(path, init, bindings, executionCtx);
 }
 
 before(async () => {
@@ -181,6 +185,7 @@ describe("Edgewarden API", () => {
 			"caches",
 		);
 		const cachedResponses = new Map<string, Response>();
+		const backgroundTasks: Promise<unknown>[] = [];
 		let upstreamRequests = 0;
 		Object.defineProperty(globalThis, "caches", {
 			configurable: true,
@@ -204,7 +209,19 @@ describe("Edgewarden API", () => {
 		};
 
 		try {
-			const first = await request("/icons/example.com/icon.png");
+			const first = await request(
+				"/icons/example.com/icon.png",
+				{},
+				{
+					waitUntil: (task: Promise<unknown>) => {
+						backgroundTasks.push(task);
+					},
+					passThroughOnException: () => undefined,
+					props: {},
+				} as unknown as ExecutionContext,
+			);
+			assert.equal(backgroundTasks.length, 1);
+			await Promise.all(backgroundTasks);
 			const second = await request("/icons/example.com/icon.png");
 			assert.equal(first.status, 200);
 			assert.equal(second.status, 200);
