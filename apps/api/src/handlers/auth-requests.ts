@@ -7,11 +7,19 @@ import {
 } from "../schemas/requests";
 import * as authRequestsDb from "../services/db/auth-requests";
 import * as usersDb from "../services/db/users";
+import {
+	decryptCredential,
+	encryptCredential,
+	hashCredential,
+} from "../services/credential-protection";
 import type { AuthRequests } from "../types/db";
 import { errorResponse } from "../utils/response";
 import { toIso } from "../utils/time";
 
-function authRequestToResponse(authRequest: Selectable<AuthRequests>) {
+async function authRequestToResponse(
+	authRequest: Selectable<AuthRequests>,
+	dataEncryptionSecret: string,
+) {
 	return {
 		id: authRequest.id,
 		userId: authRequest.user_id,
@@ -21,7 +29,11 @@ function authRequestToResponse(authRequest: Selectable<AuthRequests>) {
 		requestIpAddress: authRequest.request_ip_address ?? null,
 		requestCountryName: authRequest.request_country_name ?? null,
 		responseDeviceIdentifier: authRequest.response_device_identifier ?? null,
-		accessCode: authRequest.access_code,
+		accessCode: await decryptCredential(
+			authRequest.access_code_encrypted,
+			dataEncryptionSecret,
+			"auth-request-access-code",
+		),
 		publicKey: authRequest.public_key,
 		key: authRequest.key ?? null,
 		masterPasswordHash: authRequest.master_password_hash ?? null,
@@ -59,18 +71,31 @@ export const createAuthRequest = factory.createHandlers(
 			requestDeviceIdentifier: body.deviceIdentifier,
 			requestDeviceType: body.deviceType,
 			requestIpAddress: c.req.header("CF-Connecting-IP") ?? null,
-			accessCode: body.accessCode,
+			accessCodeHash: await hashCredential(body.accessCode),
+			accessCodeEncrypted: await encryptCredential(
+				body.accessCode,
+				c.env.DATA_ENCRYPTION_SECRET,
+				"auth-request-access-code",
+			),
 			publicKey: body.publicKey,
 		});
 		const authRequest = await authRequestsDb.getAuthRequestById(db, id);
 		if (!authRequest)
 			return errorResponse("Failed to create auth request", 500);
-		return c.json(authRequestToResponse(authRequest), 200);
+		return c.json(
+			await authRequestToResponse(authRequest, c.env.DATA_ENCRYPTION_SECRET),
+			200,
+		);
 	},
 );
 
 export const getAuthRequest = factory.createHandlers(async (c) =>
-	c.json(authRequestToResponse(c.get("authRequest"))),
+	c.json(
+		await authRequestToResponse(
+			c.get("authRequest"),
+			c.env.DATA_ENCRYPTION_SECRET,
+		),
+	),
 );
 
 export const updateAuthRequest = factory.createHandlers(
@@ -91,7 +116,9 @@ export const updateAuthRequest = factory.createHandlers(
 		);
 		const updated = await authRequestsDb.getAuthRequestById(db, authRequest.id);
 		if (!updated) return errorResponse("Failed to update auth request", 500);
-		return c.json(authRequestToResponse(updated));
+		return c.json(
+			await authRequestToResponse(updated, c.env.DATA_ENCRYPTION_SECRET),
+		);
 	},
 );
 
@@ -102,7 +129,11 @@ export const listAuthRequests = factory.createHandlers(async (c) => {
 		c.get("payload").did ?? "",
 	);
 	return c.json({
-		data: pending.map(authRequestToResponse),
+		data: await Promise.all(
+			pending.map((request) =>
+				authRequestToResponse(request, c.env.DATA_ENCRYPTION_SECRET),
+			),
+		),
 		object: "list",
 		continuationToken: null,
 	});

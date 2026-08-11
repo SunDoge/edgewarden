@@ -10,6 +10,7 @@ import {
 	createAttachmentUploadToken,
 	verifyAttachmentUploadToken,
 	createRealtimeTicket,
+	deriveJwtPurposeSecret,
 	verifyRealtimeTicket,
 } from "./jwt";
 
@@ -37,7 +38,17 @@ describe("jwt utils", () => {
 	});
 
 	describe("createJWT / verifyJWT", () => {
-			test("can sign and verify token", async () => {
+		test("derives independent signing keys for specialized token purposes", async () => {
+			const realtime = await deriveJwtPurposeSecret(secret, "realtime");
+			const attachment = await deriveJwtPurposeSecret(
+				secret,
+				"attachment-upload",
+			);
+			assert.notEqual(realtime, secret);
+			assert.notEqual(realtime, attachment);
+		});
+
+		test("can sign and verify token", async () => {
 			const inputPayload = {
 				sub: "user-123",
 				email: "user@example.com",

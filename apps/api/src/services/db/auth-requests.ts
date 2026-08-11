@@ -18,7 +18,8 @@ export async function createAuthRequest(
 		requestDeviceIdentifier: string;
 		requestDeviceType: number;
 		requestIpAddress: string | null;
-		accessCode: string;
+		accessCodeHash: string;
+		accessCodeEncrypted: string;
 		publicKey: string;
 	},
 ): Promise<void> {
@@ -31,7 +32,8 @@ export async function createAuthRequest(
 			request_device_identifier: data.requestDeviceIdentifier,
 			request_device_type: data.requestDeviceType,
 			request_ip_address: data.requestIpAddress,
-			access_code: data.accessCode,
+			access_code_hash: data.accessCodeHash,
+			access_code_encrypted: data.accessCodeEncrypted,
 			public_key: data.publicKey,
 			creation_date: now(),
 		})

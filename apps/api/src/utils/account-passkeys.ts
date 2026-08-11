@@ -7,6 +7,7 @@ import type {
 import type { Selectable } from "kysely";
 import type { WebauthnCredentials } from "../types/db";
 import { base64UrlToBytes, bytesToBase64Url } from "./passkey";
+import { deriveJwtPurposeSecret } from "./jwt";
 
 export type AccountPasskeyChallengeScope =
 	| "Authentication"
@@ -70,7 +71,10 @@ export async function createAccountPasskeyToken(
 		iat: now,
 		exp,
 	};
-	return await sign(payload as any, jwtSecret);
+	return await sign(
+		payload as any,
+		await deriveJwtPurposeSecret(jwtSecret, "account-passkey"),
+	);
 }
 
 export async function verifyAccountPasskeyToken(
@@ -82,7 +86,7 @@ export async function verifyAccountPasskeyToken(
 	try {
 		const payload = (await verify(
 			token,
-			jwtSecret,
+			await deriveJwtPurposeSecret(jwtSecret, "account-passkey"),
 			"HS256",
 		)) as unknown as AccountPasskeyTokenPayload;
 		if (

@@ -1,6 +1,27 @@
 import { sign, verify } from "hono/jwt";
 import { LIMITS } from "../config";
 
+export type JwtPurpose =
+	| "realtime"
+	| "attachment-upload"
+	| "send-file-download"
+	| "send-file-upload"
+	| "send-access"
+	| "account-passkey";
+
+export async function deriveJwtPurposeSecret(
+	secret: string,
+	purpose: JwtPurpose,
+): Promise<string> {
+	const digest = await crypto.subtle.digest(
+		"SHA-256",
+		new TextEncoder().encode(`edgewarden:jwt-purpose:v1:${purpose}:${secret}`),
+	);
+	return Array.from(new Uint8Array(digest))
+		.map((byte) => byte.toString(16).padStart(2, "0"))
+		.join("");
+}
+
 export interface JWTPayload {
 	typ: "access";
 	aud: "edgewarden-api";
@@ -21,14 +42,7 @@ export interface JWTPayload {
 export async function createJWT(
 	payload: Omit<
 		JWTPayload,
-		| "typ"
-		| "aud"
-		| "iat"
-		| "exp"
-		| "iss"
-		| "premium"
-		| "email_verified"
-		| "amr"
+		"typ" | "aud" | "iat" | "exp" | "iss" | "premium" | "email_verified" | "amr"
 	>,
 	secret: string,
 	expiresIn: number = LIMITS.auth.accessTokenTtlSeconds,
@@ -148,7 +162,7 @@ export async function createRealtimeTicket(
 		typ: "realtime",
 		exp: Math.floor(Date.now() / 1000) + 60,
 	};
-	return sign(claims as any, secret);
+	return sign(claims as any, await deriveJwtPurposeSecret(secret, "realtime"));
 }
 
 export async function verifyRealtimeTicket(
@@ -156,25 +170,66 @@ export async function verifyRealtimeTicket(
 	secret: string,
 ): Promise<RealtimeTicketClaims | null> {
 	try {
-		const claims = (await verify(token, secret, "HS256")) as unknown as RealtimeTicketClaims;
-		if (claims.typ !== "realtime" || typeof claims.sub !== "string" || typeof claims.sstamp !== "string") return null;
+		const claims = (await verify(
+			token,
+			await deriveJwtPurposeSecret(secret, "realtime"),
+			"HS256",
+		)) as unknown as RealtimeTicketClaims;
+		if (
+			claims.typ !== "realtime" ||
+			typeof claims.sub !== "string" ||
+			typeof claims.sstamp !== "string"
+		)
+			return null;
 		return claims;
 	} catch {
 		return null;
 	}
 }
 
-export async function createAttachmentUploadToken(userId: string, cipherId: string, attachmentId: string, secret: string): Promise<string> {
-	const payload: AttachmentUploadClaims = { userId, cipherId, attachmentId, typ: "attachment_upload", exp: Math.floor(Date.now() / 1000) + LIMITS.auth.fileDownloadTokenTtlSeconds };
-	return sign(payload as any, secret);
+export async function createAttachmentUploadToken(
+	userId: string,
+	cipherId: string,
+	attachmentId: string,
+	secret: string,
+): Promise<string> {
+	const payload: AttachmentUploadClaims = {
+		userId,
+		cipherId,
+		attachmentId,
+		typ: "attachment_upload",
+		exp:
+			Math.floor(Date.now() / 1000) + LIMITS.auth.fileDownloadTokenTtlSeconds,
+	};
+	return sign(
+		payload as any,
+		await deriveJwtPurposeSecret(secret, "attachment-upload"),
+	);
 }
 
-export async function verifyAttachmentUploadToken(token: string, secret: string): Promise<AttachmentUploadClaims | null> {
+export async function verifyAttachmentUploadToken(
+	token: string,
+	secret: string,
+): Promise<AttachmentUploadClaims | null> {
 	try {
-		const claims = (await verify(token, secret, "HS256")) as unknown as AttachmentUploadClaims;
-		if (claims.typ !== "attachment_upload" || typeof claims.userId !== "string" || typeof claims.cipherId !== "string" || typeof claims.attachmentId !== "string" || typeof claims.exp !== "number" || claims.exp < Math.floor(Date.now() / 1000)) return null;
+		const claims = (await verify(
+			token,
+			await deriveJwtPurposeSecret(secret, "attachment-upload"),
+			"HS256",
+		)) as unknown as AttachmentUploadClaims;
+		if (
+			claims.typ !== "attachment_upload" ||
+			typeof claims.userId !== "string" ||
+			typeof claims.cipherId !== "string" ||
+			typeof claims.attachmentId !== "string" ||
+			typeof claims.exp !== "number" ||
+			claims.exp < Math.floor(Date.now() / 1000)
+		)
+			return null;
 		return claims;
-	} catch { return null; }
+	} catch {
+		return null;
+	}
 }
 
 export async function createSendFileDownloadToken(
@@ -189,7 +244,10 @@ export async function createSendFileDownloadToken(
 		jti: createRefreshToken(),
 		exp: now + LIMITS.auth.fileDownloadTokenTtlSeconds,
 	};
-	return sign(payload as any, secret);
+	return sign(
+		payload as any,
+		await deriveJwtPurposeSecret(secret, "send-file-download"),
+	);
 }
 
 export async function verifySendFileDownloadToken(
@@ -197,7 +255,11 @@ export async function verifySendFileDownloadToken(
 	secret: string,
 ): Promise<SendFileDownloadClaims | null> {
 	try {
-		const payload = await verify(token, secret, "HS256");
+		const payload = await verify(
+			token,
+			await deriveJwtPurposeSecret(secret, "send-file-download"),
+			"HS256",
+		);
 		const claims = payload as unknown as SendFileDownloadClaims;
 		if (
 			typeof claims.sendId !== "string" ||
@@ -227,7 +289,10 @@ export async function createSendFileUploadToken(
 		fileId,
 		exp: now + LIMITS.auth.fileDownloadTokenTtlSeconds,
 	};
-	return sign(payload as any, secret);
+	return sign(
+		payload as any,
+		await deriveJwtPurposeSecret(secret, "send-file-upload"),
+	);
 }
 
 export async function verifySendFileUploadToken(
@@ -235,7 +300,11 @@ export async function verifySendFileUploadToken(
 	secret: string,
 ): Promise<SendFileUploadClaims | null> {
 	try {
-		const payload = await verify(token, secret, "HS256");
+		const payload = await verify(
+			token,
+			await deriveJwtPurposeSecret(secret, "send-file-upload"),
+			"HS256",
+		);
 		const claims = payload as unknown as SendFileUploadClaims;
 		if (
 			typeof claims.userId !== "string" ||
@@ -263,7 +332,10 @@ export async function createSendAccessToken(
 		iat: now,
 		exp: now + LIMITS.auth.sendAccessTokenTtlSeconds,
 	};
-	return sign(payload as any, secret);
+	return sign(
+		payload as any,
+		await deriveJwtPurposeSecret(secret, "send-access"),
+	);
 }
 
 export async function verifySendAccessToken(
@@ -271,7 +343,11 @@ export async function verifySendAccessToken(
 	secret: string,
 ): Promise<SendAccessTokenClaims | null> {
 	try {
-		const payload = await verify(token, secret, "HS256");
+		const payload = await verify(
+			token,
+			await deriveJwtPurposeSecret(secret, "send-access"),
+			"HS256",
+		);
 		const claims = payload as unknown as SendAccessTokenClaims;
 		if (
 			typeof claims.sub !== "string" ||

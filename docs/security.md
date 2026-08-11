@@ -12,8 +12,10 @@ Edgewarden is zero-knowledge only when clients encrypt sensitive vault fields be
 
 ## Implemented defenses
 
-- short-lived signed access, upload, download, Send, realtime, and action tokens with separate purposes;
+- short-lived signed access, upload, download, Send, realtime, and action tokens with strict purposes and domain-separated signing keys derived from `JWT_SECRET`;
 - refresh-token rotation and replay rejection;
+- hashed refresh tokens, API keys, invitation codes, and auth-request access codes at rest;
+- AES-GCM protection for recoverable API keys, TOTP secrets, recovery codes, invitation codes, and auth-request access codes using purpose-specific keys derived from `DATA_ENCRYPTION_SECRET`;
 - device session stamps and server-side revocation;
 - Cloudflare IP/account rate limits plus hashed, persisted account login lockout;
 - request body limits by content type;

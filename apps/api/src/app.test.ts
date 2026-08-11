@@ -10,7 +10,10 @@ import { createDatabase } from "./middleware/db";
 import { executeBatch } from "./services/db/batch";
 import { loadYubicoCredentials } from "./services/yubico-config";
 import { importBackupArchiveBytes } from "./services/backup/import";
-import { encryptCredential } from "./services/credential-protection";
+import {
+	encryptCredential,
+	hashCredential,
+} from "./services/credential-protection";
 import { invalidateUserCache } from "./services/auth";
 
 const JWT_SECRET = "test-secret-that-is-at-least-thirty-two-characters";
@@ -803,6 +806,41 @@ describe("Edgewarden API", () => {
 		);
 	});
 
+	test("stores auth request access codes as protected credentials", async () => {
+		const accessCode = "auth-request-client-secret";
+		const response = await request("/api/auth-requests", {
+			method: "POST",
+			headers: {
+				authorization: `Bearer ${accessToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({
+				email: EMAIL,
+				deviceIdentifier: "auth-request-test-device",
+				deviceType: 0,
+				accessCode,
+				publicKey: "encrypted-auth-request-public-key",
+			}),
+		});
+		assert.equal(response.status, 200, await response.clone().text());
+		const body = await response.json<{ id: string; accessCode: string }>();
+		assert.equal(body.accessCode, accessCode);
+		const stored = await testDatabase
+			.prepare(
+				"SELECT access_code_hash, access_code_encrypted FROM auth_requests WHERE id = ?",
+			)
+			.bind(body.id)
+			.first<{
+				access_code_hash: string;
+				access_code_encrypted: string;
+			}>();
+		assert.equal(stored?.access_code_hash, await hashCredential(accessCode));
+		assert.doesNotMatch(
+			stored?.access_code_encrypted ?? "",
+			new RegExp(accessCode),
+		);
+	});
+
 	test("rejects cross-user or missing folder ids at the database boundary", async () => {
 		const response = await request("/api/ciphers", {
 			method: "POST",
@@ -1561,6 +1599,13 @@ describe("Edgewarden API", () => {
 			invite.inviteLink,
 			new RegExp(`/register\\?invite=${invite.code}$`),
 		);
+		const storedInvite = await testDatabase
+			.prepare("SELECT code, code_encrypted FROM invites WHERE code = ?")
+			.bind(await hashCredential(invite.code))
+			.first<{ code: string; code_encrypted: string }>();
+		assert.ok(storedInvite);
+		assert.notEqual(storedInvite.code, invite.code);
+		assert.doesNotMatch(storedInvite.code_encrypted, new RegExp(invite.code));
 
 		await request("/api/admin/registration", {
 			method: "PUT",
@@ -1770,6 +1815,8 @@ describe("Edgewarden API", () => {
 		const ownerMemberId = crypto.randomUUID();
 		const restrictedMemberId = crypto.randomUUID();
 		const collectionId = crypto.randomUUID();
+		const otherOrgId = crypto.randomUUID();
+		const otherCollectionId = crypto.randomUUID();
 		await testDatabase.batch([
 			testDatabase
 				.prepare(
@@ -1832,6 +1879,22 @@ describe("Edgewarden API", () => {
 					"INSERT INTO collection_members (collection_id,org_member_id,read_only,hide_passwords) VALUES (?,?,1,0)",
 				)
 				.bind(collectionId, restrictedMemberId),
+			testDatabase
+				.prepare(
+					"INSERT INTO organizations (id,name,owner_id,created_at,updated_at) VALUES (?,?,?,?,?)",
+				)
+				.bind(otherOrgId, "Other organization", owner.id, timestamp, timestamp),
+			testDatabase
+				.prepare(
+					"INSERT INTO collections (id,org_id,name,created_at,updated_at) VALUES (?,?,?,?,?)",
+				)
+				.bind(
+					otherCollectionId,
+					otherOrgId,
+					"other-organization-collection",
+					timestamp,
+					timestamp,
+				),
 		]);
 		const restrictedCollections = await request("/api/collections", {
 			headers: { authorization: `Bearer ${memberAccessToken}` },
@@ -1885,6 +1948,19 @@ describe("Edgewarden API", () => {
 			key: "encrypted-item-key",
 			login: { username: "encrypted-user", password: "encrypted-password" },
 		};
+		const crossOrganizationWrite = await request("/api/ciphers", {
+			method: "POST",
+			headers: {
+				authorization: `Bearer ${accessToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({
+				...payload,
+				name: "cross-organization-cipher",
+				collectionIds: [otherCollectionId],
+			}),
+		});
+		assert.equal(crossOrganizationWrite.status, 404);
 		const created = await request("/api/ciphers", {
 			method: "POST",
 			headers: {
@@ -2007,6 +2083,26 @@ describe("Edgewarden API", () => {
 			200,
 			await apiKeyResponse.clone().text(),
 		);
+		const apiKey = (await apiKeyResponse.json<{ apiKey: string }>()).apiKey;
+		const persistedApiKey = await testDatabase
+			.prepare("SELECT api_key_hash, api_key_encrypted FROM users WHERE id = ?")
+			.bind(owner.id)
+			.first<{ api_key_hash: string; api_key_encrypted: string }>();
+		assert.equal(persistedApiKey?.api_key_hash, await hashCredential(apiKey));
+		assert.doesNotMatch(
+			persistedApiKey?.api_key_encrypted ?? "",
+			new RegExp(apiKey),
+		);
+		const apiSession = await request("/identity/connect/token", {
+			method: "POST",
+			headers: { "content-type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				grant_type: "client_credentials",
+				client_id: `user.${owner.id}`,
+				client_secret: apiKey,
+			}),
+		});
+		assert.equal(apiSession.status, 200, await apiSession.clone().text());
 		const backupResponse = await request("/api/admin/backup/export", {
 			method: "POST",
 			headers: {
