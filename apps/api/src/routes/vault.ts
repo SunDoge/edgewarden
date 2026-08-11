@@ -118,6 +118,8 @@ import { createTwoFactorPasskey, deleteTwoFactorPasskey, getTwoFactorPasskeyChal
 import { disableYubikeys, getYubikeySettings, saveYubicoConfig, saveYubikeys } from "../handlers/yubikey";
 import { createCollection, createOrganization, deleteCollection, deleteOrganization, getInviteePublicKey, getOrganization, inviteOrganizationMember, listCollections, listUserCollections, listOrganizationMembers, listOrganizations, removeOrganizationMember, updateOrganizationMember, updateCollection, updateOrganization } from "../handlers/organizations";
 import { authMiddleware, requireAdmin } from "../middleware/auth";
+import { realtimeMutationMiddleware } from "../middleware/realtime";
+import { createRealtimeConnectionTicket } from "../handlers/realtime";
 import {
 	requireAccountPasskey,
 	requireAuthRequest,
@@ -358,9 +360,11 @@ const sendRoutes = new Hono<HonoEnv>()
 
 export const vaultRouter = new Hono<HonoEnv>()
 	.use("/api/*", authMiddleware)
+	.use("/api/*", realtimeMutationMiddleware)
 	.use("/webauthn/*", authMiddleware)
 	.use("/webauthn", authMiddleware)
 	.get("/api/sync", ...sync)
+	.post("/api/notifications/token", ...createRealtimeConnectionTicket)
 	.route("/", accountRoutes)
 	.route("/", organizationBaseRoutes)
 	.route("/", organizationMemberRoutes)

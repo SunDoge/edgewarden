@@ -98,6 +98,40 @@ export interface AttachmentUploadClaims {
 	exp: number;
 }
 
+export interface RealtimeTicketClaims {
+	sub: string;
+	sstamp: string;
+	typ: "realtime";
+	exp: number;
+}
+
+export async function createRealtimeTicket(
+	userId: string,
+	securityStamp: string,
+	secret: string,
+): Promise<string> {
+	const claims: RealtimeTicketClaims = {
+		sub: userId,
+		sstamp: securityStamp,
+		typ: "realtime",
+		exp: Math.floor(Date.now() / 1000) + 60,
+	};
+	return sign(claims as any, secret);
+}
+
+export async function verifyRealtimeTicket(
+	token: string,
+	secret: string,
+): Promise<RealtimeTicketClaims | null> {
+	try {
+		const claims = (await verify(token, secret, "HS256")) as unknown as RealtimeTicketClaims;
+		if (claims.typ !== "realtime" || typeof claims.sub !== "string" || typeof claims.sstamp !== "string") return null;
+		return claims;
+	} catch {
+		return null;
+	}
+}
+
 export async function createAttachmentUploadToken(userId: string, cipherId: string, attachmentId: string, secret: string): Promise<string> {
 	const payload: AttachmentUploadClaims = { userId, cipherId, attachmentId, typ: "attachment_upload", exp: Math.floor(Date.now() / 1000) + LIMITS.auth.fileDownloadTokenTtlSeconds };
 	return sign(payload as any, secret);

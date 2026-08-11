@@ -48,6 +48,20 @@
 	"vars": {
 		"ATTACHMENT_STORAGE": "r2"
 	},
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "REALTIME",
+				"class_name": "VaultRealtime"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["VaultRealtime"]
+		}
+	],
 	// "ai": {
 	//   "binding": "AI"
 	// },

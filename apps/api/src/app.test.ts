@@ -266,6 +266,27 @@ describe("Edgewarden API", () => {
 		assert.equal(replay.status, 400);
 	});
 
+	test("issues dedicated realtime tickets and rejects invalid websocket tickets", async () => {
+		(bindings as any).REALTIME = { getByName: () => ({ fetch: async () => new Response(null) }) };
+		try {
+			const ticketResponse = await request("/api/notifications/token", {
+				method: "POST",
+				headers: { authorization: `Bearer ${accessToken}` },
+			});
+			assert.equal(ticketResponse.status, 200, await ticketResponse.clone().text());
+			const ticket = await ticketResponse.json<{ token: string; expiresIn: number; object: string }>();
+			assert.equal(typeof ticket.token, "string");
+			assert.deepEqual([ticket.expiresIn, ticket.object], [60, "realtimeTicket"]);
+
+			const invalid = await request("/api/notifications/hub?ticket=invalid", {
+				headers: { Upgrade: "websocket" },
+			});
+			assert.equal(invalid.status, 401);
+		} finally {
+			delete (bindings as any).REALTIME;
+		}
+	});
+
 	test("creates a folder and cipher through authenticated batch-backed handlers", async () => {
 		const auth = { authorization: `Bearer ${accessToken}` };
 		const profileAlias = await request("/api/accounts/profile", { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ name: "API Test", masterPasswordHint: null }) });

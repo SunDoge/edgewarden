@@ -9,6 +9,8 @@ import {
 	verifySendFileDownloadToken,
 	createAttachmentUploadToken,
 	verifyAttachmentUploadToken,
+	createRealtimeTicket,
+	verifyRealtimeTicket,
 } from "./jwt";
 
 describe("jwt utils", () => {
@@ -119,6 +121,23 @@ describe("jwt utils", () => {
 		test("rejects a token signed by another server", async () => {
 			const token = await createAttachmentUploadToken("user-id", "cipher-id", "attachment-id", secret);
 			assert.strictEqual(await verifyAttachmentUploadToken(token, "another-long-secret-key-that-is-invalid"), null);
+		});
+	});
+
+	describe("realtime tickets", () => {
+		test("creates a short-lived user and security-stamp bound ticket", async () => {
+			const token = await createRealtimeTicket("user-id", "security-stamp", secret);
+			const verified = await verifyRealtimeTicket(token, secret);
+			assert.deepEqual(
+				verified && [verified.sub, verified.sstamp, verified.typ],
+				["user-id", "security-stamp", "realtime"],
+			);
+			assert.ok(verified && verified.exp <= Math.floor(Date.now() / 1000) + 60);
+		});
+
+		test("rejects a realtime ticket signed by another server", async () => {
+			const token = await createRealtimeTicket("user-id", "security-stamp", secret);
+			assert.equal(await verifyRealtimeTicket(token, "another-long-secret-key-that-is-invalid"), null);
 		});
 	});
 });

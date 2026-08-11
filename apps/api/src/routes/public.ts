@@ -23,6 +23,7 @@ import {
 import { uploadAttachment } from "../handlers/attachments";
 import { checkDigitalAssetLink, getFillAssistFile, getFillAssistManifest } from "../handlers/fill-assist";
 import { recoverTwoFactor } from "../handlers/two-factor";
+import { connectRealtime } from "../handlers/realtime";
 import { getWebsiteIcon } from "../handlers/icons";
 import {
 	revocationRequestValidator,
@@ -30,6 +31,8 @@ import {
 } from "../middleware/validation";
 
 export const publicRouter = new Hono<HonoEnv>()
+	.get("/notifications/hub", ...connectRealtime)
+	.get("/api/notifications/hub", ...connectRealtime)
 	.post("/identity/accounts/prelogin", ...prelogin)
 	.post("/identity/accounts/prelogin/password", ...prelogin)
 	.get(
