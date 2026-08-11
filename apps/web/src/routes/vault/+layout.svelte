@@ -2,10 +2,11 @@
 	import { onMount } from "svelte";
 	import { goto } from "$app/navigation";
 	import { page } from "$app/state";
-	import { fetchRevisionDateApi, isLoggedIn } from "$lib/services/api";
+	import { createRealtimeTicketApi, fetchRevisionDateApi, isLoggedIn } from "$lib/services/api";
 	import { syncVaultData, vault } from "$lib/stores/vault.svelte";
 	import { lock, logout } from "$lib/stores/vault.svelte";
 	import { VaultRevisionWatcher } from "$lib/services/vault-revision-watcher";
+	import { VaultRealtimeClient } from "$lib/services/vault-realtime";
 	import { CLIENT_PREFERENCES_CHANGED_EVENT, clientPreferencesStorageKey, loadClientPreferences } from "$lib/services/client-preferences";
 	import { SessionTimeout } from "$lib/services/session-timeout";
 
@@ -42,15 +43,23 @@
 				if (!vault.isSyncing && vault.isUnlocked) await syncVaultData();
 			},
 		});
+		const realtime = new VaultRealtimeClient({
+			getTicket: async () => (await createRealtimeTicketApi()).token,
+			onRevision: async () => {
+				if (!vault.isSyncing && vault.isUnlocked) await syncVaultData();
+			},
+		});
 		const refreshWhenVisible = () => {
 			if (document.visibilityState === "visible") void watcher.check();
 		};
 		const refreshWhenOnline = () => void watcher.check();
 		watcher.start();
+		realtime.start();
 		document.addEventListener("visibilitychange", refreshWhenVisible);
 		window.addEventListener("online", refreshWhenOnline);
 		return () => {
 			watcher.stop();
+			realtime.stop();
 			document.removeEventListener("visibilitychange", refreshWhenVisible);
 			window.removeEventListener("online", refreshWhenOnline);
 		};

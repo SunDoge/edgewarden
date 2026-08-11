@@ -368,6 +368,10 @@ export async function fetchRevisionDateApi(): Promise<number> {
 	return value;
 }
 
+export async function createRealtimeTicketApi(): Promise<{ token: string; expiresIn: number }> {
+	return rpcJson(await rpc.api.notifications.token.$post()) as Promise<{ token: string; expiresIn: number }>;
+}
+
 /**
  * 5. Fetch domain settings
  */
