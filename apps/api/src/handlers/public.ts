@@ -14,7 +14,11 @@ import {
 	loadRegistrationPolicy,
 	verifyBootstrapSecret,
 } from "../services/registration-policy";
-import { turnstileEnabled, turnstileSiteKey } from "../services/turnstile";
+import {
+	turnstileEnabled,
+	turnstileSiteKey,
+	verifyTurnstileToken,
+} from "../services/turnstile";
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
 
@@ -25,6 +29,17 @@ export const registerAccount = factory.createHandlers(
 			return errorResponse("Too many registration attempts", 429);
 		}
 		const body = c.req.valid("json");
+		if (
+			turnstileEnabled(c.env) &&
+			!(await verifyTurnstileToken(
+				c.env,
+				body.captchaResponse ?? "",
+				"register",
+				c.req.header("CF-Connecting-IP"),
+			))
+		) {
+			return errorResponse("Captcha verification failed", 400);
+		}
 		const db = c.get("db");
 		const email = body.email.toLowerCase();
 		const policy = await loadRegistrationPolicy(db, c.env);
@@ -33,7 +48,8 @@ export const registerAccount = factory.createHandlers(
 			getConfigValue(db, BOOTSTRAP_LOCK_KEY),
 		]);
 		const isBootstrap = userCount === 0 && !bootstrapLock;
-		if (userCount === 0 && bootstrapLock) return errorResponse("Bootstrap has already been completed", 403);
+		if (userCount === 0 && bootstrapLock)
+			return errorResponse("Bootstrap has already been completed", 403);
 
 		const inviteCode = body.inviteCode?.trim();
 		const invite =

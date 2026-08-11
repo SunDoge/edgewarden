@@ -35,6 +35,7 @@ export interface RegisterPayload {
 	name?: string;
 	inviteCode?: string;
 	adminPassword?: string;
+	captchaResponse?: string;
 	keys?: {
 		publicKey: string;
 		encryptedPrivateKey: string;

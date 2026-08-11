@@ -195,6 +195,8 @@ export interface RegistrationConfig {
 	invitationsAllowed: boolean;
 	bootstrapRequired: boolean;
 	adminPasswordConfigured: boolean;
+	turnstileEnabled: boolean;
+	turnstileSiteKey: string | null;
 }
 
 export type AdminRegistrationPolicy = Pick<
@@ -209,6 +211,7 @@ export async function getRegistrationConfigApi(): Promise<RegistrationConfig> {
 	if (!response.ok) throw new Error("无法加载注册配置");
 	const config = (await response.json()) as {
 		registration?: Partial<RegistrationConfig>;
+		turnstile?: { enabled?: boolean; siteKey?: string | null };
 	};
 	return {
 		signupsAllowed: config.registration?.signupsAllowed === true,
@@ -216,6 +219,8 @@ export async function getRegistrationConfigApi(): Promise<RegistrationConfig> {
 		bootstrapRequired: config.registration?.bootstrapRequired === true,
 		adminPasswordConfigured:
 			config.registration?.adminPasswordConfigured === true,
+		turnstileEnabled: config.turnstile?.enabled === true,
+		turnstileSiteKey: config.turnstile?.siteKey ?? null,
 	};
 }
 
@@ -574,6 +579,7 @@ export async function register(
 	iterations = 600_000,
 	inviteCode?: string,
 	adminPassword?: string,
+	captchaResponse?: string,
 ): Promise<void> {
 	const masterKey = await deriveMasterKey(password, email, iterations);
 	const masterPasswordHash = await deriveMasterPasswordHash(
@@ -619,6 +625,7 @@ export async function register(
 		name: name || undefined,
 		inviteCode: inviteCode?.trim() || undefined,
 		adminPassword: adminPassword || undefined,
+		captchaResponse: captchaResponse || undefined,
 		keys: {
 			publicKey: bytesToBase64(publicKey),
 			encryptedPrivateKey,

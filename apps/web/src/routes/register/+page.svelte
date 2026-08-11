@@ -6,6 +6,7 @@ import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import { Label } from "$lib/components/ui/label/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
+import TurnstileWidget from "$lib/components/turnstile-widget.svelte";
 import {
 	Eye,
 	EyeOff,
@@ -30,6 +31,10 @@ let signupsAllowed = $state(false);
 let invitationsAllowed = $state(false);
 let bootstrapRequired = $state(false);
 let adminPasswordConfigured = $state(false);
+let turnstileEnabled = $state(false);
+let turnstileSiteKey = $state<string | null>(null);
+let turnstileToken = $state("");
+let turnstileWidget = $state<{ reset(): void } | null>(null);
 
 onMount(async () => {
 	inviteCode = new URLSearchParams(location.search).get("invite")?.trim() ?? "";
@@ -39,6 +44,11 @@ onMount(async () => {
 		invitationsAllowed = config.invitationsAllowed;
 		bootstrapRequired = config.bootstrapRequired;
 		adminPasswordConfigured = config.adminPasswordConfigured;
+		turnstileEnabled = config.turnstileEnabled;
+		turnstileSiteKey = config.turnstileSiteKey;
+		if (config.turnstileEnabled && !config.turnstileSiteKey) {
+			error = "Turnstile 已启用，但服务器没有配置站点密钥。";
+		}
 	} catch (err: any) {
 		error = err.message || "无法加载注册配置。";
 	} finally {
@@ -70,6 +80,10 @@ async function handleSubmit(e: SubmitEvent) {
 		error = "首次创建管理员账号需要部署管理员密码。";
 		return;
 	}
+	if (turnstileEnabled && !turnstileToken) {
+		error = "请先完成人机验证。";
+		return;
+	}
 
 	if (!isPasswordMatch) {
 		error = "两次输入的密码不一致。";
@@ -98,6 +112,7 @@ async function handleSubmit(e: SubmitEvent) {
 			iterations,
 			inviteCode,
 			adminPassword,
+			turnstileToken || undefined,
 		);
 		success = true;
 		setTimeout(() => {
@@ -105,6 +120,7 @@ async function handleSubmit(e: SubmitEvent) {
 		}, 2000);
 	} catch (err: any) {
 		error = err.message || "注册失败，请稍后重试。";
+		if (turnstileEnabled) turnstileWidget?.reset();
 	} finally {
 		loading = false;
 	}
@@ -287,7 +303,17 @@ async function handleSubmit(e: SubmitEvent) {
 						</p>
 					</div>
 
-					<Button type="submit" class="w-full mt-2" disabled={loading || configLoading || !registrationAvailable || (bootstrapRequired && !adminPasswordConfigured)}>
+					{#if turnstileEnabled && turnstileSiteKey}
+						<TurnstileWidget
+							bind:this={turnstileWidget}
+							siteKey={turnstileSiteKey}
+							action="register"
+							onToken={(token) => { turnstileToken = token; }}
+							onError={() => { error = "人机验证加载失败，请重试。"; }}
+						/>
+					{/if}
+
+					<Button type="submit" class="w-full mt-2" disabled={loading || configLoading || !registrationAvailable || (bootstrapRequired && !adminPasswordConfigured) || (turnstileEnabled && !turnstileToken)}>
 						{#if loading}
 							<div class="size-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2"></div>
 							正在本地派生加密密钥...

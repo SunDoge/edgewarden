@@ -226,7 +226,9 @@ export const connectToken = factory.createHandlers(async (c) => {
 			const captchaResponse =
 				body.captchaResponse ?? body.CaptchaResponse ?? "";
 			const remoteIp = c.req.header("CF-Connecting-IP") ?? undefined;
-			if (!(await verifyTurnstileToken(c.env, captchaResponse, remoteIp))) {
+			if (
+				!(await verifyTurnstileToken(c.env, captchaResponse, "login", remoteIp))
+			) {
 				return identityErrorResponse(
 					"Human verification failed. Please try again.",
 					"CaptchaRequired",
@@ -695,8 +697,7 @@ export const connectToken = factory.createHandlers(async (c) => {
 export const revokeToken = factory.createHandlers(async (c) => {
 	const db = c.get("db");
 	const token =
-		c.get("revocationToken") ||
-		getCookie(c, webRefreshCookieName(c.req.url));
+		c.get("revocationToken") || getCookie(c, webRefreshCookieName(c.req.url));
 	if (token) await refreshTokensDb.deleteRefreshToken(db, token);
 	deleteCookie(c, webRefreshCookieName(c.req.url), {
 		path: "/",

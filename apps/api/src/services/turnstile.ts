@@ -1,4 +1,5 @@
-const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+const SITEVERIFY_URL =
+	"https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 interface TurnstileVerificationResponse {
 	success?: boolean;
@@ -18,6 +19,7 @@ export function turnstileSiteKey(env: CloudflareBindings): string | null {
 export async function verifyTurnstileToken(
 	env: CloudflareBindings,
 	token: string,
+	expectedAction: "login" | "register",
 	remoteIp?: string,
 	fetchImpl: typeof fetch = fetch,
 ): Promise<boolean> {
@@ -37,7 +39,7 @@ export async function verifyTurnstileToken(
 		});
 		if (!response.ok) return false;
 		const result = await response.json<TurnstileVerificationResponse>();
-		return result.success === true && result.action === "login";
+		return result.success === true && result.action === expectedAction;
 	} catch {
 		return false;
 	}

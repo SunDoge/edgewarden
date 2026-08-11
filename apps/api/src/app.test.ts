@@ -577,6 +577,47 @@ describe("Edgewarden API", () => {
 		}
 	});
 
+	test("enforces the register Turnstile action on account registration", async () => {
+		(bindings as any).TURNSTILE_SECRET_KEY = "turnstile-test-secret";
+		const originalFetch = globalThis.fetch;
+		const payload = {
+			email: "turnstile-registration@example.com",
+			masterPasswordHash: MASTER_PASSWORD_HASH,
+			key: "encrypted-key",
+			kdf: 0,
+			kdfIterations: 600_000,
+		};
+		try {
+			const missing = await request("/api/accounts/register", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify(payload),
+			});
+			assert.equal(missing.status, 400);
+
+			globalThis.fetch = async () =>
+				Response.json({ success: true, action: "login" });
+			const wrongAction = await request("/api/accounts/register", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ ...payload, captchaResponse: "login-token" }),
+			});
+			assert.equal(wrongAction.status, 400);
+
+			globalThis.fetch = async () =>
+				Response.json({ success: true, action: "register" });
+			const accepted = await request("/api/accounts/register", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ ...payload, captchaResponse: "register-token" }),
+			});
+			assert.equal(accepted.status, 204, await accepted.clone().text());
+		} finally {
+			globalThis.fetch = originalFetch;
+			delete (bindings as any).TURNSTILE_SECRET_KEY;
+		}
+	});
+
 	test("creates a folder and cipher through authenticated batch-backed handlers", async () => {
 		const auth = { authorization: `Bearer ${accessToken}` };
 		const profileAlias = await request("/api/accounts/profile", {
