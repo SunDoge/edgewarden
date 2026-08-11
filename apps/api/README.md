@@ -87,12 +87,23 @@ Afterward, verify user, cipher, attachment metadata, and audit-log counts before
 resuming writes. Time Travel covers D1 only; restore R2/KV objects from an
 attachment-inclusive Edgewarden backup when blob data also needs recovery.
 
-# Turnstile login protection
+# Turnstile authentication protection
 
-Password login supports optional Cloudflare Turnstile verification. Configure both values in the Worker environment:
+Password login and account registration support optional Cloudflare Turnstile verification with separate widget actions. Configure both values in the Worker environment:
 
 ```sh
 wrangler secret put TURNSTILE_SECRET_KEY
 ```
 
 Set `TURNSTILE_SITE_KEY` as a Worker variable in Cloudflare. Turnstile is enforced only when `TURNSTILE_SECRET_KEY` is present; when enabled, the public site key is returned by `/api/config`. Restrict the production widget to the deployed hostname. For local testing, use Cloudflare's documented Turnstile test keys rather than production keys.
+
+# Cryptographic secrets
+
+Configure independent secrets for token signing and persisted configuration encryption:
+
+```sh
+wrangler secret put JWT_SECRET
+wrangler secret put DATA_ENCRYPTION_SECRET
+```
+
+Each value must be an independently generated random string of at least 32 characters. `JWT_SECRET` signs access and other short-lived tokens. `DATA_ENCRYPTION_SECRET` encrypts persisted backup destination credentials and Yubico validation credentials. Rotating `JWT_SECRET` therefore does not make persisted configuration unreadable. Keep `DATA_ENCRYPTION_SECRET` stable and backed up securely; losing it makes those encrypted settings unrecoverable.

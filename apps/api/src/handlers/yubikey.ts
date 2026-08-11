@@ -69,7 +69,7 @@ export const saveYubicoConfig = factory.createHandlers(vValidator("json", SaveYu
 	const body = c.req.valid("json");
 	if (!(await verified(c, body.masterPasswordHash))) return errorResponse("Master password verification failed", 400);
 	try { atob(body.secretKey); } catch { return errorResponse("Yubico secret key must be valid base64", 400); }
-	await saveYubicoCredentials(c.get("db"), c.env.JWT_SECRET, { clientId: body.clientId, secretKey: body.secretKey });
+	await saveYubicoCredentials(c.get("db"), c.env.DATA_ENCRYPTION_SECRET, { clientId: body.clientId, secretKey: body.secretKey });
 	await safeWriteAuditEvent(c.get("db"), { actorUserId: c.get("user").id, action: "admin.yubico.config", category: "admin", level: "warning", targetType: "config", targetId: "yubico", metadata: auditRequestMetadata(c.req.raw) });
 	return c.json({ configured: true, object: "yubicoConfig" });
 });

@@ -20,10 +20,10 @@ async function encryptionKey(secret: string): Promise<CryptoKey> {
 	return crypto.subtle.importKey("raw", material, "AES-GCM", false, ["encrypt", "decrypt"]);
 }
 
-export async function saveYubicoCredentials(db: Kysely<DB>, jwtSecret: string, credentials: YubicoCredentials): Promise<void> {
+export async function saveYubicoCredentials(db: Kysely<DB>, dataEncryptionSecret: string, credentials: YubicoCredentials): Promise<void> {
 	const iv = crypto.getRandomValues(new Uint8Array(12));
 	const plaintext = new TextEncoder().encode(JSON.stringify(credentials));
-	const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await encryptionKey(jwtSecret), plaintext);
+	const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await encryptionKey(dataEncryptionSecret), plaintext);
 	const value = JSON.stringify({ iv: bytesBase64(iv), data: bytesBase64(new Uint8Array(ciphertext)) });
 	await db.insertInto("config").values({ key: CONFIG_KEY, value }).onConflict((conflict) => conflict.column("key").doUpdateSet({ value })).execute();
 }
@@ -36,7 +36,7 @@ export async function loadYubicoCredentials(db: Kysely<DB>, env: CloudflareBindi
 	if (!row) return null;
 	try {
 		const encrypted = JSON.parse(row.value) as { iv: string; data: string };
-		const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: base64Bytes(encrypted.iv) }, await encryptionKey(env.JWT_SECRET), base64Bytes(encrypted.data));
+		const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: base64Bytes(encrypted.iv) }, await encryptionKey(env.DATA_ENCRYPTION_SECRET), base64Bytes(encrypted.data));
 		const parsed = JSON.parse(new TextDecoder().decode(plaintext)) as YubicoCredentials;
 		return parsed.clientId && parsed.secretKey ? parsed : null;
 	} catch { return null; }

@@ -1,8 +1,5 @@
 import type { BlobStore } from "../blob-store";
-import {
-	type BackupPayload,
-	parseBackupArchive,
-} from "./archive";
+import { type BackupPayload, parseBackupArchive } from "./archive";
 import {
 	BACKUP_SETTINGS_CONFIG_KEY,
 	normalizeImportedBackupSettingsValue,
@@ -309,7 +306,7 @@ function upsertConfigRow(rows: SqlRow[], key: string, value: string): SqlRow[] {
 }
 
 async function prepareImportedConfigRows(
-	jwtSecret: string,
+	dataEncryptionSecret: string,
 	configRows: SqlRow[],
 	userRows: SqlRow[],
 ): Promise<SqlRow[]> {
@@ -321,7 +318,7 @@ async function prepareImportedConfigRows(
 		typeof rawBackupSettings?.value === "string"
 			? rawBackupSettings.value
 			: null,
-		jwtSecret,
+		dataEncryptionSecret,
 		userRows.map((row) => ({
 			id: String(row.id || "").trim(),
 			public_key: typeof row.public_key === "string" ? row.public_key : null,
@@ -344,11 +341,11 @@ async function prepareImportedConfigRows(
 async function importPreparedBackupRows(
 	db: D1Database,
 	payload: BackupPayload["db"],
-	jwtSecret: string,
+	dataEncryptionSecret: string,
 ): Promise<BackupPayload["db"]> {
 	const preparedDb: BackupPayload["db"] = {
 		config: await prepareImportedConfigRows(
-			jwtSecret,
+			dataEncryptionSecret,
 			payload.config || [],
 			payload.users || [],
 		),
@@ -772,7 +769,7 @@ export async function importBackupArchiveBytes(
 	archiveBytes: Uint8Array,
 	dbBinding: D1Database,
 	blobStore: BlobStore | null,
-	jwtSecret: string,
+	dataEncryptionSecret: string,
 	actorUserId: string,
 	replaceExisting: boolean,
 	progress?: BackupRestoreProgressReporter,
@@ -831,7 +828,7 @@ export async function importBackupArchiveBytes(
 		const db = await importPreparedBackupRows(
 			dbBinding,
 			prepared.payload.db,
-			jwtSecret,
+			dataEncryptionSecret,
 		);
 		await validateShadowTableCounts(dbBinding, {
 			config: (db.config || []).length,
@@ -954,7 +951,7 @@ export async function importRemoteBackupArchiveBytes(
 	archiveBytes: Uint8Array,
 	dbBinding: D1Database,
 	blobStore: BlobStore | null,
-	jwtSecret: string,
+	dataEncryptionSecret: string,
 	actorUserId: string,
 	replaceExisting: boolean,
 	source: { loadAttachment: (blobName: string) => Promise<Uint8Array | null> },
@@ -1044,7 +1041,7 @@ export async function importRemoteBackupArchiveBytes(
 		const db = await importPreparedBackupRows(
 			dbBinding,
 			preparedPayload.db,
-			jwtSecret,
+			dataEncryptionSecret,
 		);
 		await validateShadowTableCounts(dbBinding, {
 			config: (db.config || []).length,

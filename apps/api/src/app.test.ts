@@ -8,8 +8,11 @@ import { Miniflare } from "miniflare";
 import { app } from "./index";
 import { createDatabase } from "./middleware/db";
 import { executeBatch } from "./services/db/batch";
+import { loadYubicoCredentials } from "./services/yubico-config";
 
 const JWT_SECRET = "test-secret-that-is-at-least-thirty-two-characters";
+const DATA_ENCRYPTION_SECRET =
+	"test-data-encryption-secret-at-least-thirty-two-characters";
 const EMAIL = "api-test@example.com";
 const MASTER_PASSWORD_HASH = "client-side-master-password-hash";
 const MEMBER_EMAIL = "member-api-test@example.com";
@@ -117,6 +120,7 @@ before(async () => {
 		SIGNUPS_ALLOWED: "true",
 		INVITATIONS_ALLOWED: "true",
 		JWT_SECRET,
+		DATA_ENCRYPTION_SECRET,
 		RL_IP: rateLimiter,
 		RL_ACCOUNT: rateLimiter,
 	} as unknown as CloudflareBindings;
@@ -139,6 +143,19 @@ describe("Edgewarden API", () => {
 			"https://vault.example.test/fill-assist/",
 		);
 		assert.equal(body.featureStates["fill-assist-targeting-rules"], true);
+	});
+
+	test("requires a dedicated persisted-data encryption secret", async () => {
+		const secret = bindings.DATA_ENCRYPTION_SECRET;
+		delete (bindings as unknown as Record<string, unknown>)
+			.DATA_ENCRYPTION_SECRET;
+		try {
+			const response = await request("/api/version");
+			assert.equal(response.status, 500);
+			assert.match(await response.text(), /DATA_ENCRYPTION_SECRET/);
+		} finally {
+			bindings.DATA_ENCRYPTION_SECRET = secret;
+		}
 	});
 
 	test("sets strict browser security headers and rejects unknown CORS origins", async () => {
@@ -2177,6 +2194,18 @@ describe("Edgewarden API", () => {
 			.first<{ value: string }>();
 		assert.ok(stored?.value);
 		assert.doesNotMatch(stored.value, /12345|MDEyMzQ1Njc4/);
+		const { db: rotatedJwtDb } = await createDatabase(testDatabase);
+		try {
+			assert.deepEqual(
+				await loadYubicoCredentials(rotatedJwtDb, {
+					...bindings,
+					JWT_SECRET: "rotated-token-signing-secret-at-least-thirty-two-chars",
+				}),
+				{ clientId: "12345", secretKey },
+			);
+		} finally {
+			await rotatedJwtDb.destroy();
+		}
 
 		const settings = await request("/api/yubico-enrollment/settings", {
 			method: "POST",

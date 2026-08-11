@@ -115,7 +115,7 @@ export const getBackupBlob = factory.createHandlers(
 // 3. GET /api/admin/backup/settings
 export const getBackupSettings = factory.createHandlers(async (c) => {
 	const db = c.get("db");
-	const secret = c.env.JWT_SECRET;
+	const secret = c.env.DATA_ENCRYPTION_SECRET;
 	try {
 		const settings = await loadBackupSettings(db, secret, "UTC");
 		return c.json(settings);
@@ -132,7 +132,7 @@ export const updateBackupSettings = factory.createHandlers(
 	vValidator("json", BackupSettingsSchema),
 	async (c) => {
 		const db = c.get("db");
-		const secret = c.env.JWT_SECRET;
+		const secret = c.env.DATA_ENCRYPTION_SECRET;
 		const body = c.req.valid("json");
 
 		try {
@@ -151,7 +151,7 @@ export const runBackup = factory.createHandlers(
 	vValidator("json", BackupRunSchema),
 	async (c) => {
 		const db = c.get("db");
-		const secret = c.env.JWT_SECRET;
+		const secret = c.env.DATA_ENCRYPTION_SECRET;
 		const body = c.req.valid("json");
 		const destinationId = body.destinationId;
 
@@ -249,7 +249,7 @@ export const listRemoteBackups = factory.createHandlers(
 	vValidator("query", BackupRemoteQuerySchema),
 	async (c) => {
 		const db = c.get("db");
-		const secret = c.env.JWT_SECRET;
+		const secret = c.env.DATA_ENCRYPTION_SECRET;
 		const { destinationId, path } = c.req.valid("query");
 
 		try {
@@ -272,7 +272,7 @@ export const downloadRemoteBackup = factory.createHandlers(
 	vValidator("query", BackupRemoteFileQuerySchema),
 	async (c) => {
 		const db = c.get("db");
-		const secret = c.env.JWT_SECRET;
+		const secret = c.env.DATA_ENCRYPTION_SECRET;
 		const { destinationId, path } = c.req.valid("query");
 
 		try {
@@ -303,7 +303,7 @@ export const inspectRemoteBackup = factory.createHandlers(
 	vValidator("query", BackupRemoteFileQuerySchema),
 	async (c) => {
 		const db = c.get("db");
-		const secret = c.env.JWT_SECRET;
+		const secret = c.env.DATA_ENCRYPTION_SECRET;
 		const { destinationId, path } = c.req.valid("query");
 
 		try {
@@ -337,7 +337,7 @@ export const deleteRemoteBackup = factory.createHandlers(
 	vValidator("query", BackupRemoteFileQuerySchema),
 	async (c) => {
 		const db = c.get("db");
-		const secret = c.env.JWT_SECRET;
+		const secret = c.env.DATA_ENCRYPTION_SECRET;
 		const { destinationId, path } = c.req.valid("query");
 
 		try {
@@ -360,7 +360,7 @@ export const restoreRemoteBackup = factory.createHandlers(
 	vValidator("json", BackupRemoteRestoreSchema),
 	async (c) => {
 		const db = c.get("db");
-		const secret = c.env.JWT_SECRET;
+		const secret = c.env.DATA_ENCRYPTION_SECRET;
 		const user = c.get("user");
 		const body = c.req.valid("json");
 		const { destinationId, path, replaceExisting, allowChecksumMismatch } =
@@ -414,7 +414,7 @@ export const restoreRemoteBackup = factory.createHandlers(
 export const importBackup = factory.createHandlers(
 	vValidator("form", BackupImportSchema),
 	async (c) => {
-		const secret = c.env.JWT_SECRET;
+		const secret = c.env.DATA_ENCRYPTION_SECRET;
 		const user = c.get("user");
 		const body = c.req.valid("form");
 		const file = body.file;

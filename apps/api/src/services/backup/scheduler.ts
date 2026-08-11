@@ -31,12 +31,14 @@ export async function runScheduledBackupIfDue(
 	env: CloudflareBindings,
 ): Promise<void> {
 	const db = await createBackupDatabase(env.DB);
-	const jwtSecret = env.JWT_SECRET;
+	const dataEncryptionSecret = env.DATA_ENCRYPTION_SECRET;
 	const blobStore = createBlobStore(env);
 	try {
-		const settings = await loadBackupSettings(db, jwtSecret, "UTC").catch(
-			() => null,
-		);
+		const settings = await loadBackupSettings(
+			db,
+			dataEncryptionSecret,
+			"UTC",
+		).catch(() => null);
 		if (!settings) return;
 
 		const currentTime = new Date();
@@ -55,7 +57,7 @@ export async function runScheduledBackupIfDue(
 				);
 				destination.runtime.lastErrorAt = null;
 				destination.runtime.lastErrorMessage = null;
-				await saveBackupSettings(db, jwtSecret, settings);
+				await saveBackupSettings(db, dataEncryptionSecret, settings);
 
 				const archive = await buildBackupArchive(db, currentTime, {
 					includeAttachments: destination.includeAttachments,
@@ -92,14 +94,16 @@ export async function runScheduledBackupIfDue(
 				destination.runtime.lastUploadedFileName = archive.fileName;
 				destination.runtime.lastUploadedSizeBytes = archive.bytes.byteLength;
 				destination.runtime.lastUploadedDestination = upload.remotePath;
-				await saveBackupSettings(db, jwtSecret, settings);
+				await saveBackupSettings(db, dataEncryptionSecret, settings);
 			} catch (error: unknown) {
 				destination.runtime.lastErrorAt = new Date().toISOString();
 				destination.runtime.lastErrorMessage = errorMessage(
 					error,
 					"Scheduled backup failed",
 				);
-				await saveBackupSettings(db, jwtSecret, settings).catch(() => null);
+				await saveBackupSettings(db, dataEncryptionSecret, settings).catch(
+					() => null,
+				);
 			}
 		}
 	} finally {

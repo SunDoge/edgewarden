@@ -203,13 +203,13 @@ export function exportPortableBackupSettingsEnvelope(
 
 export async function encryptBackupSettingsEnvelope(
 	plaintext: string,
-	jwtSecret: string,
+	dataEncryptionSecret: string,
 	users: Pick<Selectable<Users>, "id" | "public_key" | "role" | "status">[],
 ): Promise<string> {
 	const encoder = new TextEncoder();
 	const eligibleUsers = getEligiblePortableUsers(users);
 
-	const runtimeKey = await deriveRuntimeKey(jwtSecret);
+	const runtimeKey = await deriveRuntimeKey(dataEncryptionSecret);
 	const runtime = await encryptAesGcm(encoder.encode(plaintext), runtimeKey);
 
 	const portableDek = crypto.getRandomValues(
@@ -265,13 +265,13 @@ export async function encryptBackupSettingsEnvelope(
 
 export async function decryptBackupSettingsRuntime(
 	raw: string,
-	jwtSecret: string,
+	dataEncryptionSecret: string,
 ): Promise<string> {
 	const envelope = parseBackupSettingsEnvelope(raw);
 	if (!envelope) {
 		throw new Error("Backup settings envelope is invalid");
 	}
-	const runtimeKey = await deriveRuntimeKey(jwtSecret);
+	const runtimeKey = await deriveRuntimeKey(dataEncryptionSecret);
 	const plaintext = await decryptAesGcm(
 		base64ToBytes(envelope.runtime.ciphertext),
 		base64ToBytes(envelope.runtime.iv),

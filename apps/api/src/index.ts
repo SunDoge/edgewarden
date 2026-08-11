@@ -9,7 +9,7 @@ import { vaultRouter } from "./routes/vault";
 
 const baseApp = new Hono<HonoEnv>();
 
-// Validate JWT secret is configured
+// Validate independent token-signing and persisted-data encryption secrets.
 baseApp.use("*", async (c, next) => {
 	if (
 		!c.env.JWT_SECRET ||
@@ -19,6 +19,19 @@ baseApp.use("*", async (c, next) => {
 			{
 				message:
 					"JWT_SECRET must be at least 32 characters. Set it in .dev.vars or as a Worker secret.",
+				object: "error",
+			},
+			500,
+		);
+	}
+	if (
+		!c.env.DATA_ENCRYPTION_SECRET ||
+		c.env.DATA_ENCRYPTION_SECRET.length < LIMITS.auth.jwtSecretMinLength
+	) {
+		return c.json(
+			{
+				message:
+					"DATA_ENCRYPTION_SECRET must be at least 32 characters. Set it in .dev.vars or as a Worker secret.",
 				object: "error",
 			},
 			500,

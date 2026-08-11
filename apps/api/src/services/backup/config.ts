@@ -493,25 +493,28 @@ export function serializeBackupSettings(settings: BackupSettings): string {
 
 export async function loadBackupSettings(
 	db: Kysely<DB>,
-	jwtSecret: string,
+	dataEncryptionSecret: string,
 	fallbackTimezone = "UTC",
 ): Promise<BackupSettings> {
 	const raw = await getConfigValue(db, BACKUP_SETTINGS_CONFIG_KEY);
 	if (!raw) {
 		const settings = getDefaultBackupSettings(fallbackTimezone);
-		await saveBackupSettings(db, jwtSecret, settings);
+		await saveBackupSettings(db, dataEncryptionSecret, settings);
 		return settings;
 	}
 
 	const envelope = parseBackupSettingsEnvelope(raw);
 	if (!envelope) {
 		const settings = parseBackupSettings(raw, fallbackTimezone);
-		await saveBackupSettings(db, jwtSecret, settings);
+		await saveBackupSettings(db, dataEncryptionSecret, settings);
 		return settings;
 	}
 
 	try {
-		const decrypted = await decryptBackupSettingsRuntime(raw, jwtSecret);
+		const decrypted = await decryptBackupSettingsRuntime(
+			raw,
+			dataEncryptionSecret,
+		);
 		return parseBackupSettings(decrypted, fallbackTimezone);
 	} catch {
 		throw new Error(
@@ -522,13 +525,13 @@ export async function loadBackupSettings(
 
 export async function saveBackupSettings(
 	db: Kysely<DB>,
-	jwtSecret: string,
+	dataEncryptionSecret: string,
 	settings: BackupSettings,
 ): Promise<void> {
 	const users = await getAllUsersForBackup(db);
 	const encrypted = await encryptBackupSettingsEnvelope(
 		serializeBackupSettings(settings),
-		jwtSecret,
+		dataEncryptionSecret,
 		users,
 	);
 	await setConfigValue(db, BACKUP_SETTINGS_CONFIG_KEY, encrypted);
@@ -536,7 +539,7 @@ export async function saveBackupSettings(
 
 export async function normalizeImportedBackupSettingsValue(
 	raw: string | null,
-	jwtSecret: string,
+	dataEncryptionSecret: string,
 	users: Pick<Selectable<Users>, "id" | "public_key" | "role" | "status">[],
 	fallbackTimezone = "UTC",
 ): Promise<string | null> {
@@ -544,11 +547,14 @@ export async function normalizeImportedBackupSettingsValue(
 	const envelope = parseBackupSettingsEnvelope(raw);
 	if (envelope) {
 		try {
-			const decrypted = await decryptBackupSettingsRuntime(raw, jwtSecret);
+			const decrypted = await decryptBackupSettingsRuntime(
+				raw,
+				dataEncryptionSecret,
+			);
 			const settings = parseBackupSettings(decrypted, fallbackTimezone);
 			return encryptBackupSettingsEnvelope(
 				serializeBackupSettings(settings),
-				jwtSecret,
+				dataEncryptionSecret,
 				users,
 			);
 		} catch {
@@ -559,32 +565,32 @@ export async function normalizeImportedBackupSettingsValue(
 	const settings = parseBackupSettings(raw, fallbackTimezone);
 	return encryptBackupSettingsEnvelope(
 		serializeBackupSettings(settings),
-		jwtSecret,
+		dataEncryptionSecret,
 		users,
 	);
 }
 
 export async function getBackupSettingsRepairState(
 	db: Kysely<DB>,
-	jwtSecret: string,
+	dataEncryptionSecret: string,
 	fallbackTimezone = "UTC",
 ): Promise<BackupSettingsRepairState> {
 	const raw = await getConfigValue(db, BACKUP_SETTINGS_CONFIG_KEY);
 	if (!raw) {
 		const settings = getDefaultBackupSettings(fallbackTimezone);
-		await saveBackupSettings(db, jwtSecret, settings);
+		await saveBackupSettings(db, dataEncryptionSecret, settings);
 		return { needsRepair: false, portable: null };
 	}
 
 	const envelope = parseBackupSettingsEnvelope(raw);
 	if (!envelope) {
 		const settings = parseBackupSettings(raw, fallbackTimezone);
-		await saveBackupSettings(db, jwtSecret, settings);
+		await saveBackupSettings(db, dataEncryptionSecret, settings);
 		return { needsRepair: false, portable: null };
 	}
 
 	try {
-		await decryptBackupSettingsRuntime(raw, jwtSecret);
+		await decryptBackupSettingsRuntime(raw, dataEncryptionSecret);
 		return { needsRepair: false, portable: null };
 	} catch {
 		return {
@@ -596,10 +602,10 @@ export async function getBackupSettingsRepairState(
 
 export async function repairBackupSettings(
 	db: Kysely<DB>,
-	jwtSecret: string,
+	dataEncryptionSecret: string,
 	settings: BackupSettings,
 ): Promise<void> {
-	await saveBackupSettings(db, jwtSecret, settings);
+	await saveBackupSettings(db, dataEncryptionSecret, settings);
 }
 
 export function findBackupDestination(
