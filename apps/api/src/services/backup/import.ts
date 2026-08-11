@@ -11,8 +11,13 @@ type BackupTableName =
 	| "users"
 	| "domain_settings"
 	| "user_revisions"
+	| "organizations"
+	| "org_members"
+	| "collections"
+	| "collection_members"
 	| "folders"
 	| "ciphers"
+	| "cipher_collections"
 	| "attachments"
 	| "webauthn_credentials"
 	| "device_trust_tokens"
@@ -23,8 +28,13 @@ const BACKUP_TABLES: BackupTableName[] = [
 	"users",
 	"domain_settings",
 	"user_revisions",
+	"organizations",
+	"org_members",
+	"collections",
+	"collection_members",
 	"folders",
 	"ciphers",
+	"cipher_collections",
 	"attachments",
 	"webauthn_credentials",
 	"device_trust_tokens",
@@ -42,8 +52,13 @@ export interface BackupImportResultBody {
 		users: number;
 		domainSettings: number;
 		userRevisions: number;
+		organizations: number;
+		organizationMembers: number;
+		collections: number;
+		collectionMembers: number;
 		folders: number;
 		ciphers: number;
+		cipherCollections: number;
 		attachments: number;
 		webauthnCredentials: number;
 		deviceTrustTokens: number;
@@ -144,6 +159,14 @@ async function createShadowTables(db: D1Database): Promise<void> {
 			db.prepare(buildShadowTableCreateSql(createSql, table)),
 		);
 	}
+	// The cipher table has a composite foreign key to folders(id, user_id).
+	// CREATE TABLE cloning does not copy the source UNIQUE index, so add the
+	// matching shadow index before inserting any cipher rows.
+	createStatements.push(
+		db.prepare(
+			`CREATE UNIQUE INDEX folders__restore_id_user ON ${shadowTableName("folders")}(id, user_id)`,
+		),
+	);
 	await db.batch(createStatements);
 }
 
@@ -211,8 +234,13 @@ function buildResetImportTargetStatements(
 	return [
 		"DELETE FROM sends",
 		"DELETE FROM attachments",
+		"DELETE FROM cipher_collections",
 		"DELETE FROM ciphers",
 		"DELETE FROM folders",
+		"DELETE FROM collection_members",
+		"DELETE FROM collections",
+		"DELETE FROM org_members",
+		"DELETE FROM organizations",
 		"DELETE FROM webauthn_credentials",
 		"DELETE FROM device_trust_tokens",
 		"DELETE FROM domain_settings",
@@ -355,6 +383,10 @@ async function importPreparedBackupRows(
 		})),
 		domain_settings: cloneRows(payload.domain_settings || []),
 		user_revisions: cloneRows(payload.user_revisions || []),
+		organizations: cloneRows(payload.organizations || []),
+		org_members: cloneRows(payload.org_members || []),
+		collections: cloneRows(payload.collections || []),
+		collection_members: cloneRows(payload.collection_members || []),
 		device_trust_tokens: cloneRows(payload.device_trust_tokens || []),
 		webauthn_credentials: cloneRows(payload.webauthn_credentials || []),
 		folders: cloneRows(payload.folders || []),
@@ -362,6 +394,7 @@ async function importPreparedBackupRows(
 			...row,
 			archived_at: row.archived_at ?? null,
 		})),
+		cipher_collections: cloneRows(payload.cipher_collections || []),
 		attachments: cloneRows(payload.attachments || []),
 		sends: cloneRows(payload.sends || []),
 	};
@@ -616,6 +649,7 @@ async function importBackupRows(
 				"verify_devices",
 				"totp_secret",
 				"totp_recovery_code",
+				"yubikey_config",
 				"created_at",
 				"updated_at",
 			],
@@ -648,6 +682,65 @@ async function importBackupRows(
 			],
 			payload.domain_settings || [],
 			true,
+		),
+	);
+	await runInsertBatch(
+		db,
+		tableName("organizations"),
+		buildInsertStatements(
+			db,
+			tableName("organizations"),
+			[
+				"id",
+				"name",
+				"public_key",
+				"private_key",
+				"owner_id",
+				"created_at",
+				"updated_at",
+			],
+			payload.organizations || [],
+		),
+	);
+	await runInsertBatch(
+		db,
+		tableName("org_members"),
+		buildInsertStatements(
+			db,
+			tableName("org_members"),
+			[
+				"id",
+				"org_id",
+				"user_id",
+				"email",
+				"key",
+				"role",
+				"status",
+				"access_all",
+				"created_at",
+				"updated_at",
+			],
+			payload.org_members || [],
+		),
+	);
+	await runInsertBatch(
+		db,
+		tableName("collections"),
+		buildInsertStatements(
+			db,
+			tableName("collections"),
+			["id", "org_id", "name", "created_at", "updated_at"],
+			payload.collections || [],
+		),
+	);
+	await runInsertBatch(
+		db,
+		tableName("collection_members"),
+		buildInsertStatements(
+			db,
+			tableName("collection_members"),
+			["collection_id", "org_member_id", "read_only", "hide_passwords"],
+			payload.collection_members || [],
 		),
 	);
 	await runInsertBatch(
@@ -705,10 +798,13 @@ async function importBackupRows(
 			[
 				"id",
 				"user_id",
+				"org_id",
 				"type",
 				"folder_id",
 				"name",
 				"notes",
+				"fields",
+				"password_history",
 				"favorite",
 				"data",
 				"reprompt",
@@ -717,8 +813,19 @@ async function importBackupRows(
 				"updated_at",
 				"archived_at",
 				"deleted_at",
+				"purge_after",
 			],
 			payload.ciphers || [],
+		),
+	);
+	await runInsertBatch(
+		db,
+		tableName("cipher_collections"),
+		buildInsertStatements(
+			db,
+			tableName("cipher_collections"),
+			["cipher_id", "collection_id"],
+			payload.cipher_collections || [],
 		),
 	);
 	await runInsertBatch(
@@ -727,7 +834,15 @@ async function importBackupRows(
 		buildInsertStatements(
 			db,
 			tableName("attachments"),
-			["id", "cipher_id", "file_name", "size", "size_name", "key"],
+			[
+				"id",
+				"cipher_id",
+				"file_name",
+				"size",
+				"size_name",
+				"key",
+				"created_at",
+			],
 			payload.attachments || [],
 		),
 	);
@@ -740,6 +855,7 @@ async function importBackupRows(
 			[
 				"id",
 				"user_id",
+				"org_id",
 				"type",
 				"key",
 				"name",
@@ -835,10 +951,15 @@ export async function importBackupArchiveBytes(
 			users: (db.users || []).length,
 			domain_settings: (db.domain_settings || []).length,
 			user_revisions: (db.user_revisions || []).length,
+			organizations: (db.organizations || []).length,
+			org_members: (db.org_members || []).length,
+			collections: (db.collections || []).length,
+			collection_members: (db.collection_members || []).length,
 			device_trust_tokens: (db.device_trust_tokens || []).length,
 			webauthn_credentials: (db.webauthn_credentials || []).length,
 			folders: (db.folders || []).length,
 			ciphers: (db.ciphers || []).length,
+			cipher_collections: (db.cipher_collections || []).length,
 			attachments: (db.attachments || []).length,
 			sends: (db.sends || []).length,
 		});
@@ -866,10 +987,15 @@ export async function importBackupArchiveBytes(
 			users: (db.users || []).length,
 			domain_settings: (db.domain_settings || []).length,
 			user_revisions: (db.user_revisions || []).length,
+			organizations: (db.organizations || []).length,
+			org_members: (db.org_members || []).length,
+			collections: (db.collections || []).length,
+			collection_members: (db.collection_members || []).length,
 			device_trust_tokens: (db.device_trust_tokens || []).length,
 			webauthn_credentials: (db.webauthn_credentials || []).length,
 			folders: (db.folders || []).length,
 			ciphers: (db.ciphers || []).length,
+			cipher_collections: (db.cipher_collections || []).length,
 			attachments: restored.restoredAttachments.length,
 			sends: (db.sends || []).length,
 		});
@@ -919,8 +1045,13 @@ export async function importBackupArchiveBytes(
 					users: (db.users || []).length,
 					domainSettings: (db.domain_settings || []).length,
 					userRevisions: (db.user_revisions || []).length,
+					organizations: (db.organizations || []).length,
+					organizationMembers: (db.org_members || []).length,
+					collections: (db.collections || []).length,
+					collectionMembers: (db.collection_members || []).length,
 					folders: (db.folders || []).length,
 					ciphers: (db.ciphers || []).length,
+					cipherCollections: (db.cipher_collections || []).length,
 					attachments: restored.restoredAttachments.length,
 					webauthnCredentials: (db.webauthn_credentials || []).length,
 					deviceTrustTokens: (db.device_trust_tokens || []).length,
@@ -1048,10 +1179,15 @@ export async function importRemoteBackupArchiveBytes(
 			users: (db.users || []).length,
 			domain_settings: (db.domain_settings || []).length,
 			user_revisions: (db.user_revisions || []).length,
+			organizations: (db.organizations || []).length,
+			org_members: (db.org_members || []).length,
+			collections: (db.collections || []).length,
+			collection_members: (db.collection_members || []).length,
 			device_trust_tokens: (db.device_trust_tokens || []).length,
 			webauthn_credentials: (db.webauthn_credentials || []).length,
 			folders: (db.folders || []).length,
 			ciphers: (db.ciphers || []).length,
+			cipher_collections: (db.cipher_collections || []).length,
 			attachments: (db.attachments || []).length,
 			sends: (db.sends || []).length,
 		});
@@ -1112,10 +1248,15 @@ export async function importRemoteBackupArchiveBytes(
 			users: (db.users || []).length,
 			domain_settings: (db.domain_settings || []).length,
 			user_revisions: (db.user_revisions || []).length,
+			organizations: (db.organizations || []).length,
+			org_members: (db.org_members || []).length,
+			collections: (db.collections || []).length,
+			collection_members: (db.collection_members || []).length,
 			device_trust_tokens: (db.device_trust_tokens || []).length,
 			webauthn_credentials: (db.webauthn_credentials || []).length,
 			folders: (db.folders || []).length,
 			ciphers: (db.ciphers || []).length,
+			cipher_collections: (db.cipher_collections || []).length,
 			attachments: restoredAttachments.length,
 			sends: (db.sends || []).length,
 		});
@@ -1167,8 +1308,13 @@ export async function importRemoteBackupArchiveBytes(
 					users: (db.users || []).length,
 					domainSettings: (db.domain_settings || []).length,
 					userRevisions: (db.user_revisions || []).length,
+					organizations: (db.organizations || []).length,
+					organizationMembers: (db.org_members || []).length,
+					collections: (db.collections || []).length,
+					collectionMembers: (db.collection_members || []).length,
 					folders: (db.folders || []).length,
 					ciphers: (db.ciphers || []).length,
+					cipherCollections: (db.cipher_collections || []).length,
 					attachments: restoredAttachments.length,
 					webauthnCredentials: (db.webauthn_credentials || []).length,
 					deviceTrustTokens: (db.device_trust_tokens || []).length,

@@ -48,13 +48,22 @@ export interface BackupPayload {
 		users: SqlRow[];
 		domain_settings: SqlRow[];
 		user_revisions: SqlRow[];
+		organizations?: SqlRow[];
+		org_members?: SqlRow[];
+		collections?: SqlRow[];
+		collection_members?: SqlRow[];
 		folders: SqlRow[];
 		ciphers: SqlRow[];
+		cipher_collections?: SqlRow[];
 		attachments: SqlRow[];
 		webauthn_credentials?: SqlRow[];
 		device_trust_tokens?: SqlRow[];
 		sends?: SqlRow[];
 	};
+}
+
+function sanitizeUserRowsForExport(rows: SqlRow[]): SqlRow[] {
+	return rows.map(({ api_key: _apiKey, ...row }) => row);
 }
 
 export interface BackupArchiveBundle {
@@ -314,8 +323,13 @@ export async function buildBackupArchive(
 		userRows,
 		domainSettingsRows,
 		revisionRows,
+		organizationRows,
+		orgMemberRows,
+		collectionRows,
+		collectionMemberRows,
 		folderRows,
 		cipherRows,
+		cipherCollectionRows,
 		attachmentRows,
 		webauthnRows,
 		deviceTrustRows,
@@ -333,8 +347,33 @@ export async function buildBackupArchive(
 			.selectAll()
 			.orderBy("user_id asc")
 			.execute(),
+		db
+			.selectFrom("organizations")
+			.selectAll()
+			.orderBy("created_at asc")
+			.execute(),
+		db
+			.selectFrom("org_members")
+			.selectAll()
+			.orderBy("created_at asc")
+			.execute(),
+		db
+			.selectFrom("collections")
+			.selectAll()
+			.orderBy("created_at asc")
+			.execute(),
+		db
+			.selectFrom("collection_members")
+			.selectAll()
+			.orderBy("collection_id asc")
+			.execute(),
 		db.selectFrom("folders").selectAll().orderBy("created_at asc").execute(),
 		db.selectFrom("ciphers").selectAll().orderBy("created_at asc").execute(),
+		db
+			.selectFrom("cipher_collections")
+			.selectAll()
+			.orderBy("cipher_id asc")
+			.execute(),
 		db.selectFrom("attachments").selectAll().orderBy("id asc").execute(),
 		db
 			.selectFrom("webauthn_credentials")
@@ -351,6 +390,9 @@ export async function buildBackupArchive(
 
 	const exportedConfigRows = sanitizeConfigRowsForExport(
 		configRows as unknown as SqlRow[],
+	);
+	const exportedUserRows = sanitizeUserRowsForExport(
+		userRows as unknown as SqlRow[],
 	);
 	const exportedAttachmentRows = includeAttachments
 		? (attachmentRows as unknown as SqlRow[])
@@ -374,11 +416,16 @@ export async function buildBackupArchive(
 		storageKind: includeAttachments ? (options.blobStore?.kind ?? null) : null,
 		tableCounts: {
 			config: exportedConfigRows.length,
-			users: userRows.length,
+			users: exportedUserRows.length,
 			domain_settings: domainSettingsRows.length,
 			user_revisions: revisionRows.length,
+			organizations: organizationRows.length,
+			org_members: orgMemberRows.length,
+			collections: collectionRows.length,
+			collection_members: collectionMemberRows.length,
 			folders: folderRows.length,
 			ciphers: cipherRows.length,
+			cipher_collections: cipherCollectionRows.length,
 			attachments: exportedAttachmentRows.length,
 			webauthn_credentials: webauthnRows.length,
 			device_trust_tokens: deviceTrustRows.length,
@@ -409,11 +456,16 @@ export async function buildBackupArchive(
 			JSON.stringify(
 				{
 					config: exportedConfigRows,
-					users: userRows,
+					users: exportedUserRows,
 					domain_settings: domainSettingsRows,
 					user_revisions: revisionRows,
+					organizations: organizationRows,
+					org_members: orgMemberRows,
+					collections: collectionRows,
+					collection_members: collectionMemberRows,
 					folders: folderRows,
 					ciphers: cipherRows,
+					cipher_collections: cipherCollectionRows,
 					attachments: exportedAttachmentRows,
 					webauthn_credentials: webauthnRows,
 					device_trust_tokens: deviceTrustRows,
