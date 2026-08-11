@@ -46,7 +46,9 @@
 		}
 	],
 	"vars": {
-		"ATTACHMENT_STORAGE": "r2"
+		"ATTACHMENT_STORAGE": "r2",
+		"SIGNUPS_ALLOWED": "false",
+		"INVITATIONS_ALLOWED": "true"
 	},
 	"durable_objects": {
 		"bindings": [

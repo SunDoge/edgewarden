@@ -20,8 +20,15 @@ import {
 import type { InferRequestType } from "hono/client";
 import { rpc, rpcJson } from "./rpc";
 import { ApiError } from "./rpc";
-import { assertAccountPasskey, unlockVaultKeyWithAccountPasskeyPrf } from "./passkeys";
-import { browserDeviceName, getOrCreateDeviceIdentifier, WEB_DEVICE_TYPE } from "./client-device";
+import {
+	assertAccountPasskey,
+	unlockVaultKeyWithAccountPasskeyPrf,
+} from "./passkeys";
+import {
+	browserDeviceName,
+	getOrCreateDeviceIdentifier,
+	WEB_DEVICE_TYPE,
+} from "./client-device";
 
 // Re-export shared types that consumers of this module may need
 export type { PreloginResponse, RegisterPayload, TokenResponse, SyncResponse };
@@ -46,7 +53,9 @@ export async function logout(): Promise<void> {
 	sessionStorage.removeItem("master_key");
 	if (refreshToken) {
 		try {
-			await rpc.identity.connect.revocation.$post({ form: { token: refreshToken } });
+			await rpc.identity.connect.revocation.$post({
+				form: { token: refreshToken },
+			});
 		} catch {
 			// Local logout must still complete while offline.
 		}
@@ -88,17 +97,34 @@ export async function prelogin(email: string): Promise<PreloginResponse> {
 	return rpcJson(response) as Promise<PreloginResponse>;
 }
 
-export async function deriveAccountPasswordHash(email: string, password: string): Promise<string> {
+export async function deriveAccountPasswordHash(
+	email: string,
+	password: string,
+): Promise<string> {
 	const settings = await prelogin(email);
-	const masterKey = await deriveMasterKey(password, email, settings.kdfIterations);
+	const masterKey = await deriveMasterKey(
+		password,
+		email,
+		settings.kdfIterations,
+	);
 	return deriveMasterPasswordHash(masterKey, password);
 }
 
-export async function recoverTwoFactorApi(email: string, password: string, recoveryCode: string): Promise<void> {
+export async function recoverTwoFactorApi(
+	email: string,
+	password: string,
+	recoveryCode: string,
+): Promise<void> {
 	const masterPasswordHash = await deriveAccountPasswordHash(email, password);
-	await rpcJson(await rpc.identity.accounts["recover-2fa"].$post({
-		json: { email: email.trim().toLowerCase(), masterPasswordHash, recoveryCode: recoveryCode.trim() },
-	}));
+	await rpcJson(
+		await rpc.identity.accounts["recover-2fa"].$post({
+			json: {
+				email: email.trim().toLowerCase(),
+				masterPasswordHash,
+				recoveryCode: recoveryCode.trim(),
+			},
+		}),
+	);
 }
 
 /**
@@ -133,133 +159,340 @@ export async function login(
 			deviceName: browserDeviceName(),
 			deviceType: String(WEB_DEVICE_TYPE),
 			...(captchaResponse ? { captchaResponse } : {}),
-			...(twoFactor ? {
-				twoFactorToken: twoFactor.token.trim(),
-				twoFactorProvider: twoFactor.provider ?? "0",
-			} : {}),
+			...(twoFactor
+				? {
+						twoFactorToken: twoFactor.token.trim(),
+						twoFactorProvider: twoFactor.provider ?? "0",
+					}
+				: {}),
 		},
 	});
 	const tokenResponse = (await rpcJson(response)) as TokenResponse;
 
 	localStorage.setItem("access_token", tokenResponse.access_token);
-	if (tokenResponse.refresh_token) localStorage.setItem("refresh_token", tokenResponse.refresh_token);
+	if (tokenResponse.refresh_token)
+		localStorage.setItem("refresh_token", tokenResponse.refresh_token);
 
 	return { masterKey };
 }
 
-export async function getTurnstileConfigApi(): Promise<{ enabled: boolean; siteKey: string | null }> {
-	const response = await fetch("/api/config", { headers: { accept: "application/json" } });
+export async function getTurnstileConfigApi(): Promise<{
+	enabled: boolean;
+	siteKey: string | null;
+}> {
+	const response = await fetch("/api/config", {
+		headers: { accept: "application/json" },
+	});
 	if (!response.ok) throw new Error("无法加载人机验证配置");
-	const config = await response.json() as { turnstile?: { enabled?: boolean; siteKey?: string | null } };
+	const config = (await response.json()) as {
+		turnstile?: { enabled?: boolean; siteKey?: string | null };
+	};
 	return {
 		enabled: config.turnstile?.enabled === true,
 		siteKey: config.turnstile?.siteKey ?? null,
 	};
 }
 
-export function isTwoFactorRequiredError(error: unknown): boolean {
-	if (!(error instanceof ApiError) || !error.payload || typeof error.payload !== "object") return false;
-	const payload = error.payload as Record<string, unknown>;
-	return payload.error_description === "Two factor required." || "TwoFactorProviders" in payload;
+export interface RegistrationConfig {
+	signupsAllowed: boolean;
+	invitationsAllowed: boolean;
+	bootstrapRequired: boolean;
+	adminPasswordConfigured: boolean;
 }
 
-export function twoFactorPasskeyChallengeFromError(error: unknown): { options: unknown; token: string } | null {
-	if (!(error instanceof ApiError) || !error.payload || typeof error.payload !== "object") return null;
+export async function getRegistrationConfigApi(): Promise<RegistrationConfig> {
+	const response = await fetch("/api/config", {
+		headers: { accept: "application/json" },
+	});
+	if (!response.ok) throw new Error("无法加载注册配置");
+	const config = (await response.json()) as {
+		registration?: Partial<RegistrationConfig>;
+	};
+	return {
+		signupsAllowed: config.registration?.signupsAllowed === true,
+		invitationsAllowed: config.registration?.invitationsAllowed === true,
+		bootstrapRequired: config.registration?.bootstrapRequired === true,
+		adminPasswordConfigured:
+			config.registration?.adminPasswordConfigured === true,
+	};
+}
+
+export function isTwoFactorRequiredError(error: unknown): boolean {
+	if (
+		!(error instanceof ApiError) ||
+		!error.payload ||
+		typeof error.payload !== "object"
+	)
+		return false;
+	const payload = error.payload as Record<string, unknown>;
+	return (
+		payload.error_description === "Two factor required." ||
+		"TwoFactorProviders" in payload
+	);
+}
+
+export function twoFactorPasskeyChallengeFromError(
+	error: unknown,
+): { options: unknown; token: string } | null {
+	if (
+		!(error instanceof ApiError) ||
+		!error.payload ||
+		typeof error.payload !== "object"
+	)
+		return null;
 	const payload = error.payload as any;
-	const provider = payload.TwoFactorProviders2?.["7"] ?? payload.CustomResponse?.TwoFactorProviders2?.["7"];
+	const provider =
+		payload.TwoFactorProviders2?.["7"] ??
+		payload.CustomResponse?.TwoFactorProviders2?.["7"];
 	const challenge = provider?.Challenge ?? provider?.challenge;
 	if (!challenge?.options || !challenge?.token) return null;
 	return { options: challenge.options, token: String(challenge.token) };
 }
 
-export async function getTwoFactorPasskeysApi(masterPasswordHash: string): Promise<any> {
-	return rpcJson(await rpc.api["two-factor"]["get-webauthn"].$post({ json: { masterPasswordHash } }));
+export async function getTwoFactorPasskeysApi(
+	masterPasswordHash: string,
+): Promise<any> {
+	return rpcJson(
+		await rpc.api["two-factor"]["get-webauthn"].$post({
+			json: { masterPasswordHash },
+		}),
+	);
 }
 
-export async function getTwoFactorPasskeyChallengeApi(masterPasswordHash: string): Promise<{ options: unknown; token: string }> {
-	return rpcJson(await rpc.api["two-factor"]["get-webauthn-challenge"].$post({ json: { masterPasswordHash } })) as Promise<{ options: unknown; token: string }>;
+export async function getTwoFactorPasskeyChallengeApi(
+	masterPasswordHash: string,
+): Promise<{ options: unknown; token: string }> {
+	return rpcJson(
+		await rpc.api["two-factor"]["get-webauthn-challenge"].$post({
+			json: { masterPasswordHash },
+		}),
+	) as Promise<{ options: unknown; token: string }>;
 }
 
-export async function createTwoFactorPasskeyApi(payload: { masterPasswordHash: string; name: string; token: string; deviceResponse: unknown }): Promise<any> {
+export async function createTwoFactorPasskeyApi(payload: {
+	masterPasswordHash: string;
+	name: string;
+	token: string;
+	deviceResponse: unknown;
+}): Promise<any> {
 	return rpcJson(await rpc.api["two-factor"].webauthn.$put({ json: payload }));
 }
 
-export async function deleteTwoFactorPasskeyApi(payload: { masterPasswordHash: string; id: string }): Promise<any> {
-	return rpcJson(await rpc.api["two-factor"].webauthn.$delete({ json: payload }));
+export async function deleteTwoFactorPasskeyApi(payload: {
+	masterPasswordHash: string;
+	id: string;
+}): Promise<any> {
+	return rpcJson(
+		await rpc.api["two-factor"].webauthn.$delete({ json: payload }),
+	);
 }
 
-export async function getYubikeySettingsApi(masterPasswordHash: string): Promise<any> {
-	return rpcJson(await rpc.api["yubico-enrollment"].settings.$post({ json: { masterPasswordHash } }));
+export async function getYubikeySettingsApi(
+	masterPasswordHash: string,
+): Promise<any> {
+	return rpcJson(
+		await rpc.api["yubico-enrollment"].settings.$post({
+			json: { masterPasswordHash },
+		}),
+	);
 }
 
-export async function saveYubikeysApi(payload: { masterPasswordHash: string; otps: string[]; nfc: boolean }): Promise<any> {
-	return rpcJson(await rpc.api["yubico-enrollment"].save.$post({ json: payload }));
+export async function saveYubikeysApi(payload: {
+	masterPasswordHash: string;
+	otps: string[];
+	nfc: boolean;
+}): Promise<any> {
+	return rpcJson(
+		await rpc.api["yubico-enrollment"].save.$post({ json: payload }),
+	);
 }
 
-export async function disableYubikeysApi(masterPasswordHash: string): Promise<any> {
-	return rpcJson(await rpc.api["yubico-control"].disable.$post({ json: { masterPasswordHash } }));
+export async function disableYubikeysApi(
+	masterPasswordHash: string,
+): Promise<any> {
+	return rpcJson(
+		await rpc.api["yubico-control"].disable.$post({
+			json: { masterPasswordHash },
+		}),
+	);
 }
 
-export async function saveYubicoConfigApi(payload: { masterPasswordHash: string; clientId: string; secretKey: string }): Promise<any> {
-	return rpcJson(await rpc.api["yubico-control"].config.$put({ json: payload }));
+export async function saveYubicoConfigApi(payload: {
+	masterPasswordHash: string;
+	clientId: string;
+	secretKey: string;
+}): Promise<any> {
+	return rpcJson(
+		await rpc.api["yubico-control"].config.$put({ json: payload }),
+	);
 }
 
 export async function listOrganizationsApi(): Promise<any> {
 	return rpcJson(await rpc.api.organizations.$get());
 }
 
-export async function createOrganizationApi(payload: { name: string; collectionName: string; key: string; publicKey: string; encryptedPrivateKey: string }): Promise<any> {
+export async function createOrganizationApi(payload: {
+	name: string;
+	collectionName: string;
+	key: string;
+	publicKey: string;
+	encryptedPrivateKey: string;
+}): Promise<any> {
 	return rpcJson(await rpc.api.organizations.$post({ json: payload }));
 }
 
-export async function updateOrganizationApi(orgId: string, name: string): Promise<any> {
-	return rpcJson(await rpc.api.organizations[":orgId"].$put({ param: { orgId }, json: { name } }));
+export async function updateOrganizationApi(
+	orgId: string,
+	name: string,
+): Promise<any> {
+	return rpcJson(
+		await rpc.api.organizations[":orgId"].$put({
+			param: { orgId },
+			json: { name },
+		}),
+	);
 }
 
-export async function deleteOrganizationApi(orgId: string, masterPasswordHash: string): Promise<void> {
-	await rpcJson(await rpc.api.organizations[":orgId"].$delete({ param: { orgId }, json: { masterPasswordHash } }));
+export async function deleteOrganizationApi(
+	orgId: string,
+	masterPasswordHash: string,
+): Promise<void> {
+	await rpcJson(
+		await rpc.api.organizations[":orgId"].$delete({
+			param: { orgId },
+			json: { masterPasswordHash },
+		}),
+	);
 }
 
-export async function getOrganizationInviteeApi(orgId: string, email: string): Promise<any> {
-	return rpcJson(await rpc.api.organizations[":orgId"].invitee.$get({ param: { orgId }, query: { email } }));
+export async function getOrganizationInviteeApi(
+	orgId: string,
+	email: string,
+): Promise<any> {
+	return rpcJson(
+		await rpc.api.organizations[":orgId"].invitee.$get({
+			param: { orgId },
+			query: { email },
+		}),
+	);
 }
 
 export async function listOrganizationMembersApi(orgId: string): Promise<any> {
-	return rpcJson(await rpc.api.organizations[":orgId"].members.$get({ param: { orgId } }));
+	return rpcJson(
+		await rpc.api.organizations[":orgId"].members.$get({ param: { orgId } }),
+	);
 }
 
-export async function inviteOrganizationMemberApi(orgId: string, payload: { email: string; role: "admin" | "manager" | "member"; accessAll: boolean; collections: Array<{ id: string; readOnly: boolean; hidePasswords: boolean }>; key: string }): Promise<any> {
-	return rpcJson(await rpc.api.organizations[":orgId"].members.$post({ param: { orgId }, json: payload }));
+export async function inviteOrganizationMemberApi(
+	orgId: string,
+	payload: {
+		email: string;
+		role: "admin" | "manager" | "member";
+		accessAll: boolean;
+		collections: Array<{
+			id: string;
+			readOnly: boolean;
+			hidePasswords: boolean;
+		}>;
+		key: string;
+	},
+): Promise<any> {
+	return rpcJson(
+		await rpc.api.organizations[":orgId"].members.$post({
+			param: { orgId },
+			json: payload,
+		}),
+	);
 }
 
-export async function updateOrganizationMemberApi(orgId: string, memberId: string, payload: { role: "admin" | "manager" | "member"; accessAll: boolean; collections: Array<{ id: string; readOnly: boolean; hidePasswords: boolean }> }): Promise<any> {
-	return rpcJson(await rpc.api.organizations[":orgId"].members[":memberId"].$put({ param: { orgId, memberId }, json: payload }));
+export async function updateOrganizationMemberApi(
+	orgId: string,
+	memberId: string,
+	payload: {
+		role: "admin" | "manager" | "member";
+		accessAll: boolean;
+		collections: Array<{
+			id: string;
+			readOnly: boolean;
+			hidePasswords: boolean;
+		}>;
+	},
+): Promise<any> {
+	return rpcJson(
+		await rpc.api.organizations[":orgId"].members[":memberId"].$put({
+			param: { orgId, memberId },
+			json: payload,
+		}),
+	);
 }
 
-export async function removeOrganizationMemberApi(orgId: string, memberId: string): Promise<void> {
-	await rpcJson(await rpc.api.organizations[":orgId"].members[":memberId"].$delete({ param: { orgId, memberId } }));
+export async function removeOrganizationMemberApi(
+	orgId: string,
+	memberId: string,
+): Promise<void> {
+	await rpcJson(
+		await rpc.api.organizations[":orgId"].members[":memberId"].$delete({
+			param: { orgId, memberId },
+		}),
+	);
 }
 
-export async function listOrganizationCollectionsApi(orgId: string): Promise<any> {
-	return rpcJson(await rpc.api.organizations[":orgId"].collections.$get({ param: { orgId } }));
+export async function listOrganizationCollectionsApi(
+	orgId: string,
+): Promise<any> {
+	return rpcJson(
+		await rpc.api.organizations[":orgId"].collections.$get({
+			param: { orgId },
+		}),
+	);
 }
 
-export async function createOrganizationCollectionApi(orgId: string, name: string): Promise<any> {
-	return rpcJson(await rpc.api.organizations[":orgId"].collections.$post({ param: { orgId }, json: { name } }));
+export async function createOrganizationCollectionApi(
+	orgId: string,
+	name: string,
+): Promise<any> {
+	return rpcJson(
+		await rpc.api.organizations[":orgId"].collections.$post({
+			param: { orgId },
+			json: { name },
+		}),
+	);
 }
 
-export async function updateOrganizationCollectionApi(orgId: string, collectionId: string, name: string): Promise<any> {
-	return rpcJson(await rpc.api.organizations[":orgId"].collections[":collectionId"].$put({ param: { orgId, collectionId }, json: { name } }));
+export async function updateOrganizationCollectionApi(
+	orgId: string,
+	collectionId: string,
+	name: string,
+): Promise<any> {
+	return rpcJson(
+		await rpc.api.organizations[":orgId"].collections[":collectionId"].$put({
+			param: { orgId, collectionId },
+			json: { name },
+		}),
+	);
 }
 
-export async function deleteOrganizationCollectionApi(orgId: string, collectionId: string): Promise<void> {
-	await rpcJson(await rpc.api.organizations[":orgId"].collections[":collectionId"].$delete({ param: { orgId, collectionId } }));
+export async function deleteOrganizationCollectionApi(
+	orgId: string,
+	collectionId: string,
+): Promise<void> {
+	await rpcJson(
+		await rpc.api.organizations[":orgId"].collections[":collectionId"].$delete({
+			param: { orgId, collectionId },
+		}),
+	);
 }
 
 export function twoFactorProvidersFromError(error: unknown): string[] {
-	if (!(error instanceof ApiError) || !error.payload || typeof error.payload !== "object") return [];
+	if (
+		!(error instanceof ApiError) ||
+		!error.payload ||
+		typeof error.payload !== "object"
+	)
+		return [];
 	const payload = error.payload as any;
-	const providers = payload.TwoFactorProviders ?? payload.CustomResponse?.TwoFactorProviders;
+	const providers =
+		payload.TwoFactorProviders ?? payload.CustomResponse?.TwoFactorProviders;
 	return Array.isArray(providers) ? providers.map(String) : [];
 }
 
@@ -267,9 +500,15 @@ export async function loginWithPasskeyApi(): Promise<{
 	accessToken: string;
 	symEncKey?: Uint8Array;
 	symMacKey?: Uint8Array;
-	masterPasswordUnlock?: { email: string; iterations: number; profileKey: string };
+	masterPasswordUnlock?: {
+		email: string;
+		iterations: number;
+		profileKey: string;
+	};
 }> {
-	const options = await rpcJson<any>(await rpc.identity.accounts.webauthn["assertion-options"].$get());
+	const options = await rpcJson<any>(
+		await rpc.identity.accounts.webauthn["assertion-options"].$get(),
+	);
 	const assertion = await assertAccountPasskey(options);
 	const response = await rpc.identity.connect.token.$post({
 		form: {
@@ -281,22 +520,44 @@ export async function loginWithPasskeyApi(): Promise<{
 	});
 	const token = await rpcJson<any>(response);
 	if (!token.access_token) throw new Error("通行密钥登录未返回访问令牌");
-	const decryption = token.UserDecryptionOptions ?? token.userDecryptionOptions ?? {};
-	const prfOption = decryption.WebAuthnPrfOption ?? decryption.webAuthnPrfOption;
+	const decryption =
+		token.UserDecryptionOptions ?? token.userDecryptionOptions ?? {};
+	const prfOption =
+		decryption.WebAuthnPrfOption ?? decryption.webAuthnPrfOption;
 	let keys: { symEncKey: string; symMacKey: string } | undefined;
-	if (assertion.prfKey && prfOption) keys = await unlockVaultKeyWithAccountPasskeyPrf(assertion.prfKey, prfOption);
+	if (assertion.prfKey && prfOption)
+		keys = await unlockVaultKeyWithAccountPasskeyPrf(
+			assertion.prfKey,
+			prfOption,
+		);
 	localStorage.setItem("access_token", token.access_token);
-	if (token.refresh_token) localStorage.setItem("refresh_token", token.refresh_token);
+	if (token.refresh_token)
+		localStorage.setItem("refresh_token", token.refresh_token);
 	if (keys) {
-		return { accessToken: token.access_token, symEncKey: base64ToBytes(keys.symEncKey), symMacKey: base64ToBytes(keys.symMacKey) };
+		return {
+			accessToken: token.access_token,
+			symEncKey: base64ToBytes(keys.symEncKey),
+			symMacKey: base64ToBytes(keys.symMacKey),
+		};
 	}
-	const unlock = decryption.MasterPasswordUnlock ?? decryption.masterPasswordUnlock ?? {};
+	const unlock =
+		decryption.MasterPasswordUnlock ?? decryption.masterPasswordUnlock ?? {};
 	return {
 		accessToken: token.access_token,
 		masterPasswordUnlock: {
 			email: String(unlock.Salt ?? unlock.salt ?? ""),
-			iterations: Number(unlock.Kdf?.Iterations ?? unlock.kdf?.iterations ?? token.KdfIterations ?? 600_000),
-			profileKey: String(unlock.MasterKeyWrappedUserKey ?? unlock.masterKeyWrappedUserKey ?? token.Key ?? ""),
+			iterations: Number(
+				unlock.Kdf?.Iterations ??
+					unlock.kdf?.iterations ??
+					token.KdfIterations ??
+					600_000,
+			),
+			profileKey: String(
+				unlock.MasterKeyWrappedUserKey ??
+					unlock.masterKeyWrappedUserKey ??
+					token.Key ??
+					"",
+			),
 		},
 	};
 }
@@ -312,6 +573,7 @@ export async function register(
 	hint?: string,
 	iterations = 600_000,
 	inviteCode?: string,
+	adminPassword?: string,
 ): Promise<void> {
 	const masterKey = await deriveMasterKey(password, email, iterations);
 	const masterPasswordHash = await deriveMasterPasswordHash(
@@ -356,6 +618,7 @@ export async function register(
 		kdfIterations: iterations,
 		name: name || undefined,
 		inviteCode: inviteCode?.trim() || undefined,
+		adminPassword: adminPassword || undefined,
 		keys: {
 			publicKey: bytesToBase64(publicKey),
 			encryptedPrivateKey,
@@ -374,14 +637,22 @@ export async function syncVault(): Promise<SyncResponse> {
 }
 
 export async function fetchRevisionDateApi(): Promise<number> {
-	const revision = await rpcJson(await rpc.api.accounts["revision-date"].$get());
+	const revision = await rpcJson(
+		await rpc.api.accounts["revision-date"].$get(),
+	);
 	const value = Number(revision);
 	if (!Number.isFinite(value)) throw new Error("Invalid vault revision date");
 	return value;
 }
 
-export async function createRealtimeTicketApi(): Promise<{ token: string; expiresIn: number }> {
-	return rpcJson(await rpc.api.notifications.token.$post()) as Promise<{ token: string; expiresIn: number }>;
+export async function createRealtimeTicketApi(): Promise<{
+	token: string;
+	expiresIn: number;
+}> {
+	return rpcJson(await rpc.api.notifications.token.$post()) as Promise<{
+		token: string;
+		expiresIn: number;
+	}>;
 }
 
 /**
@@ -469,26 +740,65 @@ export async function unarchiveCiphersApi(ids: string[]): Promise<void> {
 }
 
 export async function hardDeleteCiphersApi(ids: string[]): Promise<void> {
-	await rpcJson(await rpc.api.ciphers["delete-permanent"].$post({ json: { ids } }));
+	await rpcJson(
+		await rpc.api.ciphers["delete-permanent"].$post({ json: { ids } }),
+	);
 }
 
-export async function createAttachmentApi(cipherId: string, payload: { fileName: string; key: string; fileSize: number }): Promise<{ attachmentId: string; url: string }> {
-	return rpcJson(await rpc.api.ciphers[":id"].attachment.v2.$post({ param: { id: cipherId }, json: payload })) as Promise<{ attachmentId: string; url: string }>;
+export async function createAttachmentApi(
+	cipherId: string,
+	payload: { fileName: string; key: string; fileSize: number },
+): Promise<{ attachmentId: string; url: string }> {
+	return rpcJson(
+		await rpc.api.ciphers[":id"].attachment.v2.$post({
+			param: { id: cipherId },
+			json: payload,
+		}),
+	) as Promise<{ attachmentId: string; url: string }>;
 }
 
-export async function uploadAttachmentApi(url: string, encryptedData: Uint8Array): Promise<void> {
-	const response = await fetch(url, { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: encryptedData as BodyInit });
-	if (!response.ok) throw new ApiError(`附件上传失败 (${response.status})`, response.status, await response.text().catch(() => null));
+export async function uploadAttachmentApi(
+	url: string,
+	encryptedData: Uint8Array,
+): Promise<void> {
+	const response = await fetch(url, {
+		method: "PUT",
+		headers: { "Content-Type": "application/octet-stream" },
+		body: encryptedData as BodyInit,
+	});
+	if (!response.ok)
+		throw new ApiError(
+			`附件上传失败 (${response.status})`,
+			response.status,
+			await response.text().catch(() => null),
+		);
 }
 
-export async function downloadAttachmentApi(cipherId: string, attachmentId: string): Promise<Uint8Array> {
-	const response = await rpc.api.ciphers[":id"].attachment[":attachmentId"].$get({ param: { id: cipherId, attachmentId } });
-	if (!response.ok) throw new ApiError(`附件下载失败 (${response.status})`, response.status, await response.text().catch(() => null));
+export async function downloadAttachmentApi(
+	cipherId: string,
+	attachmentId: string,
+): Promise<Uint8Array> {
+	const response = await rpc.api.ciphers[":id"].attachment[
+		":attachmentId"
+	].$get({ param: { id: cipherId, attachmentId } });
+	if (!response.ok)
+		throw new ApiError(
+			`附件下载失败 (${response.status})`,
+			response.status,
+			await response.text().catch(() => null),
+		);
 	return new Uint8Array(await response.arrayBuffer());
 }
 
-export async function deleteAttachmentApi(cipherId: string, attachmentId: string): Promise<void> {
-	await rpcJson(await rpc.api.ciphers[":id"].attachment[":attachmentId"].$delete({ param: { id: cipherId, attachmentId } }));
+export async function deleteAttachmentApi(
+	cipherId: string,
+	attachmentId: string,
+): Promise<void> {
+	await rpcJson(
+		await rpc.api.ciphers[":id"].attachment[":attachmentId"].$delete({
+			param: { id: cipherId, attachmentId },
+		}),
+	);
 }
 
 /**
@@ -780,12 +1090,20 @@ export async function deleteDevicesApi(ids: string[]): Promise<void> {
 	await rpcJson(await rpc.api.devices.delete.$post({ json: { ids } }));
 }
 
-export async function deleteAllDevicesApi(masterPasswordHash: string): Promise<void> {
-	await rpcJson(await rpc.api.devices.$delete({ json: { masterPasswordHash } }));
+export async function deleteAllDevicesApi(
+	masterPasswordHash: string,
+): Promise<void> {
+	await rpcJson(
+		await rpc.api.devices.$delete({ json: { masterPasswordHash } }),
+	);
 }
 
-export async function deleteAccountApi(masterPasswordHash: string): Promise<void> {
-	await rpcJson(await rpc.api.accounts.delete.$post({ json: { masterPasswordHash } }));
+export async function deleteAccountApi(
+	masterPasswordHash: string,
+): Promise<void> {
+	await rpcJson(
+		await rpc.api.accounts.delete.$post({ json: { masterPasswordHash } }),
+	);
 }
 
 export async function fetchTwoFactorApi(): Promise<{ data: any[] }> {
@@ -796,9 +1114,7 @@ export async function getAuthenticatorApi(): Promise<{
 	key: string;
 	enabled: boolean;
 }> {
-	return rpcJson(
-		await rpc.api["two-factor"]["get-authenticator"].$post(),
-	);
+	return rpcJson(await rpc.api["two-factor"]["get-authenticator"].$post());
 }
 
 export async function enableAuthenticatorApi(
@@ -838,8 +1154,15 @@ export async function getAccountPasskeyAttestationOptionsApi(
 	) as Promise<{ options: unknown; token: string }>;
 }
 
-export async function getAccountPasskeyAssertionOptionsApi(masterPasswordHash: string, credentialId: string): Promise<{ options: unknown; token: string }> {
-	return rpcJson(await rpc.api.webauthn["assertion-options"].$post({ json: { masterPasswordHash, credentialId } })) as Promise<{ options: unknown; token: string }>;
+export async function getAccountPasskeyAssertionOptionsApi(
+	masterPasswordHash: string,
+	credentialId: string,
+): Promise<{ options: unknown; token: string }> {
+	return rpcJson(
+		await rpc.api.webauthn["assertion-options"].$post({
+			json: { masterPasswordHash, credentialId },
+		}),
+	) as Promise<{ options: unknown; token: string }>;
 }
 
 export async function createAccountPasskeyApi(payload: {
@@ -854,7 +1177,13 @@ export async function createAccountPasskeyApi(payload: {
 	return rpcJson(await rpc.api.webauthn.$post({ json: payload }));
 }
 
-export async function updateAccountPasskeyEncryptionApi(payload: { token: string; deviceResponse: unknown; encryptedUserKey: string; encryptedPublicKey: string; encryptedPrivateKey: string }): Promise<any> {
+export async function updateAccountPasskeyEncryptionApi(payload: {
+	token: string;
+	deviceResponse: unknown;
+	encryptedUserKey: string;
+	encryptedPublicKey: string;
+	encryptedPrivateKey: string;
+}): Promise<any> {
 	return rpcJson(await rpc.api.webauthn.$put({ json: payload }));
 }
 
@@ -874,45 +1203,127 @@ export async function listAdminUsersApi(): Promise<{ data: any[] }> {
 	return rpcJson(await rpc.api.admin.users.$get()) as Promise<{ data: any[] }>;
 }
 
-export async function listAdminInvitesApi(includeInactive = true): Promise<{ data: any[] }> {
-	return rpcJson(await rpc.api.admin.invites.$get({ query: { includeInactive: String(includeInactive) } })) as Promise<{ data: any[] }>;
+export async function listAdminInvitesApi(
+	includeInactive = true,
+): Promise<{ data: any[] }> {
+	return rpcJson(
+		await rpc.api.admin.invites.$get({
+			query: { includeInactive: String(includeInactive) },
+		}),
+	) as Promise<{ data: any[] }>;
 }
 
-export async function createAdminInviteApi(masterPasswordHash: string, expiresInHours: number): Promise<any> {
-	return rpcJson(await rpc.api.admin.invites.$post({ json: { masterPasswordHash, expiresInHours } }));
+export async function createAdminInviteApi(
+	masterPasswordHash: string,
+	expiresInHours: number,
+): Promise<any> {
+	return rpcJson(
+		await rpc.api.admin.invites.$post({
+			json: { masterPasswordHash, expiresInHours },
+		}),
+	);
 }
 
-export async function deleteAdminInviteApi(code: string, masterPasswordHash: string): Promise<void> {
-	await rpcJson(await rpc.api.admin.invites[":code"].$delete({ param: { code }, json: { masterPasswordHash } }));
+export async function deleteAdminInviteApi(
+	code: string,
+	masterPasswordHash: string,
+): Promise<void> {
+	await rpcJson(
+		await rpc.api.admin.invites[":code"].$delete({
+			param: { code },
+			json: { masterPasswordHash },
+		}),
+	);
 }
 
-export async function deleteAdminInvitesApi(masterPasswordHash: string, invalidOnly = false): Promise<{ deleted: number }> {
-	return rpcJson(await rpc.api.admin.invites.$delete({ query: invalidOnly ? { scope: "invalid" } : {}, json: { masterPasswordHash } })) as Promise<{ deleted: number }>;
+export async function deleteAdminInvitesApi(
+	masterPasswordHash: string,
+	invalidOnly = false,
+): Promise<{ deleted: number }> {
+	return rpcJson(
+		await rpc.api.admin.invites.$delete({
+			query: invalidOnly ? { scope: "invalid" } : {},
+			json: { masterPasswordHash },
+		}),
+	) as Promise<{ deleted: number }>;
 }
 
-export async function setAdminUserStatusApi(id: string, status: "active" | "banned", masterPasswordHash: string): Promise<void> {
-	await rpcJson(await rpc.api.admin.users[":id"].status.$put({ param: { id }, json: { status, masterPasswordHash } }));
+export async function setAdminUserStatusApi(
+	id: string,
+	status: "active" | "banned",
+	masterPasswordHash: string,
+): Promise<void> {
+	await rpcJson(
+		await rpc.api.admin.users[":id"].status.$put({
+			param: { id },
+			json: { status, masterPasswordHash },
+		}),
+	);
 }
 
-export async function deleteAdminUserApi(id: string, masterPasswordHash: string): Promise<void> {
-	await rpcJson(await rpc.api.admin.users[":id"].$delete({ param: { id }, json: { masterPasswordHash } }));
+export async function deleteAdminUserApi(
+	id: string,
+	masterPasswordHash: string,
+): Promise<void> {
+	await rpcJson(
+		await rpc.api.admin.users[":id"].$delete({
+			param: { id },
+			json: { masterPasswordHash },
+		}),
+	);
 }
 
-export interface AuditLogQuery { limit?: number; offset?: number; category?: string; level?: string; q?: string }
-export async function listAuditLogsApi(filters: AuditLogQuery = {}): Promise<{ data: any[]; total: number; limit: number; offset: number; hasMore: boolean }> {
+export interface AuditLogQuery {
+	limit?: number;
+	offset?: number;
+	category?: string;
+	level?: string;
+	q?: string;
+}
+export async function listAuditLogsApi(
+	filters: AuditLogQuery = {},
+): Promise<{
+	data: any[];
+	total: number;
+	limit: number;
+	offset: number;
+	hasMore: boolean;
+}> {
 	const query: Record<string, string> = {};
-	for (const [key, value] of Object.entries(filters)) if (value !== undefined && value !== "") query[key] = String(value);
-	return rpcJson(await rpc.api.admin.logs.$get({ query })) as Promise<{ data: any[]; total: number; limit: number; offset: number; hasMore: boolean }>;
+	for (const [key, value] of Object.entries(filters))
+		if (value !== undefined && value !== "") query[key] = String(value);
+	return rpcJson(await rpc.api.admin.logs.$get({ query })) as Promise<{
+		data: any[];
+		total: number;
+		limit: number;
+		offset: number;
+		hasMore: boolean;
+	}>;
 }
 
-export async function clearAuditLogsApi(masterPasswordHash: string): Promise<{ deleted: number }> {
-	return rpcJson(await rpc.api.admin.logs.$delete({ json: { masterPasswordHash } })) as Promise<{ deleted: number }>;
+export async function clearAuditLogsApi(
+	masterPasswordHash: string,
+): Promise<{ deleted: number }> {
+	return rpcJson(
+		await rpc.api.admin.logs.$delete({ json: { masterPasswordHash } }),
+	) as Promise<{ deleted: number }>;
 }
 
-export async function fetchAuditLogSettingsApi(): Promise<{ retentionDays: number | null; maxEntries: number | null }> {
-	return rpcJson(await rpc.api.admin.logs.settings.$get()) as Promise<{ retentionDays: number | null; maxEntries: number | null }>;
+export async function fetchAuditLogSettingsApi(): Promise<{
+	retentionDays: number | null;
+	maxEntries: number | null;
+}> {
+	return rpcJson(await rpc.api.admin.logs.settings.$get()) as Promise<{
+		retentionDays: number | null;
+		maxEntries: number | null;
+	}>;
 }
 
-export async function updateAuditLogSettingsApi(settings: { retentionDays: 7 | 30 | 90 | 180 | 365 | null; maxEntries: number | null }): Promise<{ retentionDays: number | null; maxEntries: number | null }> {
-	return rpcJson(await rpc.api.admin.logs.settings.$put({ json: settings })) as Promise<{ retentionDays: number | null; maxEntries: number | null }>;
+export async function updateAuditLogSettingsApi(settings: {
+	retentionDays: 7 | 30 | 90 | 180 | 365 | null;
+	maxEntries: number | null;
+}): Promise<{ retentionDays: number | null; maxEntries: number | null }> {
+	return rpcJson(
+		await rpc.api.admin.logs.settings.$put({ json: settings }),
+	) as Promise<{ retentionDays: number | null; maxEntries: number | null }>;
 }

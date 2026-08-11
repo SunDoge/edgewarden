@@ -4,6 +4,9 @@ export const RegisterSchema = v.object({
 	email: v.pipe(v.string(), v.email()),
 	name: v.optional(v.string()),
 	inviteCode: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(128))),
+	adminPassword: v.optional(
+		v.pipe(v.string(), v.minLength(1), v.maxLength(1024)),
+	),
 	masterPasswordHash: v.pipe(v.string(), v.minLength(1)),
 	masterPasswordHint: v.optional(v.nullable(v.string())),
 	key: v.pipe(v.string(), v.minLength(1)),

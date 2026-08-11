@@ -34,6 +34,7 @@ export interface RegisterPayload {
 	kdfParallelism?: number;
 	name?: string;
 	inviteCode?: string;
+	adminPassword?: string;
 	keys?: {
 		publicKey: string;
 		encryptedPrivateKey: string;

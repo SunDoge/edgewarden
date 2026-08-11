@@ -13,6 +13,7 @@ const JWT_SECRET = "test-secret-that-is-at-least-thirty-two-characters";
 const EMAIL = "api-test@example.com";
 const MASTER_PASSWORD_HASH = "client-side-master-password-hash";
 const MEMBER_EMAIL = "member-api-test@example.com";
+const ADMIN_PASSWORD = "test-bootstrap-admin-password";
 
 let miniflare: Miniflare;
 let bindings: CloudflareBindings;
@@ -112,6 +113,9 @@ before(async () => {
 			},
 		},
 		ATTACHMENT_STORAGE: "r2",
+		ADMIN_PASSWORD,
+		SIGNUPS_ALLOWED: "true",
+		INVITATIONS_ALLOWED: "true",
 		JWT_SECRET,
 		RL_IP: rateLimiter,
 		RL_ACCOUNT: rateLimiter,
@@ -209,17 +213,13 @@ describe("Edgewarden API", () => {
 		};
 
 		try {
-			const first = await request(
-				"/icons/example.com/icon.png",
-				{},
-				{
-					waitUntil: (task: Promise<unknown>) => {
-						backgroundTasks.push(task);
-					},
-					passThroughOnException: () => undefined,
-					props: {},
-				} as unknown as ExecutionContext,
-			);
+			const first = await request("/icons/example.com/icon.png", {}, {
+				waitUntil: (task: Promise<unknown>) => {
+					backgroundTasks.push(task);
+				},
+				passThroughOnException: () => undefined,
+				props: {},
+			} as unknown as ExecutionContext);
 			assert.equal(backgroundTasks.length, 1);
 			await Promise.all(backgroundTasks);
 			const second = await request("/icons/example.com/icon.png");
@@ -253,6 +253,37 @@ describe("Edgewarden API", () => {
 		assert.equal(response.status, 400);
 	});
 
+	test("requires the deployment admin password for the first account", async () => {
+		const config = await request("/api/config");
+		assert.equal(config.status, 200);
+		const configBody = await config.json<{
+			registration: Record<string, unknown>;
+		}>();
+		assert.deepEqual(configBody.registration, {
+			signupsAllowed: true,
+			invitationsAllowed: true,
+			bootstrapRequired: true,
+			adminPasswordConfigured: true,
+		});
+		assert.equal(JSON.stringify(configBody).includes(ADMIN_PASSWORD), false);
+
+		for (const adminPassword of [undefined, "incorrect-password"]) {
+			const response = await request("/api/accounts/register", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					email: "bootstrap-rejected@example.com",
+					masterPasswordHash: MASTER_PASSWORD_HASH,
+					key: "encrypted-user-key",
+					kdf: 0,
+					kdfIterations: 600_000,
+					adminPassword,
+				}),
+			});
+			assert.equal(response.status, 403);
+		}
+	});
+
 	test("registers, logs in and returns the generated KDF settings", async () => {
 		const registration = await request("/api/accounts/register", {
 			method: "POST",
@@ -264,6 +295,7 @@ describe("Edgewarden API", () => {
 				key: "encrypted-user-key",
 				kdf: 0,
 				kdfIterations: 600_000,
+				adminPassword: ADMIN_PASSWORD,
 			}),
 		});
 		assert.equal(registration.status, 204);
@@ -351,6 +383,26 @@ describe("Edgewarden API", () => {
 		assert.equal(login.status, 200, await login.clone().text());
 		memberAccessToken = (await login.json<{ access_token: string }>())
 			.access_token;
+	});
+
+	test("blocks registration without an invite when public signups are disabled", async () => {
+		(bindings as unknown as Record<string, unknown>).SIGNUPS_ALLOWED = "false";
+		try {
+			const response = await request("/api/accounts/register", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					email: "closed-registration@example.com",
+					masterPasswordHash: MASTER_PASSWORD_HASH,
+					key: "encrypted-key",
+					kdf: 0,
+					kdfIterations: 600_000,
+				}),
+			});
+			assert.equal(response.status, 403);
+		} finally {
+			(bindings as unknown as Record<string, unknown>).SIGNUPS_ALLOWED = "true";
+		}
 	});
 
 	test("rotates refresh tokens and rejects replay", async () => {
@@ -1272,6 +1324,25 @@ describe("Edgewarden API", () => {
 			new RegExp(`/register\\?invite=${invite.code}$`),
 		);
 
+		(bindings as unknown as Record<string, unknown>).INVITATIONS_ALLOWED =
+			"false";
+		const disabledInvite = await request("/api/accounts/register", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({
+				email: "disabled-invite@example.com",
+				masterPasswordHash: MASTER_PASSWORD_HASH,
+				key: "encrypted-key",
+				kdf: 0,
+				kdfIterations: 600_000,
+				inviteCode: invite.code,
+			}),
+		});
+		assert.equal(disabledInvite.status, 400);
+		(bindings as unknown as Record<string, unknown>).INVITATIONS_ALLOWED =
+			"true";
+
+		(bindings as unknown as Record<string, unknown>).SIGNUPS_ALLOWED = "false";
 		const invitedRegistration = await request("/api/accounts/register", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
@@ -1290,6 +1361,7 @@ describe("Edgewarden API", () => {
 			204,
 			await invitedRegistration.clone().text(),
 		);
+		(bindings as unknown as Record<string, unknown>).SIGNUPS_ALLOWED = "true";
 
 		const replayInvite = await request("/api/accounts/register", {
 			method: "POST",

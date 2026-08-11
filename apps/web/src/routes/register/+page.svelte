@@ -1,7 +1,7 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { onMount } from "svelte";
-import { register } from "$lib/services/api";
+import { getRegistrationConfigApi, register } from "$lib/services/api";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import { Label } from "$lib/components/ui/label/index.js";
@@ -24,8 +24,27 @@ let confirmPassword = $state("");
 let hint = $state("");
 let iterations = $state(600000);
 let inviteCode = $state("");
+let adminPassword = $state("");
+let configLoading = $state(true);
+let signupsAllowed = $state(false);
+let invitationsAllowed = $state(false);
+let bootstrapRequired = $state(false);
+let adminPasswordConfigured = $state(false);
 
-onMount(() => { inviteCode = new URLSearchParams(location.search).get("invite")?.trim() ?? ""; });
+onMount(async () => {
+	inviteCode = new URLSearchParams(location.search).get("invite")?.trim() ?? "";
+	try {
+		const config = await getRegistrationConfigApi();
+		signupsAllowed = config.signupsAllowed;
+		invitationsAllowed = config.invitationsAllowed;
+		bootstrapRequired = config.bootstrapRequired;
+		adminPasswordConfigured = config.adminPasswordConfigured;
+	} catch (err: any) {
+		error = err.message || "无法加载注册配置。";
+	} finally {
+		configLoading = false;
+	}
+});
 
 let showPassword = $state(false);
 let showConfirmPassword = $state(false);
@@ -35,11 +54,20 @@ let success = $state(false);
 
 let isPasswordMatch = $derived(password === confirmPassword);
 let isPasswordLengthValid = $derived(password.length >= 8);
+let registrationAvailable = $derived(
+	bootstrapRequired ||
+		signupsAllowed ||
+		(invitationsAllowed && Boolean(inviteCode.trim())),
+);
 
 async function handleSubmit(e: SubmitEvent) {
 	e.preventDefault();
 	if (!email || !password || !confirmPassword) {
 		error = "请填写所有必填字段。";
+		return;
+	}
+	if (bootstrapRequired && !adminPassword) {
+		error = "首次创建管理员账号需要部署管理员密码。";
 		return;
 	}
 
@@ -62,7 +90,15 @@ async function handleSubmit(e: SubmitEvent) {
 	error = "";
 
 	try {
-		await register(email, password, name, hint, iterations, inviteCode);
+		await register(
+			email,
+			password,
+			name,
+			hint,
+			iterations,
+			inviteCode,
+			adminPassword,
+		);
 		success = true;
 		setTimeout(() => {
 			goto("/login");
@@ -99,6 +135,15 @@ async function handleSubmit(e: SubmitEvent) {
 					<p class="text-sm">您的零知识密码库已初始化。正在为您跳转到登录页面...</p>
 				</div>
 			{:else}
+				{#if !configLoading && bootstrapRequired && !adminPasswordConfigured}
+					<div class="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm border border-destructive/20">
+						服务端尚未配置 ADMIN_PASSWORD，无法安全创建首个管理员账号。
+					</div>
+				{:else if !configLoading && !registrationAvailable}
+					<div class="mb-4 p-3 rounded-lg bg-muted text-muted-foreground text-sm border">
+						公开注册已关闭。请填写有效邀请码，或联系管理员开启注册。
+					</div>
+				{/if}
 				{#if error}
 					<div class="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm flex items-start gap-2.5 border border-destructive/20 animate-in fade-in slide-in-from-top-1 duration-200">
 						<ShieldAlert class="size-4 shrink-0 mt-0.5" />
@@ -107,7 +152,11 @@ async function handleSubmit(e: SubmitEvent) {
 				{/if}
 
 				<form onsubmit={handleSubmit} class="space-y-4">
-					{#if inviteCode}<div class="space-y-2"><Label for="invite-code">邀请码</Label><Input id="invite-code" bind:value={inviteCode} autocomplete="off" /></div>{/if}
+					{#if bootstrapRequired}
+						<div class="space-y-2"><Label for="admin-password">部署管理员密码 <span class="text-destructive">*</span></Label><Input id="admin-password" type="password" bind:value={adminPassword} autocomplete="current-password" disabled={loading} required /></div>
+					{:else if invitationsAllowed}
+						<div class="space-y-2"><Label for="invite-code">邀请码（可选）</Label><Input id="invite-code" bind:value={inviteCode} autocomplete="off" disabled={loading} /></div>
+					{/if}
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 						<div class="space-y-2">
 							<Label for="email">电子邮件地址 <span class="text-destructive">*</span></Label>
@@ -238,7 +287,7 @@ async function handleSubmit(e: SubmitEvent) {
 						</p>
 					</div>
 
-					<Button type="submit" class="w-full mt-2" disabled={loading}>
+					<Button type="submit" class="w-full mt-2" disabled={loading || configLoading || !registrationAvailable || (bootstrapRequired && !adminPasswordConfigured)}>
 						{#if loading}
 							<div class="size-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2"></div>
 							正在本地派生加密密钥...

@@ -13,6 +13,22 @@ npm run deploy
 npm run cf-typegen
 ```
 
+# Registration policy
+
+The first account is always the administrator and requires a deployment secret:
+
+```sh
+wrangler secret put ADMIN_PASSWORD
+```
+
+`ADMIN_PASSWORD` is compared in constant time, is never stored in D1, and is
+never returned by `/api/config`. Use a unique, randomly generated secret.
+
+`SIGNUPS_ALLOWED` controls registration without an invite and defaults to
+`false`. `INVITATIONS_ALLOWED` controls registration with an active, unexpired
+one-time invite and defaults to `true`. Set both as Worker variables. Neither
+setting bypasses the deployment password required to create the first account.
+
 Pass the `CloudflareBindings` as generics when instantiating `Hono`:
 
 ```ts
