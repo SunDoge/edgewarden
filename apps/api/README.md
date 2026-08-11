@@ -19,6 +19,55 @@ Pass the `CloudflareBindings` as generics when instantiating `Hono`:
 // src/index.ts
 const app = new Hono<{ Bindings: CloudflareBindings }>()
 ```
+
+# Blob storage
+
+R2 is the default backend for encrypted attachments and attachment-inclusive
+backups. Set `ATTACHMENT_STORAGE` to `r2` and bind `ATTACHMENTS_R2`.
+
+For accounts that cannot enable R2, bind `ATTACHMENTS_KV` and set
+`ATTACHMENT_STORAGE` to `kv`. KV remains a compatibility backend and limits each
+object to 25 MiB. When both bindings exist, reads fall back to the other backend
+to support migrations, while new writes follow `ATTACHMENT_STORAGE` (R2 by
+default) and deletes remove both copies.
+
+# Observability
+
+Workers Logs is enabled in `wrangler.jsonc` with 10% head sampling. Invocation
+logs are operational diagnostics only. Security audit events remain in D1. Do
+not add email addresses, credentials, tokens, vault ciphertext, or raw request
+bodies to `console` output.
+
+# D1 point-in-time recovery
+
+D1 Time Travel is always enabled for production D1 databases. The Workers Free
+plan retains seven days of history. Before a risky migration, record the current
+bookmark:
+
+```sh
+wrangler d1 time-travel info edgewarden-db
+```
+
+To inspect the bookmark for a UTC/RFC3339 timestamp:
+
+```sh
+wrangler d1 time-travel info edgewarden-db \
+  --timestamp="2026-08-11T05:00:00Z"
+```
+
+Restoring overwrites the production database and cancels in-flight queries.
+Stop application writes, record the current bookmark so the restore can be
+undone, verify the target timestamp, and then run one of:
+
+```sh
+wrangler d1 time-travel restore edgewarden-db --bookmark=BOOKMARK
+wrangler d1 time-travel restore edgewarden-db --timestamp=UNIX_TIMESTAMP
+```
+
+Afterward, verify user, cipher, attachment metadata, and audit-log counts before
+resuming writes. Time Travel covers D1 only; restore R2/KV objects from an
+attachment-inclusive Edgewarden backup when blob data also needs recovery.
+
 # Turnstile login protection
 
 Password login supports optional Cloudflare Turnstile verification. Configure both values in the Worker environment:

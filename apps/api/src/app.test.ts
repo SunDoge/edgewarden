@@ -174,6 +174,59 @@ describe("Edgewarden API", () => {
 		}
 	});
 
+	test("caches validated public website icons at the edge", async () => {
+		const originalFetch = globalThis.fetch;
+		const originalCaches = Object.getOwnPropertyDescriptor(
+			globalThis,
+			"caches",
+		);
+		const cachedResponses = new Map<string, Response>();
+		let upstreamRequests = 0;
+		Object.defineProperty(globalThis, "caches", {
+			configurable: true,
+			value: {
+				default: {
+					match: async (key: Request) => cachedResponses.get(key.url)?.clone(),
+					put: async (key: Request, response: Response) => {
+						cachedResponses.set(key.url, response.clone());
+					},
+				},
+			},
+		});
+		globalThis.fetch = async () => {
+			upstreamRequests += 1;
+			return new Response(new Uint8Array([137, 80, 78, 71]), {
+				headers: {
+					"content-type": "image/png",
+					"content-length": "4",
+				},
+			});
+		};
+
+		try {
+			const first = await request("/icons/example.com/icon.png");
+			const second = await request("/icons/example.com/icon.png");
+			assert.equal(first.status, 200);
+			assert.equal(second.status, 200);
+			assert.equal(upstreamRequests, 1);
+			assert.equal(
+				first.headers.get("cache-control"),
+				"public, max-age=604800",
+			);
+			assert.deepEqual(
+				new Uint8Array(await second.arrayBuffer()),
+				new Uint8Array([137, 80, 78, 71]),
+			);
+		} finally {
+			globalThis.fetch = originalFetch;
+			if (originalCaches) {
+				Object.defineProperty(globalThis, "caches", originalCaches);
+			} else {
+				delete (globalThis as { caches?: CacheStorage }).caches;
+			}
+		}
+	});
+
 	test("rejects invalid registration payloads through Valibot", async () => {
 		const response = await request("/api/accounts/register", {
 			method: "POST",
