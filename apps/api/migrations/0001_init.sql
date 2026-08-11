@@ -445,6 +445,8 @@ CREATE TABLE IF NOT EXISTS auth_requests (
   FOREIGN KEY (organization_id)   REFERENCES organizations(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_auth_requests_user_created ON auth_requests(user_id, creation_date);
+CREATE INDEX IF NOT EXISTS idx_auth_requests_creation_date ON auth_requests(creation_date);
+-- scheduled cleanup
 CREATE INDEX IF NOT EXISTS idx_auth_requests_user_pending ON auth_requests(
   user_id,
   approved,
