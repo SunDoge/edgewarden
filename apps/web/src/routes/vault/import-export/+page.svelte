@@ -3,7 +3,16 @@ import { onMount } from "svelte";
 import { goto } from "$app/navigation";
 import { vault, syncVaultData } from "$lib/stores/vault.svelte";
 import { importCiphersApi } from "$lib/services/api";
-import { buildBitwardenCsv, buildBitwardenJson, buildPlainExportDocument, encryptTransferDocument, parseVaultImport, type TransferDocument } from "$lib/services/vault-transfer";
+import {
+	buildBitwardenCsv,
+	buildBitwardenJson,
+	buildPlainExportDocument,
+	encryptTransferDocument,
+	inspectEncryptedVaultImport,
+	parseVaultImport,
+	parseVaultImportFile,
+	type TransferDocument,
+} from "$lib/services/vault-transfer";
 import { Button } from "$lib/components/ui/button/index.js";
 import {
 	ArrowLeft,
@@ -21,6 +30,8 @@ let files = $state<FileList | null>(null);
 let importFormat = $state<"json" | "csv">("json");
 let exportFormat = $state<"json" | "csv">("json");
 let pendingImport = $state<TransferDocument | null>(null);
+let encryptedImport = $state(false);
+let importPassword = $state("");
 const MAX_IMPORT_BYTES = 32 * 1024 * 1024;
 
 onMount(() => {
@@ -44,8 +55,14 @@ function handleExport() {
 
 	try {
 		const exportData = buildPlainExportDocument(vault.folders, vault.ciphers);
-		const content = exportFormat === "csv" ? buildBitwardenCsv(exportData) : buildBitwardenJson(exportData);
-		const blob = new Blob([content], { type: exportFormat === "csv" ? "text/csv;charset=utf-8" : "application/json" });
+		const content =
+			exportFormat === "csv"
+				? buildBitwardenCsv(exportData)
+				: buildBitwardenJson(exportData);
+		const blob = new Blob([content], {
+			type:
+				exportFormat === "csv" ? "text/csv;charset=utf-8" : "application/json",
+		});
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement("a");
 		a.href = url;
@@ -62,9 +79,38 @@ function handleExport() {
 async function prepareImport() {
 	errorMsg = "";
 	pendingImport = null;
+	encryptedImport = false;
+	importPassword = "";
 	if (!files?.[0]) return;
-	if (files[0].size > MAX_IMPORT_BYTES) { errorMsg = "导入文件不能超过 32 MiB。"; return; }
-	try { pendingImport = parseVaultImport(await files[0].text(), importFormat); } catch (e) { errorMsg = "解析失败: " + (e instanceof Error ? e.message : e); }
+	if (files[0].size > MAX_IMPORT_BYTES) {
+		errorMsg = "导入文件不能超过 32 MiB。";
+		return;
+	}
+	try {
+		const text = await files[0].text();
+		if (importFormat === "json") {
+			const encryptedType = inspectEncryptedVaultImport(text);
+			if (encryptedType === "account-restricted")
+				throw new Error(
+					"账户限制型加密 JSON 不能跨服务器导入，请改用密码保护型加密导出",
+				);
+			if (encryptedType === "password-protected") {
+				encryptedImport = true;
+				return;
+			}
+		}
+		pendingImport = parseVaultImport(text, importFormat);
+	} catch (e) {
+		errorMsg = "解析失败: " + (e instanceof Error ? e.message : e);
+	}
+}
+
+function resetImportSelection() {
+	files = null;
+	pendingImport = null;
+	encryptedImport = false;
+	importPassword = "";
+	errorMsg = "";
 }
 
 // Client-side import function
@@ -79,7 +125,13 @@ async function handleImport() {
 
 	importing = true;
 	try {
-		const importedData = pendingImport ?? parseVaultImport(await files[0].text(), importFormat);
+		const importedData =
+			pendingImport ??
+			(await parseVaultImportFile(
+				await files[0].text(),
+				importFormat,
+				importPassword,
+			));
 		if (importedData.folders.length === 0 && importedData.items.length === 0) {
 			throw new Error("导入的文件中没有发现任何文件夹或密码项。");
 		}
@@ -88,7 +140,11 @@ async function handleImport() {
 			throw new Error("加密密钥未就绪，请重新解锁保险库。");
 		}
 
-		const encryptedPayload = await encryptTransferDocument(importedData, vault.symEncKey, vault.symMacKey);
+		const encryptedPayload = await encryptTransferDocument(
+			importedData,
+			vault.symEncKey,
+			vault.symMacKey,
+		);
 		await importCiphersApi(encryptedPayload);
 
 		// 4. Reload local vault data
@@ -97,6 +153,8 @@ async function handleImport() {
 		successMsg = `导入成功！已成功导入 ${encryptedPayload.folders.length} 个文件夹和 ${encryptedPayload.ciphers.length} 个密码项。`;
 		files = null;
 		pendingImport = null;
+		encryptedImport = false;
+		importPassword = "";
 	} catch (e: any) {
 		errorMsg = "导入失败: " + (e.message || e);
 	} finally {
@@ -149,7 +207,7 @@ async function handleImport() {
 					</div>
 					<div>
 						<h3 class="font-bold text-slate-800 dark:text-slate-100">导入密码数据</h3>
-						<p class="text-xs text-slate-400">导入 Bitwarden 未加密导出文件</p>
+						<p class="text-xs text-slate-400">导入 Bitwarden JSON 或 CSV</p>
 					</div>
 				</div>
 
@@ -161,15 +219,15 @@ async function handleImport() {
 						<div class="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg flex items-center gap-3">
 							<FileCode class="size-8 text-primary" />
 							<div>
-								<p class="text-sm font-semibold text-slate-800 dark:text-slate-200">Bitwarden 未加密导出</p>
-								<p class="text-[10px] text-slate-400">支持 JSON 和 CSV</p>
+								<p class="text-sm font-semibold text-slate-800 dark:text-slate-200">Bitwarden Vault 导出</p>
+								<p class="text-[10px] text-slate-400">支持密码保护 JSON、未加密 JSON 和 CSV</p>
 							</div>
 						</div>
 					</div>
 
 					<div class="space-y-1.5">
 						<span class="text-xs font-semibold text-slate-400">文件格式</span>
-						<select bind:value={importFormat} onchange={() => { files = null; pendingImport = null; }} class="h-9 w-full rounded-md border bg-background px-3 text-sm"><option value="json">Bitwarden JSON</option><option value="csv">Bitwarden CSV</option></select>
+						<select bind:value={importFormat} onchange={resetImportSelection} class="h-9 w-full rounded-md border bg-background px-3 text-sm"><option value="json">Bitwarden JSON（密码保护或未加密）</option><option value="csv">Bitwarden CSV</option></select>
 					</div>
 
 					<div class="space-y-1.5">
@@ -184,11 +242,12 @@ async function handleImport() {
 						/>
 					</div>
 
-					{#if pendingImport}<div class="rounded-md border bg-muted p-3 text-xs"><p class="font-medium">导入预览</p><p>{pendingImport.folders.length} 个文件夹，{pendingImport.items.length} 个条目</p>{#if pendingImport.warnings.length}<p class="mt-1 text-amber-600">{pendingImport.warnings.length} 条格式警告</p>{/if}</div>{/if}
+						{#if pendingImport}<div class="rounded-md border bg-muted p-3 text-xs"><p class="font-medium">导入预览</p><p>{pendingImport.folders.length} 个文件夹，{pendingImport.items.length} 个条目</p>{#if pendingImport.warnings.length}<p class="mt-1 text-amber-600">{pendingImport.warnings.length} 条格式警告</p>{/if}</div>{/if}
+						{#if encryptedImport}<div class="space-y-1.5"><label for="import-password" class="text-xs font-semibold text-slate-400">加密导出密码</label><input id="import-password" type="password" autocomplete="off" bind:value={importPassword} class="h-9 w-full rounded-md border bg-background px-3 text-sm" placeholder="仅在浏览器内用于解密" /><p class="text-[10px] text-slate-400">密码和解密后的内容不会发送到服务器。</p></div>{/if}
 
 					<Button
 						class="w-full bg-primary font-semibold py-2"
-						disabled={importing || !pendingImport}
+						disabled={importing || (!pendingImport && !(encryptedImport && importPassword))}
 						onclick={handleImport}
 					>
 						{#if importing}
