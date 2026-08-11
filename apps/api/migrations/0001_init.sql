@@ -180,10 +180,6 @@ CREATE TABLE IF NOT EXISTS ciphers (
   -- client-encrypted (NOT NULL for integrity)
   notes TEXT,
   -- client-encrypted
-  fields TEXT,
-  -- JSON array of custom encrypted fields (kept separate like Vaultwarden)
-  password_history TEXT,
-  -- JSON array of encrypted password-history entries
   favorite INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1)),
   -- All type-specific fields are in data (client-encrypted JSON blob)
   data TEXT NOT NULL,
