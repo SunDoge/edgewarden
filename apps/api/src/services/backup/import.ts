@@ -1,13 +1,12 @@
-import { unzipSync } from "fflate";
+import type { BlobStore } from "../blob-store";
+import {
+	type BackupPayload,
+	parseBackupArchive,
+} from "./archive";
 import {
 	BACKUP_SETTINGS_CONFIG_KEY,
 	normalizeImportedBackupSettingsValue,
 } from "./config";
-import {
-	type BackupManifestAttachmentBlob,
-	type BackupPayload,
-	parseBackupArchive,
-} from "./archive";
 
 type SqlRow = Record<string, string | number | null>;
 type BackupTableName =
@@ -34,8 +33,6 @@ const BACKUP_TABLES: BackupTableName[] = [
 	"device_trust_tokens",
 	"sends",
 ];
-
-const KV_MAX_OBJECT_BYTES = 25 * 1024 * 1024; // 25 MB Cloudflare KV limit
 
 function shadowTableName(table: BackupTableName): string {
 	return `${table}__restore`;
@@ -106,7 +103,7 @@ function buildShadowTableCreateSql(
 	table: BackupTableName,
 ): string {
 	const tablePattern = new RegExp(
-		`^CREATE TABLE(?:\\s+IF NOT EXISTS)?\\s+(?:\"${table}\"|${table})(?=\\s*\\()`,
+		`^CREATE TABLE(?:\\s+IF NOT EXISTS)?\\s+(?:"${table}"|${table})(?=\\s*\\()`,
 		"i",
 	);
 	let next = createSql.replace(
@@ -120,7 +117,7 @@ function buildShadowTableCreateSql(
 	}
 	for (const currentTable of BACKUP_TABLES) {
 		const referencePattern = new RegExp(
-			`\\bREFERENCES\\s+(?:\"${currentTable}\"|${currentTable})(?=\\s*\\()`,
+			`\\bREFERENCES\\s+(?:"${currentTable}"|${currentTable})(?=\\s*\\()`,
 			"gi",
 		);
 		next = next.replace(
@@ -376,11 +373,11 @@ async function importPreparedBackupRows(
 }
 
 function prepareImportPayloadForTarget(
-	attachmentsKv: KVNamespace | undefined,
+	blobStore: BlobStore | null,
 	payload: BackupPayload,
 	files: Record<string, Uint8Array>,
 ): PreparedBackupImportPayload {
-	if (!attachmentsKv) {
+	if (!blobStore) {
 		const skippedItems = (payload.db.attachments || []).map((row) => {
 			const cipherId = String(row.cipher_id || "").trim();
 			const attachmentId = String(row.id || "").trim();
@@ -415,7 +412,11 @@ function prepareImportPayloadForTarget(
 	for (const entry of Object.keys(files)) {
 		if (!entry.endsWith(".bin")) continue;
 		const sizeBytes = files[entry].byteLength;
-		if (sizeBytes <= KV_MAX_OBJECT_BYTES) continue;
+		if (
+			blobStore.maxObjectBytes === null ||
+			sizeBytes <= blobStore.maxObjectBytes
+		)
+			continue;
 		if (entry.startsWith("attachments/")) {
 			oversizedAttachmentPaths.add(entry);
 			skippedItems.push({ kind: "attachment", path: entry, sizeBytes });
@@ -477,14 +478,14 @@ async function runInsertBatch(
 }
 
 async function restoreBlobFiles(
-	attachmentsKv: KVNamespace | undefined,
+	blobStore: BlobStore | null,
 	db: BackupPayload["db"],
 	files: Record<string, Uint8Array>,
 ): Promise<AttachmentRestoreResult> {
 	const restoredAttachments: SqlRow[] = [];
 	const skippedItems: BackupImportSkipSummary["items"] = [];
 
-	if (!attachmentsKv) {
+	if (!blobStore) {
 		return {
 			imported: 0,
 			restoredAttachments: [],
@@ -515,7 +516,10 @@ async function restoreBlobFiles(
 			continue;
 		}
 		try {
-			await attachmentsKv.put(key, bytes);
+			await blobStore.put(key, bytes, {
+				size: bytes.byteLength,
+				contentType: "application/octet-stream",
+			});
 			restoredAttachments.push(row);
 		} catch {
 			skippedItems.push({
@@ -561,14 +565,14 @@ async function removeAttachmentRows(
 }
 
 async function cleanupOrphanedBlobFiles(
-	attachmentsKv: KVNamespace | undefined,
+	blobStore: BlobStore | null,
 	beforeKeys: Set<string>,
 	afterKeys: Set<string>,
 ): Promise<void> {
-	if (!attachmentsKv) return;
+	if (!blobStore) return;
 	const staleKeys = Array.from(beforeKeys).filter((key) => !afterKeys.has(key));
 	for (const key of staleKeys) {
-		await attachmentsKv.delete(key);
+		await blobStore.delete(key);
 	}
 }
 
@@ -767,7 +771,7 @@ async function importBackupRows(
 export async function importBackupArchiveBytes(
 	archiveBytes: Uint8Array,
 	dbBinding: D1Database,
-	attachmentsKv: KVNamespace | undefined,
+	blobStore: BlobStore | null,
 	jwtSecret: string,
 	actorUserId: string,
 	replaceExisting: boolean,
@@ -787,7 +791,7 @@ export async function importBackupArchiveBytes(
 	}
 
 	const prepared = prepareImportPayloadForTarget(
-		attachmentsKv,
+		blobStore,
 		parsed.payload,
 		parsed.files,
 	);
@@ -850,7 +854,7 @@ export async function importBackupArchiveBytes(
 			stageDetail: "txt_backup_restore_progress_local_files_detail",
 			replaceExisting,
 		});
-		const restored = await restoreBlobFiles(attachmentsKv, db, parsed.files);
+		const restored = await restoreBlobFiles(blobStore, db, parsed.files);
 		const restoredAttachmentKeys = new Set(
 			(restored.restoredAttachments || []).map(attachmentRowKey),
 		);
@@ -888,7 +892,7 @@ export async function importBackupArchiveBytes(
 			);
 			if (nextBlobKeys) {
 				await cleanupOrphanedBlobFiles(
-					attachmentsKv,
+					blobStore,
 					previousBlobKeys,
 					nextBlobKeys,
 				).catch(() => undefined);
@@ -949,7 +953,7 @@ export async function importBackupArchiveBytes(
 export async function importRemoteBackupArchiveBytes(
 	archiveBytes: Uint8Array,
 	dbBinding: D1Database,
-	attachmentsKv: KVNamespace | undefined,
+	blobStore: BlobStore | null,
 	jwtSecret: string,
 	actorUserId: string,
 	replaceExisting: boolean,
@@ -968,7 +972,7 @@ export async function importRemoteBackupArchiveBytes(
 		parsed.payload.db.webauthn_credentials = [];
 	}
 
-	const storageKind = attachmentsKv ? "kv" : null;
+	const storageKind = blobStore?.kind ?? null;
 	const nextAttachments: SqlRow[] = [];
 	const skippedItems: BackupImportSkipSummary["items"] = [];
 
@@ -981,7 +985,11 @@ export async function importRemoteBackupArchiveBytes(
 			nextAttachments.push(row);
 			continue;
 		}
-		if (storageKind === "kv" && sizeBytes > KV_MAX_OBJECT_BYTES) {
+		if (
+			blobStore?.maxObjectBytes !== null &&
+			blobStore?.maxObjectBytes !== undefined &&
+			sizeBytes > blobStore.maxObjectBytes
+		) {
 			skippedItems.push({ kind: "attachment", path, sizeBytes });
 			continue;
 		}
@@ -1061,7 +1069,7 @@ export async function importRemoteBackupArchiveBytes(
 		});
 
 		const restoredAttachments: SqlRow[] = [];
-		if (attachmentsKv) {
+		if (blobStore) {
 			for (const row of db.attachments || []) {
 				const cipherId = String(row.cipher_id || "").trim();
 				const attachmentId = String(row.id || "").trim();
@@ -1078,7 +1086,10 @@ export async function importRemoteBackupArchiveBytes(
 					continue;
 				}
 				try {
-					await attachmentsKv.put(key, bytes);
+					await blobStore.put(key, bytes, {
+						size: bytes.byteLength,
+						contentType: "application/octet-stream",
+					});
 					restoredAttachments.push(row);
 				} catch {
 					skippedItems.push({
@@ -1128,7 +1139,7 @@ export async function importRemoteBackupArchiveBytes(
 			);
 			if (nextBlobKeys) {
 				await cleanupOrphanedBlobFiles(
-					attachmentsKv,
+					blobStore,
 					previousBlobKeys,
 					nextBlobKeys,
 				).catch(() => undefined);

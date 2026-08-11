@@ -1,6 +1,7 @@
 import { D1Dialect } from "@sundoge/kysely-d1";
 import { Kysely, sql } from "kysely";
 import type { DB } from "../../types/db";
+import { createBlobStore } from "../blob-store";
 import {
 	buildBackupArchive,
 	verifyBackupArchiveFileNameChecksum,
@@ -27,10 +28,11 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 export async function runScheduledBackupIfDue(
-	d1: D1Database,
-	jwtSecret: string,
+	env: CloudflareBindings,
 ): Promise<void> {
-	const db = await createBackupDatabase(d1);
+	const db = await createBackupDatabase(env.DB);
+	const jwtSecret = env.JWT_SECRET;
+	const blobStore = createBlobStore(env);
 	try {
 		const settings = await loadBackupSettings(db, jwtSecret, "UTC").catch(
 			() => null,
@@ -57,6 +59,7 @@ export async function runScheduledBackupIfDue(
 
 				const archive = await buildBackupArchive(db, currentTime, {
 					includeAttachments: destination.includeAttachments,
+					blobStore,
 					timeZone: destination.schedule.timezone,
 				});
 				const session = createRemoteBackupTransferSession(destination);

@@ -1,8 +1,8 @@
 import { vValidator } from "@hono/valibot-validator";
 import { factory } from "../http/factory";
 import {
-	BackupExportSchema,
 	BackupBlobQuerySchema,
+	BackupExportSchema,
 	BackupImportSchema,
 	BackupRemoteFileQuerySchema,
 	BackupRemoteQuerySchema,
@@ -30,6 +30,7 @@ import {
 	createRemoteBackupTransferSession,
 	pruneRemoteBackupArchives,
 } from "../services/backup/uploader";
+import { createBlobStore } from "../services/blob-store";
 import { errorResponse } from "../utils/response";
 
 // Helper: Ensure backup attachment blob name is valid
@@ -59,8 +60,10 @@ export const exportBackup = factory.createHandlers(
 		const body = c.req.valid("json");
 
 		try {
+			const blobStore = createBlobStore(c.env);
 			const archive = await buildBackupArchive(db, new Date(), {
 				includeAttachments: !!body?.includeAttachments,
+				blobStore,
 			});
 
 			return new Response(archive.bytes, {
@@ -82,18 +85,18 @@ export const getBackupBlob = factory.createHandlers(
 	vValidator("query", BackupBlobQuerySchema),
 	async (c) => {
 		const blobNameRaw = c.req.valid("query").blobName;
-		const attachmentsKv = c.env.ATTACHMENTS_KV;
-		if (!attachmentsKv) {
+		const blobStore = createBlobStore(c.env);
+		if (!blobStore) {
 			return errorResponse("Attachment storage is not configured", 409);
 		}
 
 		try {
 			const blobName = ensureBackupBlobName(blobNameRaw);
-			const bytes = await attachmentsKv.get(blobName, "arrayBuffer");
-			if (!bytes) {
+			const object = await blobStore.get(blobName);
+			if (!object?.body) {
 				return errorResponse("Backup attachment blob not found", 404);
 			}
-			return new Response(bytes, {
+			return new Response(object.body, {
 				status: 200,
 				headers: {
 					"Content-Type": "application/octet-stream",
@@ -153,6 +156,7 @@ export const runBackup = factory.createHandlers(
 		const destinationId = body.destinationId;
 
 		try {
+			const blobStore = createBlobStore(c.env);
 			const currentSettings = await loadBackupSettings(db, secret, "UTC");
 			const destination = requireBackupDestination(
 				currentSettings,
@@ -172,6 +176,7 @@ export const runBackup = factory.createHandlers(
 			// Build backup zip
 			const archive = await buildBackupArchive(db, now, {
 				includeAttachments: destination.includeAttachments,
+				blobStore,
 				timeZone: destination.schedule.timezone,
 			});
 
@@ -381,7 +386,7 @@ export const restoreRemoteBackup = factory.createHandlers(
 			const result = await importRemoteBackupArchiveBytes(
 				file.bytes,
 				c.env.DB,
-				c.env.ATTACHMENTS_KV,
+				createBlobStore(c.env),
 				secret,
 				user.id,
 				!!replaceExisting,
@@ -439,7 +444,7 @@ export const importBackup = factory.createHandlers(
 			const imported = await importBackupArchiveBytes(
 				archiveBytes,
 				c.env.DB,
-				c.env.ATTACHMENTS_KV,
+				createBlobStore(c.env),
 				secret,
 				user.id,
 				replaceExisting,

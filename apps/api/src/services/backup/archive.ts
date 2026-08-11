@@ -1,6 +1,7 @@
-import { zipSync, unzipSync } from "fflate";
+import { unzipSync, zipSync } from "fflate";
 import type { Kysely } from "kysely";
 import type { DB } from "../../types/db";
+import type { BlobStore } from "../blob-store";
 import { BACKUP_SETTINGS_CONFIG_KEY } from "./config";
 import { exportPortableBackupSettingsEnvelope } from "./settings-crypto";
 
@@ -71,6 +72,7 @@ export interface BackupFileIntegrityCheckResult {
 
 export interface BuildBackupArchiveOptions {
 	includeAttachments?: boolean;
+	blobStore?: BlobStore | null;
 	progress?: BackupArchiveBuildProgressReporter;
 	timeZone?: string;
 }
@@ -190,13 +192,6 @@ function getRequiredZipEntries(db: BackupPayload["db"]): string[] {
 	return entries;
 }
 
-function ensureRowArray(value: unknown, table: string): SqlRow[] {
-	if (!Array.isArray(value)) {
-		throw new Error(`Backup archive table ${table} is invalid`);
-	}
-	return value as SqlRow[];
-}
-
 function createZipEntries(
 	files: Record<string, Uint8Array>,
 ): Record<string, Uint8Array | [Uint8Array, { level: 0 | 1 | 6 }]> {
@@ -300,6 +295,9 @@ export async function buildBackupArchive(
 	options: BuildBackupArchiveOptions = {},
 ): Promise<BackupArchiveBundle> {
 	const includeAttachments = options.includeAttachments !== false;
+	if (includeAttachments && !options.blobStore) {
+		throw new Error("Attachment storage is not configured");
+	}
 	await options.progress?.({
 		step: "collect_data",
 		fileName: "",
@@ -373,7 +371,7 @@ export async function buildBackupArchive(
 		formatVersion: BACKUP_FORMAT_VERSION,
 		exportedAt: date.toISOString(),
 		appVersion: "1.0.0",
-		storageKind: "kv",
+		storageKind: includeAttachments ? (options.blobStore?.kind ?? null) : null,
 		tableCounts: {
 			config: exportedConfigRows.length,
 			users: userRows.length,
@@ -426,6 +424,22 @@ export async function buildBackupArchive(
 			),
 		),
 	};
+
+	if (includeAttachments && options.blobStore) {
+		for (const blob of attachmentBlobs) {
+			const object = await options.blobStore.get(blob.blobName);
+			if (!object?.body) {
+				throw new Error(`Backup attachment blob not found: ${blob.blobName}`);
+			}
+			const bytes = new Uint8Array(
+				await new Response(object.body).arrayBuffer(),
+			);
+			if (bytes.byteLength !== blob.sizeBytes) {
+				throw new Error(`Backup attachment size mismatch: ${blob.blobName}`);
+			}
+			files[blob.blobName] = bytes;
+		}
+	}
 
 	await options.progress?.({
 		step: "package_archive",

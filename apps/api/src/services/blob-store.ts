@@ -7,6 +7,13 @@ interface KVBlobMetadata {
 	customMetadata?: Record<string, string> | null;
 }
 
+type BlobBindings = CloudflareBindings & {
+	ATTACHMENTS_R2?: R2Bucket;
+	ATTACHMENTS?: R2Bucket;
+	ATTACHMENTS_KV?: KVNamespace;
+	ATTACHMENT_STORAGE?: string;
+};
+
 export interface BlobObject {
 	body: ReadableStream | null;
 	size: number;
@@ -19,10 +26,23 @@ export interface PutBlobOptions {
 	customMetadata?: Record<string, string>;
 }
 
+export interface BlobStore {
+	readonly kind: "r2" | "kv";
+	readonly maxObjectBytes: number | null;
+	get(key: string): Promise<BlobObject | null>;
+	put(
+		key: string,
+		value: string | ArrayBuffer | ArrayBufferView | ReadableStream,
+		options: PutBlobOptions,
+	): Promise<void>;
+	delete(key: string): Promise<void>;
+}
+
 function hasR2Storage(
 	env: CloudflareBindings,
 ): env is CloudflareBindings & { ATTACHMENTS_R2: R2Bucket } {
-	return !!(env as any).ATTACHMENTS_R2 || !!(env as any).ATTACHMENTS;
+	const bindings = env as BlobBindings;
+	return !!bindings.ATTACHMENTS_R2 || !!bindings.ATTACHMENTS;
 }
 
 function hasKvStorage(
@@ -34,7 +54,9 @@ function hasKvStorage(
 export function getBlobStorageKind(
 	env: CloudflareBindings,
 ): "r2" | "kv" | null {
-	const configured = String((env as any).ATTACHMENT_STORAGE || "").toLowerCase();
+	const configured = String(
+		(env as BlobBindings).ATTACHMENT_STORAGE || "",
+	).toLowerCase();
 	if (configured === "kv" && hasKvStorage(env)) return "kv";
 	if (configured === "r2" && hasR2Storage(env)) return "r2";
 	if (hasR2Storage(env)) return "r2";
@@ -43,7 +65,8 @@ export function getBlobStorageKind(
 }
 
 function getR2Storage(env: CloudflareBindings): R2Bucket {
-	return ((env as any).ATTACHMENTS_R2 || (env as any).ATTACHMENTS) as R2Bucket;
+	const bindings = env as BlobBindings;
+	return (bindings.ATTACHMENTS_R2 || bindings.ATTACHMENTS) as R2Bucket;
 }
 
 export function getBlobStorageMaxBytes(
@@ -60,7 +83,10 @@ export function getSendFileObjectKey(sendId: string, fileId: string): string {
 	return `sends/${sendId}/${fileId}`;
 }
 
-export function getAttachmentObjectKey(cipherId: string, attachmentId: string): string {
+export function getAttachmentObjectKey(
+	cipherId: string,
+	attachmentId: string,
+): string {
 	return `attachments/${cipherId}/${attachmentId}.bin`;
 }
 
@@ -73,10 +99,29 @@ export async function putBlobObject(
 	const contentType = options.contentType || DEFAULT_CONTENT_TYPE;
 
 	if (getBlobStorageKind(env) === "r2") {
-		await getR2Storage(env).put(key, value, {
+		const putOptions = {
 			httpMetadata: { contentType },
 			customMetadata: options.customMetadata,
-		});
+		};
+		if (value instanceof ReadableStream) {
+			const FixedLengthStreamCtor = (
+				globalThis as typeof globalThis & {
+					FixedLengthStream?: typeof FixedLengthStream;
+				}
+			).FixedLengthStream;
+			if (FixedLengthStreamCtor) {
+				const fixedLength = new FixedLengthStreamCtor(options.size);
+				await Promise.all([
+					value.pipeTo(fixedLength.writable),
+					getR2Storage(env).put(key, fixedLength.readable, putOptions),
+				]);
+			} else {
+				const bytes = await new Response(value).arrayBuffer();
+				await getR2Storage(env).put(key, bytes, putOptions);
+			}
+		} else {
+			await getR2Storage(env).put(key, value, putOptions);
+		}
 		return;
 	}
 
@@ -89,7 +134,7 @@ export async function putBlobObject(
 			contentType,
 			customMetadata: options.customMetadata || null,
 		};
-		await env.ATTACHMENTS_KV.put(key, value as any, { metadata });
+		await env.ATTACHMENTS_KV.put(key, value, { metadata });
 		return;
 	}
 
@@ -144,4 +189,17 @@ export async function deleteBlobObject(
 		hasR2Storage(env) ? getR2Storage(env).delete(key) : Promise.resolve(),
 		hasKvStorage(env) ? env.ATTACHMENTS_KV.delete(key) : Promise.resolve(),
 	]);
+}
+
+export function createBlobStore(env: CloudflareBindings): BlobStore | null {
+	const kind = getBlobStorageKind(env);
+	if (!kind) return null;
+
+	return {
+		kind,
+		maxObjectBytes: kind === "kv" ? KV_MAX_OBJECT_BYTES : null,
+		get: (key) => getBlobObject(env, key),
+		put: (key, value, options) => putBlobObject(env, key, value, options),
+		delete: (key) => deleteBlobObject(env, key),
+	};
 }

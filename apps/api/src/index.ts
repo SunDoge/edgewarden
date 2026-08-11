@@ -63,6 +63,7 @@ export type AppType = typeof app;
 app.notFound((c) => c.json({ message: "Not found", object: "error" }, 404));
 
 import { runScheduledBackupIfDue } from "./services/backup/scheduler";
+
 export { VaultRealtime } from "./durable-objects/vault-realtime";
 
 export default {
@@ -72,6 +73,6 @@ export default {
 		env: CloudflareBindings,
 		ctx: ExecutionContext,
 	) {
-		ctx.waitUntil(runScheduledBackupIfDue(env.DB, env.JWT_SECRET));
+		ctx.waitUntil(runScheduledBackupIfDue(env));
 	},
 };
