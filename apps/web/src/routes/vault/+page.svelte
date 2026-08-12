@@ -37,31 +37,28 @@ import VaultItemList from "$lib/components/vault/VaultItemList.svelte";
 import VaultSidebar from "$lib/components/vault/VaultSidebar.svelte";
 import {
 	archiveCipherApi,
-	archiveCiphersApi,
-	createCipherApi,
 	createFolderApi,
 	deleteAttachmentApi,
 	deleteCipherApi,
-	deleteCiphersApi,
 	deleteFolderApi,
 	deleteFoldersApi,
 	hardDeleteCipherApi,
-	hardDeleteCiphersApi,
 	isLoggedIn,
 	restoreCipherApi,
-	restoreCiphersApi,
 	unarchiveCipherApi,
-	unarchiveCiphersApi,
-	updateCipherApi,
 	updateFolderApi,
 } from "$lib/services/api";
 import {
 	downloadVaultAttachment,
 	uploadVaultAttachment,
 } from "$lib/services/vault-attachments";
-import { encryptCipher } from "$lib/services/cipher-crypto";
-import { buildCipherPayload } from "$lib/services/cipher-draft";
 import { calcTotpNow, encryptStr } from "$lib/services/crypto";
+import {
+	applyVaultBulkAction,
+	saveVaultCipher,
+	updateEncryptedVaultCipher,
+	type VaultBulkAction,
+} from "$lib/services/vault-cipher-actions";
 import {
 	createVaultEditorForm,
 	vaultCipherToEditorForm,
@@ -367,60 +364,13 @@ function cancelEdit() {
 
 async function handleSaveCipher() {
 	try {
-		const payload = buildCipherPayload(
-			{
-				type: editor.type,
-				name: editor.name,
-				notes: editor.notes,
-				favorite: editor.favorite,
-				folderId: editor.folderId,
-				login: {
-					username: editor.loginUsername,
-					password: editor.loginPassword,
-					uri: editor.loginUri,
-					uris: editor.loginUris,
-					totp: editor.loginTotp,
-				},
-				card: {
-					cardholderName: editor.cardholderName,
-					number: editor.cardNumber,
-				},
-				identity: {
-					firstName: editor.firstName,
-					lastName: editor.lastName,
-					number: editor.identityNumber,
-				},
-				customFields: editor.customFields,
-				extraData: editor.extraData,
-			},
+		await saveVaultCipher({
+			editor,
 			selectedItem,
+			isCreating,
 			isEditing,
-		);
-		const ownerKey = editor.organizationId
-			? getOrganizationKey(editor.organizationId)
-			: vault.symEncKey && vault.symMacKey
-				? { encKey: vault.symEncKey, macKey: vault.symMacKey }
-				: null;
-		if (!ownerKey) {
-			throw new Error("密钥未就绪，请重新解锁保险库");
-		}
-		if (editor.organizationId && !editor.collectionIds.length)
-			throw new Error("组织条目至少需要选择一个集合");
-		const encryptedPayload = await encryptCipher(
-			{
-				...payload,
-				folderId: editor.organizationId ? null : payload.folderId,
-				organizationId: editor.organizationId,
-				collectionIds: editor.organizationId ? editor.collectionIds : [],
-			},
-			ownerKey.encKey,
-			ownerKey.macKey,
-		);
-		if (isCreating) {
-			await createCipherApi(encryptedPayload);
-		} else if (isEditing && selectedItem) {
-			await updateCipherApi(selectedItem.id, encryptedPayload);
-		}
+			resolveOwnerKey,
+		});
 
 		isCreating = false;
 		isEditing = false;
@@ -503,16 +453,12 @@ function clearSelection() {
 }
 
 async function runBulkAction(
-	action: "delete" | "restore" | "permanent" | "archive" | "unarchive",
+	action: VaultBulkAction,
 ) {
 	if (!selectedIdList.length) return;
 	const items = selectedIdList
 		.map((id) => vault.ciphers.find((cipher) => cipher.id === id))
 		.filter(Boolean) as any[];
-	if (items.some((item) => item.readOnly)) {
-		alert("选择中包含只读组织条目");
-		return;
-	}
 	if (
 		(action === "delete" || action === "permanent") &&
 		!confirm(
@@ -524,24 +470,7 @@ async function runBulkAction(
 		return;
 	deleteLoading = true;
 	try {
-		const personalIds = items
-			.filter((item) => !item.organizationId)
-			.map((item) => item.id);
-		const organizationItems = items.filter((item) => item.organizationId);
-		if (personalIds.length) {
-			if (action === "restore") await restoreCiphersApi(personalIds);
-			else if (action === "archive") await archiveCiphersApi(personalIds);
-			else if (action === "unarchive") await unarchiveCiphersApi(personalIds);
-			else if (action === "permanent") await hardDeleteCiphersApi(personalIds);
-			else await deleteCiphersApi(personalIds);
-		}
-		for (const item of organizationItems) {
-			if (action === "restore") await restoreCipherApi(item.id);
-			else if (action === "archive") await archiveCipherApi(item.id);
-			else if (action === "unarchive") await unarchiveCipherApi(item.id);
-			else if (action === "permanent") await hardDeleteCipherApi(item.id);
-			else await deleteCipherApi(item.id);
-		}
+		await applyVaultBulkAction(action, items);
 		clearSelection();
 		selectedItem = null;
 		await syncVaultData();
@@ -552,23 +481,12 @@ async function runBulkAction(
 	}
 }
 
-async function encryptAndUpdateItem(
-	item: any,
-	changes: Record<string, unknown>,
-) {
-	if (item.readOnly) throw new Error("该组织条目为只读");
-	const ownerKey = item.organizationId
-		? getOrganizationKey(item.organizationId)
+function resolveOwnerKey(organizationId?: string | null) {
+	return organizationId
+		? getOrganizationKey(organizationId)
 		: vault.symEncKey && vault.symMacKey
 			? { encKey: vault.symEncKey, macKey: vault.symMacKey }
 			: null;
-	if (!ownerKey) throw new Error("保险库密钥不可用");
-	const encrypted = await encryptCipher(
-		{ ...item, ...changes },
-		ownerKey.encKey,
-		ownerKey.macKey,
-	);
-	await updateCipherApi(item.id, encrypted);
 }
 
 async function moveSelectedItems() {
@@ -579,7 +497,7 @@ async function moveSelectedItems() {
 			if (item?.organizationId)
 				throw new Error("组织条目使用集合，不能移动到个人文件夹");
 			if (item && !item.deletedDate)
-				await encryptAndUpdateItem(item, { folderId: moveFolderId });
+				await updateEncryptedVaultCipher(item, { folderId: moveFolderId }, resolveOwnerKey);
 		}
 		moveDialogOpen = false;
 		clearSelection();
@@ -594,7 +512,7 @@ async function moveSelectedItems() {
 async function toggleFavorite(item: any) {
 	deleteLoading = true;
 	try {
-		await encryptAndUpdateItem(item, { favorite: !item.favorite });
+		await updateEncryptedVaultCipher(item, { favorite: !item.favorite }, resolveOwnerKey);
 		await syncVaultData();
 		selectedItem =
 			vault.ciphers.find((cipher) => cipher.id === item.id) ?? null;
