@@ -2,10 +2,7 @@
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
 import {
-	deleteAllDevicesApi,
 	deleteAccountApi,
-	deleteDeviceApi,
-	deleteDevicesApi,
 	disableTwoFactorApi,
 	enableAuthenticatorApi,
 	changeMasterPasswordApi,
@@ -15,7 +12,6 @@ import {
 	fetchRecoveryCodeApi,
 	getAuthenticatorApi,
 	isLoggedIn,
-	renameDeviceApi,
 	rotateApiKeyApi,
 	updateProfileApi,
 } from "$lib/services/api";
@@ -26,14 +22,14 @@ import {
 import { vault, syncVaultData, logout } from "$lib/stores/vault.svelte";
 import { Button } from "$lib/components/ui/button/index.js";
 import AccountPasskeys from "$lib/components/settings/AccountPasskeys.svelte";
+import AccountSecurityDialogs from "$lib/components/settings/AccountSecurityDialogs.svelte";
 import AuthRequestSettings from "$lib/components/settings/AuthRequestSettings.svelte";
+import DeviceManager from "$lib/components/settings/DeviceManager.svelte";
 import TwoFactorPasskeys from "$lib/components/settings/TwoFactorPasskeys.svelte";
 import YubikeySettings from "$lib/components/settings/YubikeySettings.svelte";
 import { Input } from "$lib/components/ui/input/index.js";
 import * as Field from "$lib/components/ui/field/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
-import * as Dialog from "$lib/components/ui/dialog/index.js";
-import * as Table from "$lib/components/ui/table/index.js";
 import * as Select from "$lib/components/ui/select/index.js";
 import { Badge } from "$lib/components/ui/badge/index.js";
 import {
@@ -48,12 +44,9 @@ import {
 	Copy,
 	KeyRound,
 	LoaderCircle,
-	Pencil,
 	RefreshCw,
 	ShieldCheck,
-	Trash2,
 } from "@lucide/svelte";
-import { getCurrentDeviceIdentifier } from "$lib/services/client-device";
 
 let loading = $state(true);
 let busy = $state("");
@@ -64,18 +57,8 @@ let devices = $state<any[]>([]);
 let apiKey = $state("");
 let name = $state("");
 let hint = $state("");
-let editingDevice = $state<any>(null);
-let deviceName = $state("");
-let removeAllDevicesOpen = $state(false);
-let removeAllDevicesPassword = $state("");
 let deleteAccountOpen = $state(false);
 let deleteAccountPassword = $state("");
-let selectedDeviceIds = $state<Record<string, boolean>>({});
-let selectedDeviceIdList = $derived(
-	devices
-		.filter((device) => selectedDeviceIds[device.id])
-		.map((device) => device.id),
-);
 let totpOpen = $state(false);
 let totpKey = $state("");
 let totpToken = $state("");
@@ -178,88 +161,6 @@ async function rotateApiKey() {
 async function copy(value: string) {
 	await navigator.clipboard.writeText(value);
 	message = "已复制到剪贴板";
-}
-
-function startRename(device: any) {
-	editingDevice = device;
-	deviceName = device.name ?? "";
-}
-
-async function saveDeviceName() {
-	if (!editingDevice || !deviceName.trim()) return;
-	busy = `device-${editingDevice.id}`;
-	try {
-		await renameDeviceApi(editingDevice.id, deviceName.trim());
-		editingDevice = null;
-		devices = (await fetchDevicesApi()).data;
-		message = "设备名称已更新";
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
-}
-
-async function removeDevice(device: any) {
-	if (!confirm(`移除设备“${device.name}”？`)) return;
-	busy = `device-${device.id}`;
-	try {
-		await deleteDeviceApi(device.id);
-		devices = devices.filter((item) => item.id !== device.id);
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
-}
-
-async function removeSelectedDevices() {
-	if (
-		!selectedDeviceIdList.length ||
-		!confirm(`移除选中的 ${selectedDeviceIdList.length} 台设备并撤销其会话？`)
-	)
-		return;
-	const removesCurrent = selectedDeviceIdList.includes(
-		getCurrentDeviceIdentifier(),
-	);
-	busy = "selected-devices";
-	try {
-		await deleteDevicesApi(selectedDeviceIdList);
-		devices = devices.filter((device) => !selectedDeviceIds[device.id]);
-		selectedDeviceIds = {};
-		message = "已移除选中设备";
-		if (removesCurrent) {
-			await logout();
-			await goto("/login?reason=device-removed");
-		}
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
-}
-
-function toggleAllDevices(checked: boolean) {
-	selectedDeviceIds = checked
-		? Object.fromEntries(devices.map((device) => [device.id, true]))
-		: {};
-}
-
-async function removeAllDevices() {
-	if (!removeAllDevicesPassword) return;
-	busy = "devices";
-	try {
-		await deleteAllDevicesApi(await passwordHash(removeAllDevicesPassword));
-		devices = [];
-		removeAllDevicesOpen = false;
-		removeAllDevicesPassword = "";
-		await logout();
-		await goto("/login?reason=devices-removed");
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
 }
 
 async function removeAccount() {
@@ -467,14 +368,13 @@ async function changeMasterPassword() {
 			onError={fail}
 		/>
 
-		<Card.Root>
-			<Card.Header class="flex-col items-start justify-between gap-3 sm:flex-row"><div><Card.Title>设备</Card.Title><Card.Description>查看并撤销已登录设备。</Card.Description></div><div class="flex flex-wrap gap-2">{#if selectedDeviceIdList.length}<Button variant="destructive" size="sm" onclick={removeSelectedDevices} disabled={busy === "selected-devices"}>移除已选（{selectedDeviceIdList.length}）</Button>{/if}<Button variant="destructive" size="sm" onclick={() => removeAllDevicesOpen = true} disabled={!devices.length || busy === "devices"}>移除全部</Button></div></Card.Header>
-			<Card.Content class="overflow-x-auto">
-				<Table.Root><Table.Header><Table.Row><Table.Head class="w-10"><input type="checkbox" aria-label="选择全部设备" checked={devices.length > 0 && selectedDeviceIdList.length === devices.length} onchange={(event) => toggleAllDevices(event.currentTarget.checked)} /></Table.Head><Table.Head>名称</Table.Head><Table.Head>最近登录</Table.Head><Table.Head>密钥状态</Table.Head><Table.Head class="text-right">操作</Table.Head></Table.Row></Table.Header><Table.Body>
-					{#each devices as device (device.id)}<Table.Row><Table.Cell><input type="checkbox" aria-label={`选择设备 ${device.name}`} checked={!!selectedDeviceIds[device.id]} onchange={(event) => selectedDeviceIds = { ...selectedDeviceIds, [device.id]: event.currentTarget.checked }} /></Table.Cell><Table.Cell><div class="font-medium">{device.name}{device.id === getCurrentDeviceIdentifier() ? "（当前）" : ""}</div><div class="text-xs text-muted-foreground">{device.identifier}</div></Table.Cell><Table.Cell>{device.lastLoginDate ? new Date(device.lastLoginDate).toLocaleString() : "—"}</Table.Cell><Table.Cell><Badge variant="outline">{device.isTrusted ? "已保存设备密钥" : "未保存设备密钥"}</Badge></Table.Cell><Table.Cell><div class="flex justify-end gap-1"><Button variant="ghost" size="icon-sm" onclick={() => startRename(device)} aria-label="重命名设备"><Pencil /></Button><Button variant="ghost" size="icon-sm" onclick={() => removeDevice(device)} disabled={busy === `device-${device.id}`} aria-label="移除设备"><Trash2 /></Button></div></Table.Cell></Table.Row>{:else}<Table.Row><Table.Cell colspan={5} class="py-8 text-center text-muted-foreground">暂无设备记录</Table.Cell></Table.Row>{/each}
-				</Table.Body></Table.Root>
-			</Card.Content>
-		</Card.Root>
+		<DeviceManager
+			bind:devices
+			{passwordHash}
+			onMessage={(value) => { message = value; error = ""; }}
+			onError={fail}
+			onSessionRevoked={async (reason) => { await logout(); await goto(`/login?reason=${reason}`); }}
+		/>
 
 		<Card.Root class="border-destructive/40">
 			<Card.Header><Card.Title>删除账户</Card.Title><Card.Description>永久删除个人保险库、Sends、设备、通行密钥和账户资料。若你仍拥有组织，必须先删除或转移组织。</Card.Description></Card.Header>
@@ -483,14 +383,22 @@ async function changeMasterPassword() {
 	{/if}
 </main>
 
-<Dialog.Root open={!!editingDevice} onOpenChange={(open) => { if (!open) editingDevice = null; }}><Dialog.Content><Dialog.Header><Dialog.Title>重命名设备</Dialog.Title><Dialog.Description>名称用于区分登录设备。</Dialog.Description></Dialog.Header><Field.Field><Field.Label for="device-name">设备名称</Field.Label><Input id="device-name" bind:value={deviceName} /></Field.Field><Dialog.Footer><Button variant="outline" onclick={() => editingDevice = null}>取消</Button><Button onclick={saveDeviceName} disabled={!deviceName.trim()}>保存</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
-
-<Dialog.Root bind:open={removeAllDevicesOpen}><Dialog.Content><Dialog.Header><Dialog.Title>移除全部设备</Dialog.Title><Dialog.Description>所有刷新令牌都会撤销，当前浏览器也会退出。请输入主密码确认。</Dialog.Description></Dialog.Header><Field.Field><Field.Label for="remove-devices-password">当前主密码</Field.Label><Input id="remove-devices-password" type="password" bind:value={removeAllDevicesPassword} autocomplete="current-password" /></Field.Field><Dialog.Footer><Button variant="outline" onclick={() => removeAllDevicesOpen = false}>取消</Button><Button variant="destructive" onclick={removeAllDevices} disabled={!removeAllDevicesPassword || busy === "devices"}>移除并退出</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
-
-<Dialog.Root bind:open={deleteAccountOpen}><Dialog.Content><Dialog.Header><Dialog.Title>永久删除账户</Dialog.Title><Dialog.Description>此操作无法撤销。服务器会删除个人保险库及账户数据，并清理附件和 Send 文件。请输入当前主密码确认。</Dialog.Description></Dialog.Header><Field.Field><Field.Label for="delete-account-password">当前主密码</Field.Label><Input id="delete-account-password" type="password" bind:value={deleteAccountPassword} autocomplete="current-password" /></Field.Field><Dialog.Footer><Button variant="outline" onclick={() => deleteAccountOpen = false}>取消</Button><Button variant="destructive" onclick={removeAccount} disabled={!deleteAccountPassword || busy === "delete-account"}>永久删除</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
-
-<Dialog.Root bind:open={totpOpen}><Dialog.Content><Dialog.Header><Dialog.Title>设置身份验证器</Dialog.Title><Dialog.Description>在身份验证器中手动输入密钥，再填写生成的 6 位验证码。</Dialog.Description></Dialog.Header><Field.Group><Field.Field><Field.Label>密钥</Field.Label><div class="flex gap-2"><Input value={totpKey} readonly class="font-mono" /><Button variant="outline" size="icon" onclick={() => copy(totpKey)} aria-label="复制密钥"><Copy /></Button></div></Field.Field><Field.Field><Field.Label for="totp-token">验证码</Field.Label><Input id="totp-token" bind:value={totpToken} inputmode="numeric" maxlength={6} autocomplete="one-time-code" /></Field.Field></Field.Group><Dialog.Footer><Button variant="outline" onclick={() => totpOpen = false}>取消</Button><Button onclick={enableTotp} disabled={!/^\d{6}$/.test(totpToken) || busy === "totp-enable"}>启用</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
-
-<Dialog.Root bind:open={disableOpen}><Dialog.Content><Dialog.Header><Dialog.Title>关闭两步验证</Dialog.Title><Dialog.Description>请输入主密码确认。此操作会撤销现有刷新令牌。</Dialog.Description></Dialog.Header><Field.Field><Field.Label for="master-password">主密码</Field.Label><Input id="master-password" type="password" bind:value={masterPassword} autocomplete="current-password" /></Field.Field><Dialog.Footer><Button variant="outline" onclick={() => disableOpen = false}>取消</Button><Button variant="destructive" onclick={disableTotp} disabled={!masterPassword || busy === "totp-disable"}>确认关闭</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
-
-<Dialog.Root bind:open={passwordOpen}><Dialog.Content><Dialog.Header><Dialog.Title>更改主密码</Dialog.Title><Dialog.Description>保险库密钥会使用新密码重新加密。完成后需要重新登录所有设备。</Dialog.Description></Dialog.Header><Field.Group><Field.Field><Field.Label for="current-password">当前主密码</Field.Label><Input id="current-password" type="password" bind:value={currentPassword} autocomplete="current-password" /></Field.Field><Field.Field><Field.Label for="new-password">新主密码</Field.Label><Input id="new-password" type="password" bind:value={newPassword} autocomplete="new-password" /><Field.Description>至少 12 个字符。</Field.Description></Field.Field><Field.Field><Field.Label for="confirm-password">确认新主密码</Field.Label><Input id="confirm-password" type="password" bind:value={confirmPassword} autocomplete="new-password" /></Field.Field></Field.Group><Dialog.Footer><Button variant="outline" onclick={() => passwordOpen = false}>取消</Button><Button variant="destructive" onclick={changeMasterPassword} disabled={!currentPassword || newPassword.length < 12 || !confirmPassword || busy === "password"}>更改并退出</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
+<AccountSecurityDialogs
+	bind:deleteAccountOpen
+	bind:deleteAccountPassword
+	bind:totpOpen
+	{totpKey}
+	bind:totpToken
+	bind:disableOpen
+	bind:masterPassword
+	bind:passwordOpen
+	bind:currentPassword
+	bind:newPassword
+	bind:confirmPassword
+	{busy}
+	onCopy={copy}
+	onDeleteAccount={removeAccount}
+	onEnableTotp={enableTotp}
+	onDisableTotp={disableTotp}
+	onChangePassword={changeMasterPassword}
+/>
