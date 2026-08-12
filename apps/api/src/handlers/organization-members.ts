@@ -9,9 +9,8 @@ import {
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import {
 	conditionalOrganizationMemberRevisionQuery,
-	executeBatch,
 	organizationMemberCollectionAccessQuery,
-	revisionQuery,
+	organizationMemberInvitationRevisionQuery,
 } from "../services/db/batch";
 import { textColumnInJson } from "../services/db/json-array";
 import { errorResponse } from "../utils/response";
@@ -164,48 +163,100 @@ export const inviteOrganizationMember = factory.createHandlers(
 		if (!target?.public_key) {
 			return errorResponse("User is not available for encrypted sharing", 404);
 		}
-		if (
-			await db
-				.selectFrom("org_members")
-				.select("id")
-				.where("org_id", "=", orgId)
-				.where("email", "=", target.email)
-				.executeTakeFirst()
-		) {
-			return errorResponse("User is already a member", 409);
-		}
 		const ts = now();
 		const memberId = crypto.randomUUID();
-		await executeBatch(c.get("dbDialect"), [
+		const actor = c.get("orgMember");
+		const mutationToken = crypto.randomUUID();
+		const collectionIds = JSON.stringify(
+			access.collections.map((item) => item.id),
+		);
+		const [inserted] = await c.get("dbDialect").batch([
 			db
 				.insertInto("org_members")
-				.values({
-					id: memberId,
-					org_id: orgId,
-					user_id: target.id,
-					email: target.email,
-					role: body.role,
-					status: "confirmed",
-					access_all: body.accessAll ? 1 : 0,
-					key: body.key,
-					created_at: ts,
-					updated_at: ts,
-				})
+				.columns([
+					"id",
+					"org_id",
+					"user_id",
+					"email",
+					"role",
+					"status",
+					"access_all",
+					"key",
+					"created_at",
+					"updated_at",
+					"mutation_token",
+				])
+				.expression(
+					db
+						.selectFrom("users as target_user")
+						.select([
+							sql<string>`${memberId}`.as("id"),
+							sql<string>`${orgId}`.as("org_id"),
+							"target_user.id as user_id",
+							"target_user.email",
+							sql<string>`${body.role}`.as("role"),
+							sql<string>`'confirmed'`.as("status"),
+							sql<number>`${body.accessAll ? 1 : 0}`.as("access_all"),
+							sql<string>`${body.key}`.as("key"),
+							sql<number>`${ts}`.as("created_at"),
+							sql<number>`${ts}`.as("updated_at"),
+							sql<string>`${mutationToken}`.as("mutation_token"),
+						])
+						.where("target_user.id", "=", target.id)
+						.where("target_user.email", "=", target.email)
+						.where("target_user.status", "=", "active")
+						.where("target_user.public_key", "=", target.public_key)
+						.where((eb) =>
+							eb.exists(
+								db
+									.selectFrom("org_members as current_actor")
+									.select("current_actor.id")
+									.where("current_actor.id", "=", actor.id)
+									.where("current_actor.org_id", "=", orgId)
+									.where("current_actor.role", "=", actor.role)
+									.where("current_actor.status", "=", "confirmed")
+									.where(
+										sql<boolean>`current_actor.mutation_token IS ${actor.mutation_token}`,
+									),
+							),
+						)
+						.where(sql<boolean>`not exists (
+							select 1 from org_members existing
+							where existing.org_id = ${orgId}
+							  and existing.email = ${target.email}
+						)`)
+						.$if(!body.accessAll, (query) =>
+							query.where(sql<boolean>`not exists (
+								select 1 from json_each(${collectionIds}) requested
+								where not exists (
+									select 1 from collections collection
+									where collection.id = requested.value
+									  and collection.org_id = ${orgId}
+								)
+							)`),
+						),
+				)
 				.compile(),
 			...access.collections.map((item) =>
-				db
-					.insertInto("collection_members")
-					.values({
-						collection_id: item.id,
-						org_member_id: memberId,
-						read_only: item.readOnly ? 1 : 0,
-						hide_passwords: item.hidePasswords ? 1 : 0,
-					})
-					.compile(),
+				organizationMemberCollectionAccessQuery(
+					db,
+					memberId,
+					item.id,
+					item.readOnly,
+					item.hidePasswords,
+					mutationToken,
+				),
 			),
-			revisionQuery(db, target.id, ts),
-			revisionQuery(db, c.get("user").id, ts),
+			organizationMemberInvitationRevisionQuery(
+				db,
+				memberId,
+				c.get("user").id,
+				mutationToken,
+				ts,
+			),
 		]);
+		if (inserted.numAffectedRows !== 1n)
+			return errorResponse("Member invitation changed or already exists", 409);
 		await safeWriteAuditEvent(db, {
 			actorUserId: c.get("user").id,
 			action: "organization.member.add",

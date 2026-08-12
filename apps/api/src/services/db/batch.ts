@@ -140,6 +140,34 @@ export function conditionalOrganizationMemberRevisionQuery(
 	`.compile(db);
 }
 
+export function organizationMemberInvitationRevisionQuery(
+	db: Kysely<DB>,
+	memberId: string,
+	actorUserId: string,
+	mutationToken: string,
+	timestamp = now(),
+) {
+	return sql`
+		INSERT INTO user_revisions (user_id, revision_date)
+		SELECT user_id, ${timestamp}
+		FROM org_members
+		WHERE id = ${memberId}
+		  AND mutation_token = ${mutationToken}
+		  AND user_id IS NOT NULL
+		UNION
+		SELECT ${actorUserId}, ${timestamp}
+		WHERE EXISTS (
+			SELECT 1 FROM org_members
+			WHERE id = ${memberId}
+			  AND mutation_token = ${mutationToken}
+		)
+		ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
+			user_revisions.revision_date + 1,
+			excluded.revision_date
+		)
+	`.compile(db);
+}
+
 export function organizationMemberCollectionAccessQuery(
 	db: Kysely<DB>,
 	memberId: string,
