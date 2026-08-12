@@ -44,7 +44,7 @@ export const MAX_AUDIT_METADATA_BYTES = 4 * 1024;
 export const MAX_AUDIT_METADATA_STRING_BYTES = 1024;
 const utf8 = new TextEncoder();
 
-const AUDIT_SETTINGS_KEY = "audit.log.settings.v1";
+export const AUDIT_SETTINGS_KEY = "audit.log.settings.v1";
 export interface AuditLogSettings {
 	retentionDays: 7 | 30 | 90 | 180 | 365 | null;
 	maxEntries: number | null;
@@ -124,19 +124,16 @@ export async function applyAuditLogRetention(
 	}
 }
 
-export async function saveAuditLogSettings(
+export function auditLogSettingsQuery(
 	db: Kysely<DB>,
 	settings: AuditLogSettings,
-): Promise<AuditLogSettings> {
-	await db
+): CompiledQuery {
+	const value = JSON.stringify(settings);
+	return db
 		.insertInto("config")
-		.values({ key: AUDIT_SETTINGS_KEY, value: JSON.stringify(settings) })
-		.onConflict((oc) =>
-			oc.column("key").doUpdateSet({ value: JSON.stringify(settings) }),
-		)
-		.execute();
-	await applyAuditLogRetention(db, settings);
-	return settings;
+		.values({ key: AUDIT_SETTINGS_KEY, value })
+		.onConflict((oc) => oc.column("key").doUpdateSet({ value }))
+		.compile();
 }
 
 export function auditRequestMetadata(

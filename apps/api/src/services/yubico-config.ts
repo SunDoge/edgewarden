@@ -1,9 +1,9 @@
-import type { Kysely } from "kysely";
+import type { CompiledQuery, Kysely } from "kysely";
 import type { DB } from "../types/db";
 import type { YubicoCredentials } from "../utils/yubico";
 import type { WorkerBindings } from "../worker-bindings";
 
-const CONFIG_KEY = "security.yubico.credentials.v1";
+export const YUBICO_CONFIG_KEY = "security.yubico.credentials.v1";
 
 function bytesBase64(value: Uint8Array): string {
 	let binary = "";
@@ -27,11 +27,11 @@ async function encryptionKey(secret: string): Promise<CryptoKey> {
 	]);
 }
 
-export async function saveYubicoCredentials(
+export async function prepareYubicoCredentialsUpdate(
 	db: Kysely<DB>,
 	dataEncryptionSecret: string,
 	credentials: YubicoCredentials,
-): Promise<void> {
+): Promise<{ query: CompiledQuery; value: string }> {
 	const iv = crypto.getRandomValues(new Uint8Array(12));
 	const plaintext = new TextEncoder().encode(JSON.stringify(credentials));
 	const ciphertext = await crypto.subtle.encrypt(
@@ -43,11 +43,12 @@ export async function saveYubicoCredentials(
 		iv: bytesBase64(iv),
 		data: bytesBase64(new Uint8Array(ciphertext)),
 	});
-	await db
+	const query = db
 		.insertInto("config")
-		.values({ key: CONFIG_KEY, value })
+		.values({ key: YUBICO_CONFIG_KEY, value })
 		.onConflict((conflict) => conflict.column("key").doUpdateSet({ value }))
-		.execute();
+		.compile();
+	return { query, value };
 }
 
 export async function loadYubicoCredentials(
@@ -61,7 +62,7 @@ export async function loadYubicoCredentials(
 	const row = await db
 		.selectFrom("config")
 		.select("value")
-		.where("key", "=", CONFIG_KEY)
+		.where("key", "=", YUBICO_CONFIG_KEY)
 		.executeTakeFirst();
 	if (!row) return null;
 	try {
