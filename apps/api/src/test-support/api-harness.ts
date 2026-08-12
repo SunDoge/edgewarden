@@ -78,6 +78,11 @@ export async function createApiTestHarness(secrets: {
 
 	const r2Values = new Map<string, Uint8Array>();
 	const rateLimiter = { limit: async () => ({ success: true }) };
+	const realtime = {
+		getByName: () => ({
+			fetch: async () => new Response(null, { status: 204 }),
+		}),
+	};
 	const bindings = {
 		DB: database,
 		ATTACHMENTS_KV: await miniflare.getKVNamespace("ATTACHMENTS_KV"),
@@ -111,14 +116,34 @@ export async function createApiTestHarness(secrets: {
 		DATA_ENCRYPTION_SECRET: secrets.dataEncryptionSecret,
 		RL_IP: rateLimiter,
 		RL_ACCOUNT: rateLimiter,
+		REALTIME: realtime,
 	} as unknown as CloudflareBindings;
 
 	return {
 		bindings,
 		database,
 		r2Values,
-		request: async (path, init = {}, executionContext) =>
-			app.request(path, init, bindings, executionContext),
+		request: async (path, init = {}, executionContext) => {
+			if (executionContext) {
+				return app.request(path, init, bindings, executionContext);
+			}
+			const backgroundTasks: Promise<unknown>[] = [];
+			const testExecutionContext = {
+				waitUntil(task: Promise<unknown>) {
+					backgroundTasks.push(task);
+				},
+				passThroughOnException() {},
+				props: {},
+			} as ExecutionContext;
+			const response = await app.request(
+				path,
+				init,
+				bindings,
+				testExecutionContext,
+			);
+			await Promise.all(backgroundTasks);
+			return response;
+		},
 		dispose: () => miniflare.dispose(),
 	};
 }
