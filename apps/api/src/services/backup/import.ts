@@ -1,9 +1,15 @@
 import type { BlobStore } from "../blob-store";
 import { type BackupPayload, parseBackupArchive } from "./archive";
 import {
-	BACKUP_SETTINGS_CONFIG_KEY,
-	normalizeImportedBackupSettingsValue,
-} from "./config";
+	importPreparedBackupRows,
+	prepareImportPayloadForTarget,
+} from "./import-prepare";
+import {
+	ATTACHMENT_RESTORE_FAILED_REASON,
+	type AttachmentRestoreResult,
+	type BackupImportSkipSummary,
+	BLOB_STORAGE_UNAVAILABLE_SKIP_REASON,
+} from "./import-types";
 import {
 	type BackupTableName,
 	collectCurrentBlobKeys,
@@ -15,7 +21,6 @@ import {
 	swapShadowTablesIntoPlace,
 	validateShadowTableCounts,
 } from "./restore-database";
-import { importBackupRows } from "./restore-rows";
 
 export interface BackupImportResultBody {
 	object: "instance-backup-import";
@@ -51,33 +56,6 @@ export interface BackupImportResultBody {
 export interface BackupImportExecutionResult {
 	result: BackupImportResultBody;
 	auditActorUserId: string | null;
-}
-
-const KV_BLOB_SKIP_REASON = "Cloudflare KV object size limit (25 MB)";
-const BLOB_STORAGE_UNAVAILABLE_SKIP_REASON =
-	"Attachment storage is not configured";
-const ATTACHMENT_RESTORE_FAILED_REASON =
-	"Some attachments could not be restored and were skipped";
-
-interface BackupImportSkipSummary {
-	reason: string | null;
-	attachments: number;
-	items: Array<{
-		kind: "attachment";
-		path: string;
-		sizeBytes: number;
-	}>;
-}
-
-interface PreparedBackupImportPayload {
-	payload: BackupPayload;
-	skipped: BackupImportSkipSummary;
-}
-
-interface AttachmentRestoreResult {
-	imported: number;
-	restoredAttachments: SqlRow[];
-	skipped: BackupImportSkipSummary;
 }
 
 function backupTableCounts(
@@ -160,171 +138,6 @@ function attachmentRowKey(row: SqlRow): string {
 	const attachmentId = String(row.id || "").trim();
 	const cipherId = String(row.cipher_id || "").trim();
 	return `${cipherId}/${attachmentId}`;
-}
-
-function cloneRows(rows: SqlRow[]): SqlRow[] {
-	return rows.map((row) => ({ ...row }));
-}
-
-function upsertConfigRow(rows: SqlRow[], key: string, value: string): SqlRow[] {
-	let replaced = false;
-	const nextRows = rows.map((row) => {
-		if (String(row.key || "").trim() !== key) return { ...row };
-		replaced = true;
-		return { ...row, key, value };
-	});
-	if (!replaced) {
-		nextRows.push({ key, value });
-	}
-	return nextRows;
-}
-
-async function prepareImportedConfigRows(
-	dataEncryptionSecret: string,
-	configRows: SqlRow[],
-	userRows: SqlRow[],
-): Promise<SqlRow[]> {
-	let nextConfigRows = cloneRows(configRows || []);
-	const rawBackupSettings = nextConfigRows.find(
-		(row) => String(row.key || "").trim() === BACKUP_SETTINGS_CONFIG_KEY,
-	);
-	const normalizedBackupSettings = await normalizeImportedBackupSettingsValue(
-		typeof rawBackupSettings?.value === "string"
-			? rawBackupSettings.value
-			: null,
-		dataEncryptionSecret,
-		userRows.map((row) => ({
-			id: String(row.id || "").trim(),
-			public_key: typeof row.public_key === "string" ? row.public_key : null,
-			role: String(row.role || "").trim(),
-			status: String(row.status || "").trim(),
-		})),
-		"UTC",
-	);
-	if (normalizedBackupSettings !== null) {
-		nextConfigRows = upsertConfigRow(
-			nextConfigRows,
-			BACKUP_SETTINGS_CONFIG_KEY,
-			normalizedBackupSettings,
-		);
-	}
-	nextConfigRows = upsertConfigRow(nextConfigRows, "registered", "true");
-	return nextConfigRows;
-}
-
-async function importPreparedBackupRows(
-	db: D1Database,
-	payload: BackupPayload["db"],
-	dataEncryptionSecret: string,
-): Promise<BackupPayload["db"]> {
-	const preparedDb: BackupPayload["db"] = {
-		config: await prepareImportedConfigRows(
-			dataEncryptionSecret,
-			payload.config || [],
-			payload.users || [],
-		),
-		users: cloneRows(payload.users || []).map((row) => ({
-			...row,
-			verify_devices: row.verify_devices ?? 1,
-			// A restore is a security boundary: do not let access tokens signed
-			// before the restore remain usable against the replaced database.
-			security_stamp: crypto.randomUUID(),
-		})),
-		domain_settings: cloneRows(payload.domain_settings || []),
-		user_revisions: cloneRows(payload.user_revisions || []),
-		organizations: cloneRows(payload.organizations || []),
-		org_members: cloneRows(payload.org_members || []),
-		collections: cloneRows(payload.collections || []),
-		collection_members: cloneRows(payload.collection_members || []),
-		device_trust_tokens: cloneRows(payload.device_trust_tokens || []),
-		webauthn_credentials: cloneRows(payload.webauthn_credentials || []),
-		folders: cloneRows(payload.folders || []),
-		ciphers: cloneRows(payload.ciphers || []).map((row) => ({
-			...row,
-			archived_at: row.archived_at ?? null,
-		})),
-		cipher_collections: cloneRows(payload.cipher_collections || []),
-		attachments: cloneRows(payload.attachments || []),
-		sends: cloneRows(payload.sends || []),
-	};
-	await importBackupRows(db, preparedDb, true);
-	return preparedDb;
-}
-
-function prepareImportPayloadForTarget(
-	blobStore: BlobStore | null,
-	payload: BackupPayload,
-	files: Record<string, Uint8Array>,
-): PreparedBackupImportPayload {
-	if (!blobStore) {
-		const skippedItems = (payload.db.attachments || []).map((row) => {
-			const cipherId = String(row.cipher_id || "").trim();
-			const attachmentId = String(row.id || "").trim();
-			return {
-				kind: "attachment" as const,
-				path: `attachments/${cipherId}/${attachmentId}.bin`,
-				sizeBytes: Number(row.size || 0) || 0,
-			};
-		});
-
-		return {
-			payload: {
-				...payload,
-				db: {
-					...payload.db,
-					attachments: [],
-				},
-			},
-			skipped: {
-				reason: skippedItems.length
-					? BLOB_STORAGE_UNAVAILABLE_SKIP_REASON
-					: null,
-				attachments: skippedItems.length,
-				items: skippedItems,
-			},
-		};
-	}
-
-	const oversizedAttachmentPaths = new Set<string>();
-	const skippedItems: BackupImportSkipSummary["items"] = [];
-
-	for (const entry of Object.keys(files)) {
-		if (!entry.endsWith(".bin")) continue;
-		const sizeBytes = files[entry].byteLength;
-		if (
-			blobStore.maxObjectBytes === null ||
-			sizeBytes <= blobStore.maxObjectBytes
-		)
-			continue;
-		if (entry.startsWith("attachments/")) {
-			oversizedAttachmentPaths.add(entry);
-			skippedItems.push({ kind: "attachment", path: entry, sizeBytes });
-		}
-	}
-
-	const nextAttachments = (payload.db.attachments || []).filter((row) => {
-		const cipherId = String(row.cipher_id || "").trim();
-		const attachmentId = String(row.id || "").trim();
-		if (!cipherId || !attachmentId) return false;
-		return !oversizedAttachmentPaths.has(
-			`attachments/${cipherId}/${attachmentId}.bin`,
-		);
-	});
-
-	return {
-		payload: {
-			...payload,
-			db: {
-				...payload.db,
-				attachments: nextAttachments,
-			},
-		},
-		skipped: {
-			reason: skippedItems.length ? KV_BLOB_SKIP_REASON : null,
-			attachments: skippedItems.length,
-			items: skippedItems,
-		},
-	};
 }
 
 async function restoreBlobFiles(
