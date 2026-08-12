@@ -58,9 +58,9 @@ onMount(() => {
 
 <svelte:head><title>验证码 - Edgewarden</title></svelte:head>
 
-<main class="min-h-screen bg-muted/30 p-6">
+<main class="min-h-screen bg-muted/30 p-4 md:p-6">
 	<div class="mx-auto max-w-5xl space-y-6">
-		<header class="flex items-center gap-3"><Button variant="ghost" size="icon" onclick={() => goto("/vault")} aria-label="返回保险库"><ArrowLeft /></Button><div><h1 class="text-2xl font-bold">验证码</h1><p class="text-sm text-muted-foreground">所有验证码均在本机根据保险库中的 TOTP 密钥计算。</p></div></header>
+		<header class="flex items-start gap-2 sm:items-center sm:gap-3"><Button variant="ghost" size="icon" class="shrink-0" onclick={() => goto("/vault")} aria-label="返回保险库"><ArrowLeft /></Button><div class="min-w-0"><h1 class="text-xl font-bold sm:text-2xl">验证码</h1><p class="text-sm text-muted-foreground">所有验证码均在本机根据保险库中的 TOTP 密钥计算。</p></div></header>
 		{#if vault.isSyncing && !items.length}<div class="flex items-center gap-2 text-sm text-muted-foreground"><RefreshCw class="animate-spin" />正在载入…</div>
 		{:else if !items.length}<div class="rounded-lg border bg-card p-8 text-center text-muted-foreground"><KeyRound class="mx-auto mb-3 size-8" />没有包含 TOTP 密钥的登录项。</div>
 		{:else}<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

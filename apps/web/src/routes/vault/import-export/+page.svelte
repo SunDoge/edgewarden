@@ -210,16 +210,16 @@ async function handleImport() {
 </svelte:head>
 
 <div class="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col">
-	<header class="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 flex items-center justify-between shrink-0">
+	<header class="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
 		<div class="flex items-center gap-2.5">
 			<Button variant="ghost" size="icon" onclick={() => goto("/vault")} class="size-8 rounded-lg">
 				<ArrowLeft class="size-4" />
 			</Button>
-			<span class="font-bold text-lg text-slate-800 dark:text-slate-100">数据导入与导出</span>
+			<span class="text-base font-bold text-slate-800 sm:text-lg dark:text-slate-100">数据导入与导出</span>
 		</div>
 	</header>
 
-	<main class="flex-1 p-6 md:p-8 max-w-4xl w-full mx-auto space-y-6">
+	<main class="mx-auto w-full max-w-4xl flex-1 space-y-4 p-4 sm:space-y-6 md:p-8">
 		{#if errorMsg}
 			<div class="p-4 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 rounded-xl border border-red-200 dark:border-red-900/50 flex items-start gap-3">
 				<ShieldAlert class="size-5 shrink-0 mt-0.5" />
@@ -240,9 +240,9 @@ async function handleImport() {
 			</div>
 		{/if}
 
-		<div class="grid md:grid-cols-2 gap-6">
+		<div class="grid gap-4 md:grid-cols-2 md:gap-6">
 			<!-- Import Panel -->
-			<section class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-5">
+			<section class="space-y-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 dark:border-slate-800 dark:bg-slate-900">
 				<div class="flex items-center gap-3">
 					<div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
 						<Upload class="size-5" />
@@ -304,7 +304,7 @@ async function handleImport() {
 			</section>
 
 			<!-- Export Panel -->
-			<section class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-5">
+			<section class="space-y-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 dark:border-slate-800 dark:bg-slate-900">
 				<div class="flex items-center gap-3">
 					<div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/20 text-amber-500 flex items-center justify-center">
 						<Download class="size-5" />

@@ -443,19 +443,20 @@ function copyShareLink(send: any) {
 								</div>
 							</div>
 
-							<div class="flex items-center gap-2 shrink-0 ml-4">
+							<div class="ml-2 flex shrink-0 items-center gap-2 sm:ml-4">
 								<Button
 									variant="outline"
 									size="sm"
-									class="gap-1.5 text-xs font-semibold"
+									class="size-8 gap-1.5 p-0 text-xs font-semibold sm:h-8 sm:w-auto sm:px-3"
 									onclick={(e) => { e.stopPropagation(); copyShareLink(send); }}
+									aria-label={copiedId === send.id ? "链接已复制" : `复制 ${send.name} 的链接`}
 								>
 									{#if copiedId === send.id}
 										<Check class="size-3 text-green-500" />
-										已复制
+										<span class="hidden sm:inline">已复制</span>
 									{:else}
 										<Copy class="size-3" />
-										复制链接
+										<span class="hidden sm:inline">复制链接</span>
 									{/if}
 								</Button>
 							</div>
