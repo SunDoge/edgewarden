@@ -11,8 +11,7 @@ import { encryptCredential } from "../services/credential-protection";
 import {
 	conditionalRefreshTokenDeletionQuery,
 	conditionalUserRevisionQuery,
-	executeBatch,
-	revisionQuery,
+	conditionalYubikeyUpdateQuery,
 } from "../services/db/batch";
 import {
 	loadYubicoCredentials,
@@ -86,6 +85,7 @@ export const saveYubikeys = factory.createHandlers(
 		const user = c.get("user");
 		const db = c.get("db");
 		const ts = now();
+		const securityStamp = crypto.randomUUID();
 		const encryptedRecoveryCode =
 			user.totp_recovery_code ??
 			(await encryptCredential(
@@ -93,22 +93,24 @@ export const saveYubikeys = factory.createHandlers(
 				c.env.DATA_ENCRYPTION_SECRET,
 				"totp-recovery",
 			));
-		await executeBatch(c.get("dbDialect"), [
-			db
-				.updateTable("users")
-				.set({
-					yubikey_config: serializeYubikeyConfig({
-						keys: publicIds,
-						nfc: body.nfc,
-					}),
-					totp_recovery_code: encryptedRecoveryCode,
-					updated_at: ts,
-				})
-				.where("id", "=", user.id)
-				.compile(),
-			db.deleteFrom("refresh_tokens").where("user_id", "=", user.id).compile(),
-			revisionQuery(db, user.id, ts),
-		]);
+		const [changed] = await c
+			.get("dbDialect")
+			.batch([
+				conditionalYubikeyUpdateQuery(
+					db,
+					user.id,
+					user.security_stamp,
+					user.yubikey_config,
+					serializeYubikeyConfig({ keys: publicIds, nfc: body.nfc }),
+					encryptedRecoveryCode,
+					securityStamp,
+					ts,
+				),
+				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+				conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
+			]);
+		if (changed.numAffectedRows !== 1n)
+			return errorResponse("YubiKey settings changed by another request", 409);
 		invalidateUserCache(user.id);
 		await safeWriteAuditEvent(db, {
 			actorUserId: user.id,

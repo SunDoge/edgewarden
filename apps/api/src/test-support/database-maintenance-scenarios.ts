@@ -28,6 +28,7 @@ import {
 	conditionalAuthenticatorUpdateQuery,
 	conditionalRefreshTokenDeletionQuery,
 	conditionalUserRevisionQuery,
+	conditionalYubikeyUpdateQuery,
 	deletedAttachmentCipherUpdateQuery,
 	deletedAttachmentRevisionQuery,
 	executeBatch,
@@ -639,6 +640,73 @@ export function registerDatabaseMaintenanceScenarios(
 				.updateTable("users")
 				.set({
 					totp_secret: user.totp_secret,
+					totp_recovery_code: user.totp_recovery_code,
+					security_stamp: user.security_stamp,
+				})
+				.where("id", "=", user.id)
+				.execute();
+			await db
+				.updateTable("user_revisions")
+				.set({ revision_date: revision.revision_date })
+				.where("user_id", "=", user.id)
+				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("enables YubiKeys once from a shared security snapshot", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select(["id", "yubikey_config", "totp_recovery_code", "security_stamp"])
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const revision = await db
+			.selectFrom("user_revisions")
+			.select("revision_date")
+			.where("user_id", "=", user.id)
+			.executeTakeFirstOrThrow();
+		const timestamp = Math.floor(Date.now() / 1000);
+		try {
+			const affected: bigint[] = [];
+			for (let attempt = 0; attempt < 2; attempt += 1) {
+				const securityStamp = crypto.randomUUID();
+				const envelope = JSON.stringify({
+					v: 1,
+					iv: `yubikey-iv-${attempt}`,
+					data: `yubikey-data-${attempt}`,
+				});
+				const [changed] = await dialect.batch([
+					conditionalYubikeyUpdateQuery(
+						db,
+						user.id,
+						user.security_stamp,
+						user.yubikey_config,
+						JSON.stringify({
+							keys: [`ccccccbbbb0${attempt}`],
+							nfc: false,
+						}),
+						envelope,
+						securityStamp,
+						timestamp,
+					),
+					conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+					conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
+				]);
+				affected.push(changed.numAffectedRows ?? 0n);
+			}
+			assert.deepEqual(affected, [1n, 0n]);
+			const after = await db
+				.selectFrom("user_revisions")
+				.select("revision_date")
+				.where("user_id", "=", user.id)
+				.executeTakeFirstOrThrow();
+			assert.equal(after.revision_date, revision.revision_date + 1);
+		} finally {
+			await db
+				.updateTable("users")
+				.set({
+					yubikey_config: user.yubikey_config,
 					totp_recovery_code: user.totp_recovery_code,
 					security_stamp: user.security_stamp,
 				})

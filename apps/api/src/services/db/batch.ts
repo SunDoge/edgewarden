@@ -260,6 +260,31 @@ export function conditionalAuthenticatorUpdateQuery(
 	`.compile(db);
 }
 
+export function conditionalYubikeyUpdateQuery(
+	db: Kysely<DB>,
+	userId: string,
+	expectedSecurityStamp: string,
+	expectedConfig: string,
+	yubikeyConfig: string,
+	encryptedRecoveryCode: string,
+	securityStamp: string,
+	timestamp = now(),
+) {
+	return sql`
+		UPDATE users
+		SET yubikey_config = ${yubikeyConfig},
+		    totp_recovery_code = COALESCE(
+		      totp_recovery_code,
+		      ${encryptedRecoveryCode}
+		    ),
+		    security_stamp = ${securityStamp},
+		    updated_at = ${timestamp}
+		WHERE id = ${userId}
+		  AND security_stamp = ${expectedSecurityStamp}
+		  AND yubikey_config = ${expectedConfig}
+	`.compile(db);
+}
+
 export function conditionalRefreshTokenDeletionQuery(
 	db: Kysely<DB>,
 	userId: string,
