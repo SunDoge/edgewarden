@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { createDatabase } from "../middleware/db";
+import { generateAccessToken, verifyAccessToken } from "../services/auth";
 import {
 	conditionalAccountPasskeyClaimQuery,
 	conditionalAllDevicesDeletionClaimQuery,
@@ -768,6 +769,83 @@ export function registerAuthReliabilityScenarios(
 				jwtSecret: "stale-session-test-secret-at-least-32-chars",
 			});
 			assert.ok(issued);
+		} finally {
+			await db.deleteFrom("users").where("id", "=", userId).execute();
+			await db.destroy();
+		}
+	});
+
+	test("rejects revoked JWT state without isolate-local invalidation", async () => {
+		const { db } = await createDatabase(context.database);
+		const timestamp = Math.floor(Date.now() / 1000);
+		const userId = crypto.randomUUID();
+		const userStamp = crypto.randomUUID();
+		const deviceId = `jwt-device-${crypto.randomUUID()}`;
+		const deviceStamp = crypto.randomUUID();
+		const jwtSecret = "cross-isolate-revocation-test-secret-32-chars";
+		try {
+			await db
+				.insertInto("users")
+				.values({
+					id: userId,
+					email: `jwt-state-${crypto.randomUUID()}@example.com`,
+					master_password_hash: "isolated-jwt-hash",
+					key: "isolated-jwt-key",
+					kdf_type: 0,
+					kdf_iterations: 600_000,
+					kdf_memory: null,
+					kdf_parallelism: null,
+					security_stamp: userStamp,
+					created_at: timestamp,
+					updated_at: timestamp,
+				})
+				.execute();
+			await db
+				.insertInto("devices")
+				.values({
+					user_id: userId,
+					device_identifier: deviceId,
+					name: "JWT revocation device",
+					type: 14,
+					session_stamp: deviceStamp,
+					mutation_token: crypto.randomUUID(),
+					created_at: timestamp,
+					updated_at: timestamp,
+				})
+				.execute();
+			const user = await db
+				.selectFrom("users")
+				.selectAll()
+				.where("id", "=", userId)
+				.executeTakeFirstOrThrow();
+			const token = await generateAccessToken(
+				user,
+				{ identifier: deviceId, sessionStamp: deviceStamp },
+				jwtSecret,
+			);
+			const authorization = `Bearer ${token}`;
+			assert.ok(await verifyAccessToken(authorization, db, jwtSecret));
+
+			await db
+				.updateTable("users")
+				.set({ security_stamp: crypto.randomUUID() })
+				.where("id", "=", userId)
+				.execute();
+			assert.equal(await verifyAccessToken(authorization, db, jwtSecret), null);
+
+			await db
+				.updateTable("users")
+				.set({ security_stamp: userStamp })
+				.where("id", "=", userId)
+				.execute();
+			assert.ok(await verifyAccessToken(authorization, db, jwtSecret));
+			await db
+				.updateTable("devices")
+				.set({ session_stamp: crypto.randomUUID() })
+				.where("user_id", "=", userId)
+				.where("device_identifier", "=", deviceId)
+				.execute();
+			assert.equal(await verifyAccessToken(authorization, db, jwtSecret), null);
 		} finally {
 			await db.deleteFrom("users").where("id", "=", userId).execute();
 			await db.destroy();
