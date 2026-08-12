@@ -38,7 +38,11 @@ function requireSuccess(result: ReturnType<typeof spawnSync>, action: string) {
 		.map((value) => value.trim())
 		.join("\n");
 	const permissionHint =
-		action.includes("D1") && process.env.WORKERS_CI
+		action.includes("D1") &&
+		process.env.WORKERS_CI &&
+		/(?:permission|unauthori[sz]ed|forbidden|authentication|not authorized|code.+(?:10000|9109))/i.test(
+			output,
+		)
 			? "\n\nWorkers Builds requires a custom build API token with Account > D1 > Edit. The default generated build token does not include D1 access. Select that token under Worker Settings > Build > API token, then retry the deployment."
 			: "";
 	throw new Error(

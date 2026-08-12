@@ -41,7 +41,8 @@
 		}
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.5.7"
+		"@biomejs/biome": "2.5.7",
+		"wrangler": "^4.4.0"
 	},
 	"dependencies": {
 		"fflate": "^0.8.3"
