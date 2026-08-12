@@ -51,6 +51,9 @@ const AttachmentUploadClaimsSchema = v.object({
 	userId: v.pipe(v.string(), v.minLength(1)),
 	cipherId: v.pipe(v.string(), v.minLength(1)),
 	attachmentId: v.pipe(v.string(), v.minLength(1)),
+	fileName: v.pipe(v.string(), v.minLength(1)),
+	key: v.pipe(v.string(), v.minLength(1)),
+	fileSize: v.pipe(v.number(), v.integer(), v.minValue(1)),
 	typ: v.literal("attachment_upload"),
 	exp: v.number(),
 });
@@ -187,12 +190,14 @@ export async function createAttachmentUploadToken(
 	userId: string,
 	cipherId: string,
 	attachmentId: string,
+	metadata: { fileName: string; key: string; fileSize: number },
 	secret: string,
 ): Promise<string> {
 	const payload: AttachmentUploadClaims = {
 		userId,
 		cipherId,
 		attachmentId,
+		...metadata,
 		typ: "attachment_upload",
 		exp:
 			Math.floor(Date.now() / 1000) + LIMITS.auth.fileDownloadTokenTtlSeconds,

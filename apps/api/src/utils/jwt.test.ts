@@ -137,6 +137,7 @@ describe("jwt utils", () => {
 				"user-id",
 				"cipher-id",
 				"attachment-id",
+				{ fileName: "encrypted-name", key: "encrypted-key", fileSize: 42 },
 				secret,
 			);
 			const verified = await verifyAttachmentUploadToken(token, secret);
@@ -145,9 +146,20 @@ describe("jwt utils", () => {
 					verified.userId,
 					verified.cipherId,
 					verified.attachmentId,
+					verified.fileName,
+					verified.key,
+					verified.fileSize,
 					verified.typ,
 				],
-				["user-id", "cipher-id", "attachment-id", "attachment_upload"],
+				[
+					"user-id",
+					"cipher-id",
+					"attachment-id",
+					"encrypted-name",
+					"encrypted-key",
+					42,
+					"attachment_upload",
+				],
 			);
 		});
 
@@ -156,6 +168,7 @@ describe("jwt utils", () => {
 				"user-id",
 				"cipher-id",
 				"attachment-id",
+				{ fileName: "encrypted-name", key: "encrypted-key", fileSize: 42 },
 				secret,
 			);
 			assert.strictEqual(
