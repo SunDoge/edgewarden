@@ -2066,6 +2066,59 @@ describe("Edgewarden API", () => {
 			}>();
 		assert.deepEqual(stored, { user_id: null, org_id: orgId, folder_id: null });
 
+		const secondCollectionId = crypto.randomUUID();
+		await testDatabase.batch([
+			testDatabase
+				.prepare(
+					"INSERT INTO collections (id,org_id,name,created_at,updated_at) VALUES (?,?,?,?,?)",
+				)
+				.bind(
+					secondCollectionId,
+					orgId,
+					"second-encrypted-collection",
+					timestamp,
+					timestamp,
+				),
+			testDatabase
+				.prepare(
+					"INSERT INTO collection_members (collection_id,org_member_id,read_only,hide_passwords) VALUES (?,?,1,0)",
+				)
+				.bind(secondCollectionId, restrictedMemberId),
+			testDatabase
+				.prepare(
+					"INSERT INTO cipher_collections (cipher_id,collection_id) VALUES (?,?)",
+				)
+				.bind(cipher.id, secondCollectionId),
+		]);
+		const restrictedSync = await request("/api/sync", {
+			headers: { authorization: `Bearer ${memberAccessToken}` },
+		});
+		assert.equal(
+			restrictedSync.status,
+			200,
+			await restrictedSync.clone().text(),
+		);
+		const syncedCipherRows = (
+			await restrictedSync.json<{
+				ciphers: Array<{ id: string; collectionIds: string[] }>;
+			}>()
+		).ciphers.filter((item) => item.id === cipher.id);
+		assert.equal(syncedCipherRows.length, 1);
+		assert.deepEqual(
+			new Set(syncedCipherRows[0].collectionIds),
+			new Set([collectionId, secondCollectionId]),
+		);
+		await testDatabase.batch([
+			testDatabase
+				.prepare(
+					"DELETE FROM cipher_collections WHERE cipher_id = ? AND collection_id = ?",
+				)
+				.bind(cipher.id, secondCollectionId),
+			testDatabase
+				.prepare("DELETE FROM collections WHERE id = ?")
+				.bind(secondCollectionId),
+		]);
+
 		const visible = await request(`/api/ciphers/${cipher.id}`, {
 			headers: { authorization: `Bearer ${memberAccessToken}` },
 		});
@@ -2299,6 +2352,8 @@ describe("Edgewarden API", () => {
 		const sendId = crypto.randomUUID();
 		const fileId = crypto.randomUUID();
 		const refreshToken = `expired-${crypto.randomUUID()}`;
+		const expiredChallenge = `expired-${crypto.randomUUID()}`;
+		const usedChallenge = `used-${crypto.randomUUID()}`;
 		try {
 			await db
 				.insertInto("refresh_tokens")
@@ -2309,6 +2364,27 @@ describe("Edgewarden API", () => {
 					device_identifier: null,
 					device_session_stamp: null,
 				})
+				.execute();
+			await db
+				.insertInto("webauthn_challenges")
+				.values([
+					{
+						challenge_hash: expiredChallenge,
+						scope: "login",
+						user_id: user.id,
+						expires_at: timestamp - 1,
+						used_at: null,
+						created_at: timestamp - 2,
+					},
+					{
+						challenge_hash: usedChallenge,
+						scope: "login",
+						user_id: user.id,
+						expires_at: timestamp + 3600,
+						used_at: timestamp - 1,
+						created_at: timestamp - 2,
+					},
+				])
 				.execute();
 			await db
 				.insertInto("ciphers")
@@ -2380,6 +2456,7 @@ describe("Edgewarden API", () => {
 			r2Values.set(`sends/${sendId}/${fileId}`, new Uint8Array([2]));
 			const result = await runMaintenance(db, bindings, timestamp);
 			assert.ok(result.refreshTokens >= 1);
+			assert.ok(result.webauthnChallenges >= 2);
 			assert.ok(result.purgedCiphers >= 1);
 			assert.ok(result.purgedSends >= 1);
 			assert.equal(
@@ -2387,6 +2464,14 @@ describe("Edgewarden API", () => {
 				false,
 			);
 			assert.equal(r2Values.has(`sends/${sendId}/${fileId}`), false);
+			assert.deepEqual(
+				await db
+					.selectFrom("webauthn_challenges")
+					.select("challenge_hash")
+					.where("challenge_hash", "in", [expiredChallenge, usedChallenge])
+					.execute(),
+				[],
+			);
 			assert.equal(
 				await db
 					.selectFrom("refresh_tokens")

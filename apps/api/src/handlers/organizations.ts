@@ -1,21 +1,22 @@
 import { vValidator } from "@hono/valibot-validator";
+import { sql } from "kysely";
 import { factory } from "../http/factory";
 import {
 	CreateCollectionSchema,
 	CreateOrganizationSchema,
 	DeleteOrganizationSchema,
 	InviteOrganizationMemberSchema,
-	UpdateOrganizationMemberSchema,
 	OrganizationInviteeQuerySchema,
 	UpdateCollectionSchema,
+	UpdateOrganizationMemberSchema,
 	UpdateOrganizationSchema,
 } from "../schemas/organizations";
-import { executeBatch, revisionQuery } from "../services/db/batch";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import { verifyPassword } from "../services/auth";
+import { executeBatch, revisionQuery } from "../services/db/batch";
+import { textColumnInJson } from "../services/db/json-array";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
-import { verifyPassword } from "../services/auth";
-import { textColumnInJson } from "../services/db/json-array";
 
 function organizationResponse(org: any, member: any) {
 	return {
@@ -680,33 +681,25 @@ export const updateCollection = factory.createHandlers(
 export const deleteCollection = factory.createHandlers(async (c) => {
 	const db = c.get("db");
 	const collection = c.get("collection");
-	const linked = await db
-		.selectFrom("cipher_collections")
-		.select("cipher_id")
-		.where("collection_id", "=", collection.id)
-		.execute();
-	if (linked.length) {
-		const allLinks = await db
-			.selectFrom("cipher_collections")
-			.select("cipher_id")
-			.where(
-				textColumnInJson(
-					"cipher_id",
-					linked.map((item: any) => item.cipher_id),
-				),
-			)
-			.execute();
-		const linkCounts = Map.groupBy(allLinks, (item: any) => item.cipher_id);
-		if (
-			linked.some(
-				(item: any) => (linkCounts.get(item.cipher_id)?.length ?? 0) < 2,
-			)
+	const exclusivelyLinkedCipher = await db
+		.selectFrom("cipher_collections as current_link")
+		.select("current_link.cipher_id")
+		.where("current_link.collection_id", "=", collection.id)
+		.where(
+			sql<boolean>`not exists (
+				select 1
+				from cipher_collections as other_link
+				where other_link.cipher_id = current_link.cipher_id
+					and other_link.collection_id <> ${collection.id}
+			)`,
 		)
-			return errorResponse(
-				"Move or delete items that only belong to this collection first",
-				409,
-			);
-	}
+		.limit(1)
+		.executeTakeFirst();
+	if (exclusivelyLinkedCipher)
+		return errorResponse(
+			"Move or delete items that only belong to this collection first",
+			409,
+		);
 	const ts = now();
 	await executeBatch(c.get("dbDialect"), [
 		db.deleteFrom("collections").where("id", "=", collection.id).compile(),

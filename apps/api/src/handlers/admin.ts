@@ -1,5 +1,6 @@
 import { vValidator } from "@hono/valibot-validator";
 import type { Context } from "hono";
+import { sql } from "kysely";
 import type { HonoEnv } from "../env";
 import { factory } from "../http/factory";
 import {
@@ -11,31 +12,31 @@ import {
 	RegistrationPolicySchema,
 	SetUserStatusSchema,
 } from "../schemas/admin";
-import { verifyPassword } from "../services/auth";
-import {
-	decryptCredential,
-	encryptCredential,
-	hashCredential,
-} from "../services/credential-protection";
-import {
-	deleteBlobObject,
-	getAttachmentObjectKey,
-	getSendFileObjectKey,
-} from "../services/blob-store";
-import * as attachmentsDb from "../services/db/attachments";
 import {
 	auditRequestMetadata,
 	getAuditLogSettings,
 	safeWriteAuditEvent,
 	saveAuditLogSettings,
 } from "../services/audit";
-import { errorResponse } from "../utils/response";
-import { now, toIso } from "../utils/time";
-import { userYubicoPublicIds } from "../utils/yubico";
+import { verifyPassword } from "../services/auth";
+import {
+	deleteBlobObject,
+	getAttachmentObjectKey,
+	getSendFileObjectKey,
+} from "../services/blob-store";
+import {
+	decryptCredential,
+	encryptCredential,
+	hashCredential,
+} from "../services/credential-protection";
+import * as attachmentsDb from "../services/db/attachments";
 import {
 	loadRegistrationPolicy,
 	saveRegistrationPolicy,
 } from "../services/registration-policy";
+import { errorResponse } from "../utils/response";
+import { now, toIso } from "../utils/time";
+import { userYubicoPublicIds } from "../utils/yubico";
 
 async function verifyAdminPassword(
 	c: Context<HonoEnv>,
@@ -95,17 +96,15 @@ export const listAdminUsers = factory.createHandlers(async (c) => {
 			"yubikey_config",
 			"created_at",
 			"updated_at",
+			sql<number>`exists (
+				select 1
+				from webauthn_credentials as credential
+				where credential.user_id = users.id
+					and credential.purpose = 'twoFactor'
+			)`.as("has_two_factor_passkey"),
 		])
 		.orderBy("created_at", "desc")
 		.execute();
-	const passkeys = await db
-		.selectFrom("webauthn_credentials")
-		.select("user_id")
-		.where("purpose", "=", "twoFactor")
-		.execute();
-	const passkeyUsers = new Set(
-		passkeys.map((credential) => credential.user_id),
-	);
 	return c.json({
 		data: users.map((user) => ({
 			id: user.id,
@@ -116,7 +115,7 @@ export const listAdminUsers = factory.createHandlers(async (c) => {
 			twoFactorEnabled: Boolean(
 				user.totp_secret ||
 					userYubicoPublicIds(user).length ||
-					passkeyUsers.has(user.id),
+					user.has_two_factor_passkey,
 			),
 			creationDate: toIso(user.created_at),
 			revisionDate: toIso(user.updated_at),
@@ -357,18 +356,7 @@ export const deleteAdminUser = factory.createHandlers(
 			.where("id", "=", targetId)
 			.executeTakeFirst();
 		if (!target) return errorResponse("User not found", 404);
-		const cipherIds = (
-			await c
-				.get("db")
-				.selectFrom("ciphers")
-				.select("id")
-				.where("user_id", "=", targetId)
-				.execute()
-		).map((cipher) => cipher.id);
-		const attachments = await attachmentsDb.listByCipherIds(
-			c.get("db"),
-			cipherIds,
-		);
+		const attachments = await attachmentsDb.listByUserId(c.get("db"), targetId);
 		const sends = await c
 			.get("db")
 			.selectFrom("sends")
