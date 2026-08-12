@@ -22,10 +22,6 @@ import {
 	getTwoFactorPasskeysApi,
 	getTwoFactorPasskeyChallengeApi,
 	createTwoFactorPasskeyApi,
-	getYubikeySettingsApi,
-	saveYubikeysApi,
-	disableYubikeysApi,
-	saveYubicoConfigApi,
 	isLoggedIn,
 	listAccountPasskeysApi,
 	renameDeviceApi,
@@ -53,9 +49,8 @@ import {
 } from "$lib/services/auth-requests";
 import { vault, syncVaultData, logout } from "$lib/stores/vault.svelte";
 import { Button } from "$lib/components/ui/button/index.js";
+import YubikeySettings from "$lib/components/settings/YubikeySettings.svelte";
 import { Input } from "$lib/components/ui/input/index.js";
-import { Textarea } from "$lib/components/ui/textarea/index.js";
-import { Switch } from "$lib/components/ui/switch/index.js";
 import * as Field from "$lib/components/ui/field/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
 import * as Dialog from "$lib/components/ui/dialog/index.js";
@@ -130,13 +125,6 @@ let twoFactorPasskeys = $state<any[]>([]);
 let twoFactorPasskeyOpen = $state(false);
 let twoFactorPasskeyPassword = $state("");
 let twoFactorPasskeyName = $state("");
-let yubikeyOpen = $state(false);
-let yubikeyPassword = $state("");
-let yubikeyOtps = $state("");
-let yubikeyNfc = $state(false);
-let yubikeySettings = $state<any>(null);
-let yubicoClientId = $state("");
-let yubicoSecretKey = $state("");
 
 function fail(value: unknown) {
 	error = value instanceof Error ? value.message : "操作失败";
@@ -587,77 +575,6 @@ async function removeTwoFactorPasskey(id: string) {
 	}
 }
 
-async function loadYubikeySettings() {
-	if (!yubikeyPassword) return;
-	busy = "yubikey-load";
-	try {
-		yubikeySettings = await getYubikeySettingsApi(
-			await passwordHash(yubikeyPassword),
-		);
-		yubikeyNfc = Boolean(yubikeySettings.nfc);
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
-}
-
-async function saveYubikeys() {
-	const otps = yubikeyOtps
-		.split(/\s+/)
-		.map((value) => value.trim())
-		.filter(Boolean);
-	if (!yubikeyPassword || !otps.length) return;
-	busy = "yubikey-save";
-	try {
-		yubikeySettings = await saveYubikeysApi({
-			masterPasswordHash: await passwordHash(yubikeyPassword),
-			otps,
-			nfc: yubikeyNfc,
-		});
-		yubikeyOtps = "";
-		message = "YubiKey 两步验证已启用";
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
-}
-
-async function disableYubikeys() {
-	if (!yubikeyPassword || !confirm("关闭 YubiKey 两步验证？")) return;
-	busy = "yubikey-disable";
-	try {
-		yubikeySettings = await disableYubikeysApi(
-			await passwordHash(yubikeyPassword),
-		);
-		message = "YubiKey 两步验证已关闭";
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
-}
-
-async function saveYubicoConfig() {
-	if (!yubikeyPassword || !yubicoClientId || !yubicoSecretKey) return;
-	busy = "yubico-config";
-	try {
-		await saveYubicoConfigApi({
-			masterPasswordHash: await passwordHash(yubikeyPassword),
-			clientId: yubicoClientId.trim(),
-			secretKey: yubicoSecretKey.trim(),
-		});
-		yubicoSecretKey = "";
-		await loadYubikeySettings();
-		message = "Yubico 验证凭据已加密保存";
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
-}
-
 function deviceTypeLabel(type: number): string {
 	return match(type)
 		.with(0, () => "浏览器")
@@ -770,10 +687,13 @@ async function respondToAuthRequest(request: AuthRequest, approved: boolean) {
 			<Card.Content><Button variant="outline" onclick={() => twoFactorPasskeyOpen = true}><Fingerprint />管理安全密钥</Button></Card.Content>
 		</Card.Root>
 
-		<Card.Root>
-			<Card.Header><Card.Title>YubiKey OTP</Card.Title><Card.Description>使用 Yubico OTP 模式的硬件密钥作为第二因素；登录时 OTP 会由服务端向 Yubico 验证。</Card.Description></Card.Header>
-			<Card.Content><Button variant="outline" onclick={() => yubikeyOpen = true}><KeyRound />管理 YubiKey</Button></Card.Content>
-		</Card.Root>
+		<YubikeySettings
+			email={profile.email}
+			kdfIterations={profile.kdfIterations}
+			isAdmin={profile.role === "admin"}
+			onMessage={(value) => { message = value; error = ""; }}
+			onError={fail}
+		/>
 
 		<Card.Root>
 			<Card.Header class="flex-row items-start justify-between"><div><Card.Title>通行密钥</Card.Title><Card.Description>最多添加 5 把 WebAuthn 通行密钥；支持 PRF 的设备可直接解锁保险库。</Card.Description></div><Button size="sm" onclick={() => passkeyOpen = true} disabled={passkeys.length >= 5}>添加</Button></Card.Header>
@@ -830,6 +750,5 @@ async function respondToAuthRequest(request: AuthRequest, approved: boolean) {
 
 <Dialog.Root bind:open={twoFactorPasskeyOpen}><Dialog.Content><Dialog.Header><Dialog.Title>两步验证安全密钥</Dialog.Title><Dialog.Description>先用主密码验证身份，再添加或删除安全密钥。</Dialog.Description></Dialog.Header><Field.Group><Field.Field><Field.Label for="two-factor-passkey-password">当前主密码</Field.Label><Input id="two-factor-passkey-password" type="password" bind:value={twoFactorPasskeyPassword} autocomplete="current-password" /></Field.Field><Field.Field orientation="horizontal"><Button variant="outline" onclick={manageTwoFactorPasskeys} disabled={!twoFactorPasskeyPassword || busy === "2fa-passkey-load"}>读取设置</Button></Field.Field>{#if twoFactorPasskeys.length}<div class="space-y-2">{#each twoFactorPasskeys as credential (credential.id)}<div class="flex items-center justify-between rounded-md border p-3"><span>{credential.name || "安全密钥"}</span><Button variant="ghost" size="icon-sm" onclick={() => removeTwoFactorPasskey(String(credential.id))} disabled={busy === `2fa-passkey-${credential.id}`} aria-label="删除安全密钥"><Trash2 /></Button></div>{/each}</div>{/if}<Field.Field><Field.Label for="two-factor-passkey-name">新安全密钥名称</Field.Label><Input id="two-factor-passkey-name" bind:value={twoFactorPasskeyName} placeholder="例如：USB 安全密钥" /></Field.Field></Field.Group><Dialog.Footer><Button variant="outline" onclick={() => twoFactorPasskeyOpen = false}>关闭</Button><Button onclick={addTwoFactorPasskey} disabled={!twoFactorPasskeyPassword || busy === "2fa-passkey-create"}><Fingerprint />添加安全密钥</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
 
-<Dialog.Root bind:open={yubikeyOpen}><Dialog.Content class="max-h-[90vh] overflow-y-auto"><Dialog.Header><Dialog.Title>YubiKey OTP</Dialog.Title><Dialog.Description>每把密钥触摸一次并逐行输入完整 OTP。服务器只保存前 12 位公共 ID。</Dialog.Description></Dialog.Header><Field.Group><Field.Field><Field.Label for="yubikey-password">当前主密码</Field.Label><Input id="yubikey-password" type="password" bind:value={yubikeyPassword} autocomplete="current-password" /></Field.Field><Field.Field orientation="horizontal"><Button variant="outline" onclick={loadYubikeySettings} disabled={!yubikeyPassword || busy === "yubikey-load"}>读取设置</Button></Field.Field>{#if yubikeySettings}<div class="rounded-md border p-3 text-sm"><div>状态：{yubikeySettings.enabled ? "已启用" : "未启用"}</div><div>已登记：{(yubikeySettings.keys ?? []).join("、") || "无"}</div><div>Yubico 验证：{yubikeySettings.configured ? "已配置" : "未配置"}</div></div>{/if}<Field.Field><Field.Label for="yubikey-otps">新 YubiKey OTP</Field.Label><Textarea id="yubikey-otps" bind:value={yubikeyOtps} rows={3} autocomplete="off" spellcheck={false} placeholder="每行输入一把密钥生成的 OTP（最多 5 把）" /></Field.Field><Field.Field orientation="horizontal"><Switch id="yubikey-nfc" bind:checked={yubikeyNfc} /><Field.Label for="yubikey-nfc">允许 NFC 提示</Field.Label></Field.Field>{#if profile?.role === "admin"}<div class="space-y-3 rounded-md border p-3"><div class="font-medium">Yubico 验证凭据（管理员）</div><Field.Field><Field.Label for="yubico-client-id">Client ID</Field.Label><Input id="yubico-client-id" bind:value={yubicoClientId} inputmode="numeric" /></Field.Field><Field.Field><Field.Label for="yubico-secret">Secret Key</Field.Label><Input id="yubico-secret" type="password" bind:value={yubicoSecretKey} autocomplete="new-password" /></Field.Field><Button variant="outline" onclick={saveYubicoConfig} disabled={!yubikeyPassword || !yubicoClientId || !yubicoSecretKey || busy === "yubico-config"}>加密保存验证凭据</Button></div>{/if}</Field.Group><Dialog.Footer><Button variant="destructive" onclick={disableYubikeys} disabled={!yubikeySettings?.enabled || busy === "yubikey-disable"}>关闭 YubiKey</Button><Button onclick={saveYubikeys} disabled={!yubikeyPassword || !yubikeyOtps.trim() || busy === "yubikey-save"}>验证并保存</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
 
 <Dialog.Root open={!!deletePasskey} onOpenChange={(open) => { if (!open) deletePasskey = null; }}><Dialog.Content><Dialog.Header><Dialog.Title>删除通行密钥</Dialog.Title><Dialog.Description>请输入当前主密码确认删除“{deletePasskey?.name || "通行密钥"}”。</Dialog.Description></Dialog.Header><Field.Field><Field.Label for="delete-passkey-password">当前主密码</Field.Label><Input id="delete-passkey-password" type="password" bind:value={deletePasskeyPassword} autocomplete="current-password" /></Field.Field><Dialog.Footer><Button variant="outline" onclick={() => deletePasskey = null}>取消</Button><Button variant="destructive" onclick={removePasskey} disabled={!deletePasskeyPassword || busy === "passkey-delete"}>删除</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
