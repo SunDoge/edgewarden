@@ -1,123 +1,222 @@
 <script lang="ts">
-	import { onMount } from "svelte";
-	import { goto } from "$app/navigation";
-	import { Button } from "$lib/components/ui/button/index.js";
-	import { Input } from "$lib/components/ui/input/index.js";
-	import * as Field from "$lib/components/ui/field/index.js";
-	import * as Card from "$lib/components/ui/card/index.js";
-	import * as Tabs from "$lib/components/ui/tabs/index.js";
-	import * as Select from "$lib/components/ui/select/index.js";
-	import { Textarea } from "$lib/components/ui/textarea/index.js";
-	import { Switch } from "$lib/components/ui/switch/index.js";
-	import {
-		estimateBits,
-		generateEmailAlias,
-		generatePassphrase,
-		generatePassword,
-		generatePin,
-		generateUsername,
-		type GeneratorMode,
-	} from "$lib/services/password-generator";
-	import { generateSshKey, type GeneratedSshKey } from "$lib/services/ssh-key-generator";
-	import { ArrowLeft, Check, Copy, Download, RefreshCw } from "@lucide/svelte";
-	import { match } from "ts-pattern";
+import { onMount } from "svelte";
+import { goto } from "$app/navigation";
+import { Button } from "$lib/components/ui/button/index.js";
+import { Input } from "$lib/components/ui/input/index.js";
+import * as Field from "$lib/components/ui/field/index.js";
+import * as Card from "$lib/components/ui/card/index.js";
+import * as Tabs from "$lib/components/ui/tabs/index.js";
+import * as Select from "$lib/components/ui/select/index.js";
+import { Textarea } from "$lib/components/ui/textarea/index.js";
+import { Switch } from "$lib/components/ui/switch/index.js";
+import {
+	estimateBits,
+	generateEmailAlias,
+	generatePassphrase,
+	generatePassword,
+	generatePin,
+	generateUsername,
+	type GeneratorMode,
+} from "$lib/services/password-generator";
+import {
+	generateSshKey,
+	type GeneratedSshKey,
+} from "$lib/services/ssh-key-generator";
+import { ArrowLeft, Check, Copy, Download, RefreshCw } from "@lucide/svelte";
+import { match } from "ts-pattern";
 
-	let mode = $state<GeneratorMode>("password");
-	let value = $state("");
-	let error = $state("");
-	let copied = $state(false);
-	let length = $state(20);
-	let uppercase = $state(true);
-	let lowercase = $state(true);
-	let numbers = $state(true);
-	let special = $state(true);
-	let avoidAmbiguous = $state(false);
-	let minUppercase = $state(1);
-	let minLowercase = $state(1);
-	let minNumbers = $state(1);
-	let minSpecial = $state(1);
-	let words = $state(5);
-	let separator = $state("-");
-	let capitalize = $state(false);
-	let includeNumber = $state(true);
-	let useCustomWords = $state(false);
-	let customWords = $state("");
-	let usernameCustomWord = $state("");
-	let pinLength = $state(6);
-	let email = $state("");
-	let aliasMode = $state<"plus" | "catchall" | "subdomain">("plus");
-	let aliasDomain = $state("");
-	let sshType = $state<"ed25519" | "rsa">("ed25519");
-	let rsaLength = $state("3072");
-	let sshComment = $state("");
-	let sshKey = $state<GeneratedSshKey | null>(null);
-	let generating = $state(false);
-	let bits = $derived(estimateBits(value, mode));
+let mode = $state<GeneratorMode>("password");
+let value = $state("");
+let error = $state("");
+let copied = $state(false);
+let length = $state(20);
+let uppercase = $state(true);
+let lowercase = $state(true);
+let numbers = $state(true);
+let special = $state(true);
+let avoidAmbiguous = $state(false);
+let minUppercase = $state(1);
+let minLowercase = $state(1);
+let minNumbers = $state(1);
+let minSpecial = $state(1);
+let words = $state(5);
+let separator = $state("-");
+let capitalize = $state(false);
+let includeNumber = $state(true);
+let useCustomWords = $state(false);
+let customWords = $state("");
+let usernameCustomWord = $state("");
+let pinLength = $state(6);
+let email = $state("");
+let aliasMode = $state<"plus" | "catchall" | "subdomain">("plus");
+let aliasDomain = $state("");
+let sshType = $state<"ed25519" | "rsa">("ed25519");
+let rsaLength = $state("3072");
+let sshComment = $state("");
+let sshKey = $state<GeneratedSshKey | null>(null);
+let generating = $state(false);
+let bits = $derived(estimateBits(value, mode));
 
-	async function generate() {
-		error = "";
-		copied = false;
-		generating = true;
-		try {
-			if (mode === "ssh") {
-				sshKey = await generateSshKey({ type: sshType, rsaLength: Number(rsaLength) as 2048 | 3072 | 4096, comment: sshComment });
-				value = sshKey.publicKey;
-				return;
-			}
-			value = match(mode)
-				.with("password", () => generatePassword({ length, uppercase, lowercase, numbers, special, avoidAmbiguous, minUppercase, minLowercase, minNumbers, minSpecial }))
-				.with("passphrase", () => generatePassphrase({ words, separator, capitalize, includeNumber, customWords: useCustomWords ? customWords : undefined }))
-				.with("pin", () => generatePin(pinLength))
-				.with("username", () => generateUsername({ words, separator, capitalize, includeNumber, customWords: useCustomWords ? customWords : undefined, customWord: usernameCustomWord }))
-				.with("email", () => generateEmailAlias({ email, mode: aliasMode, domain: aliasDomain }))
-				.exhaustive();
-		} catch (e) { error = e instanceof Error ? e.message : "生成失败"; }
-		finally { generating = false; }
+async function generate() {
+	error = "";
+	copied = false;
+	generating = true;
+	try {
+		if (mode === "ssh") {
+			sshKey = await generateSshKey({
+				type: sshType,
+				rsaLength: Number(rsaLength) as 2048 | 3072 | 4096,
+				comment: sshComment,
+			});
+			value = sshKey.publicKey;
+			return;
+		}
+		value = match(mode)
+			.with("password", () =>
+				generatePassword({
+					length,
+					uppercase,
+					lowercase,
+					numbers,
+					special,
+					avoidAmbiguous,
+					minUppercase,
+					minLowercase,
+					minNumbers,
+					minSpecial,
+				}),
+			)
+			.with("passphrase", () =>
+				generatePassphrase({
+					words,
+					separator,
+					capitalize,
+					includeNumber,
+					customWords: useCustomWords ? customWords : undefined,
+				}),
+			)
+			.with("pin", () => generatePin(pinLength))
+			.with("username", () =>
+				generateUsername({
+					words,
+					separator,
+					capitalize,
+					includeNumber,
+					customWords: useCustomWords ? customWords : undefined,
+					customWord: usernameCustomWord,
+				}),
+			)
+			.with("email", () =>
+				generateEmailAlias({ email, mode: aliasMode, domain: aliasDomain }),
+			)
+			.exhaustive();
+	} catch (e) {
+		error = e instanceof Error ? e.message : "生成失败";
+	} finally {
+		generating = false;
 	}
+}
 
-	function changeMode(next: string) {
-		mode = next as GeneratorMode;
-		value = "";
-		sshKey = null;
-		error = "";
+function changeMode(next: string) {
+	mode = next as GeneratorMode;
+	value = "";
+	sshKey = null;
+	error = "";
+}
+
+async function copy(text = value) {
+	if (!text) return;
+	await navigator.clipboard.writeText(text);
+	copied = true;
+	setTimeout(() => (copied = false), 1500);
+}
+
+function download(filename: string, text: string) {
+	const url = URL.createObjectURL(
+		new Blob([text], { type: "text/plain;charset=utf-8" }),
+	);
+	const anchor = document.createElement("a");
+	anchor.href = url;
+	anchor.download = filename;
+	anchor.click();
+	setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+const settingsKey = "edgewarden.password-generator.v1";
+onMount(() => {
+	try {
+		const saved = JSON.parse(localStorage.getItem(settingsKey) ?? "null");
+		if (saved && typeof saved === "object") {
+			mode = saved.mode ?? mode;
+			length = saved.length ?? length;
+			uppercase = saved.uppercase ?? uppercase;
+			lowercase = saved.lowercase ?? lowercase;
+			numbers = saved.numbers ?? numbers;
+			special = saved.special ?? special;
+			avoidAmbiguous = saved.avoidAmbiguous ?? avoidAmbiguous;
+			minUppercase = saved.minUppercase ?? minUppercase;
+			minLowercase = saved.minLowercase ?? minLowercase;
+			minNumbers = saved.minNumbers ?? minNumbers;
+			minSpecial = saved.minSpecial ?? minSpecial;
+			words = saved.words ?? words;
+			separator = saved.separator ?? separator;
+			capitalize = saved.capitalize ?? capitalize;
+			includeNumber = saved.includeNumber ?? includeNumber;
+			useCustomWords = saved.useCustomWords ?? useCustomWords;
+			customWords = saved.customWords ?? customWords;
+			usernameCustomWord = saved.usernameCustomWord ?? usernameCustomWord;
+			pinLength = saved.pinLength ?? pinLength;
+			email = saved.email ?? email;
+			aliasMode = saved.aliasMode ?? aliasMode;
+			aliasDomain = saved.aliasDomain ?? aliasDomain;
+			sshType = saved.sshType ?? sshType;
+			rsaLength = saved.rsaLength ?? rsaLength;
+			sshComment = saved.sshComment ?? sshComment;
+			value = "";
+			void generate();
+		}
+	} catch {
+		/* malformed preferences use safe defaults */
 	}
+});
 
-	async function copy(text = value) {
-		if (!text) return;
-		await navigator.clipboard.writeText(text);
-		copied = true;
-		setTimeout(() => copied = false, 1500);
-	}
+$effect(() => {
+	if (typeof window === "undefined") return;
+	localStorage.setItem(
+		settingsKey,
+		JSON.stringify({
+			mode,
+			length,
+			uppercase,
+			lowercase,
+			numbers,
+			special,
+			avoidAmbiguous,
+			minUppercase,
+			minLowercase,
+			minNumbers,
+			minSpecial,
+			words,
+			separator,
+			capitalize,
+			includeNumber,
+			useCustomWords,
+			customWords,
+			usernameCustomWord,
+			pinLength,
+			email,
+			aliasMode,
+			aliasDomain,
+			sshType,
+			rsaLength,
+			sshComment,
+		}),
+	);
+});
 
-	function download(filename: string, text: string) {
-		const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
-		const anchor = document.createElement("a");
-		anchor.href = url;
-		anchor.download = filename;
-		anchor.click();
-		setTimeout(() => URL.revokeObjectURL(url), 0);
-	}
-
-	const settingsKey = "edgewarden.password-generator.v1";
-	onMount(() => {
-		try {
-			const saved = JSON.parse(localStorage.getItem(settingsKey) ?? "null");
-			if (saved && typeof saved === "object") {
-				mode = saved.mode ?? mode; length = saved.length ?? length; uppercase = saved.uppercase ?? uppercase; lowercase = saved.lowercase ?? lowercase; numbers = saved.numbers ?? numbers; special = saved.special ?? special; avoidAmbiguous = saved.avoidAmbiguous ?? avoidAmbiguous;
-				minUppercase = saved.minUppercase ?? minUppercase; minLowercase = saved.minLowercase ?? minLowercase; minNumbers = saved.minNumbers ?? minNumbers; minSpecial = saved.minSpecial ?? minSpecial;
-				words = saved.words ?? words; separator = saved.separator ?? separator; capitalize = saved.capitalize ?? capitalize; includeNumber = saved.includeNumber ?? includeNumber; useCustomWords = saved.useCustomWords ?? useCustomWords; customWords = saved.customWords ?? customWords; usernameCustomWord = saved.usernameCustomWord ?? usernameCustomWord;
-				pinLength = saved.pinLength ?? pinLength; email = saved.email ?? email; aliasMode = saved.aliasMode ?? aliasMode; aliasDomain = saved.aliasDomain ?? aliasDomain; sshType = saved.sshType ?? sshType; rsaLength = saved.rsaLength ?? rsaLength; sshComment = saved.sshComment ?? sshComment;
-				value = ""; void generate();
-			}
-		} catch { /* malformed preferences use safe defaults */ }
-	});
-
-	$effect(() => {
-		if (typeof window === "undefined") return;
-		localStorage.setItem(settingsKey, JSON.stringify({ mode, length, uppercase, lowercase, numbers, special, avoidAmbiguous, minUppercase, minLowercase, minNumbers, minSpecial, words, separator, capitalize, includeNumber, useCustomWords, customWords, usernameCustomWord, pinLength, email, aliasMode, aliasDomain, sshType, rsaLength, sshComment }));
-	});
-
-	$effect(() => { if (!value && mode !== "email") void generate(); });
+$effect(() => {
+	if (!value && mode !== "email") void generate();
+});
 </script>
 
 <svelte:head><title>密码生成器 · Edgewarden</title></svelte:head>

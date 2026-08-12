@@ -2,8 +2,15 @@
 import "./layout.css";
 import favicon from "$lib/assets/favicon.svg";
 import { onMount } from "svelte";
-import { applyThemePreference, clientPreferencesStorageKey, loadClientPreferences } from "$lib/services/client-preferences";
-import { NetworkStatusMonitor, type NetworkStatus } from "$lib/services/network-status";
+import {
+	applyThemePreference,
+	clientPreferencesStorageKey,
+	loadClientPreferences,
+} from "$lib/services/client-preferences";
+import {
+	NetworkStatusMonitor,
+	type NetworkStatus,
+} from "$lib/services/network-status";
 import { Badge } from "$lib/components/ui/badge/index.js";
 import { Wifi, WifiOff } from "@lucide/svelte";
 import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
@@ -29,14 +36,21 @@ onMount(() => {
 onMount(() => {
 	const monitor = new NetworkStatusMonitor({
 		probe: async () => {
-			const response = await fetch("/api/version", { cache: "no-store", signal: AbortSignal.timeout(5_000) });
+			const response = await fetch("/api/version", {
+				cache: "no-store",
+				signal: AbortSignal.timeout(5_000),
+			});
 			if (!response.ok) throw new Error("Service unavailable");
 		},
-		onStatus: (status) => { networkStatus = status; },
+		onStatus: (status) => {
+			networkStatus = status;
+		},
 	});
 	const check = () => void monitor.check();
 	const offline = () => void monitor.check(false);
-	const visible = () => { if (document.visibilityState === "visible") check(); };
+	const visible = () => {
+		if (document.visibilityState === "visible") check();
+	};
 	monitor.start();
 	window.addEventListener("online", check);
 	window.addEventListener("offline", offline);

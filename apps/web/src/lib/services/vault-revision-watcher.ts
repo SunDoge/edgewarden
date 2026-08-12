@@ -32,7 +32,9 @@ export class VaultRevisionWatcher {
 			}
 		} catch {
 			// Network failures are expected while offline; the next interval retries.
-		} finally { this.#checking = false; }
+		} finally {
+			this.#checking = false;
+		}
 	}
 
 	start(): void {

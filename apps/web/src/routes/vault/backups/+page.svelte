@@ -384,7 +384,8 @@ async function handleInspectFile(path: string) {
 	try {
 		const result = await inspectRemoteBackupApi(selectedDestId, path);
 		const integrity = result.integrity ?? {};
-		if (integrity.matches === true || integrity.valid === true) showSuccess("备份文件校验和验证通过。");
+		if (integrity.matches === true || integrity.valid === true)
+			showSuccess("备份文件校验和验证通过。");
 		else error = integrity.reason || "备份文件校验和与文件名不匹配。";
 	} catch (e: any) {
 		error = e.message || "检查备份完整性失败。";
@@ -399,7 +400,10 @@ function openRemoteDirectory(path: string) {
 }
 
 function openParentDirectory() {
-	const parts = currentRemotePath.replace(/\/+$/, "").split("/").filter(Boolean);
+	const parts = currentRemotePath
+		.replace(/\/+$/, "")
+		.split("/")
+		.filter(Boolean);
 	parts.pop();
 	openRemoteDirectory(parts.join("/"));
 }

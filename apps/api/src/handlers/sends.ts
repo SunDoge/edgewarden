@@ -622,7 +622,8 @@ export const updateSend = factory.createHandlers(
 			updateData.emails = serializeSendEmails(body.emails);
 		}
 		if (textData !== undefined) {
-			if (send.type !== 0) return errorResponse("Only text Sends can update text data", 400);
+			if (send.type !== 0)
+				return errorResponse("Only text Sends can update text data", 400);
 			updateData.data = JSON.stringify(textData);
 		}
 

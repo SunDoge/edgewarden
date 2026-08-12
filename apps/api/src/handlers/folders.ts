@@ -107,20 +107,37 @@ export const deleteFolders = factory.createHandlers(
 		const userId = c.get("user").id;
 		const db = c.get("db");
 		const ids = [...new Set(c.req.valid("json").ids)];
-		const ownedIds = (await db
-			.selectFrom("folders")
-			.select("id")
-			.where("user_id", "=", userId)
-			.where("id", "in", ids)
-			.execute()).map((folder) => folder.id);
+		const ownedIds = (
+			await db
+				.selectFrom("folders")
+				.select("id")
+				.where("user_id", "=", userId)
+				.where("id", "in", ids)
+				.execute()
+		).map((folder) => folder.id);
 		if (!ownedIds.length) return new Response(null, { status: 204 });
 		const ts = now();
 		await executeBatch(c.get("dbDialect"), [
-			db.updateTable("ciphers").set({ folder_id: null, updated_at: ts }).where("user_id", "=", userId).where("folder_id", "in", ownedIds).compile(),
-			db.deleteFrom("folders").where("user_id", "=", userId).where("id", "in", ownedIds).compile(),
+			db
+				.updateTable("ciphers")
+				.set({ folder_id: null, updated_at: ts })
+				.where("user_id", "=", userId)
+				.where("folder_id", "in", ownedIds)
+				.compile(),
+			db
+				.deleteFrom("folders")
+				.where("user_id", "=", userId)
+				.where("id", "in", ownedIds)
+				.compile(),
 			revisionQuery(db, userId, ts),
 		]);
-		await safeWriteAuditEvent(db, { actorUserId: userId, action: "folder.delete.bulk", category: "vault", targetType: "folder", metadata: { ...auditRequestMetadata(c.req.raw), size: ownedIds.length } });
+		await safeWriteAuditEvent(db, {
+			actorUserId: userId,
+			action: "folder.delete.bulk",
+			category: "vault",
+			targetType: "folder",
+			metadata: { ...auditRequestMetadata(c.req.raw), size: ownedIds.length },
+		});
 		return new Response(null, { status: 204 });
 	},
 );

@@ -82,21 +82,46 @@ export const deleteDevice = factory.createHandlers(async (c) => {
 	return new Response(null, { status: 200 });
 });
 
-export const deleteDevices = factory.createHandlers(vValidator("json", BulkIdsSchema), async (c) => {
-	const db = c.get("db");
-	const userId = c.get("user").id;
-	const ids = [...new Set(c.req.valid("json").ids)];
-	const ownedIds = (await db.selectFrom("devices").select("device_identifier").where("user_id", "=", userId).where("device_identifier", "in", ids).execute()).map((device) => device.device_identifier);
-	if (ownedIds.length) {
-		await executeBatch(c.get("dbDialect"), [
-			db.deleteFrom("refresh_tokens").where("user_id", "=", userId).where("device_identifier", "in", ownedIds).compile(),
-			db.deleteFrom("devices").where("user_id", "=", userId).where("device_identifier", "in", ownedIds).compile(),
-		]);
-		invalidateUserCache(userId);
-		await safeWriteAuditEvent(db, { actorUserId: userId, action: "device.delete.bulk", category: "auth", level: "warning", targetType: "device", metadata: { ...auditRequestMetadata(c.req.raw), size: ownedIds.length } });
-	}
-	return c.json({ deleted: ownedIds.length });
-});
+export const deleteDevices = factory.createHandlers(
+	vValidator("json", BulkIdsSchema),
+	async (c) => {
+		const db = c.get("db");
+		const userId = c.get("user").id;
+		const ids = [...new Set(c.req.valid("json").ids)];
+		const ownedIds = (
+			await db
+				.selectFrom("devices")
+				.select("device_identifier")
+				.where("user_id", "=", userId)
+				.where("device_identifier", "in", ids)
+				.execute()
+		).map((device) => device.device_identifier);
+		if (ownedIds.length) {
+			await executeBatch(c.get("dbDialect"), [
+				db
+					.deleteFrom("refresh_tokens")
+					.where("user_id", "=", userId)
+					.where("device_identifier", "in", ownedIds)
+					.compile(),
+				db
+					.deleteFrom("devices")
+					.where("user_id", "=", userId)
+					.where("device_identifier", "in", ownedIds)
+					.compile(),
+			]);
+			invalidateUserCache(userId);
+			await safeWriteAuditEvent(db, {
+				actorUserId: userId,
+				action: "device.delete.bulk",
+				category: "auth",
+				level: "warning",
+				targetType: "device",
+				metadata: { ...auditRequestMetadata(c.req.raw), size: ownedIds.length },
+			});
+		}
+		return c.json({ deleted: ownedIds.length });
+	},
+);
 
 export const updateDeviceName = factory.createHandlers(
 	vValidator("json", DeviceNameSchema),
@@ -146,16 +171,33 @@ export const updateDeviceKeys = factory.createHandlers(
 	},
 );
 
-export const deleteAllDevices = factory.createHandlers(vValidator("json", VerifyPasswordSchema), async (c) => {
-	const db = c.get("db");
-	const user = c.get("user");
-	if (!(await verifyPassword(c.req.valid("json").masterPasswordHash, user.master_password_hash, user.email))) return c.json({ error: "Invalid password" }, 400);
-	const userId = user.id;
-	await executeBatch(c.get("dbDialect"), [
-		db.deleteFrom("refresh_tokens").where("user_id", "=", userId).compile(),
-		db.deleteFrom("devices").where("user_id", "=", userId).compile(),
-		db.updateTable("users").set({ security_stamp: crypto.randomUUID(), updated_at: Math.floor(Date.now() / 1000) }).where("id", "=", userId).compile(),
-	]);
-	invalidateUserCache(userId);
-	return new Response(null, { status: 200 });
-});
+export const deleteAllDevices = factory.createHandlers(
+	vValidator("json", VerifyPasswordSchema),
+	async (c) => {
+		const db = c.get("db");
+		const user = c.get("user");
+		if (
+			!(await verifyPassword(
+				c.req.valid("json").masterPasswordHash,
+				user.master_password_hash,
+				user.email,
+			))
+		)
+			return c.json({ error: "Invalid password" }, 400);
+		const userId = user.id;
+		await executeBatch(c.get("dbDialect"), [
+			db.deleteFrom("refresh_tokens").where("user_id", "=", userId).compile(),
+			db.deleteFrom("devices").where("user_id", "=", userId).compile(),
+			db
+				.updateTable("users")
+				.set({
+					security_stamp: crypto.randomUUID(),
+					updated_at: Math.floor(Date.now() / 1000),
+				})
+				.where("id", "=", userId)
+				.compile(),
+		]);
+		invalidateUserCache(userId);
+		return new Response(null, { status: 200 });
+	},
+);

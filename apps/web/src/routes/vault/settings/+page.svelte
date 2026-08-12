@@ -1,453 +1,705 @@
 <script lang="ts">
-	import { onMount } from "svelte";
-	import { goto } from "$app/navigation";
-	import {
-		deleteAllDevicesApi,
-		deleteAccountApi,
-		deleteDeviceApi,
-		deleteDevicesApi,
-		disableTwoFactorApi,
-		enableAuthenticatorApi,
-		changeMasterPasswordApi,
-		createAccountPasskeyApi,
-		deleteAccountPasskeyApi,
-		deleteTwoFactorPasskeyApi,
-		fetchApiKeyApi,
-		fetchDevicesApi,
-		fetchProfileApi,
-		fetchRecoveryCodeApi,
-		getAuthenticatorApi,
-		getAccountPasskeyAttestationOptionsApi,
-		getAccountPasskeyAssertionOptionsApi,
-		getTwoFactorPasskeysApi,
-		getTwoFactorPasskeyChallengeApi,
-		createTwoFactorPasskeyApi,
-		getYubikeySettingsApi,
-		saveYubikeysApi,
-		disableYubikeysApi,
-		saveYubicoConfigApi,
-		isLoggedIn,
-		listAccountPasskeysApi,
-		renameDeviceApi,
-		rotateApiKeyApi,
-		updateProfileApi,
-		updateAccountPasskeyEncryptionApi,
-	} from "$lib/services/api";
-	import { bytesToBase64, deriveMasterKey, deriveMasterPasswordHash } from "$lib/services/crypto";
-	import { assertAccountPasskey, buildAccountPasskeyPrfKeySet, buildAccountPasskeyPrfKeySetFromPrfKey, createAccountPasskeyCredential, createTwoFactorPasskeyCredential } from "$lib/services/passkeys";
-	import { encryptVaultKeyForAuthRequest, listPendingAuthRequestsApi, respondToAuthRequestApi, type AuthRequest } from "$lib/services/auth-requests";
-	import { vault, syncVaultData, logout } from "$lib/stores/vault.svelte";
-	import { Button } from "$lib/components/ui/button/index.js";
-	import { Input } from "$lib/components/ui/input/index.js";
-	import { Textarea } from "$lib/components/ui/textarea/index.js";
-	import { Switch } from "$lib/components/ui/switch/index.js";
-	import * as Field from "$lib/components/ui/field/index.js";
-	import * as Card from "$lib/components/ui/card/index.js";
-	import * as Dialog from "$lib/components/ui/dialog/index.js";
-	import * as Table from "$lib/components/ui/table/index.js";
-	import * as Select from "$lib/components/ui/select/index.js";
-	import { Badge } from "$lib/components/ui/badge/index.js";
-	import { applyThemePreference, loadClientPreferences, saveClientPreferences, type SessionTimeoutAction, type ThemePreference } from "$lib/services/client-preferences";
-	import { ArrowLeft, Copy, Fingerprint, KeyRound, LoaderCircle, Pencil, RefreshCw, ShieldCheck, Trash2 } from "@lucide/svelte";
-	import { match } from "ts-pattern";
-	import { getCurrentDeviceIdentifier } from "$lib/services/client-device";
+import { onMount } from "svelte";
+import { goto } from "$app/navigation";
+import {
+	deleteAllDevicesApi,
+	deleteAccountApi,
+	deleteDeviceApi,
+	deleteDevicesApi,
+	disableTwoFactorApi,
+	enableAuthenticatorApi,
+	changeMasterPasswordApi,
+	createAccountPasskeyApi,
+	deleteAccountPasskeyApi,
+	deleteTwoFactorPasskeyApi,
+	fetchApiKeyApi,
+	fetchDevicesApi,
+	fetchProfileApi,
+	fetchRecoveryCodeApi,
+	getAuthenticatorApi,
+	getAccountPasskeyAttestationOptionsApi,
+	getAccountPasskeyAssertionOptionsApi,
+	getTwoFactorPasskeysApi,
+	getTwoFactorPasskeyChallengeApi,
+	createTwoFactorPasskeyApi,
+	getYubikeySettingsApi,
+	saveYubikeysApi,
+	disableYubikeysApi,
+	saveYubicoConfigApi,
+	isLoggedIn,
+	listAccountPasskeysApi,
+	renameDeviceApi,
+	rotateApiKeyApi,
+	updateProfileApi,
+	updateAccountPasskeyEncryptionApi,
+} from "$lib/services/api";
+import {
+	bytesToBase64,
+	deriveMasterKey,
+	deriveMasterPasswordHash,
+} from "$lib/services/crypto";
+import {
+	assertAccountPasskey,
+	buildAccountPasskeyPrfKeySet,
+	buildAccountPasskeyPrfKeySetFromPrfKey,
+	createAccountPasskeyCredential,
+	createTwoFactorPasskeyCredential,
+} from "$lib/services/passkeys";
+import {
+	encryptVaultKeyForAuthRequest,
+	listPendingAuthRequestsApi,
+	respondToAuthRequestApi,
+	type AuthRequest,
+} from "$lib/services/auth-requests";
+import { vault, syncVaultData, logout } from "$lib/stores/vault.svelte";
+import { Button } from "$lib/components/ui/button/index.js";
+import { Input } from "$lib/components/ui/input/index.js";
+import { Textarea } from "$lib/components/ui/textarea/index.js";
+import { Switch } from "$lib/components/ui/switch/index.js";
+import * as Field from "$lib/components/ui/field/index.js";
+import * as Card from "$lib/components/ui/card/index.js";
+import * as Dialog from "$lib/components/ui/dialog/index.js";
+import * as Table from "$lib/components/ui/table/index.js";
+import * as Select from "$lib/components/ui/select/index.js";
+import { Badge } from "$lib/components/ui/badge/index.js";
+import {
+	applyThemePreference,
+	loadClientPreferences,
+	saveClientPreferences,
+	type SessionTimeoutAction,
+	type ThemePreference,
+} from "$lib/services/client-preferences";
+import {
+	ArrowLeft,
+	Copy,
+	Fingerprint,
+	KeyRound,
+	LoaderCircle,
+	Pencil,
+	RefreshCw,
+	ShieldCheck,
+	Trash2,
+} from "@lucide/svelte";
+import { match } from "ts-pattern";
+import { getCurrentDeviceIdentifier } from "$lib/services/client-device";
 
-	let loading = $state(true);
-	let busy = $state("");
-	let message = $state("");
-	let error = $state("");
-	let profile = $state<any>(null);
-	let devices = $state<any[]>([]);
-	let passkeys = $state<any[]>([]);
-	let authRequests = $state<AuthRequest[]>([]);
-	let apiKey = $state("");
-	let name = $state("");
-	let hint = $state("");
-	let editingDevice = $state<any>(null);
-	let deviceName = $state("");
-	let removeAllDevicesOpen = $state(false);
-	let removeAllDevicesPassword = $state("");
-	let deleteAccountOpen = $state(false);
-	let deleteAccountPassword = $state("");
-	let selectedDeviceIds = $state<Record<string, boolean>>({});
-	let selectedDeviceIdList = $derived(devices.filter((device) => selectedDeviceIds[device.id]).map((device) => device.id));
-	let totpOpen = $state(false);
-	let totpKey = $state("");
-	let totpToken = $state("");
-	let disableOpen = $state(false);
-	let masterPassword = $state("");
-	let recoveryCode = $state("");
-	let passwordOpen = $state(false);
-	let currentPassword = $state("");
-	let newPassword = $state("");
-	let confirmPassword = $state("");
-	let passkeyOpen = $state(false);
-	let passkeyName = $state("");
-	let passkeyPassword = $state("");
-	let deletePasskey = $state<any>(null);
-	let deletePasskeyPassword = $state("");
-	let enablePasskey = $state<any>(null);
-	let enablePasskeyPassword = $state("");
-	let theme = $state<ThemePreference>("system");
-	let lockTimeoutMinutes = $state<"0" | "1" | "5" | "15" | "30">("15");
-	let sessionTimeoutAction = $state<SessionTimeoutAction>("lock");
-	let twoFactorPasskeys = $state<any[]>([]);
-	let twoFactorPasskeyOpen = $state(false);
-	let twoFactorPasskeyPassword = $state("");
-	let twoFactorPasskeyName = $state("");
-	let yubikeyOpen = $state(false);
-	let yubikeyPassword = $state("");
-	let yubikeyOtps = $state("");
-	let yubikeyNfc = $state(false);
-	let yubikeySettings = $state<any>(null);
-	let yubicoClientId = $state("");
-	let yubicoSecretKey = $state("");
+let loading = $state(true);
+let busy = $state("");
+let message = $state("");
+let error = $state("");
+let profile = $state<any>(null);
+let devices = $state<any[]>([]);
+let passkeys = $state<any[]>([]);
+let authRequests = $state<AuthRequest[]>([]);
+let apiKey = $state("");
+let name = $state("");
+let hint = $state("");
+let editingDevice = $state<any>(null);
+let deviceName = $state("");
+let removeAllDevicesOpen = $state(false);
+let removeAllDevicesPassword = $state("");
+let deleteAccountOpen = $state(false);
+let deleteAccountPassword = $state("");
+let selectedDeviceIds = $state<Record<string, boolean>>({});
+let selectedDeviceIdList = $derived(
+	devices
+		.filter((device) => selectedDeviceIds[device.id])
+		.map((device) => device.id),
+);
+let totpOpen = $state(false);
+let totpKey = $state("");
+let totpToken = $state("");
+let disableOpen = $state(false);
+let masterPassword = $state("");
+let recoveryCode = $state("");
+let passwordOpen = $state(false);
+let currentPassword = $state("");
+let newPassword = $state("");
+let confirmPassword = $state("");
+let passkeyOpen = $state(false);
+let passkeyName = $state("");
+let passkeyPassword = $state("");
+let deletePasskey = $state<any>(null);
+let deletePasskeyPassword = $state("");
+let enablePasskey = $state<any>(null);
+let enablePasskeyPassword = $state("");
+let theme = $state<ThemePreference>("system");
+let lockTimeoutMinutes = $state<"0" | "1" | "5" | "15" | "30">("15");
+let sessionTimeoutAction = $state<SessionTimeoutAction>("lock");
+let twoFactorPasskeys = $state<any[]>([]);
+let twoFactorPasskeyOpen = $state(false);
+let twoFactorPasskeyPassword = $state("");
+let twoFactorPasskeyName = $state("");
+let yubikeyOpen = $state(false);
+let yubikeyPassword = $state("");
+let yubikeyOtps = $state("");
+let yubikeyNfc = $state(false);
+let yubikeySettings = $state<any>(null);
+let yubicoClientId = $state("");
+let yubicoSecretKey = $state("");
 
-	function fail(value: unknown) {
-		error = value instanceof Error ? value.message : "操作失败";
-		message = "";
+function fail(value: unknown) {
+	error = value instanceof Error ? value.message : "操作失败";
+	message = "";
+}
+
+async function load() {
+	loading = true;
+	error = "";
+	try {
+		[profile, { data: devices }, { data: passkeys }] = await Promise.all([
+			fetchProfileApi(),
+			fetchDevicesApi(),
+			listAccountPasskeysApi(),
+		]);
+		name = profile.name ?? "";
+		hint = profile.masterPasswordHint ?? "";
+		authRequests = await listPendingAuthRequestsApi(profile.email);
+	} catch (e) {
+		fail(e);
+	} finally {
+		loading = false;
 	}
+}
 
-	async function load() {
-		loading = true;
-		error = "";
-		try {
-			[profile, { data: devices }, { data: passkeys }] = await Promise.all([
-				fetchProfileApi(),
-				fetchDevicesApi(),
-				listAccountPasskeysApi(),
-			]);
-			name = profile.name ?? "";
-			hint = profile.masterPasswordHint ?? "";
-			authRequests = await listPendingAuthRequestsApi(profile.email);
-		} catch (e) {
-			fail(e);
-		} finally {
-			loading = false;
-		}
-	}
+onMount(async () => {
+	const preferences = loadClientPreferences();
+	theme = preferences.theme;
+	lockTimeoutMinutes = String(
+		preferences.lockTimeoutMinutes,
+	) as typeof lockTimeoutMinutes;
+	sessionTimeoutAction = preferences.sessionTimeoutAction;
+	if (!isLoggedIn()) return goto("/login");
+	if (!vault.isUnlocked) return goto("/vault/unlock");
+	await load();
+});
 
-	onMount(async () => {
-		const preferences = loadClientPreferences();
-		theme = preferences.theme;
-		lockTimeoutMinutes = String(preferences.lockTimeoutMinutes) as typeof lockTimeoutMinutes;
-		sessionTimeoutAction = preferences.sessionTimeoutAction;
-		if (!isLoggedIn()) return goto("/login");
-		if (!vault.isUnlocked) return goto("/vault/unlock");
-		await load();
+function saveLocalPreferences() {
+	saveClientPreferences({
+		theme,
+		lockTimeoutMinutes: Number(lockTimeoutMinutes) as 0 | 1 | 5 | 15 | 30,
+		sessionTimeoutAction,
 	});
+	applyThemePreference(theme);
+	message = "外观和会话策略已保存";
+}
 
-	function saveLocalPreferences() {
-		saveClientPreferences({ theme, lockTimeoutMinutes: Number(lockTimeoutMinutes) as 0 | 1 | 5 | 15 | 30, sessionTimeoutAction });
-		applyThemePreference(theme);
-		message = "外观和会话策略已保存";
+async function saveProfile() {
+	busy = "profile";
+	error = "";
+	try {
+		profile = await updateProfileApi({
+			name: name.trim() || null,
+			masterPasswordHint: hint.trim() || null,
+		});
+		await syncVaultData();
+		message = "个人资料已保存";
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function saveProfile() {
-		busy = "profile";
-		error = "";
-		try {
-			profile = await updateProfileApi({ name: name.trim() || null, masterPasswordHint: hint.trim() || null });
-			await syncVaultData();
-			message = "个人资料已保存";
-		} catch (e) { fail(e); } finally { busy = ""; }
+async function revealApiKey() {
+	busy = "api-key";
+	try {
+		apiKey = (await fetchApiKeyApi()).apiKey;
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function revealApiKey() {
-		busy = "api-key";
-		try { apiKey = (await fetchApiKeyApi()).apiKey; } catch (e) { fail(e); } finally { busy = ""; }
+async function rotateApiKey() {
+	if (!confirm("旧 API Key 会立即失效，确认轮换？")) return;
+	busy = "api-key";
+	try {
+		apiKey = (await rotateApiKeyApi()).apiKey;
+		message = "API Key 已轮换";
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function rotateApiKey() {
-		if (!confirm("旧 API Key 会立即失效，确认轮换？")) return;
-		busy = "api-key";
-		try { apiKey = (await rotateApiKeyApi()).apiKey; message = "API Key 已轮换"; } catch (e) { fail(e); } finally { busy = ""; }
+async function copy(value: string) {
+	await navigator.clipboard.writeText(value);
+	message = "已复制到剪贴板";
+}
+
+function startRename(device: any) {
+	editingDevice = device;
+	deviceName = device.name ?? "";
+}
+
+async function saveDeviceName() {
+	if (!editingDevice || !deviceName.trim()) return;
+	busy = `device-${editingDevice.id}`;
+	try {
+		await renameDeviceApi(editingDevice.id, deviceName.trim());
+		editingDevice = null;
+		devices = (await fetchDevicesApi()).data;
+		message = "设备名称已更新";
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function copy(value: string) {
-		await navigator.clipboard.writeText(value);
-		message = "已复制到剪贴板";
+async function removeDevice(device: any) {
+	if (!confirm(`移除设备“${device.name}”？`)) return;
+	busy = `device-${device.id}`;
+	try {
+		await deleteDeviceApi(device.id);
+		devices = devices.filter((item) => item.id !== device.id);
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	function startRename(device: any) {
-		editingDevice = device;
-		deviceName = device.name ?? "";
-	}
-
-	async function saveDeviceName() {
-		if (!editingDevice || !deviceName.trim()) return;
-		busy = `device-${editingDevice.id}`;
-		try {
-			await renameDeviceApi(editingDevice.id, deviceName.trim());
-			editingDevice = null;
-			devices = (await fetchDevicesApi()).data;
-			message = "设备名称已更新";
-		} catch (e) { fail(e); } finally { busy = ""; }
-	}
-
-	async function removeDevice(device: any) {
-		if (!confirm(`移除设备“${device.name}”？`)) return;
-		busy = `device-${device.id}`;
-		try { await deleteDeviceApi(device.id); devices = devices.filter((item) => item.id !== device.id); } catch (e) { fail(e); } finally { busy = ""; }
-	}
-
-	async function removeSelectedDevices() {
-		if (!selectedDeviceIdList.length || !confirm(`移除选中的 ${selectedDeviceIdList.length} 台设备并撤销其会话？`)) return;
-		const removesCurrent = selectedDeviceIdList.includes(getCurrentDeviceIdentifier());
-		busy = "selected-devices";
-		try {
-			await deleteDevicesApi(selectedDeviceIdList);
-			devices = devices.filter((device) => !selectedDeviceIds[device.id]);
-			selectedDeviceIds = {};
-			message = "已移除选中设备";
-			if (removesCurrent) { await logout(); await goto("/login?reason=device-removed"); }
-		} catch (e) { fail(e); } finally { busy = ""; }
-	}
-
-	function toggleAllDevices(checked: boolean) {
-		selectedDeviceIds = checked ? Object.fromEntries(devices.map((device) => [device.id, true])) : {};
-	}
-
-	async function removeAllDevices() {
-		if (!removeAllDevicesPassword) return;
-		busy = "devices";
-		try { await deleteAllDevicesApi(await passwordHash(removeAllDevicesPassword)); devices = []; removeAllDevicesOpen = false; removeAllDevicesPassword = ""; await logout(); await goto("/login?reason=devices-removed"); } catch (e) { fail(e); } finally { busy = ""; }
-	}
-
-	async function removeAccount() {
-		if (!deleteAccountPassword) return;
-		busy = "delete-account";
-		try {
-			await deleteAccountApi(await passwordHash(deleteAccountPassword));
-			deleteAccountPassword = "";
+async function removeSelectedDevices() {
+	if (
+		!selectedDeviceIdList.length ||
+		!confirm(`移除选中的 ${selectedDeviceIdList.length} 台设备并撤销其会话？`)
+	)
+		return;
+	const removesCurrent = selectedDeviceIdList.includes(
+		getCurrentDeviceIdentifier(),
+	);
+	busy = "selected-devices";
+	try {
+		await deleteDevicesApi(selectedDeviceIdList);
+		devices = devices.filter((device) => !selectedDeviceIds[device.id]);
+		selectedDeviceIds = {};
+		message = "已移除选中设备";
+		if (removesCurrent) {
 			await logout();
-			await goto("/login?reason=account-deleted");
-		} catch (e) { fail(e); } finally { busy = ""; }
+			await goto("/login?reason=device-removed");
+		}
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function beginTotp() {
-		busy = "totp";
-		try {
-			const result = await getAuthenticatorApi();
-			totpKey = result.key;
-			totpToken = "";
-			totpOpen = true;
-		} catch (e) { fail(e); } finally { busy = ""; }
+function toggleAllDevices(checked: boolean) {
+	selectedDeviceIds = checked
+		? Object.fromEntries(devices.map((device) => [device.id, true]))
+		: {};
+}
+
+async function removeAllDevices() {
+	if (!removeAllDevicesPassword) return;
+	busy = "devices";
+	try {
+		await deleteAllDevicesApi(await passwordHash(removeAllDevicesPassword));
+		devices = [];
+		removeAllDevicesOpen = false;
+		removeAllDevicesPassword = "";
+		await logout();
+		await goto("/login?reason=devices-removed");
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function enableTotp() {
-		busy = "totp-enable";
-		try {
-			await enableAuthenticatorApi(totpKey, totpToken.replace(/\s/g, ""));
-			profile.twoFactorEnabled = true;
-			totpOpen = false;
-			message = "身份验证器已启用，请保存恢复代码";
-			const result = await fetchRecoveryCodeApi();
-			recoveryCode = result.code ?? "";
-		} catch (e) { fail(e); } finally { busy = ""; }
+async function removeAccount() {
+	if (!deleteAccountPassword) return;
+	busy = "delete-account";
+	try {
+		await deleteAccountApi(await passwordHash(deleteAccountPassword));
+		deleteAccountPassword = "";
+		await logout();
+		await goto("/login?reason=account-deleted");
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function showRecoveryCode() {
-		busy = "recovery";
-		try { recoveryCode = (await fetchRecoveryCodeApi()).code ?? ""; } catch (e) { fail(e); } finally { busy = ""; }
+async function beginTotp() {
+	busy = "totp";
+	try {
+		const result = await getAuthenticatorApi();
+		totpKey = result.key;
+		totpToken = "";
+		totpOpen = true;
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function disableTotp() {
-		if (!profile || !masterPassword) return;
-		busy = "totp-disable";
-		try {
-			const key = await deriveMasterKey(masterPassword, profile.email, profile.kdfIterations);
-			const hash = await deriveMasterPasswordHash(key, masterPassword);
-			await disableTwoFactorApi(hash);
-			profile.twoFactorEnabled = false;
-			disableOpen = false;
-			masterPassword = "";
-			recoveryCode = "";
-			message = "两步验证已关闭";
-		} catch (e) { fail(e); } finally { busy = ""; }
+async function enableTotp() {
+	busy = "totp-enable";
+	try {
+		await enableAuthenticatorApi(totpKey, totpToken.replace(/\s/g, ""));
+		profile.twoFactorEnabled = true;
+		totpOpen = false;
+		message = "身份验证器已启用，请保存恢复代码";
+		const result = await fetchRecoveryCodeApi();
+		recoveryCode = result.code ?? "";
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function passwordHash(password: string): Promise<string> {
-		const key = await deriveMasterKey(password, profile.email, profile.kdfIterations);
-		return deriveMasterPasswordHash(key, password);
+async function showRecoveryCode() {
+	busy = "recovery";
+	try {
+		recoveryCode = (await fetchRecoveryCodeApi()).code ?? "";
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function changeMasterPassword() {
-		if (newPassword.length < 12) return fail(new Error("新主密码至少需要 12 个字符"));
-		if (newPassword !== confirmPassword) return fail(new Error("两次输入的新主密码不一致"));
-		busy = "password";
-		try {
-			await changeMasterPasswordApi({
-				email: profile.email,
-				currentPassword,
-				newPassword,
-				iterations: profile.kdfIterations,
-				profileKey: profile.key,
-				masterPasswordHint: hint.trim() || null,
-			});
-			passwordOpen = false;
-			await logout();
-			await goto("/login?passwordChanged=1");
-		} catch (e) { fail(e); } finally { busy = ""; }
+async function disableTotp() {
+	if (!profile || !masterPassword) return;
+	busy = "totp-disable";
+	try {
+		const key = await deriveMasterKey(
+			masterPassword,
+			profile.email,
+			profile.kdfIterations,
+		);
+		const hash = await deriveMasterPasswordHash(key, masterPassword);
+		await disableTwoFactorApi(hash);
+		profile.twoFactorEnabled = false;
+		disableOpen = false;
+		masterPassword = "";
+		recoveryCode = "";
+		message = "两步验证已关闭";
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function createPasskey() {
-		if (!passkeyPassword) return;
-		busy = "passkey-create";
-		try {
-			const hash = await passwordHash(passkeyPassword);
-			const options = await getAccountPasskeyAttestationOptionsApi(hash);
-			const pending = await createAccountPasskeyCredential(options);
-			let keySet: {
-				encryptedUserKey?: string;
-				encryptedPublicKey?: string;
-				encryptedPrivateKey?: string;
-			} = {};
-			if (pending.supportsPrf && vault.symEncKey && vault.symMacKey) {
-				try {
-					keySet = await buildAccountPasskeyPrfKeySet(pending, {
-						symEncKey: bytesToBase64(vault.symEncKey),
-						symMacKey: bytesToBase64(vault.symMacKey),
-					});
-				} catch (e) {
-					if (!confirm("无法为这把通行密钥启用保险库直接解锁。仍保存为仅登录通行密钥？")) throw e;
-				}
+async function passwordHash(password: string): Promise<string> {
+	const key = await deriveMasterKey(
+		password,
+		profile.email,
+		profile.kdfIterations,
+	);
+	return deriveMasterPasswordHash(key, password);
+}
+
+async function changeMasterPassword() {
+	if (newPassword.length < 12)
+		return fail(new Error("新主密码至少需要 12 个字符"));
+	if (newPassword !== confirmPassword)
+		return fail(new Error("两次输入的新主密码不一致"));
+	busy = "password";
+	try {
+		await changeMasterPasswordApi({
+			email: profile.email,
+			currentPassword,
+			newPassword,
+			iterations: profile.kdfIterations,
+			profileKey: profile.key,
+			masterPasswordHint: hint.trim() || null,
+		});
+		passwordOpen = false;
+		await logout();
+		await goto("/login?passwordChanged=1");
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
+	}
+}
+
+async function createPasskey() {
+	if (!passkeyPassword) return;
+	busy = "passkey-create";
+	try {
+		const hash = await passwordHash(passkeyPassword);
+		const options = await getAccountPasskeyAttestationOptionsApi(hash);
+		const pending = await createAccountPasskeyCredential(options);
+		let keySet: {
+			encryptedUserKey?: string;
+			encryptedPublicKey?: string;
+			encryptedPrivateKey?: string;
+		} = {};
+		if (pending.supportsPrf && vault.symEncKey && vault.symMacKey) {
+			try {
+				keySet = await buildAccountPasskeyPrfKeySet(pending, {
+					symEncKey: bytesToBase64(vault.symEncKey),
+					symMacKey: bytesToBase64(vault.symMacKey),
+				});
+			} catch (e) {
+				if (
+					!confirm(
+						"无法为这把通行密钥启用保险库直接解锁。仍保存为仅登录通行密钥？",
+					)
+				)
+					throw e;
 			}
-			await createAccountPasskeyApi({
-				token: pending.token,
-				deviceResponse: pending.request,
-				name: passkeyName.trim() || undefined,
-				supportsPrf: pending.supportsPrf && !!keySet.encryptedUserKey,
-				...keySet,
-			});
-			passkeys = (await listAccountPasskeysApi()).data;
-			passkeyOpen = false;
-			passkeyName = "";
-			passkeyPassword = "";
-			message = "通行密钥已添加";
-		} catch (e) { fail(e); } finally { busy = ""; }
+		}
+		await createAccountPasskeyApi({
+			token: pending.token,
+			deviceResponse: pending.request,
+			name: passkeyName.trim() || undefined,
+			supportsPrf: pending.supportsPrf && !!keySet.encryptedUserKey,
+			...keySet,
+		});
+		passkeys = (await listAccountPasskeysApi()).data;
+		passkeyOpen = false;
+		passkeyName = "";
+		passkeyPassword = "";
+		message = "通行密钥已添加";
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function removePasskey() {
-		if (!deletePasskey || !deletePasskeyPassword) return;
-		busy = "passkey-delete";
-		try {
-			await deleteAccountPasskeyApi(deletePasskey.id, await passwordHash(deletePasskeyPassword));
-			passkeys = passkeys.filter((item) => item.id !== deletePasskey.id);
-			deletePasskey = null;
-			deletePasskeyPassword = "";
-			message = "通行密钥已删除";
-		} catch (e) { fail(e); } finally { busy = ""; }
+async function removePasskey() {
+	if (!deletePasskey || !deletePasskeyPassword) return;
+	busy = "passkey-delete";
+	try {
+		await deleteAccountPasskeyApi(
+			deletePasskey.id,
+			await passwordHash(deletePasskeyPassword),
+		);
+		passkeys = passkeys.filter((item) => item.id !== deletePasskey.id);
+		deletePasskey = null;
+		deletePasskeyPassword = "";
+		message = "通行密钥已删除";
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function enablePasskeyDirectUnlock() {
-		if (!enablePasskey || !enablePasskeyPassword || !vault.symEncKey || !vault.symMacKey) return;
-		busy = "passkey-enable";
-		try {
-			const assertion = await assertAccountPasskey(await getAccountPasskeyAssertionOptionsApi(await passwordHash(enablePasskeyPassword), enablePasskey.id));
-			if (!assertion.prfKey) throw new Error("这把通行密钥没有返回 PRF 密钥，无法启用直接解锁");
-			const keySet = await buildAccountPasskeyPrfKeySetFromPrfKey(assertion.prfKey, { symEncKey: bytesToBase64(vault.symEncKey), symMacKey: bytesToBase64(vault.symMacKey) });
-			await updateAccountPasskeyEncryptionApi({ token: assertion.token, deviceResponse: assertion.deviceResponse, ...keySet });
-			passkeys = (await listAccountPasskeysApi()).data;
-			enablePasskey = null; enablePasskeyPassword = ""; message = "已启用通行密钥直接解锁";
-		} catch (e) { fail(e); } finally { busy = ""; }
+async function enablePasskeyDirectUnlock() {
+	if (
+		!enablePasskey ||
+		!enablePasskeyPassword ||
+		!vault.symEncKey ||
+		!vault.symMacKey
+	)
+		return;
+	busy = "passkey-enable";
+	try {
+		const assertion = await assertAccountPasskey(
+			await getAccountPasskeyAssertionOptionsApi(
+				await passwordHash(enablePasskeyPassword),
+				enablePasskey.id,
+			),
+		);
+		if (!assertion.prfKey)
+			throw new Error("这把通行密钥没有返回 PRF 密钥，无法启用直接解锁");
+		const keySet = await buildAccountPasskeyPrfKeySetFromPrfKey(
+			assertion.prfKey,
+			{
+				symEncKey: bytesToBase64(vault.symEncKey),
+				symMacKey: bytesToBase64(vault.symMacKey),
+			},
+		);
+		await updateAccountPasskeyEncryptionApi({
+			token: assertion.token,
+			deviceResponse: assertion.deviceResponse,
+			...keySet,
+		});
+		passkeys = (await listAccountPasskeysApi()).data;
+		enablePasskey = null;
+		enablePasskeyPassword = "";
+		message = "已启用通行密钥直接解锁";
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function manageTwoFactorPasskeys() {
-		if (!twoFactorPasskeyPassword) return;
-		busy = "2fa-passkey-load";
-		try {
-			const result = await getTwoFactorPasskeysApi(await passwordHash(twoFactorPasskeyPassword));
-			twoFactorPasskeys = result.keys ?? result.Keys ?? [];
-		} catch (e) { fail(e); } finally { busy = ""; }
+async function manageTwoFactorPasskeys() {
+	if (!twoFactorPasskeyPassword) return;
+	busy = "2fa-passkey-load";
+	try {
+		const result = await getTwoFactorPasskeysApi(
+			await passwordHash(twoFactorPasskeyPassword),
+		);
+		twoFactorPasskeys = result.keys ?? result.Keys ?? [];
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function addTwoFactorPasskey() {
-		if (!twoFactorPasskeyPassword) return;
-		busy = "2fa-passkey-create";
-		try {
-			const masterPasswordHash = await passwordHash(twoFactorPasskeyPassword);
-			const credential = await createTwoFactorPasskeyCredential(await getTwoFactorPasskeyChallengeApi(masterPasswordHash));
-			const result = await createTwoFactorPasskeyApi({ masterPasswordHash, name: twoFactorPasskeyName.trim() || "安全密钥", ...credential });
-			twoFactorPasskeys = result.keys ?? result.Keys ?? [];
-			twoFactorPasskeyName = "";
-			message = "两步验证安全密钥已添加";
-		} catch (e) { fail(e); } finally { busy = ""; }
+async function addTwoFactorPasskey() {
+	if (!twoFactorPasskeyPassword) return;
+	busy = "2fa-passkey-create";
+	try {
+		const masterPasswordHash = await passwordHash(twoFactorPasskeyPassword);
+		const credential = await createTwoFactorPasskeyCredential(
+			await getTwoFactorPasskeyChallengeApi(masterPasswordHash),
+		);
+		const result = await createTwoFactorPasskeyApi({
+			masterPasswordHash,
+			name: twoFactorPasskeyName.trim() || "安全密钥",
+			...credential,
+		});
+		twoFactorPasskeys = result.keys ?? result.Keys ?? [];
+		twoFactorPasskeyName = "";
+		message = "两步验证安全密钥已添加";
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function removeTwoFactorPasskey(id: string) {
-		if (!twoFactorPasskeyPassword || !confirm("删除这把两步验证安全密钥？")) return;
-		busy = `2fa-passkey-${id}`;
-		try {
-			const result = await deleteTwoFactorPasskeyApi({ id, masterPasswordHash: await passwordHash(twoFactorPasskeyPassword) });
-			twoFactorPasskeys = result.keys ?? result.Keys ?? [];
-			message = "两步验证安全密钥已删除";
-		} catch (e) { fail(e); } finally { busy = ""; }
+async function removeTwoFactorPasskey(id: string) {
+	if (!twoFactorPasskeyPassword || !confirm("删除这把两步验证安全密钥？"))
+		return;
+	busy = `2fa-passkey-${id}`;
+	try {
+		const result = await deleteTwoFactorPasskeyApi({
+			id,
+			masterPasswordHash: await passwordHash(twoFactorPasskeyPassword),
+		});
+		twoFactorPasskeys = result.keys ?? result.Keys ?? [];
+		message = "两步验证安全密钥已删除";
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function loadYubikeySettings() {
-		if (!yubikeyPassword) return;
-		busy = "yubikey-load";
-		try { yubikeySettings = await getYubikeySettingsApi(await passwordHash(yubikeyPassword)); yubikeyNfc = Boolean(yubikeySettings.nfc); }
-		catch (e) { fail(e); } finally { busy = ""; }
+async function loadYubikeySettings() {
+	if (!yubikeyPassword) return;
+	busy = "yubikey-load";
+	try {
+		yubikeySettings = await getYubikeySettingsApi(
+			await passwordHash(yubikeyPassword),
+		);
+		yubikeyNfc = Boolean(yubikeySettings.nfc);
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function saveYubikeys() {
-		const otps = yubikeyOtps.split(/\s+/).map((value) => value.trim()).filter(Boolean);
-		if (!yubikeyPassword || !otps.length) return;
-		busy = "yubikey-save";
-		try {
-			yubikeySettings = await saveYubikeysApi({ masterPasswordHash: await passwordHash(yubikeyPassword), otps, nfc: yubikeyNfc });
-			yubikeyOtps = "";
-			message = "YubiKey 两步验证已启用";
-		} catch (e) { fail(e); } finally { busy = ""; }
+async function saveYubikeys() {
+	const otps = yubikeyOtps
+		.split(/\s+/)
+		.map((value) => value.trim())
+		.filter(Boolean);
+	if (!yubikeyPassword || !otps.length) return;
+	busy = "yubikey-save";
+	try {
+		yubikeySettings = await saveYubikeysApi({
+			masterPasswordHash: await passwordHash(yubikeyPassword),
+			otps,
+			nfc: yubikeyNfc,
+		});
+		yubikeyOtps = "";
+		message = "YubiKey 两步验证已启用";
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function disableYubikeys() {
-		if (!yubikeyPassword || !confirm("关闭 YubiKey 两步验证？")) return;
-		busy = "yubikey-disable";
-		try { yubikeySettings = await disableYubikeysApi(await passwordHash(yubikeyPassword)); message = "YubiKey 两步验证已关闭"; }
-		catch (e) { fail(e); } finally { busy = ""; }
+async function disableYubikeys() {
+	if (!yubikeyPassword || !confirm("关闭 YubiKey 两步验证？")) return;
+	busy = "yubikey-disable";
+	try {
+		yubikeySettings = await disableYubikeysApi(
+			await passwordHash(yubikeyPassword),
+		);
+		message = "YubiKey 两步验证已关闭";
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function saveYubicoConfig() {
-		if (!yubikeyPassword || !yubicoClientId || !yubicoSecretKey) return;
-		busy = "yubico-config";
-		try {
-			await saveYubicoConfigApi({ masterPasswordHash: await passwordHash(yubikeyPassword), clientId: yubicoClientId.trim(), secretKey: yubicoSecretKey.trim() });
-			yubicoSecretKey = "";
-			await loadYubikeySettings();
-			message = "Yubico 验证凭据已加密保存";
-		} catch (e) { fail(e); } finally { busy = ""; }
+async function saveYubicoConfig() {
+	if (!yubikeyPassword || !yubicoClientId || !yubicoSecretKey) return;
+	busy = "yubico-config";
+	try {
+		await saveYubicoConfigApi({
+			masterPasswordHash: await passwordHash(yubikeyPassword),
+			clientId: yubicoClientId.trim(),
+			secretKey: yubicoSecretKey.trim(),
+		});
+		yubicoSecretKey = "";
+		await loadYubikeySettings();
+		message = "Yubico 验证凭据已加密保存";
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	function deviceTypeLabel(type: number): string {
-		return match(type)
-			.with(0, () => "浏览器")
-			.with(1, () => "Android")
-			.with(2, () => "iOS")
-			.with(3, () => "桌面客户端")
-			.otherwise(() => `设备类型 ${type}`);
-	}
+function deviceTypeLabel(type: number): string {
+	return match(type)
+		.with(0, () => "浏览器")
+		.with(1, () => "Android")
+		.with(2, () => "iOS")
+		.with(3, () => "桌面客户端")
+		.otherwise(() => `设备类型 ${type}`);
+}
 
-	async function refreshAuthRequests() {
-		busy = "auth-requests";
-		try { authRequests = await listPendingAuthRequestsApi(profile.email); } catch (e) { fail(e); } finally { busy = ""; }
+async function refreshAuthRequests() {
+	busy = "auth-requests";
+	try {
+		authRequests = await listPendingAuthRequestsApi(profile.email);
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 
-	async function respondToAuthRequest(request: AuthRequest, approved: boolean) {
-		busy = `auth-request-${request.id}`;
-		try {
-			let key: string | undefined;
-			if (approved) {
-				if (!vault.symEncKey || !vault.symMacKey) throw new Error("保险库密钥不可用，请重新解锁");
-				key = await encryptVaultKeyForAuthRequest(request.publicKey, vault.symEncKey, vault.symMacKey);
-			}
-			await respondToAuthRequestApi(request.id, approved, key);
-			authRequests = authRequests.filter((item) => item.id !== request.id);
-			message = approved ? "已批准设备登录" : "已拒绝设备登录";
-		} catch (e) { fail(e); } finally { busy = ""; }
+async function respondToAuthRequest(request: AuthRequest, approved: boolean) {
+	busy = `auth-request-${request.id}`;
+	try {
+		let key: string | undefined;
+		if (approved) {
+			if (!vault.symEncKey || !vault.symMacKey)
+				throw new Error("保险库密钥不可用，请重新解锁");
+			key = await encryptVaultKeyForAuthRequest(
+				request.publicKey,
+				vault.symEncKey,
+				vault.symMacKey,
+			);
+		}
+		await respondToAuthRequestApi(request.id, approved, key);
+		authRequests = authRequests.filter((item) => item.id !== request.id);
+		message = approved ? "已批准设备登录" : "已拒绝设备登录";
+	} catch (e) {
+		fail(e);
+	} finally {
+		busy = "";
 	}
+}
 </script>
 
 <svelte:head><title>账户与安全 · Edgewarden</title></svelte:head>

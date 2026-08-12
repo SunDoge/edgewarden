@@ -58,7 +58,10 @@ describe("Hono RPC client", () => {
 
 	it("keeps the access token in memory and sends same-origin credentials", async () => {
 		setMemoryAccessToken("memory-only-token");
-		const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json({ version: "test" }));
+		const fetchMock = vi.fn(
+			async (_input: RequestInfo | URL, _init?: RequestInit) =>
+				Response.json({ version: "test" }),
+		);
 		const client = createRpcClient("http://localhost", { fetch: fetchMock });
 		await client.api.version.$get();
 		const init = fetchMock.mock.calls[0]?.[1] as RequestInit;

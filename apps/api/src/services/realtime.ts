@@ -19,11 +19,14 @@ export async function publishVaultChange(
 	const message: VaultChangeMessage = { type: "vault-revision", revisionDate };
 	await Promise.allSettled(
 		[...new Set(userIds)].map((userId) =>
-			(env as any).REALTIME.getByName(userId).fetch("https://realtime.internal/broadcast", {
-				method: "POST",
-				headers: { "content-type": "application/json" },
-				body: JSON.stringify(message),
-			}),
+			(env as any).REALTIME.getByName(userId).fetch(
+				"https://realtime.internal/broadcast",
+				{
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify(message),
+				},
+			),
 		),
 	);
 }
@@ -33,7 +36,8 @@ export async function realtimeAudience(c: Context<HonoEnv>): Promise<string[]> {
 	const cipher = c.get("cipher");
 	const orgId = cipher?.org_id || c.req.param("orgId");
 	if (orgId) {
-		const members = await c.get("db")
+		const members = await c
+			.get("db")
 			.selectFrom("org_members")
 			.select("user_id")
 			.where("org_id", "=", orgId)

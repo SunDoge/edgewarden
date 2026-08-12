@@ -1,43 +1,84 @@
 <script lang="ts">
-	import { onMount } from "svelte";
-	import { goto } from "$app/navigation";
-	import { Button } from "$lib/components/ui/button/index.js";
-	import { inspectPasswordHealth, type PasswordHealthReport } from "$lib/services/password-health";
-	import { syncVaultData, vault } from "$lib/stores/vault.svelte";
-	import { AlertTriangle, ArrowLeft, CheckCircle2, Eye, EyeOff, RefreshCw, ShieldAlert } from "@lucide/svelte";
+import { onMount } from "svelte";
+import { goto } from "$app/navigation";
+import { Button } from "$lib/components/ui/button/index.js";
+import {
+	inspectPasswordHealth,
+	type PasswordHealthReport,
+} from "$lib/services/password-health";
+import { syncVaultData, vault } from "$lib/stores/vault.svelte";
+import {
+	AlertTriangle,
+	ArrowLeft,
+	CheckCircle2,
+	Eye,
+	EyeOff,
+	RefreshCw,
+	ShieldAlert,
+} from "@lucide/svelte";
 
-	let report = $state<PasswordHealthReport | null>(null);
-	let scanning = $state(false);
-	let scanError = $state<string | null>(null);
-	let controller: AbortController | null = null;
-	let filter = $state<"all" | "exposed" | "reused" | "weak">("all");
-	let progress = $state({ checked: 0, total: 0 });
-	let revealed = $state<Set<string>>(new Set());
-	let filteredItems = $derived(report?.items.filter((item) => filter === "all" || (filter === "exposed" && (item.exposedCount ?? 0) > 0) || (filter === "reused" && item.reusedCount > 1) || (filter === "weak" && item.weak)) ?? []);
+let report = $state<PasswordHealthReport | null>(null);
+let scanning = $state(false);
+let scanError = $state<string | null>(null);
+let controller: AbortController | null = null;
+let filter = $state<"all" | "exposed" | "reused" | "weak">("all");
+let progress = $state({ checked: 0, total: 0 });
+let revealed = $state<Set<string>>(new Set());
+let filteredItems = $derived(
+	report?.items.filter(
+		(item) =>
+			filter === "all" ||
+			(filter === "exposed" && (item.exposedCount ?? 0) > 0) ||
+			(filter === "reused" && item.reusedCount > 1) ||
+			(filter === "weak" && item.weak),
+	) ?? [],
+);
 
-	async function scan() {
-		controller?.abort();
-		controller = new AbortController();
-		scanning = true;
-		filter = "all";
-		revealed = new Set();
-		progress = { checked: 0, total: vault.ciphers.filter((cipher) => cipher.type === 1 && !cipher.deletedDate && !(cipher as any).hidePasswords && cipher.login?.password).length };
-		scanError = null;
-		try { report = await inspectPasswordHealth(vault.ciphers, fetch, controller.signal, (checked, total) => progress = { checked, total }); }
-		catch (error) { if (!controller.signal.aborted) scanError = error instanceof Error ? error.message : String(error); }
-		finally { scanning = false; }
+async function scan() {
+	controller?.abort();
+	controller = new AbortController();
+	scanning = true;
+	filter = "all";
+	revealed = new Set();
+	progress = {
+		checked: 0,
+		total: vault.ciphers.filter(
+			(cipher) =>
+				cipher.type === 1 &&
+				!cipher.deletedDate &&
+				!(cipher as any).hidePasswords &&
+				cipher.login?.password,
+		).length,
+	};
+	scanError = null;
+	try {
+		report = await inspectPasswordHealth(
+			vault.ciphers,
+			fetch,
+			controller.signal,
+			(checked, total) => (progress = { checked, total }),
+		);
+	} catch (error) {
+		if (!controller.signal.aborted)
+			scanError = error instanceof Error ? error.message : String(error);
+	} finally {
+		scanning = false;
 	}
+}
 
-	onMount(() => {
-		void (async () => { if (!vault.ciphers.length) await syncVaultData(); })();
-		return () => controller?.abort();
-	});
+onMount(() => {
+	void (async () => {
+		if (!vault.ciphers.length) await syncVaultData();
+	})();
+	return () => controller?.abort();
+});
 
-	function toggleReveal(id: string) {
-		const next = new Set(revealed);
-		if (next.has(id)) next.delete(id); else next.add(id);
-		revealed = next;
-	}
+function toggleReveal(id: string) {
+	const next = new Set(revealed);
+	if (next.has(id)) next.delete(id);
+	else next.add(id);
+	revealed = next;
+}
 </script>
 
 <svelte:head><title>密码健康 - Edgewarden</title></svelte:head>

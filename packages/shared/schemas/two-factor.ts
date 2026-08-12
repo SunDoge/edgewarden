@@ -25,7 +25,11 @@ export const YubicoSettingsSchema = v.object({
 
 export const SaveYubicoKeysSchema = v.object({
 	masterPasswordHash: v.pipe(v.string(), v.minLength(1)),
-	otps: v.pipe(v.array(v.pipe(v.string(), v.minLength(1), v.maxLength(64))), v.minLength(1), v.maxLength(5)),
+	otps: v.pipe(
+		v.array(v.pipe(v.string(), v.minLength(1), v.maxLength(64))),
+		v.minLength(1),
+		v.maxLength(5),
+	),
 	nfc: v.optional(v.boolean(), false),
 });
 
@@ -38,7 +42,11 @@ export const SaveYubicoConfigSchema = v.object({
 export type TotpSetupInput = v.InferOutput<typeof TotpSetupSchema>;
 export type TotpVerifyInput = v.InferOutput<typeof TotpVerifySchema>;
 export type DisableTotpInput = v.InferOutput<typeof DisableTotpSchema>;
-export type RecoverTwoFactorInput = v.InferOutput<typeof RecoverTwoFactorSchema>;
+export type RecoverTwoFactorInput = v.InferOutput<
+	typeof RecoverTwoFactorSchema
+>;
 export type YubicoSettingsInput = v.InferOutput<typeof YubicoSettingsSchema>;
 export type SaveYubicoKeysInput = v.InferOutput<typeof SaveYubicoKeysSchema>;
-export type SaveYubicoConfigInput = v.InferOutput<typeof SaveYubicoConfigSchema>;
+export type SaveYubicoConfigInput = v.InferOutput<
+	typeof SaveYubicoConfigSchema
+>;

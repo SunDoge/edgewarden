@@ -6,7 +6,11 @@ import {
 	requestSendFileDownloadApi,
 } from "$lib/services/api";
 import { decryptBwFileData } from "$lib/services/crypto";
-import { decodeSendShareKey, decryptPublicSend, type SendKeys } from "$lib/services/send-crypto";
+import {
+	decodeSendShareKey,
+	decryptPublicSend,
+	type SendKeys,
+} from "$lib/services/send-crypto";
 import { ApiError } from "$lib/services/rpc";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";

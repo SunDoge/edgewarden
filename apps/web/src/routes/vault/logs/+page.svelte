@@ -1,68 +1,117 @@
 <script lang="ts">
-	import { onMount } from "svelte";
-	import { goto } from "$app/navigation";
-	import * as Alert from "$lib/components/ui/alert/index.js";
-	import { Badge } from "$lib/components/ui/badge/index.js";
-	import { Button } from "$lib/components/ui/button/index.js";
-	import * as Field from "$lib/components/ui/field/index.js";
-	import { Input } from "$lib/components/ui/input/index.js";
-	import * as Select from "$lib/components/ui/select/index.js";
-	import * as Table from "$lib/components/ui/table/index.js";
-	import { clearAuditLogsApi, deriveAccountPasswordHash, fetchAuditLogSettingsApi, listAuditLogsApi, updateAuditLogSettingsApi } from "$lib/services/api";
-	import { vault } from "$lib/stores/vault.svelte";
-	import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, ShieldAlert, Trash2 } from "@lucide/svelte";
+import { onMount } from "svelte";
+import { goto } from "$app/navigation";
+import * as Alert from "$lib/components/ui/alert/index.js";
+import { Badge } from "$lib/components/ui/badge/index.js";
+import { Button } from "$lib/components/ui/button/index.js";
+import * as Field from "$lib/components/ui/field/index.js";
+import { Input } from "$lib/components/ui/input/index.js";
+import * as Select from "$lib/components/ui/select/index.js";
+import * as Table from "$lib/components/ui/table/index.js";
+import {
+	clearAuditLogsApi,
+	deriveAccountPasswordHash,
+	fetchAuditLogSettingsApi,
+	listAuditLogsApi,
+	updateAuditLogSettingsApi,
+} from "$lib/services/api";
+import { vault } from "$lib/stores/vault.svelte";
+import {
+	ArrowLeft,
+	ChevronLeft,
+	ChevronRight,
+	RefreshCw,
+	ShieldAlert,
+	Trash2,
+} from "@lucide/svelte";
 
-	let logs = $state<any[]>([]);
-	let total = $state(0);
-	let offset = $state(0);
-	let category = $state("all");
-	let level = $state("all");
-	let query = $state("");
-	let masterPassword = $state("");
-	let busy = $state(false);
-	let error = $state<string | null>(null);
-	let retentionMode = $state<"days" | "entries">("days");
-	let retentionDays = $state("90");
-	let maxEntries = $state(10000);
-	const limit = 50;
+let logs = $state<any[]>([]);
+let total = $state(0);
+let offset = $state(0);
+let category = $state("all");
+let level = $state("all");
+let query = $state("");
+let masterPassword = $state("");
+let busy = $state(false);
+let error = $state<string | null>(null);
+let retentionMode = $state<"days" | "entries">("days");
+let retentionDays = $state("90");
+let maxEntries = $state(10000);
+const limit = 50;
 
-	async function load(reset = false) {
-		if (reset) offset = 0;
-		busy = true;
-		error = null;
-		try {
-			const result = await listAuditLogsApi({ limit, offset, category: category === "all" ? undefined : category, level: level === "all" ? undefined : level, q: query.trim() });
-			logs = result.data;
-			total = result.total;
-		} catch (reason) { error = reason instanceof Error ? reason.message : String(reason); }
-		finally { busy = false; }
+async function load(reset = false) {
+	if (reset) offset = 0;
+	busy = true;
+	error = null;
+	try {
+		const result = await listAuditLogsApi({
+			limit,
+			offset,
+			category: category === "all" ? undefined : category,
+			level: level === "all" ? undefined : level,
+			q: query.trim(),
+		});
+		logs = result.data;
+		total = result.total;
+	} catch (reason) {
+		error = reason instanceof Error ? reason.message : String(reason);
+	} finally {
+		busy = false;
 	}
+}
 
-	async function clearLogs() {
-		if (!confirm("清除当前全部审计日志？清除操作本身会写入一条新日志。")) return;
-		const email = vault.profile?.email;
-		if (!email || !masterPassword) { error = "请输入当前主密码"; return; }
-		busy = true;
-		try { await clearAuditLogsApi(await deriveAccountPasswordHash(email, masterPassword)); masterPassword = ""; await load(true); }
-		catch (reason) { error = reason instanceof Error ? reason.message : String(reason); }
-		finally { busy = false; }
+async function clearLogs() {
+	if (!confirm("清除当前全部审计日志？清除操作本身会写入一条新日志。")) return;
+	const email = vault.profile?.email;
+	if (!email || !masterPassword) {
+		error = "请输入当前主密码";
+		return;
 	}
-
-	async function loadSettings() {
-		const settings = await fetchAuditLogSettingsApi();
-		retentionMode = settings.maxEntries ? "entries" : "days";
-		retentionDays = String(settings.retentionDays ?? 0);
-		maxEntries = settings.maxEntries ?? 10000;
+	busy = true;
+	try {
+		await clearAuditLogsApi(
+			await deriveAccountPasswordHash(email, masterPassword),
+		);
+		masterPassword = "";
+		await load(true);
+	} catch (reason) {
+		error = reason instanceof Error ? reason.message : String(reason);
+	} finally {
+		busy = false;
 	}
+}
 
-	async function saveSettings() {
-		busy = true; error = null;
-		try { await updateAuditLogSettingsApi(retentionMode === "days" ? { retentionDays: Number(retentionDays) as 7 | 30 | 90 | 180 | 365 || null, maxEntries: null } : { retentionDays: null, maxEntries }); }
-		catch (reason) { error = reason instanceof Error ? reason.message : String(reason); }
-		finally { busy = false; }
+async function loadSettings() {
+	const settings = await fetchAuditLogSettingsApi();
+	retentionMode = settings.maxEntries ? "entries" : "days";
+	retentionDays = String(settings.retentionDays ?? 0);
+	maxEntries = settings.maxEntries ?? 10000;
+}
+
+async function saveSettings() {
+	busy = true;
+	error = null;
+	try {
+		await updateAuditLogSettingsApi(
+			retentionMode === "days"
+				? {
+						retentionDays:
+							(Number(retentionDays) as 7 | 30 | 90 | 180 | 365) || null,
+						maxEntries: null,
+					}
+				: { retentionDays: null, maxEntries },
+		);
+	} catch (reason) {
+		error = reason instanceof Error ? reason.message : String(reason);
+	} finally {
+		busy = false;
 	}
+}
 
-	onMount(() => { if (vault.profile?.role !== "admin") void goto("/vault"); else void Promise.all([load(), loadSettings()]); });
+onMount(() => {
+	if (vault.profile?.role !== "admin") void goto("/vault");
+	else void Promise.all([load(), loadSettings()]);
+});
 </script>
 
 <svelte:head><title>审计日志 - Edgewarden</title></svelte:head>

@@ -27,7 +27,9 @@ export class SessionTimeout {
 		this.#timer = this.#setTimer(() => {
 			this.#timer = null;
 			this.#firing = true;
-			void Promise.resolve(this.#onTimeout()).finally(() => { this.#firing = false; });
+			void Promise.resolve(this.#onTimeout()).finally(() => {
+				this.#firing = false;
+			});
 		}, this.#timeoutMs);
 	}
 

@@ -14,12 +14,19 @@ export class VaultRealtime {
 		const url = new URL(request.url);
 		if (request.method === "POST" && url.pathname === "/broadcast") {
 			const message = await request.json<VaultChangeMessage>();
-			if (message.type !== "vault-revision" || !Number.isFinite(message.revisionDate)) {
+			if (
+				message.type !== "vault-revision" ||
+				!Number.isFinite(message.revisionDate)
+			) {
 				return new Response("Invalid realtime message", { status: 400 });
 			}
 			const encoded = JSON.stringify(message);
 			for (const socket of this.state.getWebSockets()) {
-				try { socket.send(encoded); } catch { socket.close(1011, "Broadcast failed"); }
+				try {
+					socket.send(encoded);
+				} catch {
+					socket.close(1011, "Broadcast failed");
+				}
 			}
 			return new Response(null, { status: 204 });
 		}

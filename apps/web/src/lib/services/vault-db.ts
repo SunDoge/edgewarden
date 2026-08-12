@@ -32,28 +32,47 @@ class EdgewardenDb extends Dexie {
 		this.version(1).stores({
 			vault: "&id", // unique, single row
 		});
-		this.version(2).stores({
-			vault: "&id",
-			vaultByAccount: "&accountId,syncedAt",
-			meta: "&key",
-		}).upgrade(async (transaction) => {
-			const legacy = await transaction.table("vault").get(1) as (Omit<VaultSnapshot, "accountId" | "sends"> & { id: 1 }) | undefined;
-			if (legacy?.profile?.id) {
-				const snapshot: VaultSnapshot = { accountId: legacy.profile.id, ciphers: legacy.ciphers, folders: legacy.folders, collections: [], sends: [], profile: legacy.profile, syncedAt: legacy.syncedAt };
-				await transaction.table("vaultByAccount").put(snapshot);
-				await transaction.table("meta").put({ key: "activeAccountId", value: snapshot.accountId });
-			}
-			await transaction.table("vault").clear();
-		});
-		this.version(3).stores({
-			vault: "&id",
-			vaultByAccount: "&accountId,syncedAt",
-			meta: "&key",
-		}).upgrade(async (transaction) => {
-			await transaction.table("vaultByAccount").toCollection().modify((snapshot: VaultSnapshot) => {
-				snapshot.collections ??= [];
+		this.version(2)
+			.stores({
+				vault: "&id",
+				vaultByAccount: "&accountId,syncedAt",
+				meta: "&key",
+			})
+			.upgrade(async (transaction) => {
+				const legacy = (await transaction.table("vault").get(1)) as
+					| (Omit<VaultSnapshot, "accountId" | "sends"> & { id: 1 })
+					| undefined;
+				if (legacy?.profile?.id) {
+					const snapshot: VaultSnapshot = {
+						accountId: legacy.profile.id,
+						ciphers: legacy.ciphers,
+						folders: legacy.folders,
+						collections: [],
+						sends: [],
+						profile: legacy.profile,
+						syncedAt: legacy.syncedAt,
+					};
+					await transaction.table("vaultByAccount").put(snapshot);
+					await transaction
+						.table("meta")
+						.put({ key: "activeAccountId", value: snapshot.accountId });
+				}
+				await transaction.table("vault").clear();
 			});
-		});
+		this.version(3)
+			.stores({
+				vault: "&id",
+				vaultByAccount: "&accountId,syncedAt",
+				meta: "&key",
+			})
+			.upgrade(async (transaction) => {
+				await transaction
+					.table("vaultByAccount")
+					.toCollection()
+					.modify((snapshot: VaultSnapshot) => {
+						snapshot.collections ??= [];
+					});
+			});
 	}
 }
 
@@ -78,9 +97,15 @@ export async function loadVaultSnapshot(): Promise<VaultSnapshot | undefined> {
 
 export async function clearVaultSnapshot(): Promise<void> {
 	const legacyVault = db.table("vault");
-	await db.transaction("rw", db.vaultByAccount, db.meta, legacyVault, async () => {
-		await db.vaultByAccount.clear();
-		await db.meta.clear();
-		await legacyVault.clear();
-	});
+	await db.transaction(
+		"rw",
+		db.vaultByAccount,
+		db.meta,
+		legacyVault,
+		async () => {
+			await db.vaultByAccount.clear();
+			await db.meta.clear();
+			await legacyVault.clear();
+		},
+	);
 }

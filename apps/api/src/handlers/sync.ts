@@ -43,7 +43,14 @@ function cipherToResponse(
 		favorite: cipher.favorite === 1,
 		reprompt: cipher.reprompt ?? 0,
 		key: cipher.key ?? null,
-		attachments: attachments.map((attachment) => ({ id: attachment.id, fileName: attachment.file_name, size: attachment.size, sizeName: attachment.size_name, key: attachment.key, object: "attachment" })),
+		attachments: attachments.map((attachment) => ({
+			id: attachment.id,
+			fileName: attachment.file_name,
+			size: attachment.size,
+			sizeName: attachment.size_name,
+			key: attachment.key,
+			object: "attachment",
+		})),
 		organizationUseTotp: false,
 		edit: permissions.edit,
 		viewPassword: permissions.viewPassword,
@@ -116,18 +123,82 @@ export const sync = factory.createHandlers(async (c) => {
 		webauthnDb.countAccountPasskeyCredentialsByUserId(db, user.id, "twoFactor"),
 		sendsDb.getSendsByUserId(db, user.id),
 	]);
-	const organizationRows = await db.selectFrom("org_members as member").innerJoin("organizations as org", "org.id", "member.org_id").select(["member.id as member_id", "member.org_id", "member.key", "member.role", "member.status", "member.access_all", "org.name", "org.public_key", "org.private_key", "org.created_at", "org.updated_at"]).where("member.user_id", "=", user.id).where("member.status", "=", "confirmed").execute();
+	const organizationRows = await db
+		.selectFrom("org_members as member")
+		.innerJoin("organizations as org", "org.id", "member.org_id")
+		.select([
+			"member.id as member_id",
+			"member.org_id",
+			"member.key",
+			"member.role",
+			"member.status",
+			"member.access_all",
+			"org.name",
+			"org.public_key",
+			"org.private_key",
+			"org.created_at",
+			"org.updated_at",
+		])
+		.where("member.user_id", "=", user.id)
+		.where("member.status", "=", "confirmed")
+		.execute();
 	const organizationIds = organizationRows.map((row) => row.org_id);
-	const allAccessOrgIds = organizationRows.filter((row) => row.access_all === 1).map((row) => row.org_id);
-	const restrictedMembers = organizationRows.filter((row) => row.access_all !== 1);
-	const organizationCollections = organizationIds.length ? await db.selectFrom("collections").selectAll().where("org_id", "in", organizationIds).execute() : [];
-	const restrictedCollectionAccess = restrictedMembers.length ? await db.selectFrom("collection_members").select(["collection_id", "read_only", "hide_passwords"]).where("org_member_id", "in", restrictedMembers.map((row) => row.member_id)).execute() : [];
-	const allowedRestrictedCollectionIds = restrictedCollectionAccess.map((row) => row.collection_id);
-	const restrictedAccessByCollection = new Map(restrictedCollectionAccess.map((row) => [row.collection_id, row]));
-	const visibleCollections = organizationCollections.filter((collection) => allAccessOrgIds.includes(collection.org_id) || allowedRestrictedCollectionIds.includes(collection.id));
-	const allAccessCiphers = allAccessOrgIds.length ? await db.selectFrom("ciphers").selectAll().where("org_id", "in", allAccessOrgIds).execute() : [];
-	const restrictedCiphers = allowedRestrictedCollectionIds.length ? await db.selectFrom("ciphers as cipher").innerJoin("cipher_collections as link", "link.cipher_id", "cipher.id").selectAll("cipher").where("link.collection_id", "in", allowedRestrictedCollectionIds).execute() : [];
-	const orgCipherMap = new Map([...allAccessCiphers, ...restrictedCiphers].map((cipher) => [cipher.id, cipher]));
+	const allAccessOrgIds = organizationRows
+		.filter((row) => row.access_all === 1)
+		.map((row) => row.org_id);
+	const restrictedMembers = organizationRows.filter(
+		(row) => row.access_all !== 1,
+	);
+	const organizationCollections = organizationIds.length
+		? await db
+				.selectFrom("collections")
+				.selectAll()
+				.where("org_id", "in", organizationIds)
+				.execute()
+		: [];
+	const restrictedCollectionAccess = restrictedMembers.length
+		? await db
+				.selectFrom("collection_members")
+				.select(["collection_id", "read_only", "hide_passwords"])
+				.where(
+					"org_member_id",
+					"in",
+					restrictedMembers.map((row) => row.member_id),
+				)
+				.execute()
+		: [];
+	const allowedRestrictedCollectionIds = restrictedCollectionAccess.map(
+		(row) => row.collection_id,
+	);
+	const restrictedAccessByCollection = new Map(
+		restrictedCollectionAccess.map((row) => [row.collection_id, row]),
+	);
+	const visibleCollections = organizationCollections.filter(
+		(collection) =>
+			allAccessOrgIds.includes(collection.org_id) ||
+			allowedRestrictedCollectionIds.includes(collection.id),
+	);
+	const allAccessCiphers = allAccessOrgIds.length
+		? await db
+				.selectFrom("ciphers")
+				.selectAll()
+				.where("org_id", "in", allAccessOrgIds)
+				.execute()
+		: [];
+	const restrictedCiphers = allowedRestrictedCollectionIds.length
+		? await db
+				.selectFrom("ciphers as cipher")
+				.innerJoin("cipher_collections as link", "link.cipher_id", "cipher.id")
+				.selectAll("cipher")
+				.where("link.collection_id", "in", allowedRestrictedCollectionIds)
+				.execute()
+		: [];
+	const orgCipherMap = new Map(
+		[...allAccessCiphers, ...restrictedCiphers].map((cipher) => [
+			cipher.id,
+			cipher,
+		]),
+	);
 	const organizationCiphers = [...orgCipherMap.values()];
 
 	const webAuthnPrfOptions = accountPasskeys
@@ -140,10 +211,29 @@ export const sync = factory.createHandlers(async (c) => {
 	);
 
 	const allCiphers = [...ciphers, ...deletedCiphers, ...organizationCiphers];
-	const attachments = await attachmentsDb.listByCipherIds(db, allCiphers.map((cipher) => cipher.id));
-	const attachmentsByCipher = Map.groupBy(attachments, (attachment) => attachment.cipher_id);
-	const cipherCollectionLinks = allCiphers.length ? await db.selectFrom("cipher_collections").selectAll().where("cipher_id", "in", allCiphers.map((cipher) => cipher.id)).execute() : [];
-	const collectionIdsByCipher = Map.groupBy(cipherCollectionLinks, (link) => link.cipher_id);
+	const attachments = await attachmentsDb.listByCipherIds(
+		db,
+		allCiphers.map((cipher) => cipher.id),
+	);
+	const attachmentsByCipher = Map.groupBy(
+		attachments,
+		(attachment) => attachment.cipher_id,
+	);
+	const cipherCollectionLinks = allCiphers.length
+		? await db
+				.selectFrom("cipher_collections")
+				.selectAll()
+				.where(
+					"cipher_id",
+					"in",
+					allCiphers.map((cipher) => cipher.id),
+				)
+				.execute()
+		: [];
+	const collectionIdsByCipher = Map.groupBy(
+		cipherCollectionLinks,
+		(link) => link.cipher_id,
+	);
 
 	const profile = {
 		id: user.id,
@@ -154,7 +244,10 @@ export const sync = factory.createHandlers(async (c) => {
 		premiumFromOrganization: false,
 		masterPasswordHint: user.master_password_hint,
 		culture: "en-US",
-		twoFactorEnabled: !!user.totp_secret || twoFactorPasskeyCount > 0 || userYubicoPublicIds(user as any).length > 0,
+		twoFactorEnabled:
+			!!user.totp_secret ||
+			twoFactorPasskeyCount > 0 ||
+			userYubicoPublicIds(user as any).length > 0,
 		key: user.key,
 		privateKey: user.private_key,
 		publicKey: user.public_key,
@@ -167,7 +260,19 @@ export const sync = factory.createHandlers(async (c) => {
 		kdfMemory: user.kdf_memory ?? null,
 		kdfParallelism: user.kdf_parallelism ?? null,
 		role: user.role,
-		organizations: organizationRows.map((row) => ({ id: row.org_id, name: row.name, key: row.key, publicKey: row.public_key, privateKey: row.private_key, role: row.role, status: row.status, accessAll: Boolean(row.access_all), creationDate: toIso(row.created_at), revisionDate: toIso(row.updated_at), object: "profileOrganization" })),
+		organizations: organizationRows.map((row) => ({
+			id: row.org_id,
+			name: row.name,
+			key: row.key,
+			publicKey: row.public_key,
+			privateKey: row.private_key,
+			role: row.role,
+			status: row.status,
+			accessAll: Boolean(row.access_all),
+			creationDate: toIso(row.created_at),
+			revisionDate: toIso(row.updated_at),
+			object: "profileOrganization",
+		})),
 		providers: [],
 		providerOrganizations: [],
 		object: "profile",
@@ -196,21 +301,37 @@ export const sync = factory.createHandlers(async (c) => {
 	return c.json({
 		profile,
 		folders: folders.map(folderToResponse),
-		collections: visibleCollections.map((collection) => { const access = restrictedAccessByCollection.get(collection.id); return { id: collection.id, organizationId: collection.org_id, name: collection.name, readOnly: Boolean(access?.read_only), hidePasswords: Boolean(access?.hide_passwords), creationDate: toIso(collection.created_at), revisionDate: toIso(collection.updated_at), object: "collectionDetails" }; }),
+		collections: visibleCollections.map((collection) => {
+			const access = restrictedAccessByCollection.get(collection.id);
+			return {
+				id: collection.id,
+				organizationId: collection.org_id,
+				name: collection.name,
+				readOnly: Boolean(access?.read_only),
+				hidePasswords: Boolean(access?.hide_passwords),
+				creationDate: toIso(collection.created_at),
+				revisionDate: toIso(collection.updated_at),
+				object: "collectionDetails",
+			};
+		}),
 		ciphers: allCiphers.map((cipher) => {
-			const collectionIds = collectionIdsByCipher
-				.get(cipher.id)
-				?.map((link) => link.collection_id) ?? [];
-			const restrictedAccess = cipher.org_id && !allAccessOrgIds.includes(cipher.org_id)
-				? collectionIds.map((id) => restrictedAccessByCollection.get(id))
-				: [];
+			const collectionIds =
+				collectionIdsByCipher
+					.get(cipher.id)
+					?.map((link) => link.collection_id) ?? [];
+			const restrictedAccess =
+				cipher.org_id && !allAccessOrgIds.includes(cipher.org_id)
+					? collectionIds.map((id) => restrictedAccessByCollection.get(id))
+					: [];
 			return cipherToResponse(
 				cipher,
 				attachmentsByCipher.get(cipher.id),
 				collectionIds,
 				{
 					edit: !restrictedAccess.some((access) => access?.read_only === 1),
-					viewPassword: !restrictedAccess.some((access) => access?.hide_passwords === 1),
+					viewPassword: !restrictedAccess.some(
+						(access) => access?.hide_passwords === 1,
+					),
 				},
 			);
 		}),

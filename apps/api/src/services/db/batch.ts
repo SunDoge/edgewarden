@@ -3,7 +3,11 @@ import type { CompiledQuery, Kysely } from "kysely";
 import type { DB } from "../../types/db";
 import { now } from "../../utils/time";
 
-export function revisionQuery(db: Kysely<DB>, userId: string, timestamp = now()) {
+export function revisionQuery(
+	db: Kysely<DB>,
+	userId: string,
+	timestamp = now(),
+) {
 	return db
 		.insertInto("user_revisions")
 		.values({ user_id: userId, revision_date: timestamp })

@@ -52,8 +52,15 @@ export class VaultRealtimeClient {
 			this.#socket = socket;
 			socket.addEventListener("message", (event) => {
 				try {
-					const message = JSON.parse(String(event.data)) as { type?: unknown; revisionDate?: unknown };
-					if (message.type === "vault-revision" && typeof message.revisionDate === "number" && Number.isFinite(message.revisionDate)) {
+					const message = JSON.parse(String(event.data)) as {
+						type?: unknown;
+						revisionDate?: unknown;
+					};
+					if (
+						message.type === "vault-revision" &&
+						typeof message.revisionDate === "number" &&
+						Number.isFinite(message.revisionDate)
+					) {
 						void this.#onRevision(message.revisionDate);
 					}
 				} catch {
