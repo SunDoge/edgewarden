@@ -5,8 +5,6 @@ import { errorResponse } from "../utils/response";
 
 export const createRealtimeConnectionTicket = factory.createHandlers(
 	async (c) => {
-		if (!(c.env as any).REALTIME)
-			return errorResponse("Realtime service is not configured", 503);
 		const user = c.get("user");
 		const token = await createRealtimeTicket(
 			user.id,
@@ -21,11 +19,6 @@ export const connectRealtime = factory.createHandlers(async (c) => {
 	if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
 		return errorResponse("WebSocket upgrade required", 426);
 	}
-	const namespace = (c.env as any).REALTIME as
-		| DurableObjectNamespace
-		| undefined;
-	if (!namespace)
-		return errorResponse("Realtime service is not configured", 503);
 	const ticket = c.req.query("ticket");
 	if (!ticket) return errorResponse("Realtime ticket required", 401);
 	const claims = await verifyRealtimeTicket(ticket, c.env.JWT_SECRET);
@@ -38,5 +31,5 @@ export const connectRealtime = factory.createHandlers(async (c) => {
 	) {
 		return errorResponse("Realtime ticket is no longer valid", 401);
 	}
-	return namespace.getByName(user.id).fetch(c.req.raw);
+	return c.env.REALTIME.getByName(user.id).fetch(c.req.raw);
 });

@@ -229,4 +229,4 @@ export default {
 			runScheduledTasks(env),
 		);
 	},
-};
+} satisfies ExportedHandler<CloudflareBindings>;

@@ -18,6 +18,11 @@ export interface AuthScenarioContext {
 	adminPassword: string;
 }
 
+type TurnstileTestBindings = CloudflareBindings & {
+	TURNSTILE_SECRET_KEY?: string;
+	TURNSTILE_SITE_KEY?: string;
+};
+
 export function registerAuthScenarios(context: AuthScenarioContext): void {
 	const request = context.request;
 	const EMAIL = context.email;
@@ -406,9 +411,10 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
 	});
 
 	test("issues dedicated realtime tickets and rejects invalid websocket tickets", async () => {
-		(context.bindings as any).REALTIME = {
+		const originalRealtime = context.bindings.REALTIME;
+		context.bindings.REALTIME = {
 			getByName: () => ({ fetch: async () => new Response(null) }),
-		};
+		} as unknown as CloudflareBindings["REALTIME"];
 		try {
 			const ticketResponse = await request("/api/notifications/token", {
 				method: "POST",
@@ -435,13 +441,14 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
 			});
 			assert.equal(invalid.status, 401);
 		} finally {
-			delete (context.bindings as any).REALTIME;
+			context.bindings.REALTIME = originalRealtime;
 		}
 	});
 
 	test("enforces Turnstile on password login when configured", async () => {
-		(context.bindings as any).TURNSTILE_SECRET_KEY = "turnstile-test-secret";
-		(context.bindings as any).TURNSTILE_SITE_KEY = "turnstile-test-site-key";
+		const turnstileBindings = context.bindings as TurnstileTestBindings;
+		turnstileBindings.TURNSTILE_SECRET_KEY = "turnstile-test-secret";
+		turnstileBindings.TURNSTILE_SITE_KEY = "turnstile-test-site-key";
 		const originalFetch = globalThis.fetch;
 		try {
 			const config = await request("/api/config");
@@ -494,13 +501,14 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
 			assert.equal(accepted.status, 200, await accepted.clone().text());
 		} finally {
 			globalThis.fetch = originalFetch;
-			delete (context.bindings as any).TURNSTILE_SECRET_KEY;
-			delete (context.bindings as any).TURNSTILE_SITE_KEY;
+			delete turnstileBindings.TURNSTILE_SECRET_KEY;
+			delete turnstileBindings.TURNSTILE_SITE_KEY;
 		}
 	});
 
 	test("enforces the register Turnstile action on account registration", async () => {
-		(context.bindings as any).TURNSTILE_SECRET_KEY = "turnstile-test-secret";
+		const turnstileBindings = context.bindings as TurnstileTestBindings;
+		turnstileBindings.TURNSTILE_SECRET_KEY = "turnstile-test-secret";
 		const originalFetch = globalThis.fetch;
 		const payload = {
 			email: "turnstile-registration@example.com",
@@ -536,7 +544,7 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
 			assert.equal(accepted.status, 204, await accepted.clone().text());
 		} finally {
 			globalThis.fetch = originalFetch;
-			delete (context.bindings as any).TURNSTILE_SECRET_KEY;
+			delete turnstileBindings.TURNSTILE_SECRET_KEY;
 		}
 	});
 }
