@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { runScheduledTasks } from "../index";
 import { createDatabase } from "../middleware/db";
+import { deleteAccountData } from "../services/account-deletion";
 import {
 	getDefaultBackupSettings,
 	saveBackupSettings,
@@ -38,6 +39,44 @@ export function registerDatabaseMaintenanceScenarios(
 	context: DatabaseMaintenanceScenarioContext,
 ): void {
 	const EMAIL = context.email;
+	test("does not partially delete an account that owns an organization", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select(["id", "status", "deletion_requested_at"])
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const cipher = await db
+			.selectFrom("ciphers")
+			.select(["id", "deleted_at", "purge_after"])
+			.where("user_id", "=", user.id)
+			.executeTakeFirstOrThrow();
+		try {
+			assert.equal(await deleteAccountData(db, dialect, user.id), null);
+			assert.deepEqual(
+				await db
+					.selectFrom("users")
+					.select(["status", "deletion_requested_at"])
+					.where("id", "=", user.id)
+					.executeTakeFirstOrThrow(),
+				{
+					status: user.status,
+					deletion_requested_at: user.deletion_requested_at,
+				},
+			);
+			assert.deepEqual(
+				await db
+					.selectFrom("ciphers")
+					.select(["deleted_at", "purge_after"])
+					.where("id", "=", cipher.id)
+					.executeTakeFirstOrThrow(),
+				{ deleted_at: cipher.deleted_at, purge_after: cipher.purge_after },
+			);
+		} finally {
+			await db.destroy();
+		}
+	});
+
 	test("advances user revisions for multiple writes in the same second", async () => {
 		const { db, dialect } = await createDatabase(context.database);
 		const user = await db
