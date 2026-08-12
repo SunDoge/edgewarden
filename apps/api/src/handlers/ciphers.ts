@@ -1,8 +1,8 @@
 import { vValidator } from "@hono/valibot-validator";
-import type { CompiledQuery, Selectable } from "kysely";
+import type { Selectable } from "kysely";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
-import { CipherImportSchema, CipherSchema } from "../schemas/ciphers";
+import { CipherSchema } from "../schemas/ciphers";
 import {
 	deleteBlobObject,
 	getAttachmentObjectKey,
@@ -18,11 +18,7 @@ import {
 	cipherToResponse,
 } from "../services/ciphers/presentation";
 import * as attachmentsDb from "../services/db/attachments";
-import {
-	executeBatch,
-	executeBatchInChunks,
-	revisionQuery,
-} from "../services/db/batch";
+import { executeBatch } from "../services/db/batch";
 import * as ciphersDb from "../services/db/ciphers";
 import * as foldersDb from "../services/db/folders";
 import type { Attachments } from "../types/db";
@@ -138,112 +134,6 @@ export const createCipher = factory.createHandlers(
 
 		const created = await ciphersDb.getCipherById(db, id);
 		return c.json(cipherToResponse(created!, [], collectionIds), 200);
-	},
-);
-
-// POST /api/ciphers/import
-export const importCiphers = factory.createHandlers(
-	vValidator("json", CipherImportSchema),
-	async (c) => {
-		const user = c.get("user");
-		const db = c.get("db");
-		const returnCipherMap = c.req.query("returnCipherMap") === "1";
-
-		const { folders, ciphers, folderRelationships } = c.req.valid("json");
-
-		if (folders.length + ciphers.length > LIMITS.performance.importItemLimit) {
-			return errorResponse(
-				`Import exceeds maximum of ${LIMITS.performance.importItemLimit} items`,
-				400,
-			);
-		}
-
-		const nowTime = now();
-		const batchChunkSize = LIMITS.performance.bulkMoveChunkSize;
-
-		// Create folders and build index -> id mapping
-		const folderIdMap = new Map<number, string>();
-		const queries: CompiledQuery[] = [];
-
-		for (let i = 0; i < folders.length; i++) {
-			const folderId = crypto.randomUUID();
-			folderIdMap.set(i, folderId);
-
-			queries.push(
-				db
-					.insertInto("folders")
-					.values({
-						id: folderId,
-						user_id: user.id,
-						name: folders[i].name,
-						created_at: nowTime,
-						updated_at: nowTime,
-					})
-					.compile(),
-			);
-		}
-
-		// Build cipher index -> folder id mapping from relationships
-		const cipherFolderMap = new Map<number, string>();
-		for (const rel of folderRelationships) {
-			const folderId = folderIdMap.get(rel.value);
-			if (folderId) {
-				cipherFolderMap.set(rel.key, folderId);
-			}
-		}
-
-		// Create ciphers
-		const cipherMapRows: Array<{
-			index: number;
-			sourceId: string | null;
-			id: string;
-		}> = [];
-
-		for (let i = 0; i < ciphers.length; i++) {
-			const cItem = ciphers[i];
-			const folderId = cipherFolderMap.get(i) || cItem.folderId || null;
-			const sourceId = cItem.id ? String(cItem.id).trim() || null : null;
-			const cipherId = crypto.randomUUID();
-
-			queries.push(
-				db
-					.insertInto("ciphers")
-					.values({
-						id: cipherId,
-						user_id: user.id,
-						org_id: null,
-						type: cItem.type,
-						folder_id: folderId,
-						name: cItem.name,
-						notes: cItem.notes ?? null,
-						favorite: cItem.favorite ? 1 : 0,
-						data: buildCipherData(cItem),
-						fields: cItem.fields ? JSON.stringify(cItem.fields) : null,
-						password_history: cItem.passwordHistory
-							? JSON.stringify(cItem.passwordHistory)
-							: null,
-						reprompt: cItem.reprompt ?? 0,
-						key: cItem.key ?? null,
-						created_at: nowTime,
-						updated_at: nowTime,
-					})
-					.compile(),
-			);
-
-			cipherMapRows.push({ index: i, sourceId, id: cipherId });
-		}
-
-		queries.push(revisionQuery(db, user.id, nowTime));
-		await executeBatchInChunks(c.get("dbDialect"), queries, batchChunkSize);
-
-		if (returnCipherMap) {
-			return c.json({
-				object: "import-result",
-				cipherMap: cipherMapRows,
-			});
-		}
-
-		return new Response(null, { status: 200 });
 	},
 );
 
@@ -488,3 +378,5 @@ export {
 	restoreCiphers,
 	unarchiveCiphers,
 } from "./ciphers-bulk";
+
+export { importCiphers } from "./ciphers-import";
