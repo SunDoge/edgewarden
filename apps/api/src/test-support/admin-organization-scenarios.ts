@@ -201,6 +201,26 @@ export function registerAdminOrganizationScenarios(
 		assert.ok(
 			competingStatuses.every((status) => [204, 400, 409].includes(status)),
 		);
+		const invitedUser = await context.database
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind("invited-api-test@example.com")
+			.first<{ id: string }>();
+		assert.ok(invitedUser);
+		assert.deepEqual(
+			await context.database
+				.prepare("SELECT status, used_by FROM invites WHERE code = ?")
+				.bind(await hashCredential(invite.code))
+				.first<{ status: string; used_by: string | null }>(),
+			{ status: "used", used_by: invitedUser.id },
+		);
+		assert.equal(
+			await context.database
+				.prepare("SELECT COUNT(*) AS count FROM users WHERE email = ?")
+				.bind("invited-api-test@example.com")
+				.first<{ count: number }>()
+				.then((row) => Number(row?.count ?? 0)),
+			1,
+		);
 
 		const replayInvite = await request("/api/accounts/register", {
 			method: "POST",
