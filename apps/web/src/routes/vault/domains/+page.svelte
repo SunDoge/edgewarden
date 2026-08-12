@@ -4,7 +4,10 @@ import { goto } from "$app/navigation";
 import { isLoggedIn } from "$lib/services/api";
 import { vault } from "$lib/stores/vault.svelte";
 import { fetchDomainRules, updateDomainRules } from "$lib/services/api";
-import { normalizeEquivalentDomain } from "@edgewarden/shared";
+import {
+	createEquivalentDomainRuleId,
+	normalizeEquivalentDomainRule,
+} from "$lib/services/equivalent-domains";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import {
@@ -91,21 +94,6 @@ async function loadRules() {
 	}
 }
 
-// Validation & Norm helpers
-function validateAndNormalizeDomain(domain: string): string {
-	return normalizeEquivalentDomain(domain);
-}
-
-function getInvalidIndexes(domains: string[]): Set<number> {
-	const invalid = new Set<number>();
-	domains.forEach((d, i) => {
-		if (!d.trim() || !validateAndNormalizeDomain(d)) {
-			invalid.add(i);
-		}
-	});
-	return invalid;
-}
-
 // Custom rule actions
 function handleToggleCustomRule(index: number) {
 	customRules[index].excluded = !customRules[index].excluded;
@@ -141,24 +129,21 @@ function handleRemoveDomainField(isNewRule: boolean, index: number) {
 
 function handleConfirmNewRule() {
 	if (!newRuleDomains) return;
-	const invalid = getInvalidIndexes(newRuleDomains);
-	newRuleInvalidIndexes = invalid;
-	if (invalid.size > 0) {
+	const normalizedRule = normalizeEquivalentDomainRule(newRuleDomains);
+	newRuleInvalidIndexes = normalizedRule.invalidIndexes;
+	if (normalizedRule.invalidIndexes.size > 0) {
 		showTimedError("部分域名格式不正确，请修改红框中的内容。");
 		return;
 	}
 
-	const normalized = newRuleDomains
-		.map((d) => validateAndNormalizeDomain(d))
-		.filter(Boolean);
-	if (normalized.length < 2) {
+	if (!normalizedRule.valid) {
 		showTimedError("每条规则必须包含至少 2 个有效的等效域名。");
 		return;
 	}
 
-	const newId = `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+	const newId = createEquivalentDomainRuleId();
 	customRules = [
-		{ id: newId, domains: normalized, excluded: false },
+		{ id: newId, domains: normalizedRule.domains, excluded: false },
 		...customRules,
 	];
 	newRuleDomains = null;
@@ -174,23 +159,20 @@ function handleStartEditRule(rule: CustomEquivalentDomain) {
 }
 
 function handleConfirmEditRule() {
-	const invalid = getInvalidIndexes(editingDomains);
-	editingInvalidIndexes = invalid;
-	if (invalid.size > 0) {
+	const normalizedRule = normalizeEquivalentDomainRule(editingDomains);
+	editingInvalidIndexes = normalizedRule.invalidIndexes;
+	if (normalizedRule.invalidIndexes.size > 0) {
 		showTimedError("部分域名格式不正确，请修改红框中的内容。");
 		return;
 	}
 
-	const normalized = editingDomains
-		.map((d) => validateAndNormalizeDomain(d))
-		.filter(Boolean);
-	if (normalized.length < 2) {
+	if (!normalizedRule.valid) {
 		showTimedError("每条规则必须包含至少 2 个有效的等效域名。");
 		return;
 	}
 
 	customRules = customRules.map((r) =>
-		r.id === editingRuleId ? { ...r, domains: normalized } : r,
+		r.id === editingRuleId ? { ...r, domains: normalizedRule.domains } : r,
 	);
 	editingRuleId = null;
 	editingDomains = ["", ""];
@@ -223,9 +205,7 @@ async function handleSave() {
 		const payloadRules = customRules
 			.map((r) => ({
 				...r,
-				domains: r.domains
-					.map((d) => validateAndNormalizeDomain(d))
-					.filter(Boolean),
+				domains: normalizeEquivalentDomainRule(r.domains).domains,
 			}))
 			.filter((r) => r.domains.length >= 2);
 
@@ -560,4 +540,3 @@ function showTimedError(msg: string) {
 		{/if}
 	</main>
 </div>
-
