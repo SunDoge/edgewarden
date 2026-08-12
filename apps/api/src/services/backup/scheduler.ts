@@ -27,19 +27,21 @@ function errorMessage(error: unknown, fallback: string): string {
 	return error instanceof Error && error.message ? error.message : fallback;
 }
 
+export interface ScheduledBackupResult {
+	due: number;
+	succeeded: number;
+	failed: number;
+}
+
 export async function runScheduledBackupIfDue(
 	env: CloudflareBindings,
-): Promise<void> {
+): Promise<ScheduledBackupResult> {
 	const db = await createBackupDatabase(env.DB);
 	const dataEncryptionSecret = env.DATA_ENCRYPTION_SECRET;
 	const blobStore = createBlobStore(env);
+	const result: ScheduledBackupResult = { due: 0, succeeded: 0, failed: 0 };
 	try {
-		const settings = await loadBackupSettings(
-			db,
-			dataEncryptionSecret,
-			"UTC",
-		).catch(() => null);
-		if (!settings) return;
+		const settings = await loadBackupSettings(db, dataEncryptionSecret, "UTC");
 
 		const currentTime = new Date();
 		for (const destination of settings.destinations) {
@@ -49,6 +51,7 @@ export async function runScheduledBackupIfDue(
 			) {
 				continue;
 			}
+			result.due += 1;
 			try {
 				destination.runtime.lastAttemptAt = currentTime.toISOString();
 				destination.runtime.lastAttemptLocalDate = getBackupLocalDateKey(
@@ -95,7 +98,9 @@ export async function runScheduledBackupIfDue(
 				destination.runtime.lastUploadedSizeBytes = archive.bytes.byteLength;
 				destination.runtime.lastUploadedDestination = upload.remotePath;
 				await saveBackupSettings(db, dataEncryptionSecret, settings);
+				result.succeeded += 1;
 			} catch (error: unknown) {
+				result.failed += 1;
 				destination.runtime.lastErrorAt = new Date().toISOString();
 				destination.runtime.lastErrorMessage = errorMessage(
 					error,
@@ -104,8 +109,17 @@ export async function runScheduledBackupIfDue(
 				await saveBackupSettings(db, dataEncryptionSecret, settings).catch(
 					() => null,
 				);
+				console.error(
+					JSON.stringify({
+						event: "backup.scheduled.failed",
+						destinationId: destination.id,
+						destinationType: destination.type,
+						error: destination.runtime.lastErrorMessage,
+					}),
+				);
 			}
 		}
+		return result;
 	} finally {
 		await db.destroy();
 	}

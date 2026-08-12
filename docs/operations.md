@@ -32,10 +32,13 @@ Both deployment configurations install an hourly Cron Trigger at minute 17. The 
 
 Audit history and secret retention are deliberately separate. After the restore window, GC removes encrypted payloads and blob contents; minimal audit events may remain according to the configured audit-log retention policy. Do not retain vault ciphertext or attachment content merely to extend audit history.
 
+Every Cron invocation emits a structured `scheduled.completed` log containing duration, per-destination backup totals, GC counts, and an error count. Individual backup destinations emit `backup.scheduled.failed`; configuration/decryption failures emit `backup.scheduled.error`. Backup and maintenance failures are isolated so maintenance still runs when backup configuration is broken, but the Scheduled event is marked failed so Cloudflare notification or log-based alerts can detect it.
+
 ## Troubleshooting
 
 - `JWT_SECRET must be at least 32 characters`: configure an independent random Worker secret.
 - Backup settings cannot decrypt: confirm the original `DATA_ENCRYPTION_SECRET` is configured.
+- Cron reports `backup.scheduled.error`: do not ignore it as “no backup configured”; open the backup center and reactivate or repair the encrypted destination settings.
 - Attachments return 404 after switching storage: R2 and KV objects are not migrated automatically; switch back or restore a backup into the selected backend.
 - Official client rejects login: run `pnpm test:compat:bw`, then inspect `/api/config`, `/identity/accounts/prelogin`, and the audit log.
 - Domain recommendations are stale: run `pnpm domains:sync`; the scheduled workflow normally updates the generated upstream file weekly.
