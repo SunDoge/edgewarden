@@ -180,42 +180,49 @@ export const createAdminInvite = factory.createHandlers(
 			(byte) => byte.toString(16).padStart(2, "0"),
 		).join("");
 		const code = await hashCredential(rawCode);
-		await c
-			.get("db")
-			.insertInto("invites")
-			.values({
-				code,
-				code_encrypted: await encryptCredential(
-					rawCode,
-					c.env.DATA_ENCRYPTION_SECRET,
-					"invite-code",
-				),
-				email: body.email.trim().toLowerCase(),
-				created_by: c.get("user").id,
-				used_by: null,
-				expires_at: ts + body.expiresInHours * 3600,
-				status: "active",
-				created_at: ts,
-				updated_at: ts,
-			})
-			.execute();
-		const invite = await c
-			.get("db")
+		const db = c.get("db");
+		const normalizedEmail = body.email.trim().toLowerCase();
+		await c.get("dbDialect").batch([
+			db
+				.insertInto("invites")
+				.values({
+					code,
+					code_encrypted: await encryptCredential(
+						rawCode,
+						c.env.DATA_ENCRYPTION_SECRET,
+						"invite-code",
+					),
+					email: normalizedEmail,
+					created_by: c.get("user").id,
+					used_by: null,
+					expires_at: ts + body.expiresInHours * 3600,
+					status: "active",
+					created_at: ts,
+					updated_at: ts,
+				})
+				.compile(),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: c.get("user").id,
+					action: "admin.invite.create",
+					category: "admin",
+					targetType: "invite",
+					metadata: {
+						...auditRequestMetadata(c.req.raw),
+						status: "active",
+						email: normalizedEmail,
+					},
+				},
+				sql<boolean>`EXISTS (SELECT 1 FROM invites WHERE code = ${code})`,
+				ts,
+			),
+		]);
+		const invite = await db
 			.selectFrom("invites")
 			.selectAll()
 			.where("code", "=", code)
 			.executeTakeFirstOrThrow();
-		await safeWriteAuditEvent(c.get("db"), {
-			actorUserId: c.get("user").id,
-			action: "admin.invite.create",
-			category: "admin",
-			targetType: "invite",
-			metadata: {
-				...auditRequestMetadata(c.req.raw),
-				status: "active",
-				email: body.email.trim().toLowerCase(),
-			},
-		});
 		return c.json(
 			await inviteResponse(c.req.raw, c.env.DATA_ENCRYPTION_SECRET, invite),
 			201,
@@ -338,26 +345,38 @@ export const setAdminUserStatus = factory.createHandlers(
 			.where("status", "=", target.status)
 			.where("deletion_requested_at", "is", null)
 			.compile();
-		const [updated] = await c
-			.get("dbDialect")
-			.batch([
-				update,
-				...(body.status === "banned"
-					? [conditionalRefreshTokenDeletionQuery(db, targetId, securityStamp)]
-					: []),
-			]);
+		const [updated] = await c.get("dbDialect").batch([
+			update,
+			...(body.status === "banned"
+				? [conditionalRefreshTokenDeletionQuery(db, targetId, securityStamp)]
+				: []),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: c.get("user").id,
+					action: "admin.user.status",
+					category: "admin",
+					level: "warning",
+					targetType: "user",
+					targetId,
+					metadata: {
+						...auditRequestMetadata(c.req.raw),
+						status: body.status,
+					},
+				},
+				sql<boolean>`EXISTS (
+						SELECT 1 FROM users
+						WHERE id = ${targetId}
+						  AND status = ${body.status}
+						  AND updated_at = ${ts}
+						  ${body.status === "banned" ? sql`AND security_stamp = ${securityStamp}` : sql``}
+					)`,
+				ts,
+			),
+		]);
 		if (updated.numAffectedRows !== 1n)
 			return errorResponse("User status changed by another request", 409);
 		invalidateUserCache(targetId);
-		await safeWriteAuditEvent(db, {
-			actorUserId: c.get("user").id,
-			action: "admin.user.status",
-			category: "admin",
-			level: "warning",
-			targetType: "user",
-			targetId,
-			metadata: { ...auditRequestMetadata(c.req.raw), status: body.status },
-		});
 		return response();
 	},
 );

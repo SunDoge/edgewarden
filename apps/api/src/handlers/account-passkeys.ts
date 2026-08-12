@@ -17,11 +17,7 @@ import {
 	handleGetAccountPasskeyAssertionOptions,
 	verifyUserSecret,
 } from "../services/account-passkey-auth";
-import {
-	auditEventInsertQuery,
-	auditRequestMetadata,
-	safeWriteAuditEvent,
-} from "../services/audit";
+import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import { invalidateUserCache } from "../services/auth";
 import {
 	conditionalAccountPasskeyClaimQuery,
@@ -370,22 +366,41 @@ export const createAccountPasskey = factory.createHandlers(
 		};
 
 		const securityStamp = crypto.randomUUID();
-		const [claimed, inserted] = await c
-			.get("dbDialect")
-			.batch([
-				conditionalAccountPasskeyClaimQuery(
-					db,
-					user.id,
-					user.security_stamp,
-					credential.credential_id,
-					securityStamp,
-					MAX_ACCOUNT_PASSKEYS,
-					ts,
-				),
-				conditionalWebauthnCredentialInsertQuery(db, credential, securityStamp),
-				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
-				conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
-			]);
+		const [claimed, inserted] = await c.get("dbDialect").batch([
+			conditionalAccountPasskeyClaimQuery(
+				db,
+				user.id,
+				user.security_stamp,
+				credential.credential_id,
+				securityStamp,
+				MAX_ACCOUNT_PASSKEYS,
+				ts,
+			),
+			conditionalWebauthnCredentialInsertQuery(db, credential, securityStamp),
+			conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+			conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: user.id,
+					action: "account.passkey.create",
+					category: "system",
+					level: "info",
+					targetType: "accountPasskey",
+					targetId: credential.id,
+					metadata: {
+						prfStatus: accountPasskeyPrfStatus(credential),
+						...auditRequestMetadata(c.req.raw),
+					},
+				},
+				sql<boolean>`EXISTS (
+						SELECT 1 FROM webauthn_credentials
+						WHERE id = ${credential.id}
+						  AND mutation_token = ${credential.mutation_token}
+					)`,
+				ts,
+			),
+		]);
 		if (claimed.numAffectedRows !== 1n)
 			return errorResponse(
 				"Passkey settings changed or reached their limit",
@@ -394,19 +409,6 @@ export const createAccountPasskey = factory.createHandlers(
 		if (inserted.numAffectedRows !== 1n)
 			return errorResponse("Passkey registration could not be persisted", 500);
 		invalidateUserCache(user.id);
-
-		await safeWriteAuditEvent(db, {
-			actorUserId: user.id,
-			action: "account.passkey.create",
-			category: "system",
-			level: "info",
-			targetType: "accountPasskey",
-			targetId: credential.id,
-			metadata: {
-				prfStatus: accountPasskeyPrfStatus(credential),
-				...auditRequestMetadata(c.req.raw),
-			},
-		});
 
 		return jsonResponse(accountPasskeyCredentialToResponse(credential as any));
 	},
@@ -448,41 +450,47 @@ export const updateAccountPasskeyEncryption = factory.createHandlers(
 
 		const ts = now();
 		const mutationToken = crypto.randomUUID();
-		const [updated] = await c
-			.get("dbDialect")
-			.batch([
-				conditionalWebauthnEncryptionUpdateQuery(
-					db,
-					assertion.credential,
-					prfKeySet.encryptedUserKey,
-					prfKeySet.encryptedPublicKey,
-					prfKeySet.encryptedPrivateKey,
-					mutationToken,
-					ts,
-				),
-				conditionalWebauthnEncryptionRevisionQuery(
-					db,
-					user.id,
-					assertion.credential.id,
-					mutationToken,
-					ts,
-				),
-			]);
+		const [updated] = await c.get("dbDialect").batch([
+			conditionalWebauthnEncryptionUpdateQuery(
+				db,
+				assertion.credential,
+				prfKeySet.encryptedUserKey,
+				prfKeySet.encryptedPublicKey,
+				prfKeySet.encryptedPrivateKey,
+				mutationToken,
+				ts,
+			),
+			conditionalWebauthnEncryptionRevisionQuery(
+				db,
+				user.id,
+				assertion.credential.id,
+				mutationToken,
+				ts,
+			),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: user.id,
+					action: "account.passkey.encryption.enable",
+					category: "system",
+					level: "info",
+					targetType: "accountPasskey",
+					targetId: assertion.credential.id,
+					metadata: auditRequestMetadata(c.req.raw),
+				},
+				sql<boolean>`EXISTS (
+						SELECT 1 FROM webauthn_credentials
+						WHERE id = ${assertion.credential.id}
+						  AND mutation_token = ${mutationToken}
+					)`,
+				ts,
+			),
+		]);
 		if (updated.numAffectedRows !== 1n)
 			return errorResponse(
 				"Passkey encryption changed by another request",
 				409,
 			);
-
-		await safeWriteAuditEvent(db, {
-			actorUserId: user.id,
-			action: "account.passkey.encryption.enable",
-			category: "system",
-			level: "info",
-			targetType: "accountPasskey",
-			targetId: assertion.credential.id,
-			metadata: auditRequestMetadata(c.req.raw),
-		});
 
 		return jsonResponse({ success: true });
 	},

@@ -12,11 +12,7 @@ import {
 	TwoFactorPasskeyDeleteSchema,
 	TwoFactorPasskeyRegistrationSchema,
 } from "../schemas/passkeys";
-import {
-	auditEventInsertQuery,
-	auditRequestMetadata,
-	safeWriteAuditEvent,
-} from "../services/audit";
+import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import { invalidateUserCache, verifyPassword } from "../services/auth";
 import { encryptCredential } from "../services/credential-protection";
 import {
@@ -267,23 +263,38 @@ export const createTwoFactorPasskey = factory.createHandlers(
 				"totp-recovery",
 			));
 		const securityStamp = crypto.randomUUID();
-		const [claimed, inserted] = await c
-			.get("dbDialect")
-			.batch([
-				conditionalTwoFactorPasskeyClaimQuery(
-					db,
-					user.id,
-					user.security_stamp,
-					credential.credential_id,
-					encryptedRecoveryCode,
-					securityStamp,
-					MAX_TWO_FACTOR_PASSKEYS,
-					ts,
-				),
-				conditionalWebauthnCredentialInsertQuery(db, credential, securityStamp),
-				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
-				conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
-			]);
+		const [claimed, inserted] = await c.get("dbDialect").batch([
+			conditionalTwoFactorPasskeyClaimQuery(
+				db,
+				user.id,
+				user.security_stamp,
+				credential.credential_id,
+				encryptedRecoveryCode,
+				securityStamp,
+				MAX_TWO_FACTOR_PASSKEYS,
+				ts,
+			),
+			conditionalWebauthnCredentialInsertQuery(db, credential, securityStamp),
+			conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+			conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: user.id,
+					action: "account.two_factor.passkey.create",
+					category: "auth",
+					targetType: "twoFactorPasskey",
+					targetId: credential.id,
+					metadata: auditRequestMetadata(c.req.raw),
+				},
+				sql<boolean>`EXISTS (
+						SELECT 1 FROM webauthn_credentials
+						WHERE id = ${credential.id}
+						  AND mutation_token = ${credential.mutation_token}
+					)`,
+				ts,
+			),
+		]);
 		if (claimed.numAffectedRows !== 1n)
 			return errorResponse(
 				"Passkey settings changed or reached their limit",
@@ -292,14 +303,6 @@ export const createTwoFactorPasskey = factory.createHandlers(
 		if (inserted.numAffectedRows !== 1n)
 			return errorResponse("Passkey registration could not be persisted", 500);
 		invalidateUserCache(user.id);
-		await safeWriteAuditEvent(db, {
-			actorUserId: user.id,
-			action: "account.two_factor.passkey.create",
-			category: "auth",
-			targetType: "twoFactorPasskey",
-			targetId: credential.id,
-			metadata: auditRequestMetadata(c.req.raw),
-		});
 		return jsonResponse(
 			settings(
 				await webauthnDb.listAccountPasskeyCredentialsByUserId(

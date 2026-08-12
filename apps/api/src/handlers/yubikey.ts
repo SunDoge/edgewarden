@@ -1,11 +1,16 @@
 import { vValidator } from "@hono/valibot-validator";
+import { sql } from "kysely";
 import { factory } from "../http/factory";
 import {
 	SaveYubicoConfigSchema,
 	SaveYubicoKeysSchema,
 	YubicoSettingsSchema,
 } from "../schemas/two-factor";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+	safeWriteAuditEvent,
+} from "../services/audit";
 import { invalidateUserCache, verifyPassword } from "../services/auth";
 import { encryptCredential } from "../services/credential-protection";
 import {
@@ -93,33 +98,42 @@ export const saveYubikeys = factory.createHandlers(
 				c.env.DATA_ENCRYPTION_SECRET,
 				"totp-recovery",
 			));
-		const [changed] = await c
-			.get("dbDialect")
-			.batch([
-				conditionalYubikeyUpdateQuery(
-					db,
-					user.id,
-					user.security_stamp,
-					user.yubikey_config,
-					serializeYubikeyConfig({ keys: publicIds, nfc: body.nfc }),
-					encryptedRecoveryCode,
-					securityStamp,
-					ts,
-				),
-				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
-				conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
-			]);
+		const [changed] = await c.get("dbDialect").batch([
+			conditionalYubikeyUpdateQuery(
+				db,
+				user.id,
+				user.security_stamp,
+				user.yubikey_config,
+				serializeYubikeyConfig({ keys: publicIds, nfc: body.nfc }),
+				encryptedRecoveryCode,
+				securityStamp,
+				ts,
+			),
+			conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+			conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: user.id,
+					action: "account.two_factor.yubikey.enable",
+					category: "auth",
+					targetType: "user",
+					targetId: user.id,
+					metadata: {
+						...auditRequestMetadata(c.req.raw),
+						size: publicIds.length,
+					},
+				},
+				sql<boolean>`EXISTS (
+						SELECT 1 FROM users
+						WHERE id = ${user.id} AND security_stamp = ${securityStamp}
+					)`,
+				ts,
+			),
+		]);
 		if (changed.numAffectedRows !== 1n)
 			return errorResponse("YubiKey settings changed by another request", 409);
 		invalidateUserCache(user.id);
-		await safeWriteAuditEvent(db, {
-			actorUserId: user.id,
-			action: "account.two_factor.yubikey.enable",
-			category: "auth",
-			targetType: "user",
-			targetId: user.id,
-			metadata: { ...auditRequestMetadata(c.req.raw), size: publicIds.length },
-		});
 		const updated = await db
 			.selectFrom("users")
 			.selectAll()
@@ -162,17 +176,25 @@ export const disableYubikeys = factory.createHandlers(
 				.compile(),
 			conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
 			conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: user.id,
+					action: "account.two_factor.yubikey.disable",
+					category: "auth",
+					targetType: "user",
+					targetId: user.id,
+					metadata: auditRequestMetadata(c.req.raw),
+				},
+				sql<boolean>`EXISTS (
+					SELECT 1 FROM users
+					WHERE id = ${user.id} AND security_stamp = ${securityStamp}
+				)`,
+				ts,
+			),
 		]);
 		if (updated.numAffectedRows !== 1n) return disabledResponse();
 		invalidateUserCache(user.id);
-		await safeWriteAuditEvent(db, {
-			actorUserId: user.id,
-			action: "account.two_factor.yubikey.disable",
-			category: "auth",
-			targetType: "user",
-			targetId: user.id,
-			metadata: auditRequestMetadata(c.req.raw),
-		});
 		return disabledResponse();
 	},
 );

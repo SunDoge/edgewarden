@@ -261,6 +261,42 @@ export function registerAdminOrganizationScenarios(
 					masterPasswordHash: MASTER_PASSWORD_HASH,
 				}),
 			});
+		await context.database
+			.prepare(`
+				CREATE TRIGGER test_fail_atomic_admin_status_audit
+				BEFORE INSERT ON audit_logs
+				WHEN NEW.action = 'admin.user.status'
+				BEGIN
+					SELECT RAISE(ABORT, 'simulated audit outage');
+				END
+			`)
+			.run();
+		try {
+			const failedBan = await banRequest();
+			assert.equal(failedBan.status, 500);
+			assert.equal(
+				await context.database
+					.prepare("SELECT status FROM users WHERE id = ?")
+					.bind(member.id)
+					.first<{ status: string }>()
+					.then((row) => row?.status),
+				"active",
+			);
+			assert.equal(
+				(
+					await request("/api/accounts/profile", {
+						headers: {
+							authorization: `Bearer ${context.memberAccessToken}`,
+						},
+					})
+				).status,
+				200,
+			);
+		} finally {
+			await context.database
+				.prepare("DROP TRIGGER IF EXISTS test_fail_atomic_admin_status_audit")
+				.run();
+		}
 		const banned = await banRequest();
 		assert.equal(banned.status, 200, await banned.clone().text());
 		const duplicateBan = await banRequest();
