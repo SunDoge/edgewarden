@@ -1,14 +1,11 @@
 <script lang="ts">
 import { CipherType } from "@edgewarden/shared";
-import { ArrowLeft, Lock } from "@lucide/svelte";
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
-import { Button } from "$lib/components/ui/button/index.js";
 import VaultDialogs from "$lib/components/vault/VaultDialogs.svelte";
-import VaultEditorForm from "$lib/components/vault/VaultEditorForm.svelte";
+import VaultDetailPanel from "$lib/components/vault/VaultDetailPanel.svelte";
 import VaultHeader from "$lib/components/vault/VaultHeader.svelte";
-import VaultItemDetail from "$lib/components/vault/VaultItemDetail.svelte";
 import VaultItemList from "$lib/components/vault/VaultItemList.svelte";
 import VaultSidebar from "$lib/components/vault/VaultSidebar.svelte";
 import {
@@ -538,63 +535,30 @@ async function toggleFavorite(item: any) {
 		/>
 		</div>
 
-		<!-- Detail Panel -->
-		<section class="{mobileDetailOpen ? 'flex' : 'hidden'} absolute inset-0 z-10 w-full flex-col overflow-y-auto border-l bg-background p-4 md:static md:flex md:w-96 md:shrink-0 md:p-6">
-			<div class="mb-4 md:hidden"><Button variant="ghost" size="sm" onclick={() => { if (isCreating || isEditing) cancelEdit(); else mobileDetailOpen = false; }}><ArrowLeft />返回列表</Button></div>
-			{#if isCreating || isEditing}
-				<VaultEditorForm
-					bind:form={editor}
-					{isCreating}
-					{isEditing}
-					folders={vault.folders}
-					organizations={vault.organizations}
-					collections={vault.collections}
-					onSave={handleSaveCipher}
-					onDelete={handleDeleteCipher}
-					onCancel={cancelEdit}
-				/>
-			{:else if selectedItem}
-				<VaultItemDetail
-					item={selectedItem}
-					folders={vault.folders}
-					totp={totpLive}
-					{attachmentBusy}
-					onFavorite={() => toggleFavorite(selectedItem)}
-					onArchive={toggleArchiveSelected}
-					onRestore={restoreSelectedCipher}
-					onEdit={startEdit}
-					onDelete={handleDeleteCipher}
-					onAttachmentUpload={handleAttachmentUpload}
-					onAttachmentDownload={handleAttachmentDownload}
-					onAttachmentDelete={handleAttachmentDelete}
-				/>
-			{:else if vault.isSyncing}
-				<div class="animate-pulse space-y-6">
-					<div class="flex items-center gap-3">
-						<div class="w-12 h-12 rounded-2xl bg-slate-200 dark:bg-slate-800 shrink-0"></div>
-						<div class="flex-1 space-y-2">
-							<div class="h-5 bg-slate-200 dark:bg-slate-800 rounded w-1/2"></div>
-							<div class="h-3 bg-slate-200/60 dark:bg-slate-800/60 rounded w-1/3"></div>
-						</div>
-					</div>
-					<hr class="border-slate-200 dark:border-slate-800" />
-					<div class="space-y-4">
-						{#each Array(3) as _}
-							<div class="space-y-2">
-								<div class="h-3 bg-slate-200/60 dark:bg-slate-800/60 rounded w-1/4"></div>
-								<div class="h-10 bg-slate-200 dark:bg-slate-800 rounded w-full"></div>
-							</div>
-						{/each}
-					</div>
-				</div>
-			{:else}
-				<div class="h-full flex flex-col items-center justify-center text-center text-slate-400 p-8">
-					<Lock class="size-10 text-slate-300 dark:text-slate-700 mb-3" />
-					<p class="font-medium text-sm">选择一个项目查看详情</p>
-					<p class="text-xs text-slate-500 mt-1">点击列表中任何条目，将在此显示解密数据。</p>
-				</div>
-			{/if}
-		</section>
+		<VaultDetailPanel
+			visible={mobileDetailOpen}
+			{isCreating}
+			{isEditing}
+			bind:editor
+			{selectedItem}
+			folders={vault.folders}
+			organizations={vault.organizations}
+			collections={vault.collections}
+			totp={totpLive}
+			{attachmentBusy}
+			isSyncing={vault.isSyncing}
+			onBack={() => { if (isCreating || isEditing) cancelEdit(); else mobileDetailOpen = false; }}
+			onSave={handleSaveCipher}
+			onDelete={handleDeleteCipher}
+			onCancel={cancelEdit}
+			onFavorite={() => toggleFavorite(selectedItem)}
+			onArchive={toggleArchiveSelected}
+			onRestore={restoreSelectedCipher}
+			onEdit={startEdit}
+			onAttachmentUpload={handleAttachmentUpload}
+			onAttachmentDownload={handleAttachmentDownload}
+			onAttachmentDelete={handleAttachmentDelete}
+		/>
 	</div>
 </div>
 
