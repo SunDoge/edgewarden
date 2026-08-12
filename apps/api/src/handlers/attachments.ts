@@ -2,6 +2,7 @@ import { vValidator } from "@hono/valibot-validator";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { CreateAttachmentSchema } from "../schemas/attachments";
+import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import {
 	deleteBlobObject,
 	getAttachmentObjectKey,
@@ -142,7 +143,7 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
 	)
 		return errorResponse("Invalid or expired upload token", 401);
 	const cipher = await ciphersDb.getCipherById(c.get("db"), claims.cipherId);
-	const attachment = await attachmentsDb.getById(
+	const attachment = await attachmentsDb.getByIdIncludingDeleted(
 		c.get("db"),
 		claims.attachmentId,
 	);
@@ -152,7 +153,7 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
 	)
 		return errorResponse("Attachment not found", 404);
 	if (attachment) {
-		return attachment.cipher_id === cipher.id
+		return attachment.cipher_id === cipher.id && attachment.deleted_at === null
 			? new Response(null, { status: 201 })
 			: errorResponse("Attachment not found", 404);
 	}
@@ -241,7 +242,8 @@ export const deleteAttachment = factory.createHandlers(async (c) => {
 	await executeBatch(c.get("dbDialect"), [
 		c
 			.get("db")
-			.deleteFrom("attachments")
+			.updateTable("attachments")
+			.set({ deleted_at: ts })
 			.where("id", "=", id)
 			.where("cipher_id", "=", cipher.id)
 			.compile(),
@@ -253,6 +255,13 @@ export const deleteAttachment = factory.createHandlers(async (c) => {
 			.compile(),
 		...(await ownerRevisionQueries(c.get("db"), cipher, ts)),
 	]);
-	await deleteBlobObject(c.env, getStoredAttachmentObjectKey(attachment));
+	await safeWriteAuditEvent(c.get("db"), {
+		actorUserId: c.get("user").id,
+		action: "attachment.delete",
+		category: "vault",
+		targetType: "attachment",
+		targetId: id,
+		metadata: { ...auditRequestMetadata(c.req.raw), cipherId: cipher.id },
+	});
 	return new Response(null, { status: 204 });
 });

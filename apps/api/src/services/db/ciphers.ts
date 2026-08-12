@@ -23,6 +23,12 @@ export async function getAllCiphersByUserId(
 		.selectFrom("ciphers")
 		.selectAll()
 		.where("user_id", "=", userId)
+		.where((expression) =>
+			expression.or([
+				expression("purge_after", "is", null),
+				expression("purge_after", ">", now()),
+			]),
+		)
 		.execute();
 }
 
@@ -35,6 +41,12 @@ export async function getCipherById(
 			.selectFrom("ciphers")
 			.selectAll()
 			.where("id", "=", id)
+			.where((expression) =>
+				expression.or([
+					expression("purge_after", "is", null),
+					expression("purge_after", ">", now()),
+				]),
+			)
 			.executeTakeFirst()) ?? null
 	);
 }

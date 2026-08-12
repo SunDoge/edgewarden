@@ -8,7 +8,6 @@ import {
 	getSendFileObjectKey,
 } from "./blob-store";
 import * as attachmentsDb from "./db/attachments";
-import { textColumnInJson } from "./db/json-array";
 
 const BATCH_LIMIT = 100;
 const AUTH_REQUEST_RETENTION_SECONDS = 24 * 60 * 60;
@@ -22,6 +21,7 @@ export interface MaintenanceResult {
 	authRequests: number;
 	loginAttempts: number;
 	expiredInvites: number;
+	purgedAttachments: number;
 	purgedCiphers: number;
 	purgedSends: number;
 }
@@ -47,23 +47,76 @@ async function purgeCiphers(
 		.limit(BATCH_LIMIT)
 		.execute();
 	if (!ciphers.length) return 0;
-	const cipherIds = ciphers.map((cipher) => cipher.id);
-	const attachments = await attachmentsDb.listByCipherIds(db, cipherIds);
-	const deleted = await db
-		.deleteFrom("ciphers")
-		.where(textColumnInJson("id", cipherIds))
-		.where("purge_after", "<=", timestamp)
-		.returning("id")
-		.execute();
-	const deletedIds = new Set(deleted.map((cipher) => cipher.id));
-	await Promise.allSettled(
-		attachments
-			.filter((attachment) => deletedIds.has(attachment.cipher_id))
-			.map((attachment) =>
-				deleteBlobObject(env, getStoredAttachmentObjectKey(attachment)),
-			),
+	const attachments = Map.groupBy(
+		await attachmentsDb.listByCipherIdsIncludingDeleted(
+			db,
+			ciphers.map((cipher) => cipher.id),
+		),
+		(attachment) => attachment.cipher_id,
 	);
-	return deleted.length;
+	let purged = 0;
+	for (const cipher of ciphers) {
+		try {
+			// Keep the D1 tombstone until every external object is gone. Object
+			// deletion is idempotent, so a later D1 failure is safe to retry.
+			await Promise.all(
+				(attachments.get(cipher.id) ?? []).map((attachment) =>
+					deleteBlobObject(env, getStoredAttachmentObjectKey(attachment)),
+				),
+			);
+			const deleted = await db
+				.deleteFrom("ciphers")
+				.where("id", "=", cipher.id)
+				.where("purge_after", "<=", timestamp)
+				.executeTakeFirst();
+			purged += Number(deleted.numDeletedRows ?? 0n);
+		} catch (error) {
+			console.error(
+				JSON.stringify({
+					event: "maintenance.cipher_purge_deferred",
+					cipherId: cipher.id,
+					error: error instanceof Error ? error.message : String(error),
+				}),
+			);
+		}
+	}
+	return purged;
+}
+
+async function purgeAttachments(
+	db: Kysely<DB>,
+	env: CloudflareBindings,
+	timestamp: number,
+): Promise<number> {
+	const attachments = await db
+		.selectFrom("attachments")
+		.selectAll()
+		.where("deleted_at", "is not", null)
+		.where("deleted_at", "<=", timestamp)
+		.orderBy("deleted_at", "asc")
+		.limit(BATCH_LIMIT)
+		.execute();
+	let purged = 0;
+	for (const attachment of attachments) {
+		try {
+			await deleteBlobObject(env, getStoredAttachmentObjectKey(attachment));
+			const deleted = await db
+				.deleteFrom("attachments")
+				.where("id", "=", attachment.id)
+				.where("deleted_at", "is not", null)
+				.executeTakeFirst();
+			purged += Number(deleted.numDeletedRows ?? 0n);
+		} catch (error) {
+			console.error(
+				JSON.stringify({
+					event: "maintenance.attachment_purge_deferred",
+					attachmentId: attachment.id,
+					error: error instanceof Error ? error.message : String(error),
+				}),
+			);
+		}
+	}
+	return purged;
 }
 
 async function purgeSends(
@@ -93,24 +146,28 @@ async function purgeSends(
 			}
 		}
 	}
-	const deleted = await db
-		.deleteFrom("sends")
-		.where(
-			textColumnInJson(
-				"id",
-				sends.map((send) => send.id),
-			),
-		)
-		.where("deletion_date", "<=", timestamp)
-		.returning("id")
-		.execute();
-	await Promise.allSettled(
-		deleted.flatMap((send) => {
+	let purged = 0;
+	for (const send of sends) {
+		try {
 			const key = objectKeys.get(send.id);
-			return key ? [deleteBlobObject(env, key)] : [];
-		}),
-	);
-	return deleted.length;
+			if (key) await deleteBlobObject(env, key);
+			const deleted = await db
+				.deleteFrom("sends")
+				.where("id", "=", send.id)
+				.where("deletion_date", "<=", timestamp)
+				.executeTakeFirst();
+			purged += Number(deleted.numDeletedRows ?? 0n);
+		} catch (error) {
+			console.error(
+				JSON.stringify({
+					event: "maintenance.send_purge_deferred",
+					sendId: send.id,
+					error: error instanceof Error ? error.message : String(error),
+				}),
+			);
+		}
+	}
+	return purged;
 }
 
 export async function runMaintenance(
@@ -177,6 +234,7 @@ export async function runMaintenance(
 		authRequests,
 		loginAttempts,
 		expiredInvites,
+		purgedAttachments: await purgeAttachments(db, env, timestamp),
 		purgedCiphers: await purgeCiphers(db, env, timestamp),
 		purgedSends: await purgeSends(db, env, timestamp),
 	};

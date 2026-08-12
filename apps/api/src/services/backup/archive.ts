@@ -1,5 +1,5 @@
 import { unzipSync, zipSync } from "fflate";
-import type { Kysely } from "kysely";
+import { type Kysely, sql } from "kysely";
 import type { DB } from "../../types/db";
 import { getStoredAttachmentObjectKey, type BlobStore } from "../blob-store";
 import { BACKUP_SETTINGS_CONFIG_KEY } from "./config";
@@ -262,6 +262,7 @@ export async function buildBackupArchive(
 		includeAttachments,
 	});
 	const encoder = new TextEncoder();
+	const snapshotTimestamp = Math.floor(date.getTime() / 1000);
 
 	// Kysely-D1 exposes one connection for this archive. Keep reads ordered so
 	// the adapter never overlaps session requests while building a snapshot.
@@ -313,16 +314,35 @@ export async function buildBackupArchive(
 	const cipherRows = await db
 		.selectFrom("ciphers")
 		.selectAll()
+		.where((expression) =>
+			expression.or([
+				expression("purge_after", "is", null),
+				expression("purge_after", ">", snapshotTimestamp),
+			]),
+		)
 		.orderBy("created_at asc")
 		.execute();
 	const cipherCollectionRows = await db
 		.selectFrom("cipher_collections")
 		.selectAll()
+		.where(
+			sql<boolean>`cipher_id in (
+				select id from ciphers
+				where purge_after is null or purge_after > ${snapshotTimestamp}
+			)`,
+		)
 		.orderBy("cipher_id asc")
 		.execute();
 	const attachmentRows = await db
 		.selectFrom("attachments")
 		.selectAll()
+		.where("deleted_at", "is", null)
+		.where(
+			sql<boolean>`cipher_id in (
+				select id from ciphers
+				where purge_after is null or purge_after > ${snapshotTimestamp}
+			)`,
+		)
 		.orderBy("id asc")
 		.execute();
 	const webauthnRows = await db
@@ -338,6 +358,7 @@ export async function buildBackupArchive(
 	const sendsRows = await db
 		.selectFrom("sends")
 		.selectAll()
+		.where("deletion_date", ">", snapshotTimestamp)
 		.orderBy("created_at asc")
 		.execute();
 
@@ -349,7 +370,8 @@ export async function buildBackupArchive(
 	);
 	const sourceAttachmentRows = includeAttachments ? attachmentRows : [];
 	const exportedAttachmentRows = sourceAttachmentRows.map(
-		({ storage_key: _storageKey, ...row }) => row as SqlRow,
+		({ storage_key: _storageKey, deleted_at: _deletedAt, ...row }) =>
+			row as SqlRow,
 	);
 	const attachmentBlobs = sourceAttachmentRows.map((row) => {
 		const cipherId = String(row.cipher_id || "").trim();

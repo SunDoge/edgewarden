@@ -7,6 +7,7 @@ export interface VaultScenarioContext {
 	readonly database: D1Database;
 	readonly accessToken: string;
 	readonly memberAccessToken: string;
+	readonly r2Values: Map<string, Uint8Array>;
 	cipherId: string;
 	request: (
 		path: string,
@@ -828,6 +829,17 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 			{ headers: auth },
 		);
 		assert.equal(gone.status, 404);
+		const tombstone = await context.database
+			.prepare("SELECT deleted_at FROM attachments WHERE id = ?")
+			.bind(metadata.attachmentId)
+			.first<{ deleted_at: number | null }>();
+		assert.ok(tombstone?.deleted_at);
+		assert.equal(
+			context.r2Values.has(
+				`attachments/${context.cipherId}/${metadata.attachmentId}.bin`,
+			),
+			true,
+		);
 	});
 
 	test("retries attachment publication after a D1 failure", async () => {

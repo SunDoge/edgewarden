@@ -101,6 +101,9 @@ describe("Edgewarden API", () => {
 		get memberAccessToken() {
 			return memberAccessToken;
 		},
+		get r2Values() {
+			return r2Values;
+		},
 		set memberAccessToken(value) {
 			memberAccessToken = value;
 		},

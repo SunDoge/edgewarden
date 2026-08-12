@@ -2,7 +2,7 @@ import { vValidator } from "@hono/valibot-validator";
 import { factory } from "../http/factory";
 import { BulkIdsSchema } from "../schemas/ciphers";
 import { CreateTextSendSchema, UpdateSendSchema } from "../schemas/sends";
-import { deleteBlobObject, getSendFileObjectKey } from "../services/blob-store";
+import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import { executeBatch, revisionQuery } from "../services/db/batch";
 import { textColumnInJson } from "../services/db/json-array";
 import * as sendsDb from "../services/db/sends";
@@ -127,28 +127,23 @@ export const deleteSends = factory.createHandlers(
 			return errorResponse("ids array is required", 400);
 		}
 
-		const fileSends = await db
-			.selectFrom("sends")
-			.select(["id", "data"])
-			.where("user_id", "=", user.id)
-			.where("type", "=", 1)
-			.where(textColumnInJson("id", ids))
-			.execute();
-		const objectKeys = fileSends.flatMap((send) => {
-			const fileId = parseStoredSendData(send).id;
-			return fileId ? [getSendFileObjectKey(send.id, String(fileId))] : [];
-		});
+		const ts = now();
 		await executeBatch(c.get("dbDialect"), [
 			db
-				.deleteFrom("sends")
+				.updateTable("sends")
+				.set({ deletion_date: ts, updated_at: ts })
 				.where(textColumnInJson("id", ids))
 				.where("user_id", "=", user.id)
 				.compile(),
-			revisionQuery(db, user.id),
+			revisionQuery(db, user.id, ts),
 		]);
-		await Promise.allSettled(
-			objectKeys.map((key) => deleteBlobObject(c.env, key)),
-		);
+		await safeWriteAuditEvent(db, {
+			actorUserId: user.id,
+			action: "send.delete.bulk",
+			category: "vault",
+			targetType: "send",
+			metadata: { ...auditRequestMetadata(c.req.raw), size: ids.length },
+		});
 		return new Response(null, { status: 200 });
 	},
 );
@@ -246,24 +241,24 @@ export const deleteSend = factory.createHandlers(async (c) => {
 	const send = c.get("send");
 	const sendId = send.id;
 
-	if (send.type === 1) {
-		const fileData = parseStoredSendData(send);
-		if (fileData.id) {
-			await deleteBlobObject(
-				c.env,
-				getSendFileObjectKey(send.id, String(fileData.id)),
-			);
-		}
-	}
-
+	const ts = now();
 	await executeBatch(c.get("dbDialect"), [
 		db
-			.deleteFrom("sends")
+			.updateTable("sends")
+			.set({ deletion_date: ts, updated_at: ts })
 			.where("id", "=", sendId)
 			.where("user_id", "=", user.id)
 			.compile(),
-		revisionQuery(db, user.id),
+		revisionQuery(db, user.id, ts),
 	]);
+	await safeWriteAuditEvent(db, {
+		actorUserId: user.id,
+		action: "send.delete",
+		category: "vault",
+		targetType: "send",
+		targetId: sendId,
+		metadata: auditRequestMetadata(c.req.raw),
+	});
 	return new Response(null, { status: 200 });
 });
 
