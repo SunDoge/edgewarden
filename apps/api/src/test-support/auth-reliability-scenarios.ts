@@ -17,6 +17,12 @@ import {
 import * as webauthnDb from "../services/db/webauthn";
 import { refreshTokenRotationInsertQuery } from "../services/identity-refresh";
 import { issueIdentitySession } from "../services/identity-session";
+import {
+	clearLoginFailures,
+	isLoginLocked,
+	loginAttemptIdentifierHash,
+	recordLoginFailure,
+} from "../services/login-attempts";
 
 export interface AuthReliabilityScenarioContext {
 	readonly database: D1Database;
@@ -26,6 +32,29 @@ export interface AuthReliabilityScenarioContext {
 export function registerAuthReliabilityScenarios(
 	context: AuthReliabilityScenarioContext,
 ): void {
+	test("counts concurrent login failures without lost updates", async () => {
+		const email = `concurrent-failures-${crypto.randomUUID()}@example.com`;
+		const connections = await Promise.all(
+			Array.from({ length: 12 }, () => createDatabase(context.database)),
+		);
+		try {
+			await Promise.all(
+				connections.map(({ db }) => recordLoginFailure(db, email)),
+			);
+			const stored = await connections[0].db
+				.selectFrom("login_attempts")
+				.select(["failure_count", "locked_until"])
+				.where("identifier_hash", "=", await loginAttemptIdentifierHash(email))
+				.executeTakeFirstOrThrow();
+			assert.equal(stored.failure_count, connections.length);
+			assert.ok(stored.locked_until);
+			assert.equal(await isLoginLocked(connections[0].db, email), true);
+			await clearLoginFailures(connections[0].db, email);
+		} finally {
+			await Promise.all(connections.map(({ db }) => db.destroy()));
+		}
+	});
+
 	test("adds one login passkey from a shared security snapshot", async () => {
 		const { db, dialect } = await createDatabase(context.database);
 		const user = await db
