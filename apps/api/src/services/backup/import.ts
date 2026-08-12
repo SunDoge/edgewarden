@@ -64,6 +64,7 @@ export async function importBackupArchiveBytes(
 	const previousBlobKeys = replaceExisting
 		? await collectCurrentBlobKeys(dbBinding)
 		: new Set<string>();
+	const stagedBlobKeys = new Set<string>();
 	try {
 		await progress?.({
 			source: "local",
@@ -98,6 +99,10 @@ export async function importBackupArchiveBytes(
 			replaceExisting,
 		});
 		const restored = await restoreBlobFiles(blobStore, db, parsed.files);
+		for (const row of restored.restoredAttachments) {
+			const key = String(row.storage_key || "").trim();
+			if (key) stagedBlobKeys.add(key);
+		}
 		const restoredAttachmentKeys = new Set(
 			(restored.restoredAttachments || []).map(attachmentRowKey),
 		);
@@ -152,6 +157,11 @@ export async function importBackupArchiveBytes(
 		);
 	} catch (error) {
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);
+		if (blobStore && stagedBlobKeys.size) {
+			await Promise.allSettled(
+				Array.from(stagedBlobKeys, (key) => blobStore.delete(key)),
+			);
+		}
 		await progress?.({
 			source: "local",
 			step: "local_failed",
@@ -231,6 +241,7 @@ export async function importRemoteBackupArchiveBytes(
 	const previousBlobKeys = replaceExisting
 		? await collectCurrentBlobKeys(dbBinding)
 		: new Set<string>();
+	const stagedBlobKeys = new Set<string>();
 
 	try {
 		await progress?.({
@@ -271,28 +282,30 @@ export async function importRemoteBackupArchiveBytes(
 			for (const row of db.attachments || []) {
 				const cipherId = String(row.cipher_id || "").trim();
 				const attachmentId = String(row.id || "").trim();
-				const key = `attachments/${cipherId}/${attachmentId}.bin`;
+				const sourceKey = `attachments/${cipherId}/${attachmentId}.bin`;
+				const targetKey = String(row.storage_key || "").trim() || sourceKey;
 				const bytes =
-					parsed.files[key] ||
-					(await source.loadAttachment(key).catch(() => null));
+					parsed.files[sourceKey] ||
+					(await source.loadAttachment(sourceKey).catch(() => null));
 				if (!bytes) {
 					skippedItems.push({
 						kind: "attachment",
-						path: key,
+						path: sourceKey,
 						sizeBytes: Number(row.size || 0),
 					});
 					continue;
 				}
 				try {
-					await blobStore.put(key, bytes, {
+					await blobStore.put(targetKey, bytes, {
 						size: bytes.byteLength,
 						contentType: "application/octet-stream",
 					});
+					stagedBlobKeys.add(targetKey);
 					restoredAttachments.push(row);
 				} catch {
 					skippedItems.push({
 						kind: "attachment",
-						path: key,
+						path: sourceKey,
 						sizeBytes: bytes.byteLength,
 					});
 				}
@@ -359,6 +372,11 @@ export async function importRemoteBackupArchiveBytes(
 		);
 	} catch (error) {
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);
+		if (blobStore && stagedBlobKeys.size) {
+			await Promise.allSettled(
+				Array.from(stagedBlobKeys, (key) => blobStore.delete(key)),
+			);
+		}
 		await progress?.({
 			source: "remote",
 			step: "remote_failed",

@@ -5,7 +5,7 @@ import { factory } from "../http/factory";
 import { CipherSchema } from "../schemas/ciphers";
 import {
 	deleteBlobObject,
-	getAttachmentObjectKey,
+	getStoredAttachmentObjectKey,
 } from "../services/blob-store";
 import {
 	getCipherCollectionIds,
@@ -32,10 +32,7 @@ async function deleteAttachmentObjects(
 ) {
 	await Promise.allSettled(
 		attachments.map((attachment) =>
-			deleteBlobObject(
-				env,
-				getAttachmentObjectKey(attachment.cipher_id, attachment.id),
-			),
+			deleteBlobObject(env, getStoredAttachmentObjectKey(attachment)),
 		),
 	);
 }

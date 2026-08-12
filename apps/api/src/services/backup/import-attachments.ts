@@ -42,18 +42,19 @@ export async function restoreBlobFiles(
 		const cipherId = String(row.cipher_id || "").trim();
 		const attachmentId = String(row.id || "").trim();
 		if (!cipherId || !attachmentId) continue;
-		const key = `attachments/${cipherId}/${attachmentId}.bin`;
-		const bytes = files[key];
+		const sourceKey = `attachments/${cipherId}/${attachmentId}.bin`;
+		const targetKey = String(row.storage_key || "").trim() || sourceKey;
+		const bytes = files[sourceKey];
 		if (!bytes) {
 			skippedItems.push({
 				kind: "attachment",
-				path: key,
+				path: sourceKey,
 				sizeBytes: Number(row.size || 0) || 0,
 			});
 			continue;
 		}
 		try {
-			await blobStore.put(key, bytes, {
+			await blobStore.put(targetKey, bytes, {
 				size: bytes.byteLength,
 				contentType: "application/octet-stream",
 			});
@@ -61,7 +62,7 @@ export async function restoreBlobFiles(
 		} catch {
 			skippedItems.push({
 				kind: "attachment",
-				path: key,
+				path: sourceKey,
 				sizeBytes: bytes.byteLength,
 			});
 		}

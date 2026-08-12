@@ -5,6 +5,7 @@ import { CreateAttachmentSchema } from "../schemas/attachments";
 import {
 	deleteBlobObject,
 	getAttachmentObjectKey,
+	getStoredAttachmentObjectKey,
 	getBlobObject,
 	getBlobStorageMaxBytes,
 	putBlobObject,
@@ -192,6 +193,7 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
 				size: claims.fileSize,
 				size_name: sizeName(claims.fileSize),
 				key: claims.key,
+				storage_key: objectKey,
 				created_at: ts,
 			})
 			.onConflict((conflict) => conflict.column("id").doNothing())
@@ -216,7 +218,7 @@ export const downloadAttachment = factory.createHandlers(async (c) => {
 		return errorResponse("Attachment not found", 404);
 	const object = await getBlobObject(
 		c.env,
-		getAttachmentObjectKey(cipher.id, attachment.id),
+		getStoredAttachmentObjectKey(attachment),
 	);
 	if (!object?.body) return errorResponse("Attachment content not found", 404);
 	return new Response(object.body, {
@@ -251,6 +253,6 @@ export const deleteAttachment = factory.createHandlers(async (c) => {
 			.compile(),
 		...(await ownerRevisionQueries(c.get("db"), cipher, ts)),
 	]);
-	await deleteBlobObject(c.env, getAttachmentObjectKey(cipher.id, id));
+	await deleteBlobObject(c.env, getStoredAttachmentObjectKey(attachment));
 	return new Response(null, { status: 204 });
 });

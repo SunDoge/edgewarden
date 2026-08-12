@@ -1,4 +1,7 @@
-import type { BlobStore } from "../blob-store";
+import {
+	createRestoredAttachmentObjectKey,
+	type BlobStore,
+} from "../blob-store";
 import type { BackupPayload } from "./archive";
 import {
 	BACKUP_SETTINGS_CONFIG_KEY,
@@ -90,7 +93,17 @@ export async function importPreparedBackupRows(
 			archived_at: row.archived_at ?? null,
 		})),
 		cipher_collections: cloneRows(payload.cipher_collections || []),
-		attachments: cloneRows(payload.attachments || []),
+		attachments: cloneRows(payload.attachments || []).map((row) => {
+			const cipherId = String(row.cipher_id || "").trim();
+			const attachmentId = String(row.id || "").trim();
+			return {
+				...row,
+				storage_key:
+					cipherId && attachmentId
+						? createRestoredAttachmentObjectKey(cipherId, attachmentId)
+						: null,
+			};
+		}),
 		sends: cloneRows(payload.sends || []),
 	};
 	await importBackupRows(db, preparedDb, true);

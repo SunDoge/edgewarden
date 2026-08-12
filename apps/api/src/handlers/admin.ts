@@ -12,7 +12,7 @@ import { verifyAdminPassword } from "../services/admin-auth";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import {
 	deleteBlobObject,
-	getAttachmentObjectKey,
+	getStoredAttachmentObjectKey,
 	getSendFileObjectKey,
 } from "../services/blob-store";
 import {
@@ -346,10 +346,7 @@ export const deleteAdminUser = factory.createHandlers(
 			.execute();
 		await Promise.allSettled([
 			...attachments.map((attachment) =>
-				deleteBlobObject(
-					c.env,
-					getAttachmentObjectKey(attachment.cipher_id, attachment.id),
-				),
+				deleteBlobObject(c.env, getStoredAttachmentObjectKey(attachment)),
 			),
 			...sends
 				.filter((send) => send.type === 1)

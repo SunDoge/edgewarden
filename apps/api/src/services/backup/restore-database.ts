@@ -210,7 +210,7 @@ export async function collectCurrentBlobKeys(
 	const keys = new Set<string>();
 	const rows = await queryRows(
 		db,
-		`SELECT a.id, a.cipher_id
+		`SELECT a.id, a.cipher_id, a.storage_key
      FROM attachments a
      INNER JOIN ciphers c ON c.id = a.cipher_id`,
 	);
@@ -218,7 +218,10 @@ export async function collectCurrentBlobKeys(
 		const cipherId = String(row.cipher_id || "").trim();
 		const attachmentId = String(row.id || "").trim();
 		if (cipherId && attachmentId) {
-			keys.add(`attachments/${cipherId}/${attachmentId}.bin`);
+			keys.add(
+				String(row.storage_key || "").trim() ||
+					`attachments/${cipherId}/${attachmentId}.bin`,
+			);
 		}
 	}
 	return keys;
