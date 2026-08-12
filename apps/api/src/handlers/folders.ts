@@ -1,10 +1,10 @@
 import { vValidator } from "@hono/valibot-validator";
 import type { Selectable } from "kysely";
 import { factory } from "../http/factory";
-import { FolderSchema } from "../schemas/folders";
 import { BulkIdsSchema } from "../schemas/ciphers";
-import { executeBatch, revisionQuery } from "../services/db/batch";
+import { FolderSchema } from "../schemas/folders";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import { executeBatch, folderRevisionQuery } from "../services/db/batch";
 import * as foldersDb from "../services/db/folders";
 import { textColumnInJson } from "../services/db/json-array";
 import type { Folders } from "../types/db";
@@ -45,7 +45,7 @@ export const createFolder = factory.createHandlers(
 				.insertInto("folders")
 				.values({ id, user_id: userId, name, created_at: ts, updated_at: ts })
 				.compile(),
-			revisionQuery(db, userId, ts),
+			folderRevisionQuery(db, userId, [id], ts),
 		]);
 		const folder = await foldersDb.getFolderById(db, id, userId);
 		if (!folder) return errorResponse("Failed to create folder", 500);
@@ -72,7 +72,7 @@ export const updateFolder = factory.createHandlers(
 				.where("id", "=", id)
 				.where("user_id", "=", userId)
 				.compile(),
-			revisionQuery(db, userId, ts),
+			folderRevisionQuery(db, userId, [id], ts),
 		]);
 		const folder = await foldersDb.getFolderById(db, id, userId);
 		if (!folder) return errorResponse("Not found", 404);
@@ -86,6 +86,7 @@ export const deleteFolder = factory.createHandlers(async (c) => {
 	const id = c.get("folder").id;
 	const ts = now();
 	await executeBatch(c.get("dbDialect"), [
+		folderRevisionQuery(db, userId, [id], ts),
 		db
 			.updateTable("ciphers")
 			.set({ folder_id: null, updated_at: ts })
@@ -97,7 +98,6 @@ export const deleteFolder = factory.createHandlers(async (c) => {
 			.where("id", "=", id)
 			.where("user_id", "=", userId)
 			.compile(),
-		revisionQuery(db, userId, ts),
 	]);
 	return new Response(null, { status: 200 });
 });
@@ -119,6 +119,7 @@ export const deleteFolders = factory.createHandlers(
 		if (!ownedIds.length) return new Response(null, { status: 204 });
 		const ts = now();
 		await executeBatch(c.get("dbDialect"), [
+			folderRevisionQuery(db, userId, ownedIds, ts),
 			db
 				.updateTable("ciphers")
 				.set({ folder_id: null, updated_at: ts })
@@ -130,7 +131,6 @@ export const deleteFolders = factory.createHandlers(
 				.where("user_id", "=", userId)
 				.where(textColumnInJson("id", ownedIds))
 				.compile(),
-			revisionQuery(db, userId, ts),
 		]);
 		await safeWriteAuditEvent(db, {
 			actorUserId: userId,

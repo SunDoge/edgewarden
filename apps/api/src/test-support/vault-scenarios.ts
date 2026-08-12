@@ -448,6 +448,44 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		);
 	});
 
+	test("advances revision once for concurrent deletion of one folder", async () => {
+		const auth = {
+			authorization: `Bearer ${context.accessToken}`,
+			"content-type": "application/json",
+		};
+		const created = await request("/api/folders", {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({ name: "concurrent-delete-folder" }),
+		});
+		assert.equal(created.status, 200, await created.clone().text());
+		const folderId = (await created.json<{ id: string }>()).id;
+		const user = await context.database
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(EMAIL)
+			.first<{ id: string }>();
+		assert.ok(user);
+		const before = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(user.id)
+			.first<{ revision_date: number }>();
+		assert.ok(before);
+
+		const responses = await Promise.all([
+			request(`/api/folders/${folderId}`, { method: "DELETE", headers: auth }),
+			request(`/api/folders/${folderId}`, { method: "DELETE", headers: auth }),
+		]);
+		assert.ok(responses.some((response) => response.status === 200));
+		assert.ok(
+			responses.every((response) => [200, 404].includes(response.status)),
+		);
+		const after = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(user.id)
+			.first<{ revision_date: number }>();
+		assert.equal(after?.revision_date, before.revision_date + 1);
+	});
+
 	test("validates device updates and hides resources outside the user scope", async () => {
 		const auth = { authorization: `Bearer ${context.accessToken}` };
 		const ownDevice = await request("/api/devices/api-test-device", {
