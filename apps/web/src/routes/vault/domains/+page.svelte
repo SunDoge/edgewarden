@@ -4,30 +4,18 @@ import { goto } from "$app/navigation";
 import { isLoggedIn } from "$lib/services/api";
 import { vault } from "$lib/stores/vault.svelte";
 import { fetchDomainRules, updateDomainRules } from "$lib/services/api";
-import {
-	createEquivalentDomainRuleId,
-	normalizeEquivalentDomainRule,
-} from "$lib/services/equivalent-domains";
 import { Button } from "$lib/components/ui/button/index.js";
-import { Input } from "$lib/components/ui/input/index.js";
+import CustomEquivalentDomains from "$lib/components/domains/CustomEquivalentDomains.svelte";
+import { normalizeEquivalentDomainRule } from "$lib/services/equivalent-domains";
 import GlobalEquivalentDomains from "$lib/components/domains/GlobalEquivalentDomains.svelte";
 import {
 	ArrowLeft,
 	Save,
-	Plus,
-	Trash2,
-	Edit,
-	Check,
-	X,
 	Globe,
 	ShieldCheck,
 	RefreshCw,
 	AlertCircle,
 	Info,
-	ToggleLeft,
-	ToggleRight,
-	CheckSquare,
-	Square,
 } from "@lucide/svelte";
 import type {
 	CustomEquivalentDomain,
@@ -45,13 +33,6 @@ let customRules = $state<CustomEquivalentDomain[]>([]);
 let globalRules = $state<GlobalEquivalentDomain[]>([]);
 let excludedTypes = $state<Set<number>>(new Set());
 
-// Edit/Add states
-let editingRuleId = $state<string | null>(null);
-let editingDomains = $state<string[]>(["", ""]);
-let editingInvalidIndexes = $state<Set<number>>(new Set());
-
-let newRuleDomains = $state<string[] | null>(null);
-let newRuleInvalidIndexes = $state<Set<number>>(new Set());
 
 onMount(async () => {
 	if (!isLoggedIn()) {
@@ -89,97 +70,6 @@ async function loadRules() {
 	} finally {
 		loading = false;
 	}
-}
-
-// Custom rule actions
-function handleToggleCustomRule(index: number) {
-	customRules[index].excluded = !customRules[index].excluded;
-}
-
-function handleAddCustomRule() {
-	newRuleDomains = ["", ""];
-	newRuleInvalidIndexes = new Set();
-	editingRuleId = null;
-}
-
-function handleAddDomainField(isNewRule: boolean) {
-	if (isNewRule) {
-		if (newRuleDomains) newRuleDomains = [...newRuleDomains, ""];
-	} else {
-		editingDomains = [...editingDomains, ""];
-	}
-}
-
-function handleRemoveDomainField(isNewRule: boolean, index: number) {
-	if (isNewRule) {
-		if (newRuleDomains && newRuleDomains.length > 2) {
-			newRuleDomains = newRuleDomains.filter((_, i) => i !== index);
-			newRuleInvalidIndexes.delete(index);
-		}
-	} else {
-		if (editingDomains.length > 2) {
-			editingDomains = editingDomains.filter((_, i) => i !== index);
-			editingInvalidIndexes.delete(index);
-		}
-	}
-}
-
-function handleConfirmNewRule() {
-	if (!newRuleDomains) return;
-	const normalizedRule = normalizeEquivalentDomainRule(newRuleDomains);
-	newRuleInvalidIndexes = normalizedRule.invalidIndexes;
-	if (normalizedRule.invalidIndexes.size > 0) {
-		showTimedError("部分域名格式不正确，请修改红框中的内容。");
-		return;
-	}
-
-	if (!normalizedRule.valid) {
-		showTimedError("每条规则必须包含至少 2 个有效的等效域名。");
-		return;
-	}
-
-	const newId = createEquivalentDomainRuleId();
-	customRules = [
-		{ id: newId, domains: normalizedRule.domains, excluded: false },
-		...customRules,
-	];
-	newRuleDomains = null;
-	newRuleInvalidIndexes = new Set();
-	showTimedSuccess("已添加临时规则，请记得点击右上角“保存并应用”。");
-}
-
-function handleStartEditRule(rule: CustomEquivalentDomain) {
-	editingRuleId = rule.id;
-	editingDomains = [...rule.domains];
-	editingInvalidIndexes = new Set();
-	newRuleDomains = null;
-}
-
-function handleConfirmEditRule() {
-	const normalizedRule = normalizeEquivalentDomainRule(editingDomains);
-	editingInvalidIndexes = normalizedRule.invalidIndexes;
-	if (normalizedRule.invalidIndexes.size > 0) {
-		showTimedError("部分域名格式不正确，请修改红框中的内容。");
-		return;
-	}
-
-	if (!normalizedRule.valid) {
-		showTimedError("每条规则必须包含至少 2 个有效的等效域名。");
-		return;
-	}
-
-	customRules = customRules.map((r) =>
-		r.id === editingRuleId ? { ...r, domains: normalizedRule.domains } : r,
-	);
-	editingRuleId = null;
-	editingDomains = ["", ""];
-	editingInvalidIndexes = new Set();
-	showTimedSuccess("已更新临时规则，请记得点击右上角“保存并应用”。");
-}
-
-function handleDeleteCustomRule(index: number) {
-	customRules = customRules.filter((_, i) => i !== index);
-	showTimedSuccess("已删除规则，请记得点击右上角“保存并应用”。");
 }
 
 // Save & Sync
@@ -334,116 +224,7 @@ function showTimedError(msg: string) {
 		{:else}
 			<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 				
-				<!-- LEFT: Custom Equivalent Domains -->
-				<section class="flex min-h-[500px] min-w-0 flex-col gap-5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800/80 dark:bg-slate-900 sm:p-6">
-					<div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-850 pb-4 shrink-0">
-						<div>
-							<h3 class="font-bold text-slate-850 dark:text-slate-100 text-sm">自定义规则</h3>
-							<p class="text-xs text-slate-450 dark:text-slate-500 mt-0.5">创建专属您的等效域名绑定</p>
-						</div>
-						<Button size="sm" onclick={handleAddCustomRule} disabled={newRuleDomains !== null} class="gap-1 bg-primary text-primary-foreground">
-							<Plus class="size-3.5" />
-							新增规则
-						</Button>
-					</div>
-
-					<!-- Form to Add/Edit Rules inline -->
-					{#if newRuleDomains !== null || editingRuleId !== null}
-						{@const isNew = newRuleDomains !== null}
-						{@const currentFields = isNew ? newRuleDomains! : editingDomains}
-						{@const currentInvalids = isNew ? newRuleInvalidIndexes : editingInvalidIndexes}
-						
-						<div class="p-4 rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 dark:bg-primary/10/5 flex flex-col gap-3.5 animate-in fade-in duration-200">
-							<div class="flex items-center justify-between">
-								<span class="text-xs font-bold text-primary flex items-center gap-1.5">
-									<Globe class="size-3.5" />
-									{isNew ? "新建域名等效规则" : "编辑等效规则"}
-								</span>
-								<div class="flex gap-2">
-									<Button size="sm" variant="ghost" onclick={() => isNew ? (newRuleDomains = null) : (editingRuleId = null)} class="h-7 text-slate-500 hover:bg-slate-150">
-										取消
-									</Button>
-									<Button size="sm" onclick={isNew ? handleConfirmNewRule : handleConfirmEditRule} class="h-7 bg-primary text-primary-foreground font-medium">
-										确认
-									</Button>
-								</div>
-							</div>
-
-							<div class="space-y-2">
-								{#each currentFields as domain, idx}
-									<div class="flex items-center gap-2">
-										<Input
-											placeholder="例如: google.com"
-											bind:value={currentFields[idx]}
-											class="h-9 {currentInvalids.has(idx) ? 'border-red-500 focus-visible:ring-red-400' : ''}"
-										/>
-										{#if currentFields.length > 2}
-											<Button
-												variant="ghost" size="icon"
-												onclick={() => handleRemoveDomainField(isNew, idx)}
-												class="size-9 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 text-red-500 shrink-0"
-											>
-												<Trash2 class="size-4" />
-											</Button>
-										{/if}
-									</div>
-								{/each}
-							</div>
-
-							<Button variant="outline" size="sm" onclick={() => handleAddDomainField(isNew)} class="gap-1.5 h-8 border-dashed border-primary/20 text-primary w-full hover:bg-primary/5">
-								<Plus class="size-3.5" />
-								添加等效域名
-							</Button>
-						</div>
-					{/if}
-
-					<!-- Custom Rules Table -->
-					<div class="flex-1 space-y-3 overflow-y-auto max-h-[480px] pr-1">
-						{#each customRules as rule, ruleIdx}
-							<div class="p-4 rounded-xl border border-slate-150 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between gap-4 transition-all duration-200 hover:border-slate-300 dark:hover:border-slate-700
-								{rule.excluded ? 'opacity-60 grayscale-[40%]' : ''}">
-								<div class="flex items-center gap-3 min-w-0 flex-1">
-									<button
-										onclick={() => handleToggleCustomRule(ruleIdx)}
-										class="text-slate-400 hover:text-primary transition-colors shrink-0"
-										title={rule.excluded ? "已禁用 (点击启用)" : "已启用 (点击禁用)"}
-									>
-										{#if rule.excluded}
-											<Square class="size-4 text-slate-350" />
-										{:else}
-											<CheckSquare class="size-4 text-primary" />
-										{/if}
-									</button>
-
-									<div class="min-w-0 flex-1 flex flex-wrap gap-1.5">
-										{#each rule.domains as domain}
-											<span class="px-2 py-0.5 bg-white dark:bg-slate-800 text-[11px] font-mono border border-slate-200 dark:border-slate-700 rounded-md font-semibold text-slate-750 dark:text-slate-200 select-all">
-												{domain}
-											</span>
-										{/each}
-									</div>
-								</div>
-
-								<div class="flex items-center gap-1 shrink-0">
-									<Button variant="ghost" size="icon" onclick={() => handleStartEditRule(rule)} class="size-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">
-										<Edit class="size-3.5" />
-									</Button>
-									<Button variant="ghost" size="icon" onclick={() => handleDeleteCustomRule(ruleIdx)} class="size-8 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 text-red-500">
-										<Trash2 class="size-3.5" />
-									</Button>
-								</div>
-							</div>
-						{/each}
-
-						{#if customRules.length === 0}
-							<div class="flex flex-col items-center justify-center p-12 text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/20 dark:bg-slate-900/10 h-full">
-								<Globe class="size-10 text-slate-300 dark:text-slate-800 mb-3" />
-								<span class="text-xs font-medium">暂无自定义等效规则</span>
-								<span class="text-[10px] text-slate-500 mt-1">点击右上角“新增规则”来定义。</span>
-							</div>
-						{/if}
-					</div>
-				</section>
+				<CustomEquivalentDomains bind:rules={customRules} onSuccess={showTimedSuccess} onError={showTimedError} />
 
 				<GlobalEquivalentDomains rules={globalRules} bind:excludedTypes />
 				
