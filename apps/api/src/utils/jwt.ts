@@ -1,4 +1,5 @@
 import { sign, verify } from "hono/jwt";
+import * as v from "valibot";
 import { LIMITS } from "../config";
 
 export type JwtPurpose =
@@ -22,22 +23,24 @@ export async function deriveJwtPurposeSecret(
 		.join("");
 }
 
-export interface JWTPayload {
-	typ: "access";
-	aud: "edgewarden-api";
-	sub: string;
-	email: string;
-	name: string | null;
-	email_verified: true;
-	amr: ["Application"];
-	sstamp: string;
-	did?: string;
-	dstamp?: string;
-	iat: number;
-	exp: number;
-	iss: "edgewarden";
-	premium: true;
-}
+const JwtPayloadSchema = v.object({
+	typ: v.literal("access"),
+	aud: v.literal("edgewarden-api"),
+	sub: v.pipe(v.string(), v.minLength(1)),
+	email: v.string(),
+	name: v.nullable(v.string()),
+	email_verified: v.literal(true),
+	amr: v.tuple([v.literal("Application")]),
+	sstamp: v.pipe(v.string(), v.minLength(1)),
+	did: v.optional(v.string()),
+	dstamp: v.optional(v.string()),
+	iat: v.number(),
+	exp: v.number(),
+	iss: v.literal("edgewarden"),
+	premium: v.literal(true),
+});
+
+export type JWTPayload = v.InferOutput<typeof JwtPayloadSchema>;
 
 export async function createJWT(
 	payload: Omit<
@@ -70,28 +73,8 @@ export async function verifyJWT(
 	try {
 		// hono/jwt verify throws on bad signature, expiration, or malformed token
 		const payload = await verify(token, secret, "HS256");
-		if (
-			payload.typ !== "access" ||
-			payload.aud !== "edgewarden-api" ||
-			payload.iss !== "edgewarden" ||
-			typeof payload.sub !== "string" ||
-			!payload.sub ||
-			typeof payload.email !== "string" ||
-			typeof payload.sstamp !== "string" ||
-			!payload.sstamp ||
-			typeof payload.iat !== "number" ||
-			typeof payload.exp !== "number" ||
-			payload.email_verified !== true ||
-			payload.premium !== true ||
-			!Array.isArray(payload.amr) ||
-			payload.amr.length !== 1 ||
-			payload.amr[0] !== "Application" ||
-			(payload.did !== undefined && typeof payload.did !== "string") ||
-			(payload.dstamp !== undefined && typeof payload.dstamp !== "string")
-		) {
-			return null;
-		}
-		return payload as unknown as JWTPayload;
+		const result = v.safeParse(JwtPayloadSchema, payload);
+		return result.success ? result.output : null;
 	} catch {
 		return null;
 	}
