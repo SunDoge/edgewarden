@@ -23,6 +23,7 @@ import {
 import { importBackupArchiveBytes } from "../services/backup/import";
 import {
 	acquireDataOperationLease,
+	DataOperationLeaseLostError,
 	releaseDataOperationLease,
 	requireDataOperationLeaseRenewal,
 	requireFreshDataOperationLease,
@@ -226,6 +227,7 @@ export const runBackup = factory.createHandlers(
 					archive.fileName,
 				);
 			}
+			await requireDataOperationLeaseRenewal(c.env.DB, lease);
 			destination.runtime.lastSuccessAt = new Date().toISOString();
 			destination.runtime.lastErrorAt = null;
 			destination.runtime.lastErrorMessage = null;
@@ -257,14 +259,16 @@ export const runBackup = factory.createHandlers(
 			});
 		} catch (error: unknown) {
 			const message = backupErrorMessage(error, "Backup upload failed");
-			const settings = await loadBackupSettings(db, secret, "UTC").catch(
-				() => null,
-			);
-			if (settings) {
-				const destination = requireBackupDestination(settings, destinationId);
-				destination.runtime.lastErrorAt = new Date().toISOString();
-				destination.runtime.lastErrorMessage = message;
-				await saveBackupSettings(db, secret, settings).catch(() => null);
+			if (!(error instanceof DataOperationLeaseLostError)) {
+				const settings = await loadBackupSettings(db, secret, "UTC").catch(
+					() => null,
+				);
+				if (settings) {
+					const destination = requireBackupDestination(settings, destinationId);
+					destination.runtime.lastErrorAt = new Date().toISOString();
+					destination.runtime.lastErrorMessage = message;
+					await saveBackupSettings(db, secret, settings).catch(() => null);
+				}
 			}
 			return errorResponse(message, 500);
 		} finally {
