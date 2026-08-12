@@ -193,6 +193,105 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		);
 	});
 
+	test("fences concurrent permanent Cipher deletion", async () => {
+		const auth = {
+			authorization: `Bearer ${context.accessToken}`,
+			"content-type": "application/json",
+		};
+		const user = await context.database
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(EMAIL)
+			.first<{ id: string }>();
+		assert.ok(user);
+		const createCipher = async (name: string) => {
+			const response = await request("/api/ciphers", {
+				method: "POST",
+				headers: auth,
+				body: JSON.stringify({
+					type: 1,
+					name,
+					login: {
+						username: "encrypted-user",
+						password: "encrypted-password",
+					},
+				}),
+			});
+			assert.equal(response.status, 200, await response.clone().text());
+			return (await response.json<{ id: string }>()).id;
+		};
+		const revision = async () => {
+			const row = await context.database
+				.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+				.bind(user.id)
+				.first<{ revision_date: number }>();
+			assert.ok(row);
+			return row.revision_date;
+		};
+
+		const singleId = await createCipher("concurrent-permanent-single");
+		const beforeSingle = await revision();
+		const singleResponses = await Promise.all(
+			Array.from({ length: 4 }, () =>
+				request(`/api/ciphers/${singleId}`, {
+					method: "DELETE",
+					headers: auth,
+				}),
+			),
+		);
+		assert.equal(
+			singleResponses.filter((response) => response.status === 200).length,
+			1,
+		);
+		assert.ok(
+			singleResponses.every((response) =>
+				[200, 404, 409].includes(response.status),
+			),
+		);
+		assert.equal(await revision(), beforeSingle + 1);
+		assert.equal(
+			await context.database
+				.prepare(
+					"SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'cipher.delete.permanent' AND target_id = ?",
+				)
+				.bind(singleId)
+				.first<{ count: number }>()
+				.then((row) => Number(row?.count)),
+			1,
+		);
+
+		const bulkId = await createCipher("concurrent-permanent-bulk");
+		const beforeBulk = await revision();
+		const beforeBulkAudit = await context.database
+			.prepare(
+				"SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'cipher.delete.permanent.bulk'",
+			)
+			.first<{ count: number }>()
+			.then((row) => Number(row?.count));
+		const bulkDelete = () =>
+			request("/api/ciphers/delete-permanent", {
+				method: "POST",
+				headers: auth,
+				body: JSON.stringify({ ids: [bulkId] }),
+			});
+		const bulkResponses = await Promise.all([
+			bulkDelete(),
+			bulkDelete(),
+			bulkDelete(),
+			bulkDelete(),
+		]);
+		assert.ok(bulkResponses.every((response) => response.status === 200));
+		assert.equal(await revision(), beforeBulk + 1);
+		assert.equal(
+			await context.database
+				.prepare(
+					"SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'cipher.delete.permanent.bulk'",
+				)
+				.first<{ count: number }>()
+				.then((row) => Number(row?.count)),
+			beforeBulkAudit + 1,
+		);
+	});
+
 	test("syncs a vault larger than D1's bound-parameter limit", async () => {
 		const user = await context.database
 			.prepare("SELECT id FROM users WHERE email = ?")

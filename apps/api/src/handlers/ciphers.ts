@@ -297,15 +297,30 @@ export const hardDeleteCipher = factory.createHandlers(async (c) => {
 	const db = c.get("db");
 	const cipher = c.get("cipher");
 	const cipherId = cipher.id;
-	const ts = now();
-	await executeBatch(c.get("dbDialect"), [
+	const deletionTimestamp = now();
+	const revisionTimestamp = Math.max(deletionTimestamp, cipher.updated_at + 1);
+	const mutationToken = crypto.randomUUID();
+	const [deleted] = await c.get("dbDialect").batch([
 		db
 			.updateTable("ciphers")
-			.set({ deleted_at: ts, purge_after: ts, updated_at: ts })
+			.set({
+				deleted_at: deletionTimestamp,
+				purge_after: deletionTimestamp,
+				updated_at: revisionTimestamp,
+				mutation_token: mutationToken,
+			})
 			.where("id", "=", cipherId)
+			.where(sql<boolean>`mutation_token IS ${cipher.mutation_token}`)
 			.compile(),
-		...(await revisionQueriesForCipher(db, cipher, ts)),
+		conditionalCipherRevisionQuery(
+			db,
+			cipherId,
+			mutationToken,
+			revisionTimestamp,
+		),
 	]);
+	if (deleted.numAffectedRows !== 1n)
+		return errorResponse("Cipher changed during permanent deletion", 409);
 	await safeWriteAuditEvent(db, {
 		actorUserId: c.get("user").id,
 		action: "cipher.delete.permanent",
@@ -323,20 +338,31 @@ export const restoreCipher = factory.createHandlers(async (c) => {
 	const db = c.get("db");
 	const existing = c.get("cipher");
 	const id = existing.id;
-	const ts = now();
-	await executeBatch(c.get("dbDialect"), [
+	const ts = Math.max(now(), existing.updated_at + 1);
+	const mutationToken = crypto.randomUUID();
+	const [restored] = await c.get("dbDialect").batch([
 		db
 			.updateTable("ciphers")
-			.set({ deleted_at: null, purge_after: null, updated_at: ts })
+			.set({
+				deleted_at: null,
+				purge_after: null,
+				updated_at: ts,
+				mutation_token: mutationToken,
+			})
 			.where("id", "=", id)
+			.where("deleted_at", "is not", null)
+			.where(sql<boolean>`mutation_token IS ${existing.mutation_token}`)
 			.compile(),
-		...(await revisionQueriesForCipher(db, existing, ts)),
+		conditionalCipherRevisionQuery(db, id, mutationToken, ts),
 	]);
+	if (restored.numAffectedRows !== 1n)
+		return errorResponse("Cipher changed during restore", 409);
 	const cipher = await ciphersDb.getCipherById(db, id);
+	if (!cipher) return errorResponse("Cipher changed after restore", 409);
 	return c.json(
 		cipherToResponse(
-			cipher!,
-			await attachmentsDb.listByCipherIds(db, [cipher!.id]),
+			cipher,
+			await attachmentsDb.listByCipherIds(db, [cipher.id]),
 			await getCipherCollectionIds(db, id),
 		),
 	);
