@@ -98,10 +98,10 @@ function hideBrokenIcon(event: Event) {
 
 <section class="flex flex-1 flex-col overflow-hidden border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
 	<div class="flex shrink-0 flex-col gap-3 border-b border-slate-200 p-4 dark:border-slate-800">
-		<div class="flex gap-2">
+		<div class="flex flex-wrap gap-2 sm:flex-nowrap">
 			<div class="relative flex-1"><Search class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input type="search" placeholder="搜索您的保险库项..." class="pl-10" bind:value={searchQuery} /></div>
-			{#if activeCategory === "duplicates"}<select bind:value={duplicateMode} aria-label="重复检测方式" class="h-9 rounded-md border bg-background px-2 text-sm"><option value="exact">完全相同</option><option value="login-site">网站、账号和密码</option><option value="login-credentials">账号和密码</option><option value="password">密码复用</option></select>{/if}
-			<select bind:value={sortMode} aria-label="排序方式" class="h-9 rounded-md border bg-background px-2 text-sm"><option value="edited">最近修改</option><option value="created">最近创建</option><option value="name">名称</option></select>
+			{#if activeCategory === "duplicates"}<select bind:value={duplicateMode} aria-label="重复检测方式" class="h-9 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm sm:flex-none"><option value="exact">完全相同</option><option value="login-site">网站、账号和密码</option><option value="login-credentials">账号和密码</option><option value="password">密码复用</option></select>{/if}
+			<select bind:value={sortMode} aria-label="排序方式" class="h-9 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm sm:flex-none"><option value="edited">最近修改</option><option value="created">最近创建</option><option value="name">名称</option></select>
 		</div>
 		{#if selectedCount}
 			<div class="flex flex-wrap items-center gap-2 text-sm">

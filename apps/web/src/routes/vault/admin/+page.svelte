@@ -106,8 +106,8 @@ onMount(() => {
 
 <svelte:head><title>用户管理 - Edgewarden</title></svelte:head>
 
-<main class="min-h-screen bg-muted/30 p-6"><div class="mx-auto flex max-w-6xl flex-col gap-6">
-	<header class="flex items-center justify-between gap-3"><div class="flex items-center gap-3"><Button variant="ghost" size="icon" onclick={() => goto("/vault")} aria-label="返回保险库"><ArrowLeft /></Button><div><h1 class="text-2xl font-bold">用户与邀请</h1><p class="text-sm text-muted-foreground">敏感管理操作需要重新输入主密码。</p></div></div><Button variant="outline" onclick={refresh} disabled={busy !== null}><RefreshCw data-icon="inline-start" />刷新</Button></header>
+<main class="min-h-screen bg-muted/30 p-4 md:p-6"><div class="mx-auto flex max-w-6xl flex-col gap-6">
+	<header class="flex items-start justify-between gap-2 sm:items-center"><div class="flex min-w-0 items-start gap-2 sm:items-center sm:gap-3"><Button variant="ghost" size="icon" class="shrink-0" onclick={() => goto("/vault")} aria-label="返回保险库"><ArrowLeft /></Button><div class="min-w-0"><h1 class="text-xl font-bold sm:text-2xl">用户与邀请</h1><p class="text-sm text-muted-foreground">敏感管理操作需要重新输入主密码。</p></div></div><Button variant="outline" size="icon" class="shrink-0 sm:hidden" onclick={refresh} disabled={busy !== null} aria-label="刷新"><RefreshCw /></Button><Button variant="outline" class="hidden shrink-0 sm:inline-flex" onclick={refresh} disabled={busy !== null}><RefreshCw data-icon="inline-start" />刷新</Button></header>
 	{#if error}<Alert.Root variant="destructive"><ShieldAlert /><Alert.Title>管理操作失败</Alert.Title><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
 	<Field.Group><Field.Field><Field.Label for="admin-password">当前主密码</Field.Label><Input id="admin-password" type="password" bind:value={masterPassword} autocomplete="current-password" /><Field.Description>仅用于在浏览器中派生验证摘要，不会保存。</Field.Description></Field.Field></Field.Group>
 

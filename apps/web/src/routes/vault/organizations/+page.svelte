@@ -326,7 +326,7 @@ async function removeOrganization() {
 <svelte:head><title>组织共享 · Edgewarden</title></svelte:head>
 
 <main class="mx-auto flex max-w-6xl flex-col gap-6 p-4 md:p-8">
-	<header class="flex items-center justify-between gap-3"><div class="flex items-center gap-3"><Button variant="ghost" size="icon" onclick={() => goto("/vault")} aria-label="返回"><ArrowLeft /></Button><div><h1 class="text-2xl font-semibold">组织共享</h1><p class="text-sm text-muted-foreground">组织密钥只在成员设备上解封，服务器无法读取共享条目。</p></div></div><Button onclick={() => createOpen = true}><Plus />创建组织</Button></header>
+	<header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div class="flex min-w-0 items-start gap-2 sm:items-center sm:gap-3"><Button variant="ghost" size="icon" class="shrink-0" onclick={() => goto("/vault")} aria-label="返回"><ArrowLeft /></Button><div class="min-w-0"><h1 class="text-xl font-semibold sm:text-2xl">组织共享</h1><p class="text-sm text-muted-foreground">组织密钥只在成员设备上解封，服务器无法读取共享条目。</p></div></div><Button class="self-end sm:self-auto" onclick={() => createOpen = true}><Plus />创建组织</Button></header>
 	{#if error}<div role="alert" class="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>{/if}
 	{#if loading}<p class="py-12 text-muted-foreground">正在加载…</p>{:else}
 		<div class="grid gap-6 md:grid-cols-[16rem_1fr]">
@@ -340,7 +340,7 @@ async function removeOrganization() {
 					<div class="overflow-x-auto"><Table.Root><Table.Header><Table.Row><Table.Head>邮箱</Table.Head><Table.Head>角色</Table.Head><Table.Head>范围</Table.Head><Table.Head class="text-right">操作</Table.Head></Table.Row></Table.Header><Table.Body>{#each members as member (member.id)}<Table.Row><Table.Cell>{member.email}</Table.Cell><Table.Cell>{member.role}</Table.Cell><Table.Cell>{member.accessAll ? "全部" : `${member.collections?.length ?? 0} 个集合`}</Table.Cell><Table.Cell class="text-right">{#if member.role !== "owner"}<Button variant="ghost" size="icon-sm" onclick={() => editMember(member)} aria-label="编辑成员"><Pencil /></Button><Button variant="ghost" size="icon-sm" onclick={() => removeMember(member)} aria-label="移除成员"><Trash2 /></Button>{/if}</Table.Cell></Table.Row>{/each}</Table.Body></Table.Root></div>
 				</Card.Content></Card.Root>
 			{/if}
-			{#if selected.role === "owner"}<Card.Root class="border-destructive/30"><Card.Header><Card.Title>删除组织</Card.Title><Card.Description>此操作会永久删除组织集合、共享条目和成员关系。</Card.Description></Card.Header><Card.Content class="flex gap-2"><Input type="password" bind:value={deletePassword} autocomplete="current-password" placeholder="输入主密码确认" /><Button variant="destructive" onclick={removeOrganization} disabled={!deletePassword || busy === "delete-org"}>永久删除</Button></Card.Content></Card.Root>{/if}</div>{/if}
+			{#if selected.role === "owner"}<Card.Root class="border-destructive/30"><Card.Header><Card.Title>删除组织</Card.Title><Card.Description>此操作会永久删除组织集合、共享条目和成员关系。</Card.Description></Card.Header><Card.Content class="flex flex-col gap-2 sm:flex-row"><Input type="password" bind:value={deletePassword} autocomplete="current-password" placeholder="输入主密码确认" /><Button variant="destructive" onclick={removeOrganization} disabled={!deletePassword || busy === "delete-org"}>永久删除</Button></Card.Content></Card.Root>{/if}</div>{/if}
 		</div>
 	{/if}
 </main>
