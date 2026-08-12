@@ -3,6 +3,9 @@ import { test } from "vitest";
 import { createDatabase } from "../middleware/db";
 import {
 	conditionalAccountPasskeyClaimQuery,
+	conditionalAllDevicesDeletionClaimQuery,
+	conditionalAllDevicesDeletionQuery,
+	conditionalDeviceTrustTokenDeletionQuery,
 	conditionalUserRevisionQuery,
 	conditionalWebauthnCredentialDeletionClaimQuery,
 	conditionalWebauthnCredentialDeletionQuery,
@@ -375,6 +378,107 @@ export function registerAuthReliabilityScenarios(
 				.set({ revision_date: revision.revision_date })
 				.where("user_id", "=", user.id)
 				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("deletes all devices only from a current active account snapshot", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const timestamp = Math.floor(Date.now() / 1000);
+		const user = {
+			id: crypto.randomUUID(),
+			email: `delete-all-${crypto.randomUUID()}@example.com`,
+			master_password_hash: "isolated-test-hash",
+			key: "isolated-test-key",
+			kdf_type: 0,
+			kdf_iterations: 600_000,
+			kdf_memory: null,
+			kdf_parallelism: null,
+			security_stamp: crypto.randomUUID(),
+			created_at: timestamp,
+			updated_at: timestamp,
+			deletion_requested_at: null,
+		};
+		const deviceId = `delete-all-${crypto.randomUUID()}`;
+		try {
+			await db.insertInto("users").values(user).execute();
+			await db
+				.insertInto("devices")
+				.values({
+					user_id: user.id,
+					device_identifier: deviceId,
+					name: "Delete all reliability device",
+					type: 14,
+					session_stamp: crypto.randomUUID(),
+					mutation_token: crypto.randomUUID(),
+					created_at: timestamp,
+					updated_at: timestamp,
+				})
+				.execute();
+			await db
+				.insertInto("device_trust_tokens")
+				.values({
+					token: crypto.randomUUID(),
+					user_id: user.id,
+					device_identifier: deviceId,
+					expires_at: timestamp + 3600,
+				})
+				.execute();
+			const affected: bigint[] = [];
+			for (let attempt = 0; attempt < 2; attempt += 1) {
+				const securityStamp = crypto.randomUUID();
+				const [claimed] = await dialect.batch([
+					conditionalAllDevicesDeletionClaimQuery(
+						db,
+						user.id,
+						user.security_stamp,
+						securityStamp,
+						timestamp,
+					),
+					conditionalDeviceTrustTokenDeletionQuery(db, user.id, securityStamp),
+					conditionalAllDevicesDeletionQuery(db, user.id, securityStamp),
+				]);
+				affected.push(claimed.numAffectedRows ?? 0n);
+			}
+			assert.deepEqual(affected, [1n, 0n]);
+			assert.equal(
+				await db
+					.selectFrom("devices")
+					.select(({ fn }) => fn.countAll<number>().as("count"))
+					.where("device_identifier", "=", deviceId)
+					.executeTakeFirstOrThrow()
+					.then((row) => Number(row.count)),
+				0,
+			);
+
+			await db
+				.updateTable("users")
+				.set({
+					security_stamp: user.security_stamp,
+					deletion_requested_at: timestamp,
+				})
+				.where("id", "=", user.id)
+				.execute();
+			const blocked = await dialect.batch([
+				conditionalAllDevicesDeletionClaimQuery(
+					db,
+					user.id,
+					user.security_stamp,
+					crypto.randomUUID(),
+					timestamp,
+				),
+			]);
+			assert.equal(blocked[0].numAffectedRows, 0n);
+		} finally {
+			await db
+				.deleteFrom("device_trust_tokens")
+				.where("device_identifier", "=", deviceId)
+				.execute();
+			await db
+				.deleteFrom("devices")
+				.where("device_identifier", "=", deviceId)
+				.execute();
+			await db.deleteFrom("users").where("id", "=", user.id).execute();
 			await db.destroy();
 		}
 	});

@@ -1,17 +1,22 @@
 import { vValidator } from "@hono/valibot-validator";
 import { type Selectable, sql } from "kysely";
 import { factory } from "../http/factory";
-import { DeviceKeysSchema, DeviceNameSchema } from "../schemas/requests";
 import { VerifyPasswordSchema } from "../schemas/accounts";
 import { BulkIdsSchema } from "../schemas/ciphers";
+import { DeviceKeysSchema, DeviceNameSchema } from "../schemas/requests";
+import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import { invalidateUserCache, verifyPassword } from "../services/auth";
-import { executeBatch } from "../services/db/batch";
+import {
+	conditionalAllDevicesDeletionClaimQuery,
+	conditionalAllDevicesDeletionQuery,
+	conditionalDeviceTrustTokenDeletionQuery,
+	conditionalRefreshTokenDeletionQuery,
+} from "../services/db/batch";
 import * as devicesDb from "../services/db/devices";
 import { textColumnInJson } from "../services/db/json-array";
 import type { Devices } from "../types/db";
-import { toIso } from "../utils/time";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import { errorResponse } from "../utils/response";
+import { toIso } from "../utils/time";
 
 function deviceToResponse(device: Selectable<Devices>) {
 	return {
@@ -250,22 +255,22 @@ export const deleteAllDevices = factory.createHandlers(
 		)
 			return c.json({ error: "Invalid password" }, 400);
 		const userId = user.id;
-		await executeBatch(c.get("dbDialect"), [
-			db.deleteFrom("refresh_tokens").where("user_id", "=", userId).compile(),
-			db
-				.deleteFrom("device_trust_tokens")
-				.where("user_id", "=", userId)
-				.compile(),
-			db.deleteFrom("devices").where("user_id", "=", userId).compile(),
-			db
-				.updateTable("users")
-				.set({
-					security_stamp: crypto.randomUUID(),
-					updated_at: Math.floor(Date.now() / 1000),
-				})
-				.where("id", "=", userId)
-				.compile(),
-		]);
+		const securityStamp = crypto.randomUUID();
+		const [claimed] = await c
+			.get("dbDialect")
+			.batch([
+				conditionalAllDevicesDeletionClaimQuery(
+					db,
+					userId,
+					user.security_stamp,
+					securityStamp,
+				),
+				conditionalRefreshTokenDeletionQuery(db, userId, securityStamp),
+				conditionalDeviceTrustTokenDeletionQuery(db, userId, securityStamp),
+				conditionalAllDevicesDeletionQuery(db, userId, securityStamp),
+			]);
+		if (claimed.numAffectedRows !== 1n)
+			return errorResponse("Account security changed by another request", 409);
 		invalidateUserCache(userId);
 		return new Response(null, { status: 200 });
 	},
