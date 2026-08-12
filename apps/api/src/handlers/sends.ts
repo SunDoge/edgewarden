@@ -8,6 +8,7 @@ import {
 	executeBatch,
 	revisionQuery,
 	sendRevisionQuery,
+	unclaimedSendRevisionQuery,
 } from "../services/db/batch";
 import { textColumnInJson } from "../services/db/json-array";
 import * as sendsDb from "../services/db/sends";
@@ -231,15 +232,18 @@ export const updateSend = factory.createHandlers(
 		}
 
 		const ts = now();
-		await executeBatch(c.get("dbDialect"), [
+		const [updatedResult] = await c.get("dbDialect").batch([
 			db
 				.updateTable("sends")
 				.set({ ...updateData, updated_at: ts })
 				.where("id", "=", sendId)
 				.where("user_id", "=", user.id)
+				.where("purge_token", "is", null)
 				.compile(),
-			sendRevisionQuery(db, user.id, [sendId], ts),
+			unclaimedSendRevisionQuery(db, user.id, [sendId], ts),
 		]);
+		if (updatedResult.numAffectedRows !== 1n)
+			return errorResponse("Send is being purged", 409);
 
 		const updated = await sendsDb.getSendById(db, sendId);
 		if (!updated) return errorResponse("Send not found", 404);
@@ -288,7 +292,7 @@ export const removeSendPassword = factory.createHandlers(async (c) => {
 	await setSendPassword(sendCopy, null);
 
 	const ts = now();
-	await executeBatch(c.get("dbDialect"), [
+	const [updatedResult] = await c.get("dbDialect").batch([
 		db
 			.updateTable("sends")
 			.set({
@@ -301,9 +305,12 @@ export const removeSendPassword = factory.createHandlers(async (c) => {
 			})
 			.where("id", "=", sendId)
 			.where("user_id", "=", user.id)
+			.where("purge_token", "is", null)
 			.compile(),
-		sendRevisionQuery(db, user.id, [sendId], ts),
+		unclaimedSendRevisionQuery(db, user.id, [sendId], ts),
 	]);
+	if (updatedResult.numAffectedRows !== 1n)
+		return errorResponse("Send is being purged", 409);
 
 	const updated = await sendsDb.getSendById(db, sendId);
 	if (!updated) return errorResponse("Send not found", 404);
@@ -317,15 +324,20 @@ export const removeSendAuth = factory.createHandlers(async (c) => {
 	const sendId = send.id;
 
 	const ts = now();
-	await executeBatch(c.get("dbDialect"), [
-		db
-			.updateTable("sends")
-			.set({ auth_type: 2, emails: null, updated_at: ts })
-			.where("id", "=", sendId)
-			.where("user_id", "=", user.id)
-			.compile(),
-		sendRevisionQuery(db, user.id, [sendId], ts),
-	]);
+	const [updatedResult] = await c
+		.get("dbDialect")
+		.batch([
+			db
+				.updateTable("sends")
+				.set({ auth_type: 2, emails: null, updated_at: ts })
+				.where("id", "=", sendId)
+				.where("user_id", "=", user.id)
+				.where("purge_token", "is", null)
+				.compile(),
+			unclaimedSendRevisionQuery(db, user.id, [sendId], ts),
+		]);
+	if (updatedResult.numAffectedRows !== 1n)
+		return errorResponse("Send is being purged", 409);
 
 	const updated = await sendsDb.getSendById(db, sendId);
 	if (!updated) return errorResponse("Send not found", 404);
