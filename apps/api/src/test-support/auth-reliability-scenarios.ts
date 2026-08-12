@@ -730,13 +730,15 @@ export function registerAuthReliabilityScenarios(
 		const userId = crypto.randomUUID();
 		const securityStamp = crypto.randomUUID();
 		const deviceId = `stale-session-device-${crypto.randomUUID()}`;
+		const loginEmail = `stale-session-${crypto.randomUUID()}@example.com`;
+		const loginFailureHash = await loginAttemptIdentifierHash(loginEmail);
 		let issued: Awaited<ReturnType<typeof issueIdentitySession>> = null;
 		try {
 			await db
 				.insertInto("users")
 				.values({
 					id: userId,
-					email: `stale-session-${crypto.randomUUID()}@example.com`,
+					email: loginEmail,
 					master_password_hash: "isolated-session-hash",
 					key: "isolated-session-key",
 					kdf_type: 0,
@@ -748,6 +750,7 @@ export function registerAuthReliabilityScenarios(
 					updated_at: timestamp,
 				})
 				.execute();
+			await recordLoginFailure(db, loginEmail);
 			const snapshot = await db
 				.selectFrom("users")
 				.selectAll()
@@ -765,6 +768,7 @@ export function registerAuthReliabilityScenarios(
 					user: snapshot,
 					device: { identifier: deviceId, name: "Stale session", type: 0 },
 					jwtSecret: "stale-session-test-secret-at-least-32-chars",
+					loginFailureIdentifierHash: loginFailureHash,
 				}),
 				null,
 			);
@@ -785,6 +789,13 @@ export function registerAuthReliabilityScenarios(
 					.where("device_identifier", "=", deviceId)
 					.executeTakeFirst(),
 				undefined,
+			);
+			assert.ok(
+				await db
+					.selectFrom("login_attempts")
+					.select("identifier_hash")
+					.where("identifier_hash", "=", loginFailureHash)
+					.executeTakeFirst(),
 			);
 			assert.equal(
 				await db
@@ -843,8 +854,17 @@ export function registerAuthReliabilityScenarios(
 				user: snapshot,
 				device: { identifier: deviceId, name: "Valid session", type: 0 },
 				jwtSecret: "stale-session-test-secret-at-least-32-chars",
+				loginFailureIdentifierHash: loginFailureHash,
 			});
 			assert.ok(issued);
+			assert.equal(
+				await db
+					.selectFrom("login_attempts")
+					.select("identifier_hash")
+					.where("identifier_hash", "=", loginFailureHash)
+					.executeTakeFirst(),
+				undefined,
+			);
 			assert.ok(issued.deviceSession?.sessionStamp);
 			assert.equal(
 				await db
