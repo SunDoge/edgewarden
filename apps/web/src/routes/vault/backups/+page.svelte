@@ -16,6 +16,10 @@ import {
 } from "$lib/services/api";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
+import RemoteBackupBrowser, {
+	type RemoteBackupItem,
+} from "$lib/components/backup/RemoteBackupBrowser.svelte";
+import { formatFileSize } from "$lib/services/backup-display";
 import {
 	ArrowLeft,
 	Save,
@@ -25,13 +29,10 @@ import {
 	AlertCircle,
 	Info,
 	Server,
-	Folder,
-	FileArchive,
 	Download,
 	History,
 	Check,
 	Lock,
-	ShieldCheck,
 	FileText,
 	Database,
 	LogOut,
@@ -114,7 +115,7 @@ let scheduleTimezone = $state("UTC");
 let scheduleRetention = $state<number | null>(30);
 
 // Remote backup file browser
-let remoteFiles = $state<any[]>([]);
+let remoteFiles = $state<RemoteBackupItem[]>([]);
 let currentRemotePath = $state("");
 
 // Local backups forms
@@ -498,14 +499,6 @@ function showSuccess(msg: string) {
 	}, 5000);
 }
 
-function formatBytes(bytes: number | null): string {
-	if (bytes === null || bytes === undefined) return "--";
-	if (bytes === 0) return "0 Bytes";
-	const k = 1024;
-	const sizes = ["Bytes", "KB", "MB", "GB"];
-	const i = Math.floor(Math.log(bytes) / Math.log(k));
-	return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-}
 </script>
 
 <svelte:head>
@@ -827,7 +820,7 @@ function formatBytes(bytes: number | null): string {
 								<div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/50">
 									<span class="text-slate-500">备份文件大小：</span>
 									<span class="font-medium text-slate-900 dark:text-slate-100">
-										{formatBytes(currentDest?.runtime.lastUploadedSizeBytes ?? null)}
+									{formatFileSize(currentDest?.runtime.lastUploadedSizeBytes)}
 									</span>
 								</div>
 								<div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/50">
@@ -849,125 +842,20 @@ function formatBytes(bytes: number | null): string {
 							</div>
 						</div>
 
-						<!-- Remote Files Browser Card -->
-						<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-4">
-							<div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-								<div>
-									<h2 class="text-base font-bold text-slate-900 dark:text-slate-50">存储服务器备份浏览器</h2>
-									<p class="text-xs text-slate-500">浏览备份桶根目录下存在的已备份归档，可直接还原或清理历史记录</p>
-								</div>
-								<Button size="sm" variant="outline" onclick={loadRemoteFiles} disabled={browsing} class="size-8">
-									<RefreshCw class="size-4 {browsing ? 'animate-spin' : ''}" />
-								</Button>
-							</div>
-
-							<!-- Remote browser table -->
-							<div class="overflow-x-auto">
-								<table class="w-full text-left border-collapse text-sm">
-									<thead>
-										<tr class="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-semibold uppercase">
-											<th class="py-2.5 px-3">文件名</th>
-											<th class="py-2.5 px-3">文件大小</th>
-											<th class="py-2.5 px-3">上次修改时间</th>
-											<th class="py-2.5 px-3 text-right">操作</th>
-										</tr>
-									</thead>
-									<tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
-										{#each remoteFiles as item}
-											<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
-												<td class="py-3 px-3 font-mono text-xs text-slate-800 dark:text-slate-200">
-													<div class="flex items-center gap-2">
-														{#if item.isDirectory}
-															<Folder class="size-4 text-amber-500" />
-														{:else}
-															<FileArchive class="size-4 text-primary/70" />
-														{/if}
-														{#if item.isDirectory}<button class="hover:underline" onclick={() => openRemoteDirectory(item.path)}>{item.name}</button>{:else}<span>{item.name}</span>{/if}
-													</div>
-												</td>
-												<td class="py-3 px-3 text-slate-500">
-													{item.isDirectory ? "--" : formatBytes(item.size)}
-												</td>
-												<td class="py-3 px-3 text-slate-500 text-xs">
-													{item.modifiedAt ? new Date(item.modifiedAt).toLocaleString("zh-CN") : "--"}
-												</td>
-												<td class="py-3 px-3 text-right flex items-center justify-end gap-1.5">
-													{#if !item.isDirectory}
-														<Button
-															variant="ghost"
-															size="icon"
-															onclick={() => handleInspectFile(item.path)}
-															disabled={inspecting === item.path}
-															class="size-8 text-slate-500"
-															title="验证完整性"
-														>
-															{#if inspecting === item.path}<RefreshCw class="size-3.5 animate-spin" />{:else}<ShieldCheck class="size-3.5" />{/if}
-														</Button>
-
-														<Button
-															variant="ghost"
-															size="icon"
-															onclick={() => handleDownloadFile(item.path, item.name)}
-															disabled={downloading === item.path}
-															class="size-8 text-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
-															title="下载备份"
-														>
-															{#if downloading === item.path}
-																<RefreshCw class="size-3.5 animate-spin" />
-															{:else}
-																<Download class="size-3.5" />
-															{/if}
-														</Button>
-
-														<Button
-															variant="outline"
-															size="sm"
-															onclick={() => handleRestoreRemote(item.path)}
-															disabled={restoring}
-															class="h-7 text-xs px-2.5 border-amber-500/20 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20"
-														>
-															{#if restoring}
-																<RefreshCw class="size-3 animate-spin mr-1" />
-															{/if}
-															全量恢复
-														</Button>
-
-														<Button
-															variant="ghost"
-															size="icon"
-															onclick={() => handleDeleteFile(item.path)}
-															disabled={deleting === item.path}
-															class="size-8 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-															title="删除备份"
-														>
-															{#if deleting === item.path}
-																<RefreshCw class="size-3.5 animate-spin" />
-															{:else}
-																<Trash2 class="size-3.5" />
-															{/if}
-														</Button>
-													{/if}
-												</td>
-											</tr>
-										{/each}
-
-										{#if remoteFiles.length === 0}
-											<tr>
-												<td colspan="4" class="py-8 text-center text-slate-400">
-													{#if browsing}
-														<RefreshCw class="size-5 animate-spin mx-auto mb-2 text-primary" />
-														<span>正在检索文件列表...</span>
-													{:else}
-														<Info class="size-5 mx-auto mb-1.5 text-slate-300 dark:text-slate-700" />
-														<span>此备份目录中没有任何文件或没有读取权限。</span>
-													{/if}
-												</td>
-											</tr>
-										{/if}
-									</tbody>
-								</table>
-							</div>
-						</div>
+						<RemoteBackupBrowser
+							items={remoteFiles}
+							{browsing}
+							{downloading}
+							{deleting}
+							{inspecting}
+							{restoring}
+							onRefresh={loadRemoteFiles}
+							onOpenDirectory={openRemoteDirectory}
+							onInspect={handleInspectFile}
+							onDownload={handleDownloadFile}
+							onRestore={handleRestoreRemote}
+							onDelete={handleDeleteFile}
+						/>
 					{/if}
 				</div>
 			</div>
