@@ -5,17 +5,18 @@ import {
 	verifyAuthenticationResponse,
 	verifyRegistrationResponse,
 } from "@simplewebauthn/server";
+import { sql } from "kysely";
 import { factory } from "../http/factory";
 import {
 	PasskeySecretSchema,
 	TwoFactorPasskeyDeleteSchema,
 	TwoFactorPasskeyRegistrationSchema,
 } from "../schemas/passkeys";
-import { verifyPassword, invalidateUserCache } from "../services/auth";
-import * as webauthnDb from "../services/db/webauthn";
-import { executeBatch } from "../services/db/batch";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import { invalidateUserCache, verifyPassword } from "../services/auth";
 import { encryptCredential } from "../services/credential-protection";
+import { executeBatch, revisionQuery } from "../services/db/batch";
+import * as webauthnDb from "../services/db/webauthn";
 import {
 	createAccountPasskeyToken,
 	getAccountPasskeyRpConfig,
@@ -261,6 +262,7 @@ export const createTwoFactorPasskey = factory.createHandlers(
 				.where("id", "=", user.id)
 				.compile(),
 			db.deleteFrom("refresh_tokens").where("user_id", "=", user.id).compile(),
+			revisionQuery(db, user.id, ts),
 		]);
 		await safeWriteAuditEvent(db, {
 			actorUserId: user.id,
@@ -289,15 +291,30 @@ export const deleteTwoFactorPasskey = factory.createHandlers(
 		const body = c.req.valid("json");
 		if (!(await verifySecret(user, body)))
 			return errorResponse("Master password verification failed", 400);
-		const deleted = await webauthnDb.deleteAccountPasskeyCredential(
-			c.get("db"),
-			user.id,
-			body.id,
-			"twoFactor",
-		);
-		if (!deleted) return errorResponse("Two-factor passkey not found", 404);
+		const db = c.get("db");
+		const ts = now();
+		const [, deleted] = await c.get("dbDialect").batch([
+			sql`
+				INSERT INTO user_revisions (user_id, revision_date)
+				SELECT user_id, ${ts} FROM webauthn_credentials
+				WHERE id = ${body.id} AND user_id = ${user.id}
+				  AND purpose = 'twoFactor'
+				ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
+					user_revisions.revision_date + 1,
+					excluded.revision_date
+				)
+			`.compile(db),
+			db
+				.deleteFrom("webauthn_credentials")
+				.where("id", "=", body.id)
+				.where("user_id", "=", user.id)
+				.where("purpose", "=", "twoFactor")
+				.compile(),
+		]);
+		if (deleted.numAffectedRows !== 1n)
+			return errorResponse("Two-factor passkey not found", 404);
 		invalidateUserCache(user.id);
-		await safeWriteAuditEvent(c.get("db"), {
+		await safeWriteAuditEvent(db, {
 			actorUserId: user.id,
 			action: "account.two_factor.passkey.delete",
 			category: "auth",
@@ -308,7 +325,7 @@ export const deleteTwoFactorPasskey = factory.createHandlers(
 		return jsonResponse(
 			settings(
 				await webauthnDb.listAccountPasskeyCredentialsByUserId(
-					c.get("db"),
+					db,
 					user.id,
 					"twoFactor",
 				),
