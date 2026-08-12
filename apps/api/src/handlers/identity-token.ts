@@ -61,11 +61,17 @@ export const connectToken = factory.createHandlers(async (c) => {
 
 		let asserted: Awaited<ReturnType<typeof assertAccountPasskeyCredential>>;
 		try {
-			asserted = await assertAccountPasskeyCredential(c.req.raw, c.env, db, {
-				token,
-				deviceResponse,
-				scope: "Authentication",
-			});
+			asserted = await assertAccountPasskeyCredential(
+				c.req.raw,
+				c.env,
+				db,
+				c.get("dbDialect"),
+				{
+					token,
+					deviceResponse,
+					scope: "Authentication",
+				},
+			);
 		} catch (error: any) {
 			await safeWriteAuditEvent(db, {
 				actorUserId: null,

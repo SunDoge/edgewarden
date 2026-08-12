@@ -2,6 +2,7 @@ import {
 	generateAuthenticationOptions,
 	verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
+import type { D1Dialect } from "@sundoge/kysely-d1";
 import {
 	createAccountPasskeyToken,
 	getAccountPasskeyRpConfig,
@@ -85,6 +86,7 @@ export async function assertAccountPasskeyCredential(
 	request: Request,
 	env: CloudflareBindings,
 	db: any,
+	dialect: D1Dialect,
 	input: {
 		token: string;
 		deviceResponse: unknown;
@@ -121,16 +123,6 @@ export async function assertAccountPasskeyCredential(
 	const challengeHash = bytesToBase64Url(new Uint8Array(challengeHashBuf));
 
 	const scopeDb = input.scope === "Authentication" ? "login" : "action";
-	const consumed = await webauthnDb.consumeAccountPasskeyChallenge(
-		db,
-		challengeHash,
-		scopeDb,
-		payload.userId,
-	);
-	if (!consumed) {
-		throw new Error("Passkey challenge has expired or was already used");
-	}
-
 	const credential = await webauthnDb.getAccountPasskeyCredentialByCredentialId(
 		db,
 		response.rawId,
@@ -168,18 +160,23 @@ export async function assertAccountPasskeyCredential(
 	if (!verification.verified || !verification.authenticationInfo.userVerified) {
 		throw new Error("Passkey assertion could not be verified");
 	}
-
-	if (
-		!(await webauthnDb.updateAccountPasskeyCounter(
-			db,
-			credential.user_id,
-			credential.credential_id,
-			credential.counter,
-			verification.authenticationInfo.newCounter,
-		))
-	)
-		throw new Error("Passkey assertion counter was already advanced");
+	const assertionClaimToken = await webauthnDb.claimVerifiedPasskeyAssertion(
+		db,
+		dialect,
+		{
+			challengeHash,
+			scope: scopeDb,
+			challengeUserId: payload.userId,
+			credentialUserId: credential.user_id,
+			credentialId: credential.credential_id,
+			expectedCounter: credential.counter,
+			newCounter: verification.authenticationInfo.newCounter,
+		},
+	);
+	if (!assertionClaimToken)
+		throw new Error("Passkey assertion was already used");
 	credential.counter = verification.authenticationInfo.newCounter;
+	credential.mutation_token = assertionClaimToken;
 
 	return { user, credential };
 }

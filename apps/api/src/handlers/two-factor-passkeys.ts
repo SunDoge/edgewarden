@@ -5,6 +5,7 @@ import {
 	verifyAuthenticationResponse,
 	verifyRegistrationResponse,
 } from "@simplewebauthn/server";
+import type { D1Dialect } from "@sundoge/kysely-d1";
 import { sql } from "kysely";
 import { factory } from "../http/factory";
 import {
@@ -19,6 +20,7 @@ import {
 	conditionalRefreshTokenDeletionQuery,
 	conditionalTwoFactorPasskeyClaimQuery,
 	conditionalUserRevisionQuery,
+	conditionalWebauthnChallengeConsumptionQuery,
 	conditionalWebauthnCredentialDeletionClaimQuery,
 	conditionalWebauthnCredentialDeletionQuery,
 	conditionalWebauthnCredentialInsertQuery,
@@ -181,18 +183,6 @@ export const createTwoFactorPasskey = factory.createHandlers(
 				400,
 			);
 		if (
-			!(await webauthnDb.consumeAccountPasskeyChallenge(
-				db,
-				await challengeHash(payload.challenge),
-				"register",
-				user.id,
-			))
-		)
-			return errorResponse(
-				"Passkey challenge has expired or was already used",
-				400,
-			);
-		if (
 			(await webauthnDb.countAccountPasskeyCredentialsByUserId(
 				db,
 				user.id,
@@ -233,6 +223,7 @@ export const createTwoFactorPasskey = factory.createHandlers(
 		)
 			return errorResponse("Passkey is already registered", 409);
 		const ts = now();
+		const registrationChallengeHash = await challengeHash(payload.challenge);
 		const transports = normalizeTransports(response.response.transports);
 		const credential = {
 			id: crypto.randomUUID(),
@@ -263,7 +254,7 @@ export const createTwoFactorPasskey = factory.createHandlers(
 				"totp-recovery",
 			));
 		const securityStamp = crypto.randomUUID();
-		const [claimed, inserted] = await c.get("dbDialect").batch([
+		const [claimed, inserted, consumed] = await c.get("dbDialect").batch([
 			conditionalTwoFactorPasskeyClaimQuery(
 				db,
 				user.id,
@@ -273,8 +264,17 @@ export const createTwoFactorPasskey = factory.createHandlers(
 				securityStamp,
 				MAX_TWO_FACTOR_PASSKEYS,
 				ts,
+				{ hash: registrationChallengeHash, scope: "register" },
 			),
 			conditionalWebauthnCredentialInsertQuery(db, credential, securityStamp),
+			conditionalWebauthnChallengeConsumptionQuery(db, {
+				challengeHash: registrationChallengeHash,
+				scope: "register",
+				userId: user.id,
+				credentialId: credential.credential_id,
+				mutationToken: credential.mutation_token,
+				timestamp: ts,
+			}),
 			conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
 			conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
 			auditEventInsertQuery(
@@ -302,6 +302,8 @@ export const createTwoFactorPasskey = factory.createHandlers(
 			);
 		if (inserted.numAffectedRows !== 1n)
 			return errorResponse("Passkey registration could not be persisted", 500);
+		if (consumed.numAffectedRows !== 1n)
+			return errorResponse("Passkey challenge could not be consumed", 500);
 		invalidateUserCache(user.id);
 		return jsonResponse(
 			settings(
@@ -431,6 +433,7 @@ export async function assertTwoFactorPasskey(
 	request: Request,
 	env: CloudflareBindings,
 	db: any,
+	dialect: D1Dialect,
 	userId: string,
 	input: { token: string; deviceResponse: unknown },
 ): Promise<void> {
@@ -443,16 +446,7 @@ export async function assertTwoFactorPasskey(
 	if (!payload || payload.userId !== userId)
 		throw new Error("Invalid two-factor passkey challenge");
 	const response = normalizeAuthenticationResponse(input.deviceResponse);
-	if (
-		!response ||
-		!(await webauthnDb.consumeAccountPasskeyChallenge(
-			db,
-			await challengeHash(payload.challenge),
-			"action",
-			userId,
-		))
-	)
-		throw new Error("Invalid or expired two-factor passkey challenge");
+	if (!response) throw new Error("Invalid two-factor passkey response");
 	const credential = await webauthnDb.getAccountPasskeyCredentialByCredentialId(
 		db,
 		response.rawId,
@@ -473,13 +467,15 @@ export async function assertTwoFactorPasskey(
 	if (!verification.verified || !verification.authenticationInfo.userVerified)
 		throw new Error("Two-factor passkey verification failed");
 	if (
-		!(await webauthnDb.updateAccountPasskeyCounter(
-			db,
-			userId,
-			credential.credential_id,
-			credential.counter,
-			verification.authenticationInfo.newCounter,
-		))
+		!(await webauthnDb.claimVerifiedPasskeyAssertion(db, dialect, {
+			challengeHash: await challengeHash(payload.challenge),
+			scope: "action",
+			challengeUserId: userId,
+			credentialUserId: userId,
+			credentialId: credential.credential_id,
+			expectedCounter: credential.counter,
+			newCounter: verification.authenticationInfo.newCounter,
+		}))
 	)
-		throw new Error("Two-factor passkey counter was already advanced");
+		throw new Error("Two-factor passkey assertion was already used");
 }

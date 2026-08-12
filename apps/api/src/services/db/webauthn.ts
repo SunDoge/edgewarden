@@ -1,4 +1,5 @@
-import type { Insertable, Kysely, Selectable } from "kysely";
+import type { D1Dialect } from "@sundoge/kysely-d1";
+import { type Insertable, type Kysely, type Selectable, sql } from "kysely";
 import type {
 	DB,
 	WebauthnChallenges,
@@ -209,4 +210,67 @@ export async function consumeAccountPasskeyChallenge(
 			? query.where("user_id", "=", userId)
 			: query.where("user_id", "is", null);
 	return (await query.returningAll().executeTakeFirst()) ?? null;
+}
+
+export async function claimVerifiedPasskeyAssertion(
+	db: Kysely<DB>,
+	dialect: D1Dialect,
+	args: {
+		challengeHash: string;
+		scope: string;
+		challengeUserId: string | null;
+		credentialUserId: string;
+		credentialId: string;
+		expectedCounter: number;
+		newCounter: number;
+	},
+): Promise<string | null> {
+	if (
+		args.newCounter < args.expectedCounter ||
+		(args.newCounter === args.expectedCounter && args.newCounter !== 0)
+	)
+		return null;
+	const ts = now();
+	const claimToken = crypto.randomUUID();
+	const challengeOwner =
+		args.challengeUserId === null
+			? sql<boolean>`challenge.user_id IS NULL`
+			: sql<boolean>`challenge.user_id = ${args.challengeUserId}`;
+	const challengeEligible = sql<boolean>`
+		challenge.challenge_hash = ${args.challengeHash}
+		AND challenge.scope = ${args.scope}
+		AND challenge.used_at IS NULL
+		AND challenge.expires_at > ${ts}
+		AND ${challengeOwner}
+	`;
+	const [counter, challenge] = await dialect.batch([
+		sql`
+			UPDATE webauthn_credentials
+			SET counter = ${args.newCounter},
+			    mutation_token = ${claimToken},
+			    updated_at = ${ts}
+			WHERE user_id = ${args.credentialUserId}
+			  AND credential_id = ${args.credentialId}
+			  AND counter = ${args.expectedCounter}
+			  AND EXISTS (
+			    SELECT 1 FROM webauthn_challenges challenge
+			    WHERE ${challengeEligible}
+			  )
+		`.compile(db),
+		sql`
+			UPDATE webauthn_challenges AS challenge
+			SET used_at = ${ts}
+			WHERE ${challengeEligible}
+			  AND EXISTS (
+			    SELECT 1 FROM webauthn_credentials credential
+			    WHERE credential.user_id = ${args.credentialUserId}
+			      AND credential.credential_id = ${args.credentialId}
+			      AND credential.counter = ${args.newCounter}
+			      AND credential.mutation_token = ${claimToken}
+			  )
+		`.compile(db),
+	]);
+	return counter.numAffectedRows === 1n && challenge.numAffectedRows === 1n
+		? claimToken
+		: null;
 }

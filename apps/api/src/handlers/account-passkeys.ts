@@ -23,6 +23,7 @@ import {
 	conditionalAccountPasskeyClaimQuery,
 	conditionalRefreshTokenDeletionQuery,
 	conditionalUserRevisionQuery,
+	conditionalWebauthnChallengeConsumptionQuery,
 	conditionalWebauthnCredentialDeletionClaimQuery,
 	conditionalWebauthnCredentialDeletionQuery,
 	conditionalWebauthnCredentialInsertQuery,
@@ -276,20 +277,6 @@ export const createAccountPasskey = factory.createHandlers(
 		);
 		const challengeHash = bytesToBase64Url(new Uint8Array(challengeHashBuf));
 
-		const ts = now();
-		const consumed = await webauthnDb.consumeAccountPasskeyChallenge(
-			db,
-			challengeHash,
-			"register",
-			user.id,
-		);
-		if (!consumed) {
-			return errorResponse(
-				"Passkey challenge has expired or was already used",
-				400,
-			);
-		}
-
 		const currentCount =
 			await webauthnDb.countAccountPasskeyCredentialsByUserId(db, user.id);
 		if (currentCount >= MAX_ACCOUNT_PASSKEYS) {
@@ -337,6 +324,7 @@ export const createAccountPasskey = factory.createHandlers(
 			return errorResponse("Passkey is already registered", 409);
 		}
 
+		const ts = now();
 		const supportsPrf = !!body.supportsPrf || hasCompletePrfKeySet(body);
 		const transports = normalizeTransports(
 			registrationResponse.response.transports,
@@ -366,7 +354,7 @@ export const createAccountPasskey = factory.createHandlers(
 		};
 
 		const securityStamp = crypto.randomUUID();
-		const [claimed, inserted] = await c.get("dbDialect").batch([
+		const [claimed, inserted, consumed] = await c.get("dbDialect").batch([
 			conditionalAccountPasskeyClaimQuery(
 				db,
 				user.id,
@@ -375,8 +363,17 @@ export const createAccountPasskey = factory.createHandlers(
 				securityStamp,
 				MAX_ACCOUNT_PASSKEYS,
 				ts,
+				{ hash: challengeHash, scope: "register" },
 			),
 			conditionalWebauthnCredentialInsertQuery(db, credential, securityStamp),
+			conditionalWebauthnChallengeConsumptionQuery(db, {
+				challengeHash,
+				scope: "register",
+				userId: user.id,
+				credentialId: credential.credential_id,
+				mutationToken: credential.mutation_token,
+				timestamp: ts,
+			}),
 			conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
 			conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
 			auditEventInsertQuery(
@@ -408,6 +405,8 @@ export const createAccountPasskey = factory.createHandlers(
 			);
 		if (inserted.numAffectedRows !== 1n)
 			return errorResponse("Passkey registration could not be persisted", 500);
+		if (consumed.numAffectedRows !== 1n)
+			return errorResponse("Passkey challenge could not be consumed", 500);
 		invalidateUserCache(user.id);
 
 		return jsonResponse(accountPasskeyCredentialToResponse(credential as any));
@@ -438,12 +437,18 @@ export const updateAccountPasskeyEncryption = factory.createHandlers(
 
 		let assertion: Awaited<ReturnType<typeof assertAccountPasskeyCredential>>;
 		try {
-			assertion = await assertAccountPasskeyCredential(c.req.raw, c.env, db, {
-				token: String(body.token || ""),
-				deviceResponse: body.deviceResponse,
-				scope: "UpdateKeySet",
-				expectedUserId: user.id,
-			});
+			assertion = await assertAccountPasskeyCredential(
+				c.req.raw,
+				c.env,
+				db,
+				c.get("dbDialect"),
+				{
+					token: String(body.token || ""),
+					deviceResponse: body.deviceResponse,
+					scope: "UpdateKeySet",
+					expectedUserId: user.id,
+				},
+			);
 		} catch (error: any) {
 			return errorResponse(error.message || "Passkey assertion failed", 400);
 		}
