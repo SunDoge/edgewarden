@@ -292,6 +292,112 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		);
 	});
 
+	test("makes bulk Cipher lifecycle transitions idempotent", async () => {
+		const auth = {
+			authorization: `Bearer ${context.accessToken}`,
+			"content-type": "application/json",
+		};
+		const user = await context.database
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(EMAIL)
+			.first<{ id: string }>();
+		assert.ok(user);
+		const created = await request("/api/ciphers", {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({
+				type: 1,
+				name: "idempotent-lifecycle-cipher",
+				login: {
+					username: "encrypted-user",
+					password: "encrypted-password",
+				},
+			}),
+		});
+		assert.equal(created.status, 200, await created.clone().text());
+		const cipherId = (await created.json<{ id: string }>()).id;
+		const revision = async () => {
+			const row = await context.database
+				.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+				.bind(user.id)
+				.first<{ revision_date: number }>();
+			assert.ok(row);
+			return row.revision_date;
+		};
+		const runRepeated = async (
+			path: string,
+			body: Record<string, unknown>,
+			method = "POST",
+		) => {
+			const before = await revision();
+			const mutate = () =>
+				request(path, {
+					method,
+					headers: auth,
+					body: JSON.stringify(body),
+				});
+			const responses = await Promise.all([
+				mutate(),
+				mutate(),
+				mutate(),
+				mutate(),
+			]);
+			assert.ok(
+				responses.every((response) => response.status === 200),
+				(await responses.find((response) => response.status !== 200)?.text()) ??
+					"Cipher lifecycle request failed",
+			);
+			assert.equal(await revision(), before + 1);
+		};
+
+		await runRepeated("/api/ciphers/delete", { ids: [cipherId] }, "PUT");
+		assert.ok(
+			await context.database
+				.prepare("SELECT deleted_at FROM ciphers WHERE id = ?")
+				.bind(cipherId)
+				.first<{ deleted_at: number | null }>()
+				.then((row) => row?.deleted_at),
+		);
+		await runRepeated("/api/ciphers/restore", { ids: [cipherId] });
+		assert.equal(
+			await context.database
+				.prepare("SELECT deleted_at FROM ciphers WHERE id = ?")
+				.bind(cipherId)
+				.first<{ deleted_at: number | null }>()
+				.then((row) => row?.deleted_at),
+			null,
+		);
+		await runRepeated("/api/ciphers/archive", { ids: [cipherId] });
+		assert.ok(
+			await context.database
+				.prepare("SELECT archived_at FROM ciphers WHERE id = ?")
+				.bind(cipherId)
+				.first<{ archived_at: number | null }>()
+				.then((row) => row?.archived_at),
+		);
+		await runRepeated("/api/ciphers/unarchive", { ids: [cipherId] });
+
+		const folder = await request("/api/folders", {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({ name: "encrypted-lifecycle-folder" }),
+		});
+		assert.equal(folder.status, 200, await folder.clone().text());
+		const folderId = (await folder.json<{ id: string }>()).id;
+		await runRepeated("/api/ciphers/move", {
+			ids: [cipherId],
+			folderId,
+		});
+		assert.equal(
+			await context.database
+				.prepare("SELECT folder_id FROM ciphers WHERE id = ?")
+				.bind(cipherId)
+				.first<{ folder_id: string | null }>()
+				.then((row) => row?.folder_id),
+			folderId,
+		);
+	});
+
 	test("syncs a vault larger than D1's bound-parameter limit", async () => {
 		const user = await context.database
 			.prepare("SELECT id FROM users WHERE email = ?")

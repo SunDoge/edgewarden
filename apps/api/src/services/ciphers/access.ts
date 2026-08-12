@@ -1,4 +1,11 @@
-import { type CompiledQuery, type Kysely, type Selectable, sql } from "kysely";
+import type { D1Dialect } from "@sundoge/kysely-d1";
+import {
+	type CompiledQuery,
+	type Kysely,
+	type RawBuilder,
+	type Selectable,
+	sql,
+} from "kysely";
 import type { Ciphers, DB, OrgMembers } from "../../types/db";
 import { now } from "../../utils/time";
 import { organizationRevisionQuery, revisionQuery } from "../db/batch";
@@ -105,6 +112,42 @@ export function conditionalPersonalCipherBulkRevisionQuery(
 			excluded.revision_date
 		)
 	`.compile(db);
+}
+
+interface CipherMutationFenceCandidate {
+	id: string;
+	mutation_token: string | null;
+}
+
+export async function executeFencedPersonalCipherBulkMutation(
+	dialect: D1Dialect,
+	db: Kysely<DB>,
+	userId: string,
+	candidates: readonly CipherMutationFenceCandidate[],
+	timestamp: number,
+	buildUpdate: (
+		mutationToken: string,
+		expectedState: RawBuilder<boolean>,
+	) => CompiledQuery,
+): Promise<number> {
+	if (!candidates.length) return 0;
+	const mutationToken = crypto.randomUUID();
+	const serializedState = JSON.stringify(candidates);
+	const expectedState = sql<boolean>`EXISTS (
+		SELECT 1 FROM json_each(${serializedState}) expected
+		WHERE json_extract(expected.value, '$.id') = ciphers.id
+		  AND ciphers.mutation_token IS json_extract(expected.value, '$.mutation_token')
+	)`;
+	const [mutated] = await dialect.batch([
+		buildUpdate(mutationToken, expectedState),
+		conditionalPersonalCipherBulkRevisionQuery(
+			db,
+			userId,
+			mutationToken,
+			timestamp,
+		),
+	]);
+	return Number(mutated.numAffectedRows);
 }
 
 export async function validateOrganizationCollections(
