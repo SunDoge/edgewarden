@@ -729,6 +729,7 @@ export function registerAuthReliabilityScenarios(
 		const timestamp = Math.floor(Date.now() / 1000);
 		const userId = crypto.randomUUID();
 		const securityStamp = crypto.randomUUID();
+		const deviceId = `stale-session-device-${crypto.randomUUID()}`;
 		let issued: Awaited<ReturnType<typeof issueIdentitySession>> = null;
 		try {
 			await db
@@ -762,7 +763,7 @@ export function registerAuthReliabilityScenarios(
 					db,
 					dialect,
 					user: snapshot,
-					device: { identifier: "", name: "", type: 0 },
+					device: { identifier: deviceId, name: "Stale session", type: 0 },
 					jwtSecret: "stale-session-test-secret-at-least-32-chars",
 				}),
 				null,
@@ -778,6 +779,15 @@ export function registerAuthReliabilityScenarios(
 			);
 			assert.equal(
 				await db
+					.selectFrom("devices")
+					.select("device_identifier")
+					.where("user_id", "=", userId)
+					.where("device_identifier", "=", deviceId)
+					.executeTakeFirst(),
+				undefined,
+			);
+			assert.equal(
+				await db
 					.selectFrom("user_revisions")
 					.select("user_id")
 					.where("user_id", "=", userId)
@@ -790,14 +800,62 @@ export function registerAuthReliabilityScenarios(
 				.set({ security_stamp: securityStamp })
 				.where("id", "=", userId)
 				.execute();
+			const unclaimedDeviceId = `unclaimed-auth-request-${crypto.randomUUID()}`;
+			assert.equal(
+				await issueIdentitySession({
+					db,
+					dialect,
+					user: snapshot,
+					device: {
+						identifier: unclaimedDeviceId,
+						name: "Unclaimed auth request",
+						type: 0,
+					},
+					jwtSecret: "stale-session-test-secret-at-least-32-chars",
+					authRequest: { id: crypto.randomUUID(), token: crypto.randomUUID() },
+				}),
+				null,
+			);
+			assert.equal(
+				await db
+					.selectFrom("devices")
+					.select("device_identifier")
+					.where("user_id", "=", userId)
+					.where("device_identifier", "=", unclaimedDeviceId)
+					.executeTakeFirst(),
+				undefined,
+			);
+			await db
+				.insertInto("devices")
+				.values({
+					user_id: userId,
+					device_identifier: deviceId,
+					name: "Legacy unstamped device",
+					type: 0,
+					session_stamp: null,
+					created_at: timestamp,
+					updated_at: timestamp,
+				})
+				.execute();
 			issued = await issueIdentitySession({
 				db,
 				dialect,
 				user: snapshot,
-				device: { identifier: "", name: "", type: 0 },
+				device: { identifier: deviceId, name: "Valid session", type: 0 },
 				jwtSecret: "stale-session-test-secret-at-least-32-chars",
 			});
 			assert.ok(issued);
+			assert.ok(issued.deviceSession?.sessionStamp);
+			assert.equal(
+				await db
+					.selectFrom("devices")
+					.select("name")
+					.where("user_id", "=", userId)
+					.where("device_identifier", "=", deviceId)
+					.executeTakeFirstOrThrow()
+					.then((device) => device.name),
+				"Valid session",
+			);
 		} finally {
 			await db.deleteFrom("users").where("id", "=", userId).execute();
 			await db.destroy();
