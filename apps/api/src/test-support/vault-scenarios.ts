@@ -718,6 +718,18 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 			attachmentId: string;
 			url: string;
 		}>();
+		const beforeUpload = await request(`/api/ciphers/${context.cipherId}`, {
+			headers: auth,
+		});
+		assert.equal(beforeUpload.status, 200);
+		assert.equal(
+			(
+				await beforeUpload.json<{
+					attachments: Array<{ id: string }>;
+				}>()
+			).attachments.some((item) => item.id === metadata.attachmentId),
+			false,
+		);
 
 		const crossUser = await request(
 			`/api/ciphers/${context.cipherId}/attachment/${metadata.attachmentId}`,
@@ -759,7 +771,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 			},
 			body: encryptedBytes,
 		});
-		assert.equal(replay.status, 409);
+		assert.equal(replay.status, 201);
 
 		const downloaded = await request(
 			`/api/ciphers/${context.cipherId}/attachment/${metadata.attachmentId}`,
@@ -816,5 +828,86 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 			{ headers: auth },
 		);
 		assert.equal(gone.status, 404);
+	});
+
+	test("retries attachment publication after a D1 failure", async () => {
+		const auth = { authorization: `Bearer ${context.accessToken}` };
+		const encryptedBytes = new TextEncoder().encode("retryable-encrypted-blob");
+		const created = await request(
+			`/api/ciphers/${context.cipherId}/attachment/v2`,
+			{
+				method: "POST",
+				headers: { ...auth, "content-type": "application/json" },
+				body: JSON.stringify({
+					fileName: "2.retry-name",
+					key: "2.retry-key",
+					fileSize: encryptedBytes.byteLength,
+				}),
+			},
+		);
+		assert.equal(created.status, 200, await created.clone().text());
+		const metadata = await created.json<{
+			attachmentId: string;
+			url: string;
+		}>();
+		const uploadUrl = new URL(metadata.url);
+		const upload = () =>
+			request(`${uploadUrl.pathname}${uploadUrl.search}`, {
+				method: "PUT",
+				headers: {
+					"content-type": "application/octet-stream",
+					"content-length": String(encryptedBytes.byteLength),
+				},
+				body: encryptedBytes,
+			});
+
+		await context.database
+			.prepare(`
+				CREATE TRIGGER test_fail_attachment_publish
+				BEFORE INSERT ON attachments
+				BEGIN
+					SELECT RAISE(ABORT, 'forced attachment publication failure');
+				END
+			`)
+			.run();
+		try {
+			const failed = await upload();
+			assert.equal(failed.status, 500, await failed.clone().text());
+		} finally {
+			await context.database
+				.prepare("DROP TRIGGER IF EXISTS test_fail_attachment_publish")
+				.run();
+		}
+		assert.equal(
+			await context.database
+				.prepare("SELECT 1 FROM attachments WHERE id = ?")
+				.bind(metadata.attachmentId)
+				.first()
+				.then(Boolean),
+			false,
+		);
+
+		const retried = await upload();
+		assert.equal(retried.status, 201, await retried.clone().text());
+		assert.equal(
+			await context.database
+				.prepare("SELECT 1 FROM attachments WHERE id = ?")
+				.bind(metadata.attachmentId)
+				.first()
+				.then(Boolean),
+			true,
+		);
+		const downloaded = await request(
+			`/api/ciphers/${context.cipherId}/attachment/${metadata.attachmentId}`,
+			{ headers: auth },
+		);
+		assert.deepEqual(
+			new Uint8Array(await downloaded.arrayBuffer()),
+			encryptedBytes,
+		);
+		await request(
+			`/api/ciphers/${context.cipherId}/attachment/${metadata.attachmentId}/delete`,
+			{ method: "POST", headers: auth },
+		);
 	});
 }

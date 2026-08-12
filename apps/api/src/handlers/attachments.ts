@@ -104,33 +104,15 @@ export const createAttachment = factory.createHandlers(
 			return errorResponse("Attachment storage limit exceeded", 413);
 
 		const id = crypto.randomUUID();
-		const ts = now();
-		await executeBatch(c.get("dbDialect"), [
-			c
-				.get("db")
-				.insertInto("attachments")
-				.values({
-					id,
-					cipher_id: cipher.id,
-					file_name: body.fileName,
-					size: body.fileSize,
-					size_name: sizeName(body.fileSize),
-					key: body.key,
-					created_at: ts,
-				})
-				.compile(),
-			c
-				.get("db")
-				.updateTable("ciphers")
-				.set({ updated_at: ts })
-				.where("id", "=", cipher.id)
-				.compile(),
-			...(await ownerRevisionQueries(c.get("db"), cipher, ts)),
-		]);
 		const token = await createAttachmentUploadToken(
 			c.get("user").id,
 			cipher.id,
 			id,
+			{
+				fileName: body.fileName,
+				key: body.key,
+				fileSize: body.fileSize,
+			},
 			secret,
 		);
 		return c.json({
@@ -165,17 +147,21 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
 	);
 	if (
 		!cipher ||
-		!attachment ||
-		attachment.cipher_id !== cipher.id ||
 		!(await canUploadAttachment(c.get("db"), cipher, claims.userId))
 	)
 		return errorResponse("Attachment not found", 404);
-	if (
-		await getBlobObject(c.env, getAttachmentObjectKey(cipher.id, attachment.id))
-	)
-		return errorResponse("Attachment already uploaded", 409);
+	if (attachment) {
+		return attachment.cipher_id === cipher.id
+			? new Response(null, { status: 201 })
+			: errorResponse("Attachment not found", 404);
+	}
+	const objectKey = getAttachmentObjectKey(cipher.id, claims.attachmentId);
+	const existingObject = await getBlobObject(c.env, objectKey);
+	if (existingObject && existingObject.size !== claims.fileSize) {
+		await deleteBlobObject(c.env, objectKey);
+	}
 	const upload = await parseDirectUploadPayload(c.req.raw, {
-		expectedSize: attachment.size,
+		expectedSize: claims.fileSize,
 		maxFileSize: getBlobStorageMaxBytes(
 			c.env,
 			LIMITS.attachment.maxFileSizeBytes,
@@ -184,16 +170,40 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
 		sizeMismatchMessage: "Attachment size does not match metadata",
 	});
 	if (upload instanceof Response) return upload;
-	await putBlobObject(
-		c.env,
-		getAttachmentObjectKey(cipher.id, attachment.id),
-		upload.body,
-		{
+	if (!existingObject || existingObject.size !== claims.fileSize) {
+		await putBlobObject(c.env, objectKey, upload.body, {
 			size: upload.size,
 			contentType: "application/octet-stream",
-			customMetadata: { cipherId: cipher.id, attachmentId: attachment.id },
-		},
-	);
+			customMetadata: {
+				cipherId: cipher.id,
+				attachmentId: claims.attachmentId,
+			},
+		});
+	}
+	const ts = Math.max(now(), cipher.updated_at + 1);
+	await executeBatch(c.get("dbDialect"), [
+		c
+			.get("db")
+			.insertInto("attachments")
+			.values({
+				id: claims.attachmentId,
+				cipher_id: cipher.id,
+				file_name: claims.fileName,
+				size: claims.fileSize,
+				size_name: sizeName(claims.fileSize),
+				key: claims.key,
+				created_at: ts,
+			})
+			.onConflict((conflict) => conflict.column("id").doNothing())
+			.compile(),
+		c
+			.get("db")
+			.updateTable("ciphers")
+			.set({ updated_at: ts })
+			.where("id", "=", cipher.id)
+			.compile(),
+		...(await ownerRevisionQueries(c.get("db"), cipher, ts)),
+	]);
 	return new Response(null, { status: 201 });
 });
 
