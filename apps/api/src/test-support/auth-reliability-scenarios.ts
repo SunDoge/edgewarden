@@ -8,6 +8,7 @@ import {
 	conditionalWebauthnCredentialDeletionQuery,
 	conditionalWebauthnCredentialInsertQuery,
 } from "../services/db/batch";
+import * as webauthnDb from "../services/db/webauthn";
 
 export interface AuthReliabilityScenarioContext {
 	readonly database: D1Database;
@@ -191,6 +192,85 @@ export function registerAuthReliabilityScenarios(
 				.updateTable("user_revisions")
 				.set({ revision_date: revision.revision_date })
 				.where("user_id", "=", user.id)
+				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("never moves a WebAuthn signature counter backwards", async () => {
+		const { db } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", context.email)
+			.executeTakeFirstOrThrow();
+		const timestamp = Math.floor(Date.now() / 1000);
+		const id = crypto.randomUUID();
+		const credentialId = `counter-credential-${id}`;
+		try {
+			await db
+				.insertInto("webauthn_credentials")
+				.values({
+					id,
+					user_id: user.id,
+					purpose: "login",
+					name: "Concurrent counter passkey",
+					public_key: "AQID",
+					credential_id: credentialId,
+					counter: 0,
+					type: "public-key",
+					aa_guid: null,
+					transports: "[]",
+					encrypted_user_key: null,
+					encrypted_public_key: null,
+					encrypted_private_key: null,
+					supports_prf: 0,
+					created_at: timestamp,
+					updated_at: timestamp,
+				})
+				.execute();
+			const updates = await Promise.all(
+				Array.from({ length: 8 }, (_, index) =>
+					webauthnDb.updateAccountPasskeyCounter(
+						db,
+						user.id,
+						credentialId,
+						0,
+						index + 1,
+					),
+				),
+			);
+			assert.equal(updates.filter(Boolean).length, 1);
+			const winner = await db
+				.selectFrom("webauthn_credentials")
+				.select("counter")
+				.where("id", "=", id)
+				.executeTakeFirstOrThrow();
+			assert.ok(winner.counter >= 1 && winner.counter <= 8);
+			assert.equal(
+				await webauthnDb.updateAccountPasskeyCounter(
+					db,
+					user.id,
+					credentialId,
+					0,
+					9,
+				),
+				false,
+			);
+			assert.equal(
+				(
+					await db
+						.selectFrom("webauthn_credentials")
+						.select("counter")
+						.where("id", "=", id)
+						.executeTakeFirstOrThrow()
+				).counter,
+				winner.counter,
+			);
+		} finally {
+			await db
+				.deleteFrom("webauthn_credentials")
+				.where("id", "=", id)
 				.execute();
 			await db.destroy();
 		}

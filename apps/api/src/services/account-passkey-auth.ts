@@ -13,9 +13,9 @@ import {
 import { bytesToBase64Url } from "../utils/passkey";
 import { jsonResponse } from "../utils/response";
 import { now } from "../utils/time";
+import { verifyPassword } from "./auth";
 import * as usersDb from "./db/users";
 import * as webauthnDb from "./db/webauthn";
-import { verifyPassword } from "./auth";
 
 export async function verifyUserSecret(
 	user: any,
@@ -169,12 +169,16 @@ export async function assertAccountPasskeyCredential(
 		throw new Error("Passkey assertion could not be verified");
 	}
 
-	await webauthnDb.updateAccountPasskeyCounter(
-		db,
-		credential.user_id,
-		credential.credential_id,
-		verification.authenticationInfo.newCounter,
-	);
+	if (
+		!(await webauthnDb.updateAccountPasskeyCounter(
+			db,
+			credential.user_id,
+			credential.credential_id,
+			credential.counter,
+			verification.authenticationInfo.newCounter,
+		))
+	)
+		throw new Error("Passkey assertion counter was already advanced");
 	credential.counter = verification.authenticationInfo.newCounter;
 
 	return { user, credential };
