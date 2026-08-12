@@ -13,4 +13,5 @@ export * from "./api-backup";
 export * from "./api-folders";
 export * from "./api-organizations";
 export * from "./api-sends";
+export * from "./api-two-factor";
 export * from "./api-vault";
