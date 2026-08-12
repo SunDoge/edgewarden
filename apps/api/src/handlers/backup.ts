@@ -57,7 +57,7 @@ export const exportBackup = factory.createHandlers(
 				c.env.DB,
 				"backup.export",
 				async () => {
-					const archive = await buildBackupArchive(c.get("db"), new Date(), {
+					const archive = await buildBackupArchive(c.env.DB, new Date(), {
 						includeAttachments: !!c.req.valid("json")?.includeAttachments,
 						blobStore: createBlobStore(c.env),
 					});
@@ -187,7 +187,7 @@ export const runBackup = factory.createHandlers(
 			destination.runtime.lastErrorMessage = null;
 			await saveBackupSettings(db, secret, settings);
 
-			const archive = await buildBackupArchive(db, date, {
+			const archive = await buildBackupArchive(c.env.DB, date, {
 				includeAttachments: destination.includeAttachments,
 				blobStore,
 				timeZone: destination.schedule.timezone,

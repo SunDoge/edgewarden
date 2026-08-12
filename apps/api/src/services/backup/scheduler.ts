@@ -75,7 +75,7 @@ export async function runScheduledBackupIfDue(
 				destination.runtime.lastErrorMessage = null;
 				await saveBackupSettings(db, dataEncryptionSecret, settings);
 
-				const archive = await buildBackupArchive(db, currentTime, {
+				const archive = await buildBackupArchive(env.DB, currentTime, {
 					includeAttachments: destination.includeAttachments,
 					blobStore,
 					timeZone: destination.schedule.timezone,

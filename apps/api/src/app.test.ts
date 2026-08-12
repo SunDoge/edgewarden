@@ -309,20 +309,17 @@ describe("Edgewarden API", () => {
 			.run();
 		const blobStore = createBlobStore(bindings);
 		assert.ok(blobStore);
-		const { db } = await createDatabase(testDatabase);
-		let archive: Awaited<ReturnType<typeof buildBackupArchive>>;
-		let metadataOnlyArchive: Awaited<ReturnType<typeof buildBackupArchive>>;
-		try {
-			archive = await buildBackupArchive(db, new Date(), {
-				includeAttachments: true,
-				blobStore,
-			});
-			metadataOnlyArchive = await buildBackupArchive(db, new Date(), {
+		const archive = await buildBackupArchive(testDatabase, new Date(), {
+			includeAttachments: true,
+			blobStore,
+		});
+		const metadataOnlyArchive = await buildBackupArchive(
+			testDatabase,
+			new Date(),
+			{
 				includeAttachments: false,
-			});
-		} finally {
-			await db.destroy();
-		}
+			},
+		);
 		assert.equal(
 			(
 				parseBackupArchive(metadataOnlyArchive.bytes).payload.db.sends || []
