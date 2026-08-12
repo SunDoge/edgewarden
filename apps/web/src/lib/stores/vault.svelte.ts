@@ -1,24 +1,3 @@
-import { syncVault, logout as apiLogout } from "$lib/services/api";
-import {
-	deriveMasterKey,
-	decryptCipher,
-	hkdfExpand,
-	decryptBw,
-	decryptStr,
-	bytesToBase64,
-	base64ToBytes,
-} from "$lib/services/crypto";
-import {
-	loadVaultSnapshot,
-	saveValidatedVaultSnapshot,
-	clearVaultSnapshot,
-	type VaultSnapshot,
-} from "$lib/services/vault-db";
-import {
-	broadcastVaultEvent,
-	subscribeToVaultEvents,
-	type VaultEvent,
-} from "$lib/services/vault-events";
 import type {
 	CipherResponse,
 	CollectionResponse,
@@ -26,11 +5,32 @@ import type {
 	ProfileOrganizationResponse,
 	SyncResponse,
 } from "@edgewarden/shared";
-import { decryptOwnedSend } from "$lib/services/send-crypto";
+import { logout as apiLogout, syncVault } from "$lib/services/api";
+import { decryptCipher } from "$lib/services/cipher-crypto";
+import {
+	base64ToBytes,
+	bytesToBase64,
+	decryptBw,
+	decryptStr,
+	deriveMasterKey,
+	hkdfExpand,
+} from "$lib/services/crypto";
 import {
 	importAccountPrivateKey,
 	unwrapOrganizationKey,
 } from "$lib/services/organization-crypto";
+import { decryptOwnedSend } from "$lib/services/send-crypto";
+import {
+	clearVaultSnapshot,
+	loadVaultSnapshot,
+	saveValidatedVaultSnapshot,
+	type VaultSnapshot,
+} from "$lib/services/vault-db";
+import {
+	broadcastVaultEvent,
+	subscribeToVaultEvents,
+	type VaultEvent,
+} from "$lib/services/vault-events";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
