@@ -4,7 +4,11 @@ import { factory } from "../http/factory";
 import { BulkIdsSchema } from "../schemas/ciphers";
 import { FolderSchema } from "../schemas/folders";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
-import { executeBatch, folderRevisionQuery } from "../services/db/batch";
+import {
+	conditionalFolderRevisionQuery,
+	executeBatch,
+	folderRevisionQuery,
+} from "../services/db/batch";
 import * as foldersDb from "../services/db/folders";
 import { textColumnInJson } from "../services/db/json-array";
 import type { Folders } from "../types/db";
@@ -63,17 +67,24 @@ export const updateFolder = factory.createHandlers(
 		const { name } = c.req.valid("json");
 		const userId = c.get("user").id;
 		const db = c.get("db");
-		const id = c.get("folder").id;
-		const ts = now();
-		await executeBatch(c.get("dbDialect"), [
-			db
-				.updateTable("folders")
-				.set({ name, updated_at: ts })
-				.where("id", "=", id)
-				.where("user_id", "=", userId)
-				.compile(),
-			folderRevisionQuery(db, userId, [id], ts),
-		]);
+		const existing = c.get("folder");
+		const id = existing.id;
+		const ts = Math.max(now(), existing.updated_at + 1);
+		const mutationToken = crypto.randomUUID();
+		const [updatedResult] = await c
+			.get("dbDialect")
+			.batch([
+				db
+					.updateTable("folders")
+					.set({ name, updated_at: ts, mutation_token: mutationToken })
+					.where("id", "=", id)
+					.where("user_id", "=", userId)
+					.where(sql<boolean>`mutation_token IS ${existing.mutation_token}`)
+					.compile(),
+				conditionalFolderRevisionQuery(db, userId, mutationToken, ts),
+			]);
+		if (updatedResult.numAffectedRows !== 1n)
+			return errorResponse("Folder changed during update", 409);
 		const folder = await foldersDb.getFolderById(db, id, userId);
 		if (!folder) return errorResponse("Not found", 404);
 		return c.json(folderToResponse(folder));
@@ -83,10 +94,19 @@ export const updateFolder = factory.createHandlers(
 export const deleteFolder = factory.createHandlers(async (c) => {
 	const userId = c.get("user").id;
 	const db = c.get("db");
-	const id = c.get("folder").id;
+	const folder = c.get("folder");
+	const id = folder.id;
 	const ts = now();
-	await executeBatch(c.get("dbDialect"), [
-		folderRevisionQuery(db, userId, [id], ts),
+	const mutationToken = crypto.randomUUID();
+	await c.get("dbDialect").batch([
+		db
+			.updateTable("folders")
+			.set({ mutation_token: mutationToken })
+			.where("id", "=", id)
+			.where("user_id", "=", userId)
+			.where(sql<boolean>`mutation_token IS ${folder.mutation_token}`)
+			.compile(),
+		conditionalFolderRevisionQuery(db, userId, mutationToken, ts),
 		db
 			.updateTable("ciphers")
 			.set({
@@ -95,11 +115,21 @@ export const deleteFolder = factory.createHandlers(async (c) => {
 			})
 			.where("folder_id", "=", id)
 			.where("user_id", "=", userId)
+			.where((eb) =>
+				eb.exists(
+					db
+						.selectFrom("folders")
+						.select("id")
+						.where("id", "=", id)
+						.where("mutation_token", "=", mutationToken),
+				),
+			)
 			.compile(),
 		db
 			.deleteFrom("folders")
 			.where("id", "=", id)
 			.where("user_id", "=", userId)
+			.where("mutation_token", "=", mutationToken)
 			.compile(),
 	]);
 	return new Response(null, { status: 200 });
@@ -111,18 +141,28 @@ export const deleteFolders = factory.createHandlers(
 		const userId = c.get("user").id;
 		const db = c.get("db");
 		const ids = [...new Set(c.req.valid("json").ids)];
-		const ownedIds = (
-			await db
-				.selectFrom("folders")
-				.select("id")
-				.where("user_id", "=", userId)
-				.where(textColumnInJson("id", ids))
-				.execute()
-		).map((folder) => folder.id);
-		if (!ownedIds.length) return new Response(null, { status: 204 });
+		const ownedFolders = await db
+			.selectFrom("folders")
+			.select(["id", "mutation_token"])
+			.where("user_id", "=", userId)
+			.where(textColumnInJson("id", ids))
+			.execute();
+		if (!ownedFolders.length) return new Response(null, { status: 204 });
 		const ts = now();
-		const [, , deleted] = await c.get("dbDialect").batch([
-			folderRevisionQuery(db, userId, ownedIds, ts),
+		const mutationToken = crypto.randomUUID();
+		const expectedState = JSON.stringify(ownedFolders);
+		const [, , , deleted] = await c.get("dbDialect").batch([
+			db
+				.updateTable("folders")
+				.set({ mutation_token: mutationToken })
+				.where("user_id", "=", userId)
+				.where(sql<boolean>`EXISTS (
+					SELECT 1 FROM json_each(${expectedState}) expected
+					WHERE json_extract(expected.value, '$.id') = folders.id
+					  AND folders.mutation_token IS json_extract(expected.value, '$.mutation_token')
+				)`)
+				.compile(),
+			conditionalFolderRevisionQuery(db, userId, mutationToken, ts),
 			db
 				.updateTable("ciphers")
 				.set({
@@ -130,12 +170,22 @@ export const deleteFolders = factory.createHandlers(
 					updated_at: sql<number>`MAX(updated_at + 1, ${ts})`,
 				})
 				.where("user_id", "=", userId)
-				.where(textColumnInJson("folder_id", ownedIds))
+				.where((eb) =>
+					eb(
+						"folder_id",
+						"in",
+						db
+							.selectFrom("folders")
+							.select("id")
+							.where("user_id", "=", userId)
+							.where("mutation_token", "=", mutationToken),
+					),
+				)
 				.compile(),
 			db
 				.deleteFrom("folders")
 				.where("user_id", "=", userId)
-				.where(textColumnInJson("id", ownedIds))
+				.where("mutation_token", "=", mutationToken)
 				.compile(),
 		]);
 		const deletedCount = Number(deleted.numAffectedRows);
