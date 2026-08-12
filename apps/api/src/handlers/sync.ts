@@ -6,6 +6,7 @@ import * as domainSettingsDb from "../services/db/domain-settings";
 import * as foldersDb from "../services/db/folders";
 import * as sendsDb from "../services/db/sends";
 import * as webauthnDb from "../services/db/webauthn";
+import { textColumnInJson } from "../services/db/json-array";
 import {
 	buildDomainsResponse,
 	normalizeCustomEquivalentDomains,
@@ -224,19 +225,19 @@ export const sync = factory.createHandlers(async (c) => {
 		(attachment) => attachment.cipher_id,
 	);
 	const cipherCollectionLinks = await db
-		.selectFrom("cipher_collections as link")
-		.innerJoin("ciphers as cipher", "cipher.id", "link.cipher_id")
-		.selectAll("link")
-		.where(
-			sql<boolean>`
-				cipher.user_id = ${user.id}
-				or cipher.org_id in (
-					select value from json_each(${JSON.stringify(allAccessOrgIds)})
-				)
-				or link.collection_id in (
-					select value from json_each(${JSON.stringify(allowedRestrictedCollectionIds)})
-				)
-			`,
+		.selectFrom("cipher_collections")
+		.selectAll()
+		.where((expression) =>
+			expression.or([
+				sql<boolean>`cipher_id in (
+					select id from ciphers where user_id = ${user.id}
+					union
+					select id from ciphers where org_id in (
+						select value from json_each(${JSON.stringify(allAccessOrgIds)})
+					)
+				)`,
+				textColumnInJson("collection_id", allowedRestrictedCollectionIds),
+			]),
 		)
 		.execute();
 	const collectionIdsByCipher = Map.groupBy(

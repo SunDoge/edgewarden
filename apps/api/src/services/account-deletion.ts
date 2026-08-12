@@ -27,14 +27,7 @@ export async function deleteAccountData(
 		.where("owner_id", "=", userId)
 		.executeTakeFirst();
 	if (ownedOrganization) return null;
-	const cipherIds = (
-		await db
-			.selectFrom("ciphers")
-			.select("id")
-			.where("user_id", "=", userId)
-			.execute()
-	).map((cipher) => cipher.id);
-	const attachments = await attachmentsDb.listByCipherIds(db, cipherIds);
+	const attachments = await attachmentsDb.listByUserId(db, userId);
 	const fileSends = await db
 		.selectFrom("sends")
 		.select(["id", "data"])
