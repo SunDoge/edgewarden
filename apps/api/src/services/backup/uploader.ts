@@ -1,9 +1,22 @@
-import {
-	type BackupDestinationRecord,
-	type BackupDestinationType,
-	type S3BackupDestination,
-	type WebDavBackupDestination,
+import type {
+	BackupDestinationRecord,
+	BackupDestinationType,
+	S3BackupDestination,
+	WebDavBackupDestination,
 } from "./config";
+import {
+	basename,
+	buildJoinedPath,
+	encodePathSegments,
+	extractXmlBlocks,
+	extractXmlFirst,
+	isBackupArchiveName,
+	normalizeRelativePath,
+	parentPath,
+	parseHttpDate,
+	sortRemoteItems,
+	trimSlashes,
+} from "./remote-utils";
 
 export interface BackupUploadResult {
 	provider: BackupDestinationType;
@@ -35,112 +48,6 @@ export interface RemoteBackupFile {
 
 export interface RemoteBackupFilePutOptions {
 	contentType?: string;
-}
-
-function isBackupArchiveName(name: string): boolean {
-	return /\.zip$/i.test(String(name || "").trim());
-}
-
-function encodePathSegments(path: string): string {
-	return path
-		.split("/")
-		.filter(Boolean)
-		.map((segment) => encodeURIComponent(segment))
-		.join("/");
-}
-
-function trimSlashes(value: string): string {
-	let next = String(value || "");
-	while (next.startsWith("/")) next = next.slice(1);
-	while (next.endsWith("/")) next = next.slice(0, -1);
-	return next;
-}
-
-function buildJoinedPath(...segments: string[]): string {
-	return segments.map(trimSlashes).filter(Boolean).join("/");
-}
-
-function normalizeRelativePath(path: string): string {
-	const normalized = trimSlashes(path).replace(/\\/g, "/");
-	if (!normalized) return "";
-	const parts = normalized.split("/").filter(Boolean);
-	if (parts.some((part) => part === "." || part === "..")) {
-		throw new Error("Invalid remote backup path");
-	}
-	return parts.join("/");
-}
-
-function basename(path: string): string {
-	const normalized = trimSlashes(path);
-	if (!normalized) return "";
-	const parts = normalized.split("/").filter(Boolean);
-	return parts[parts.length - 1] || "";
-}
-
-function parentPath(path: string): string | null {
-	const normalized = normalizeRelativePath(path);
-	if (!normalized) return null;
-	const parts = normalized.split("/");
-	parts.pop();
-	return parts.length ? parts.join("/") : "";
-}
-
-function sortRemoteItems(items: RemoteBackupItem[]): RemoteBackupItem[] {
-	return items.slice().sort((a, b) => {
-		const aIsAttachmentsDir = a.isDirectory && a.name === "attachments";
-		const bIsAttachmentsDir = b.isDirectory && b.name === "attachments";
-		if (aIsAttachmentsDir !== bIsAttachmentsDir)
-			return aIsAttachmentsDir ? -1 : 1;
-		if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-		return a.name.localeCompare(b.name, "en");
-	});
-}
-
-function decodeXmlText(value: string): string {
-	return value.replace(/&(amp|lt|gt|quot|#39);/g, (_match, entity) => {
-		switch (entity) {
-			case "amp":
-				return "&";
-			case "lt":
-				return "<";
-			case "gt":
-				return ">";
-			case "quot":
-				return '"';
-			case "#39":
-				return "'";
-			default:
-				return _match;
-		}
-	});
-}
-
-function parseHttpDate(value: string): string | null {
-	const parsed = new Date(value);
-	return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
-}
-
-function extractXmlBlocks(xml: string, tagName: string): string[] {
-	const pattern = new RegExp(
-		`<(?:[^:>]+:)?${tagName}\\b[^>]*>([\\s\\S]*?)</(?:[^:>]+:)?${tagName}>`,
-		"gi",
-	);
-	const blocks: string[] = [];
-	let match = pattern.exec(xml);
-	while (match) {
-		blocks.push(match[1]);
-		match = pattern.exec(xml);
-	}
-	return blocks;
-}
-
-function extractXmlFirst(xml: string, tagName: string): string | null {
-	const pattern = new RegExp(
-		`<(?:[^:>]+:)?${tagName}\\b[^>]*>([\\s\\S]*?)</(?:[^:>]+:)?${tagName}>`,
-		"i",
-	);
-	const match = xml.match(pattern);
-	return match?.[1] ? decodeXmlText(match[1].trim()) : null;
 }
 
 async function sha256Hex(value: Uint8Array | string): Promise<string> {
