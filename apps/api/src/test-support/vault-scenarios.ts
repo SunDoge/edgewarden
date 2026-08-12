@@ -326,6 +326,36 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 			stored?.access_code_encrypted ?? "",
 			new RegExp(accessCode),
 		);
+		const rejected = await request(`/api/auth-requests/${body.id}`, {
+			method: "PUT",
+			headers: {
+				authorization: `Bearer ${context.accessToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({ approved: false }),
+		});
+		assert.equal(rejected.status, 200, await rejected.clone().text());
+		assert.equal(
+			(await rejected.json<{ approved: boolean }>()).approved,
+			false,
+		);
+		const reversed = await request(`/api/auth-requests/${body.id}`, {
+			method: "PUT",
+			headers: {
+				authorization: `Bearer ${context.accessToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({ approved: true, key: "late-key" }),
+		});
+		assert.equal(reversed.status, 409, await reversed.clone().text());
+		assert.equal(
+			await context.database
+				.prepare("SELECT approved FROM auth_requests WHERE id = ?")
+				.bind(body.id)
+				.first<{ approved: number }>()
+				.then((row) => row?.approved),
+			0,
+		);
 	});
 
 	test("fails closed on malformed local account invariants", async () => {

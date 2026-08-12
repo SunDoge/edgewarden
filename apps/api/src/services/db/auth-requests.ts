@@ -73,19 +73,27 @@ export async function getPendingAuthRequestsForDevice(
 export async function approveAuthRequest(
 	db: Kysely<DB>,
 	id: string,
+	approved: boolean,
 	responseDeviceIdentifier: string,
 	key: string | null,
 	masterPasswordHash: string | null,
-): Promise<void> {
-	await db
+): Promise<boolean> {
+	const cutoff = now() - AUTH_REQUEST_TTL_SECONDS;
+	const result = await db
 		.updateTable("auth_requests")
 		.set({
-			approved: 1,
+			approved: approved ? 1 : 0,
 			response_device_identifier: responseDeviceIdentifier,
 			key,
 			master_password_hash: masterPasswordHash,
 			response_date: now(),
 		})
 		.where("id", "=", id)
-		.execute();
+		.where("approved", "is", null)
+		.where("response_date", "is", null)
+		.where("authentication_date", "is", null)
+		.where("consumption_token", "is", null)
+		.where("creation_date", ">", cutoff)
+		.executeTakeFirst();
+	return result.numUpdatedRows === 1n;
 }

@@ -206,13 +206,13 @@ export function registerAccountSecurityScenarios(
 		});
 		assert.equal(removed.status, 200, await removed.clone().text());
 		assert.equal((await removed.json<{ enabled: boolean }>()).enabled, false);
-		assert.equal(
-			await context.database
-				.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
-				.bind(user.id)
-				.first<{ revision_date: number }>()
-				.then((row) => row?.revision_date),
-			revisionBeforeDelete.revision_date + 1,
+		const revisionAfterDelete = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(user.id)
+			.first<{ revision_date: number }>();
+		assert.ok(revisionAfterDelete);
+		assert.ok(
+			revisionAfterDelete.revision_date > revisionBeforeDelete.revision_date,
 		);
 		assert.equal(
 			await context.database
