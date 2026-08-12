@@ -1,8 +1,10 @@
 import { vValidator } from "@hono/valibot-validator";
+import { sql } from "kysely";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { BulkIdsSchema, MoveCiphersSchema } from "../schemas/ciphers";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import { conditionalPersonalCipherBulkRevisionQuery } from "../services/ciphers/access";
 import { executeBatch, revisionQuery } from "../services/db/batch";
 import * as foldersDb from "../services/db/folders";
 import { textColumnInJson } from "../services/db/json-array";
@@ -69,35 +71,56 @@ export const hardDeleteCiphers = factory.createHandlers(
 		const { ids } = c.req.valid("json");
 		const user = c.get("user");
 		const db = c.get("db");
-		const ownedIds = (
-			await db
-				.selectFrom("ciphers")
-				.select("id")
-				.where(textColumnInJson("id", ids))
-				.where("user_id", "=", user.id)
-				.execute()
-		).map((cipher) => cipher.id);
 		const ts = now();
-		await executeBatch(c.get("dbDialect"), [
-			db
-				.updateTable("ciphers")
-				.set({ deleted_at: ts, purge_after: ts, updated_at: ts })
-				.where(textColumnInJson("id", ids))
-				.where("user_id", "=", user.id)
-				.compile(),
-			revisionQuery(db, user.id, ts),
-		]);
-		await safeWriteAuditEvent(db, {
-			actorUserId: user.id,
-			action: "cipher.delete.permanent.bulk",
-			category: "vault",
-			level: "warning",
-			targetType: "cipher",
-			metadata: {
-				...auditRequestMetadata(c.req.raw),
-				size: ownedIds.length,
-			},
-		});
+		const ownedCiphers = await db
+			.selectFrom("ciphers")
+			.select(["id", "mutation_token"])
+			.where(textColumnInJson("id", ids))
+			.where("user_id", "=", user.id)
+			.where((eb) =>
+				eb.or([eb("purge_after", "is", null), eb("purge_after", ">", ts)]),
+			)
+			.execute();
+		if (ownedCiphers.length) {
+			const mutationToken = crypto.randomUUID();
+			const expectedState = JSON.stringify(ownedCiphers);
+			const [deleted] = await c.get("dbDialect").batch([
+				db
+					.updateTable("ciphers")
+					.set({
+						deleted_at: ts,
+						purge_after: ts,
+						updated_at: sql<number>`MAX(updated_at + 1, ${ts})`,
+						mutation_token: mutationToken,
+					})
+					.where("user_id", "=", user.id)
+					.where(sql<boolean>`EXISTS (
+						SELECT 1 FROM json_each(${expectedState}) expected
+						WHERE json_extract(expected.value, '$.id') = ciphers.id
+						  AND ciphers.mutation_token IS json_extract(expected.value, '$.mutation_token')
+					)`)
+					.compile(),
+				conditionalPersonalCipherBulkRevisionQuery(
+					db,
+					user.id,
+					mutationToken,
+					ts,
+				),
+			]);
+			const deletedCount = Number(deleted.numAffectedRows);
+			if (deletedCount > 0)
+				await safeWriteAuditEvent(db, {
+					actorUserId: user.id,
+					action: "cipher.delete.permanent.bulk",
+					category: "vault",
+					level: "warning",
+					targetType: "cipher",
+					metadata: {
+						...auditRequestMetadata(c.req.raw),
+						size: deletedCount,
+					},
+				});
+		}
 		return new Response(null, { status: 200 });
 	},
 );

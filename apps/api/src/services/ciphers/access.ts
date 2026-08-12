@@ -86,6 +86,27 @@ export function conditionalCipherRevisionQuery(
 	`.compile(db);
 }
 
+export function conditionalPersonalCipherBulkRevisionQuery(
+	db: Kysely<DB>,
+	userId: string,
+	mutationToken: string,
+	timestamp = now(),
+): CompiledQuery {
+	return sql`
+		INSERT INTO user_revisions (user_id, revision_date)
+		SELECT ${userId}, ${timestamp}
+		WHERE EXISTS (
+			SELECT 1 FROM ciphers
+			WHERE user_id = ${userId}
+			  AND mutation_token = ${mutationToken}
+		)
+		ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
+			user_revisions.revision_date + 1,
+			excluded.revision_date
+		)
+	`.compile(db);
+}
+
 export async function validateOrganizationCollections(
 	db: Kysely<DB>,
 	userId: string,
