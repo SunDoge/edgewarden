@@ -9,6 +9,7 @@ import {
 import {
 	acquireDataOperationLease,
 	releaseDataOperationLease,
+	renewDataOperationLease,
 } from "../services/backup/operation-lease";
 import { executeBatch } from "../services/db/batch";
 import {
@@ -17,6 +18,7 @@ import {
 	setConfigValue,
 } from "../services/db/config";
 import { runMaintenance } from "../services/maintenance";
+import { publishSendFileObject } from "../services/sends/file-storage";
 
 export interface DatabaseMaintenanceScenarioContext {
 	readonly database: D1Database;
@@ -67,7 +69,133 @@ export function registerDatabaseMaintenanceScenarios(
 			60,
 		);
 		assert.ok(recovered);
+		assert.equal(
+			await renewDataOperationLease(
+				context.database,
+				recovered,
+				timestamp + 100,
+				60,
+			),
+			true,
+		);
+		assert.equal(
+			await acquireDataOperationLease(
+				context.database,
+				"backup.blocked_by_renewal",
+				timestamp + 121,
+				60,
+			),
+			null,
+		);
 		await releaseDataOperationLease(context.database, recovered);
+		assert.equal(
+			await renewDataOperationLease(
+				context.database,
+				recovered,
+				timestamp + 122,
+				60,
+			),
+			false,
+		);
+	});
+
+	test("publishes immutable Send file versions and queues replaced objects atomically", async () => {
+		const { db } = await createDatabase(context.database);
+		const timestamp = Math.floor(Date.now() / 1000);
+		const user = await db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const sendId = crypto.randomUUID();
+		const fileId = crypto.randomUUID();
+		const initialKey = `sends/${sendId}/${fileId}`;
+		const firstKey = `${initialKey}.first.bin`;
+		const secondKey = `${initialKey}.second.bin`;
+		try {
+			await db
+				.insertInto("sends")
+				.values({
+					id: sendId,
+					user_id: user.id,
+					org_id: null,
+					type: 1,
+					name: "versioned-send",
+					notes: null,
+					data: JSON.stringify({ id: fileId, size: 1 }),
+					key: "encrypted-key",
+					password_hash: null,
+					password_salt: null,
+					password_iterations: null,
+					password_algorithm: null,
+					auth_type: 2,
+					emails: null,
+					max_access_count: null,
+					access_count: 0,
+					disabled: 0,
+					hide_email: null,
+					created_at: timestamp,
+					updated_at: timestamp,
+					expiration_date: null,
+					deletion_date: timestamp + 3600,
+					storage_key: initialKey,
+				})
+				.execute();
+			assert.equal(
+				await publishSendFileObject(
+					context.database,
+					{
+						sendId,
+						userId: user.id,
+						fileId,
+						storageKey: firstKey,
+					},
+					timestamp + 1,
+				),
+				true,
+			);
+			assert.equal(
+				await publishSendFileObject(
+					context.database,
+					{
+						sendId,
+						userId: user.id,
+						fileId,
+						storageKey: secondKey,
+					},
+					timestamp + 2,
+				),
+				true,
+			);
+			assert.equal(
+				await db
+					.selectFrom("sends")
+					.select("storage_key")
+					.where("id", "=", sendId)
+					.executeTakeFirstOrThrow()
+					.then((row) => row.storage_key),
+				secondKey,
+			);
+			assert.deepEqual(
+				new Set(
+					(
+						await db
+							.selectFrom("blob_gc_queue")
+							.select("object_key")
+							.where("object_key", "in", [initialKey, firstKey])
+							.execute()
+					).map((row) => row.object_key),
+				),
+				new Set([initialKey, firstKey]),
+			);
+		} finally {
+			await db.deleteFrom("sends").where("id", "=", sendId).execute();
+			await db
+				.deleteFrom("blob_gc_queue")
+				.where("object_key", "in", [initialKey, firstKey, secondKey])
+				.execute();
+			await db.destroy();
+		}
 	});
 	test("database enforces cipher ownership and type invariants", async () => {
 		const { db } = await createDatabase(context.database);

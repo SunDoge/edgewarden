@@ -122,6 +122,20 @@ export function createRestoredAttachmentObjectKey(
 	return `attachments/${cipherId}/${attachmentId}.${crypto.randomUUID()}.bin`;
 }
 
+export function createAttachmentUploadObjectKey(
+	cipherId: string,
+	attachmentId: string,
+): string {
+	return `attachments/${cipherId}/${attachmentId}.${crypto.randomUUID()}.bin`;
+}
+
+export function createSendFileUploadObjectKey(
+	sendId: string,
+	fileId: string,
+): string {
+	return `sends/${sendId}/${fileId}.${crypto.randomUUID()}.bin`;
+}
+
 export async function putBlobObject(
 	env: CloudflareBindings,
 	key: string,

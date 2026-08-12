@@ -16,6 +16,7 @@ import { loadRemoteBackupSession } from "../services/backup/remote-session";
 import {
 	acquireDataOperationLease,
 	releaseDataOperationLease,
+	requireDataOperationLeaseRenewal,
 } from "../services/backup/operation-lease";
 import { createBlobStore } from "../services/blob-store";
 import { errorResponse } from "../utils/response";
@@ -161,6 +162,7 @@ export const restoreRemoteBackup = factory.createHandlers(
 				destinationId,
 			);
 			const file = await session.download(path);
+			await requireDataOperationLeaseRenewal(c.env.DB, lease);
 			const checksumOk = await verifyBackupArchiveFileNameChecksum(
 				file.bytes,
 				file.fileName,
@@ -177,10 +179,13 @@ export const restoreRemoteBackup = factory.createHandlers(
 				c.get("user").id,
 				!!replaceExisting,
 				{
-					loadAttachment: async (blobName: string) =>
-						(await session.download(blobName)).bytes,
+					loadAttachment: async (blobName: string) => {
+						const blob = await session.download(blobName);
+						await requireDataOperationLeaseRenewal(c.env.DB, lease);
+						return blob.bytes;
+					},
 				},
-				undefined,
+				async () => requireDataOperationLeaseRenewal(c.env.DB, lease),
 				file.fileName,
 			);
 			await safeWriteAuditEvent(c.get("db"), {

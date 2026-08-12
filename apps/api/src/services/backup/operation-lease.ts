@@ -51,6 +51,41 @@ export async function releaseDataOperationLease(
 		.run();
 }
 
+export async function renewDataOperationLease(
+	db: D1Database,
+	lease: DataOperationLease,
+	timestamp = Math.floor(Date.now() / 1000),
+	leaseSeconds = DEFAULT_LEASE_SECONDS,
+): Promise<boolean> {
+	const expiresAt = timestamp + leaseSeconds;
+	const value = JSON.stringify({
+		token: lease.token,
+		operation: lease.operation,
+		expiresAt,
+	});
+	const result = await db
+		.prepare(`
+			UPDATE config SET value = ?
+			WHERE key = ?
+			  AND json_valid(value)
+			  AND json_extract(value, '$.token') = ?
+		`)
+		.bind(value, DATA_OPERATION_LEASE_CONFIG_KEY, lease.token)
+		.run();
+	if (Number(result.meta?.changes ?? 0) !== 1) return false;
+	lease.expiresAt = expiresAt;
+	return true;
+}
+
+export async function requireDataOperationLeaseRenewal(
+	db: D1Database,
+	lease: DataOperationLease,
+): Promise<void> {
+	if (!(await renewDataOperationLease(db, lease))) {
+		throw new Error(`Data operation lease was lost: ${lease.operation}`);
+	}
+}
+
 export async function readActiveDataOperationLeaseValue(
 	db: D1Database,
 	timestamp = Math.floor(Date.now() / 1000),

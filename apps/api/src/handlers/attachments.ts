@@ -4,13 +4,13 @@ import { factory } from "../http/factory";
 import { CreateAttachmentSchema } from "../schemas/attachments";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import {
-	deleteBlobObject,
-	getAttachmentObjectKey,
+	createAttachmentUploadObjectKey,
 	getStoredAttachmentObjectKey,
 	getBlobObject,
 	getBlobStorageMaxBytes,
 	putBlobObject,
 } from "../services/blob-store";
+import { discardUnpublishedBlob } from "../services/blob-gc";
 import { executeBatch, revisionQuery } from "../services/db/batch";
 import * as attachmentsDb from "../services/db/attachments";
 import { textColumnInJson } from "../services/db/json-array";
@@ -157,11 +157,6 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
 			? new Response(null, { status: 201 })
 			: errorResponse("Attachment not found", 404);
 	}
-	const objectKey = getAttachmentObjectKey(cipher.id, claims.attachmentId);
-	const existingObject = await getBlobObject(c.env, objectKey);
-	if (existingObject && existingObject.size !== claims.fileSize) {
-		await deleteBlobObject(c.env, objectKey);
-	}
 	const upload = await parseDirectUploadPayload(c.req.raw, {
 		expectedSize: claims.fileSize,
 		maxFileSize: getBlobStorageMaxBytes(
@@ -172,7 +167,11 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
 		sizeMismatchMessage: "Attachment size does not match metadata",
 	});
 	if (upload instanceof Response) return upload;
-	if (!existingObject || existingObject.size !== claims.fileSize) {
+	const objectKey = createAttachmentUploadObjectKey(
+		cipher.id,
+		claims.attachmentId,
+	);
+	try {
 		await putBlobObject(c.env, objectKey, upload.body, {
 			size: upload.size,
 			contentType: "application/octet-stream",
@@ -181,32 +180,42 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
 				attachmentId: claims.attachmentId,
 			},
 		});
+		const ts = Math.max(now(), cipher.updated_at + 1);
+		await executeBatch(c.get("dbDialect"), [
+			c
+				.get("db")
+				.insertInto("attachments")
+				.values({
+					id: claims.attachmentId,
+					cipher_id: cipher.id,
+					file_name: claims.fileName,
+					size: claims.fileSize,
+					size_name: sizeName(claims.fileSize),
+					key: claims.key,
+					storage_key: objectKey,
+					created_at: ts,
+				})
+				.onConflict((conflict) => conflict.column("id").doNothing())
+				.compile(),
+			c
+				.get("db")
+				.updateTable("ciphers")
+				.set({ updated_at: ts })
+				.where("id", "=", cipher.id)
+				.compile(),
+			...(await ownerRevisionQueries(c.get("db"), cipher, ts)),
+		]);
+	} catch (error) {
+		await discardUnpublishedBlob(c.env, objectKey).catch(() => undefined);
+		throw error;
 	}
-	const ts = Math.max(now(), cipher.updated_at + 1);
-	await executeBatch(c.get("dbDialect"), [
-		c
-			.get("db")
-			.insertInto("attachments")
-			.values({
-				id: claims.attachmentId,
-				cipher_id: cipher.id,
-				file_name: claims.fileName,
-				size: claims.fileSize,
-				size_name: sizeName(claims.fileSize),
-				key: claims.key,
-				storage_key: objectKey,
-				created_at: ts,
-			})
-			.onConflict((conflict) => conflict.column("id").doNothing())
-			.compile(),
-		c
-			.get("db")
-			.updateTable("ciphers")
-			.set({ updated_at: ts })
-			.where("id", "=", cipher.id)
-			.compile(),
-		...(await ownerRevisionQueries(c.get("db"), cipher, ts)),
-	]);
+	const published = await attachmentsDb.getByIdIncludingDeleted(
+		c.get("db"),
+		claims.attachmentId,
+	);
+	if (published?.storage_key !== objectKey) {
+		await discardUnpublishedBlob(c.env, objectKey);
+	}
 	return new Response(null, { status: 201 });
 });
 
