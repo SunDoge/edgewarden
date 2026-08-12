@@ -5,6 +5,7 @@ import {
 	db,
 	loadVaultSnapshot,
 	saveVaultSnapshot,
+	saveValidatedVaultSnapshot,
 } from "./vault-db";
 
 function snapshot(accountId: string) {
@@ -70,5 +71,16 @@ describe("encrypted vault cache", () => {
 		expect(await db.vaultByAccount.count()).toBe(0);
 		expect(await db.table("vault").count()).toBe(0);
 		expect(await loadVaultSnapshot()).toBeUndefined();
+	});
+
+	it("does not overwrite the last good snapshot after validation fails", async () => {
+		await saveVaultSnapshot(snapshot("account"));
+		const invalid = snapshot("account");
+		invalid.ciphers[0].name = "corrupted-ciphertext";
+
+		expect(await saveValidatedVaultSnapshot(invalid, false)).toBe(false);
+		expect((await loadVaultSnapshot())?.ciphers[0]?.name).toBe(
+			"2.encrypted-cipher-name",
+		);
 	});
 });

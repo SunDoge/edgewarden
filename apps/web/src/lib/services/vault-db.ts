@@ -90,6 +90,15 @@ export async function saveVaultSnapshot(
 	});
 }
 
+export async function saveValidatedVaultSnapshot(
+	data: Omit<VaultSnapshot, "accountId" | "syncedAt">,
+	validationPassed: boolean,
+): Promise<boolean> {
+	if (!validationPassed) return false;
+	await saveVaultSnapshot(data);
+	return true;
+}
+
 export async function loadVaultSnapshot(): Promise<VaultSnapshot | undefined> {
 	const active = await db.meta.get("activeAccountId");
 	return active ? db.vaultByAccount.get(active.value) : undefined;
