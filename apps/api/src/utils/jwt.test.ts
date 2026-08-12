@@ -1,17 +1,18 @@
 import assert from "node:assert";
+import { sign } from "hono/jwt";
 import { describe, test } from "vitest";
 import {
-	createJWT,
-	verifyJWT,
-	createRefreshToken,
-	hashRefreshToken,
-	createSendFileDownloadToken,
-	verifySendFileDownloadToken,
 	createAttachmentUploadToken,
-	verifyAttachmentUploadToken,
+	createJWT,
 	createRealtimeTicket,
+	createRefreshToken,
+	createSendFileDownloadToken,
 	deriveJwtPurposeSecret,
+	hashRefreshToken,
+	verifyAttachmentUploadToken,
+	verifyJWT,
 	verifyRealtimeTicket,
+	verifySendFileDownloadToken,
 } from "./jwt";
 
 describe("jwt utils", () => {
@@ -195,6 +196,19 @@ describe("jwt utils", () => {
 				),
 				null,
 			);
+		});
+
+		test("rejects correctly signed tickets with invalid claims", async () => {
+			const token = await sign(
+				{
+					sub: "",
+					sstamp: "security-stamp",
+					typ: "realtime",
+					exp: Math.floor(Date.now() / 1000) + 60,
+				},
+				await deriveJwtPurposeSecret(secret, "realtime"),
+			);
+			assert.equal(await verifyRealtimeTicket(token, secret), null);
 		});
 	});
 });
