@@ -1,4 +1,5 @@
 import { vValidator } from "@hono/valibot-validator";
+import { sql } from "kysely";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { checkIpRateLimit } from "../middleware/rate-limit";
@@ -109,30 +110,42 @@ export const registerAccount = factory.createHandlers(
 		const role = isBootstrap ? "admin" : "user";
 		const userId = crypto.randomUUID();
 		const ts = now();
-		const statements = [
-			db
-				.insertInto("users")
-				.values({
-					id: userId,
-					email,
-					name: body.name ?? null,
-					master_password_hash: passwordHash,
-					master_password_hint: body.masterPasswordHint ?? null,
-					key: body.key,
-					private_key: body.keys?.encryptedPrivateKey ?? null,
-					public_key: body.keys?.publicKey ?? null,
-					kdf_type: body.kdf,
-					kdf_iterations: body.kdfIterations,
-					kdf_memory: body.kdfMemory ?? null,
-					kdf_parallelism: body.kdfParallelism ?? null,
-					security_stamp: crypto.randomUUID(),
-					role,
-					created_at: ts,
-					updated_at: ts,
-				})
-				.compile(),
-			revisionQuery(db, userId, ts),
-		];
+		const userValues = {
+			id: userId,
+			email,
+			name: body.name ?? null,
+			master_password_hash: passwordHash,
+			master_password_hint: body.masterPasswordHint ?? null,
+			key: body.key,
+			private_key: body.keys?.encryptedPrivateKey ?? null,
+			public_key: body.keys?.publicKey ?? null,
+			kdf_type: body.kdf,
+			kdf_iterations: body.kdfIterations,
+			kdf_memory: body.kdfMemory ?? null,
+			kdf_parallelism: body.kdfParallelism ?? null,
+			security_stamp: crypto.randomUUID(),
+			role,
+			created_at: ts,
+			updated_at: ts,
+		};
+		const userInsert = invite
+			? db
+					.insertInto("users")
+					.columns(Object.keys(userValues) as Array<keyof typeof userValues>)
+					.expression(
+						db
+							.selectFrom("config")
+							.select(
+								Object.entries(userValues).map(([column, value]) =>
+									sql`${value}`.as(column),
+								),
+							)
+							.where("key", "=", inviteConsumptionLockKey(invite.code))
+							.where("value", "=", userId),
+					)
+					.compile()
+			: db.insertInto("users").values(userValues).compile();
+		const statements = [userInsert, revisionQuery(db, userId, ts)];
 		if (isBootstrap)
 			statements.unshift(
 				db
@@ -140,22 +153,34 @@ export const registerAccount = factory.createHandlers(
 					.values({ key: BOOTSTRAP_LOCK_KEY, value: userId })
 					.compile(),
 			);
-		if (invite)
+		if (invite) {
+			statements.unshift(
+				sql`
+					INSERT INTO config (key, value)
+					SELECT ${inviteConsumptionLockKey(invite.code)}, ${userId}
+					FROM invites
+					WHERE code = ${invite.code}
+					  AND status = 'active'
+					  AND expires_at > ${ts}
+					  AND lower(trim(email)) = ${email}
+				`.compile(db),
+			);
 			statements.push(
-				db
-					.insertInto("config")
-					.values({ key: inviteConsumptionLockKey(invite.code), value: userId })
-					.compile(),
 				db
 					.updateTable("invites")
 					.set({ status: "used", used_by: userId, updated_at: ts })
 					.where("code", "=", invite.code)
 					.where("status", "=", "active")
+					.where("expires_at", ">", ts)
+					.where(sql<boolean>`lower(trim(email)) = ${email}`)
 					.compile(),
 			);
+		}
 		try {
 			await executeBatch(c.get("dbDialect"), statements);
 		} catch (error) {
+			if (await usersDb.getUserByEmail(db, email))
+				return errorResponse("Email already taken.", 400);
 			if (isBootstrap || invite)
 				return errorResponse("Registration was already completed", 409);
 			throw error;
