@@ -2,6 +2,7 @@ import { vValidator } from "@hono/valibot-validator";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { SendAccessSchema } from "../schemas/sends";
+import { discardUnpublishedBlob } from "../services/blob-gc";
 import {
 	createSendFileUploadObjectKey,
 	getBlobObject,
@@ -9,9 +10,8 @@ import {
 	getStoredSendFileObjectKey,
 	putBlobObject,
 } from "../services/blob-store";
-import { discardUnpublishedBlob } from "../services/blob-gc";
-import { publishSendFileObject } from "../services/sends/file-storage";
 import * as sendsDb from "../services/db/sends";
+import { publishSendFileObject } from "../services/sends/file-storage";
 import { getSafeSendJwtSecret } from "../services/sends/jwt-secret";
 import {
 	verifySendPassword,
@@ -349,16 +349,18 @@ export const uploadPublicSendFile = factory.createHandlers(async (c) => {
 				fileId,
 			},
 		});
-		if (
-			!(await publishSendFileObject(c.env.DB, {
-				sendId: send.id,
-				userId: claims.userId,
-				fileId,
-				storageKey: candidateKey,
-			}))
-		) {
+		const publication = await publishSendFileObject(c.env.DB, {
+			sendId: send.id,
+			userId: claims.userId,
+			fileId,
+			storageKey: candidateKey,
+			expectedStorageKey: send.storage_key,
+		});
+		if (publication !== "published") {
 			await discardUnpublishedBlob(c.env, candidateKey);
-			return errorResponse("Send not found. Unable to save the file.", 404);
+			return publication === "conflict"
+				? errorResponse("Send file changed during upload.", 409)
+				: errorResponse("Send not found. Unable to save the file.", 404);
 		}
 	} catch (error) {
 		await discardUnpublishedBlob(c.env, candidateKey).catch(() => undefined);

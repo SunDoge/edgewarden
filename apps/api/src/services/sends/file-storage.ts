@@ -7,19 +7,11 @@ export async function publishSendFileObject(
 		userId: string;
 		fileId: string;
 		storageKey: string;
+		expectedStorageKey: string | null;
 	},
 	timestamp = now(),
-): Promise<boolean> {
+): Promise<"published" | "conflict" | "missing"> {
 	const results = await db.batch([
-		db
-			.prepare(`
-				INSERT OR IGNORE INTO blob_gc_queue (
-					object_key, attempts, next_attempt_at, last_error, created_at
-				)
-				SELECT storage_key, 0, ?, NULL, ? FROM sends
-				WHERE id = ? AND storage_key IS NOT NULL AND storage_key <> ?
-			`)
-			.bind(timestamp, timestamp, args.sendId, args.storageKey),
 		db
 			.prepare(`
 				UPDATE sends SET storage_key = ?, updated_at = ?
@@ -28,6 +20,7 @@ export async function publishSendFileObject(
 				  AND json_extract(data, '$.id') = ?
 				  AND deletion_date > ?
 				  AND purge_token IS NULL
+				  AND storage_key IS ?
 			`)
 			.bind(
 				args.storageKey,
@@ -36,6 +29,23 @@ export async function publishSendFileObject(
 				args.userId,
 				args.fileId,
 				timestamp,
+				args.expectedStorageKey,
+			),
+		db
+			.prepare(`
+				INSERT OR IGNORE INTO blob_gc_queue (
+					object_key, attempts, next_attempt_at, last_error, created_at
+				)
+				SELECT ?, 0, ?, NULL, ? FROM sends
+				WHERE id = ? AND storage_key = ? AND ? IS NOT NULL
+			`)
+			.bind(
+				args.expectedStorageKey,
+				timestamp,
+				timestamp,
+				args.sendId,
+				args.storageKey,
+				args.expectedStorageKey,
 			),
 		db
 			.prepare(`
@@ -49,5 +59,17 @@ export async function publishSendFileObject(
 			`)
 			.bind(timestamp, args.sendId, args.storageKey),
 	]);
-	return Number(results[1]?.meta?.changes ?? 0) === 1;
+	if (Number(results[0]?.meta?.changes ?? 0) === 1) return "published";
+	const stillUploadable = await db
+		.prepare(`
+			SELECT 1 FROM sends
+			WHERE id = ? AND user_id = ? AND type = 1
+			  AND json_valid(data)
+			  AND json_extract(data, '$.id') = ?
+			  AND deletion_date > ?
+			  AND purge_token IS NULL
+		`)
+		.bind(args.sendId, args.userId, args.fileId, timestamp)
+		.first();
+	return stillUploadable ? "conflict" : "missing";
 }
