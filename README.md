@@ -15,6 +15,8 @@ Deploy command: pnpm deploy
 
 The deploy command resolves or creates the named D1 database, applies every pending migration with Wrangler, and only then publishes the Worker once. It uses a temporary ignored config for the account-specific D1 ID, so deployment never rewrites the portable repository config. Wrangler provisions the named R2 bucket during the final deployment.
 
+Before the first build, select a custom API token under **Worker → Settings → Build → API token**. In addition to the normal Workers Builds permissions, it must grant **Account → D1 → Edit** for the target account. Cloudflare's automatically generated build token currently omits D1 access, while Edgewarden's deploy command must list/create the database and apply migrations. Keep the remaining generated-token permissions for Workers Scripts, R2 (or KV), account membership, and Workers Routes.
+
 Configure these required secrets in the deployment form:
 
 - `JWT_SECRET`: independently generated token-signing secret, at least 32 characters.
