@@ -37,7 +37,6 @@
 		"kysely-codegen": "^0.20.0",
 		"miniflare": "5.20260804.0-alpha",
 		"typescript": "^6.0.3",
-		"vitest": "^4.1.9",
-		"wrangler": "^4.4.0"
+		"vitest": "^4.1.9"
 	}
 }
