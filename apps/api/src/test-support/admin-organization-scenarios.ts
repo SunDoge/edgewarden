@@ -526,13 +526,27 @@ export function registerAdminOrganizationScenarios(
 	});
 
 	test("admits only one concurrent organization member invitation", async () => {
+		const targetEmail = `concurrent-invite-${crypto.randomUUID()}@example.com`;
+		const registered = await request("/api/accounts/register", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({
+				email: targetEmail,
+				name: "Concurrent Invite Target",
+				masterPasswordHash: MASTER_PASSWORD_HASH,
+				key: "encrypted-invite-target-key",
+				kdf: 0,
+				kdfIterations: 600_000,
+			}),
+		});
+		assert.equal(registered.status, 204, await registered.clone().text());
 		const owner = await context.database
 			.prepare("SELECT id FROM users WHERE email = ?")
 			.bind(EMAIL)
 			.first<{ id: string }>();
 		const target = await context.database
 			.prepare("SELECT id FROM users WHERE email = ?")
-			.bind(MEMBER_EMAIL)
+			.bind(targetEmail)
 			.first<{ id: string }>();
 		assert.ok(owner?.id && target?.id);
 		await context.database
@@ -600,7 +614,7 @@ export function registerAdminOrganizationScenarios(
 					"content-type": "application/json",
 				},
 				body: JSON.stringify({
-					email: MEMBER_EMAIL,
+					email: targetEmail,
 					role: "member",
 					accessAll: false,
 					key: "encrypted-member-key",
@@ -632,7 +646,7 @@ export function registerAdminOrganizationScenarios(
 				.prepare(
 					"SELECT COUNT(*) AS count FROM org_members WHERE org_id = ? AND email = ?",
 				)
-				.bind(orgId, MEMBER_EMAIL)
+				.bind(orgId, targetEmail)
 				.first<{ count: number }>()
 				.then((row) => Number(row?.count)),
 			1,
@@ -658,7 +672,7 @@ export function registerAdminOrganizationScenarios(
 			.bind(orgId)
 			.run();
 		await context.database
-			.prepare("UPDATE users SET public_key = NULL WHERE id = ?")
+			.prepare("DELETE FROM users WHERE id = ?")
 			.bind(target.id)
 			.run();
 	});
