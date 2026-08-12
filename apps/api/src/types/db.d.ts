@@ -19,6 +19,7 @@ export interface Attachments {
 	cipher_id: string;
 	created_at: number;
 	deleted_at: number | null;
+	deletion_token: string | null;
 	file_name: string;
 	id: string;
 	key: string | null;

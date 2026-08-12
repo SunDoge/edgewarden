@@ -413,8 +413,12 @@ export async function buildBackupArchive(
 		(row) => Number(row.type) !== 1 || includeAttachments,
 	);
 	const exportedAttachmentRows = sourceAttachmentRows.map(
-		({ storage_key: _storageKey, deleted_at: _deletedAt, ...row }) =>
-			row as SqlRow,
+		({
+			storage_key: _storageKey,
+			deleted_at: _deletedAt,
+			deletion_token: _deletionToken,
+			...row
+		}) => row as SqlRow,
 	);
 	const attachmentBlobs = sourceAttachmentRows.map((row) => {
 		const cipherId = String(row.cipher_id || "").trim();

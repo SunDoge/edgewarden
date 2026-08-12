@@ -182,7 +182,8 @@ async function purgeAttachments(
 	let purged = 0;
 	for (const attachment of attachments) {
 		try {
-			await deleteBlobObject(env, getStoredAttachmentObjectKey(attachment));
+			const objectKey = getStoredAttachmentObjectKey(attachment);
+			await deleteBlobObject(env, objectKey);
 			purged += await deleteWithPurgeAudit(
 				env.DB,
 				[
@@ -194,10 +195,18 @@ async function purgeAttachments(
 					},
 				],
 				timestamp,
-				"SELECT 1 FROM attachments WHERE id = ? AND deleted_at IS NOT NULL",
-				[attachment.id],
-				"DELETE FROM attachments WHERE id = ? AND deleted_at IS NOT NULL",
-				[attachment.id],
+				`SELECT 1 FROM attachments
+				 WHERE id = ?
+				   AND deleted_at IS NOT NULL
+				   AND deletion_token IS ?
+				   AND coalesce(storage_key, 'attachments/' || cipher_id || '/' || id || '.bin') = ?`,
+				[attachment.id, attachment.deletion_token, objectKey],
+				`DELETE FROM attachments
+				 WHERE id = ?
+				   AND deleted_at IS NOT NULL
+				   AND deletion_token IS ?
+				   AND coalesce(storage_key, 'attachments/' || cipher_id || '/' || id || '.bin') = ?`,
+				[attachment.id, attachment.deletion_token, objectKey],
 			);
 		} catch (error) {
 			console.error(

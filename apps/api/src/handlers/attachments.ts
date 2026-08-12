@@ -15,9 +15,9 @@ import * as attachmentsDb from "../services/db/attachments";
 import {
 	attachmentCipherUpdateQuery,
 	attachmentRevisionQuery,
+	deletedAttachmentCipherUpdateQuery,
+	deletedAttachmentRevisionQuery,
 	executeBatch,
-	organizationRevisionQuery,
-	revisionQuery,
 } from "../services/db/batch";
 import * as ciphersDb from "../services/db/ciphers";
 import { textColumnInJson } from "../services/db/json-array";
@@ -32,17 +32,6 @@ import {
 } from "../utils/jwt";
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
-
-async function ownerRevisionQueries(
-	db: any,
-	cipher: { user_id: string | null; org_id: string | null },
-	timestamp: number,
-) {
-	if (cipher.user_id) return [revisionQuery(db, cipher.user_id, timestamp)];
-	return cipher.org_id
-		? [organizationRevisionQuery(db, cipher.org_id, timestamp)]
-		: [];
-}
 
 async function canUploadAttachment(
 	db: any,
@@ -247,23 +236,30 @@ export const deleteAttachment = factory.createHandlers(async (c) => {
 	const attachment = await attachmentsDb.getById(c.get("db"), id);
 	if (!attachment || attachment.cipher_id !== cipher.id)
 		return errorResponse("Attachment not found", 404);
-	const ts = now();
-	await executeBatch(c.get("dbDialect"), [
-		c
-			.get("db")
-			.updateTable("attachments")
-			.set({ deleted_at: ts })
-			.where("id", "=", id)
-			.where("cipher_id", "=", cipher.id)
-			.compile(),
-		c
-			.get("db")
-			.updateTable("ciphers")
-			.set({ updated_at: ts })
-			.where("id", "=", cipher.id)
-			.compile(),
-		...(await ownerRevisionQueries(c.get("db"), cipher, ts)),
-	]);
+	const ts = Math.max(now(), cipher.updated_at + 1);
+	const deletionToken = crypto.randomUUID();
+	const [deleted] = await c
+		.get("dbDialect")
+		.batch([
+			c
+				.get("db")
+				.updateTable("attachments")
+				.set({ deleted_at: ts, deletion_token: deletionToken })
+				.where("id", "=", id)
+				.where("cipher_id", "=", cipher.id)
+				.where("deleted_at", "is", null)
+				.compile(),
+			deletedAttachmentCipherUpdateQuery(
+				c.get("db"),
+				cipher.id,
+				id,
+				deletionToken,
+				ts,
+			),
+			deletedAttachmentRevisionQuery(c.get("db"), id, deletionToken, ts),
+		]);
+	if (deleted.numAffectedRows !== 1n)
+		return errorResponse("Attachment not found", 404);
 	await safeWriteAuditEvent(c.get("db"), {
 		actorUserId: c.get("user").id,
 		action: "attachment.delete",
