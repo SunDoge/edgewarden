@@ -492,6 +492,144 @@ export function registerAdminOrganizationScenarios(
 		);
 	});
 
+	test("admits only one concurrent organization member invitation", async () => {
+		const owner = await context.database
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(EMAIL)
+			.first<{ id: string }>();
+		const target = await context.database
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(MEMBER_EMAIL)
+			.first<{ id: string }>();
+		assert.ok(owner?.id && target?.id);
+		await context.database
+			.prepare("UPDATE users SET public_key = ? WHERE id = ?")
+			.bind("member-invitation-public-key", target.id)
+			.run();
+		const timestamp = Math.floor(Date.now() / 1000);
+		const orgId = crypto.randomUUID();
+		const ownerMemberId = crypto.randomUUID();
+		const collectionId = crypto.randomUUID();
+		await context.database.batch([
+			context.database
+				.prepare(
+					"INSERT INTO organizations (id,name,owner_id,created_at,updated_at) VALUES (?,?,?,?,?)",
+				)
+				.bind(
+					orgId,
+					"Concurrent invitation org",
+					owner.id,
+					timestamp,
+					timestamp,
+				),
+			context.database
+				.prepare(
+					"INSERT INTO org_members (id,org_id,user_id,email,role,status,access_all,key,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+				)
+				.bind(
+					ownerMemberId,
+					orgId,
+					owner.id,
+					EMAIL,
+					"owner",
+					"confirmed",
+					1,
+					"owner-key",
+					timestamp,
+					timestamp,
+				),
+			context.database
+				.prepare(
+					"INSERT INTO collections (id,org_id,name,created_at,updated_at) VALUES (?,?,?,?,?)",
+				)
+				.bind(
+					collectionId,
+					orgId,
+					"invitation-collection",
+					timestamp,
+					timestamp,
+				),
+		]);
+		const ownerRevision = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(owner.id)
+			.first<{ revision_date: number }>();
+		const targetRevision = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(target.id)
+			.first<{ revision_date: number }>();
+		assert.ok(ownerRevision && targetRevision);
+		const invite = () =>
+			request(`/api/organizations/${orgId}/members`, {
+				method: "POST",
+				headers: {
+					authorization: `Bearer ${context.accessToken}`,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					email: MEMBER_EMAIL,
+					role: "member",
+					accessAll: false,
+					key: "encrypted-member-key",
+					collections: [
+						{
+							id: collectionId,
+							readOnly: true,
+							hidePasswords: false,
+						},
+					],
+				}),
+			});
+		const responses = await Promise.all([
+			invite(),
+			invite(),
+			invite(),
+			invite(),
+		]);
+		assert.equal(
+			responses.filter((response) => response.status === 201).length,
+			1,
+		);
+		assert.equal(
+			responses.filter((response) => response.status === 409).length,
+			3,
+		);
+		assert.equal(
+			await context.database
+				.prepare(
+					"SELECT COUNT(*) AS count FROM org_members WHERE org_id = ? AND email = ?",
+				)
+				.bind(orgId, MEMBER_EMAIL)
+				.first<{ count: number }>()
+				.then((row) => Number(row?.count)),
+			1,
+		);
+		assert.equal(
+			await context.database
+				.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+				.bind(owner.id)
+				.first<{ revision_date: number }>()
+				.then((row) => row?.revision_date),
+			ownerRevision.revision_date + 1,
+		);
+		assert.equal(
+			await context.database
+				.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+				.bind(target.id)
+				.first<{ revision_date: number }>()
+				.then((row) => row?.revision_date),
+			targetRevision.revision_date + 1,
+		);
+		await context.database
+			.prepare("DELETE FROM organizations WHERE id = ?")
+			.bind(orgId)
+			.run();
+		await context.database
+			.prepare("UPDATE users SET public_key = NULL WHERE id = ?")
+			.bind(target.id)
+			.run();
+	});
+
 	test("enforces organization collection visibility and read-only writes", async () => {
 		const owner = await context.database
 			.prepare("SELECT id FROM users WHERE email = ?")
