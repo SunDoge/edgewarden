@@ -5,7 +5,11 @@ import {
 	CreateCollectionSchema,
 	UpdateCollectionSchema,
 } from "../schemas/organizations";
-import { collectionRevisionQuery, executeBatch } from "../services/db/batch";
+import {
+	collectionRevisionQuery,
+	conditionalCollectionRevisionQuery,
+	executeBatch,
+} from "../services/db/batch";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
 
@@ -150,18 +154,29 @@ export const updateCollection = factory.createHandlers(
 	vValidator("json", UpdateCollectionSchema),
 	async (c) => {
 		const collection = c.get("collection");
-		const ts = now();
+		const ts = Math.max(now(), collection.updated_at + 1);
+		const mutationToken = crypto.randomUUID();
 		const [updated] = await c.get("dbDialect").batch([
 			c
 				.get("db")
 				.updateTable("collections")
-				.set({ name: c.req.valid("json").name, updated_at: ts })
+				.set({
+					name: c.req.valid("json").name,
+					updated_at: ts,
+					mutation_token: mutationToken,
+				})
 				.where("id", "=", collection.id)
+				.where(sql<boolean>`mutation_token IS ${collection.mutation_token}`)
 				.compile(),
-			collectionRevisionQuery(c.get("db"), collection.id, ts),
+			conditionalCollectionRevisionQuery(
+				c.get("db"),
+				collection.id,
+				mutationToken,
+				ts,
+			),
 		]);
 		if (updated.numAffectedRows !== 1n)
-			return errorResponse("Collection not found", 404);
+			return errorResponse("Collection changed during update", 409);
 		return c.json(
 			collectionResponse({
 				...collection,
@@ -175,29 +190,37 @@ export const updateCollection = factory.createHandlers(
 export const deleteCollection = factory.createHandlers(async (c) => {
 	const db = c.get("db");
 	const collection = c.get("collection");
-	const exclusivelyLinkedCipher = await db
-		.selectFrom("cipher_collections as current_link")
-		.select("current_link.cipher_id")
-		.where("current_link.collection_id", "=", collection.id)
-		.where(
-			sql<boolean>`not exists (
+	const ts = now();
+	const mutationToken = crypto.randomUUID();
+	const [claimed, , deleted] = await c.get("dbDialect").batch([
+		db
+			.updateTable("collections")
+			.set({ mutation_token: mutationToken })
+			.where("id", "=", collection.id)
+			.where(sql<boolean>`mutation_token IS ${collection.mutation_token}`)
+			.where(sql<boolean>`not exists (
 				select 1
-				from cipher_collections as other_link
-				where other_link.cipher_id = current_link.cipher_id
-					and other_link.collection_id <> ${collection.id}
-			)`,
-		)
-		.limit(1)
-		.executeTakeFirst();
-	if (exclusivelyLinkedCipher)
+				from cipher_collections as current_link
+				where current_link.collection_id = collections.id
+					and not exists (
+						select 1
+						from cipher_collections as other_link
+						where other_link.cipher_id = current_link.cipher_id
+							and other_link.collection_id <> collections.id
+					)
+			)`)
+			.compile(),
+		conditionalCollectionRevisionQuery(db, collection.id, mutationToken, ts),
+		db
+			.deleteFrom("collections")
+			.where("id", "=", collection.id)
+			.where("mutation_token", "=", mutationToken)
+			.compile(),
+	]);
+	if (claimed.numAffectedRows !== 1n || deleted.numAffectedRows !== 1n)
 		return errorResponse(
-			"Move or delete items that only belong to this collection first",
+			"Collection changed or still has exclusively linked items",
 			409,
 		);
-	const ts = now();
-	await executeBatch(c.get("dbDialect"), [
-		collectionRevisionQuery(db, collection.id, ts),
-		db.deleteFrom("collections").where("id", "=", collection.id).compile(),
-	]);
 	return new Response(null, { status: 204 });
 });

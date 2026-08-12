@@ -107,6 +107,7 @@ export interface CollectionMembers {
 export interface Collections {
 	created_at: number;
 	id: string;
+	mutation_token: string | null;
 	name: string;
 	org_id: string;
 	updated_at: number;
