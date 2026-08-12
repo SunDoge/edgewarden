@@ -5,12 +5,22 @@ import type { BlobStore } from "../blob-store";
 import { BACKUP_SETTINGS_CONFIG_KEY } from "./config";
 import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 import { exportPortableBackupSettingsEnvelope } from "./settings-crypto";
+import {
+	buildBackupFileNameInTimeZone,
+	getBackupArchiveChecksumPrefix,
+} from "./archive-integrity";
+
+export {
+	extractBackupFileChecksumPrefix,
+	inspectBackupArchiveFileNameChecksum,
+	verifyBackupArchiveFileNameChecksum,
+} from "./archive-integrity";
+export type { BackupFileIntegrityCheckResult } from "./archive-integrity";
 
 type SqlRow = Record<string, string | number | null>;
 
 const BACKUP_FORMAT_VERSION = 1;
 const BACKUP_RUNNER_LOCK_CONFIG_KEY = "backup.runner.lock.v1";
-const BACKUP_FILE_HASH_PREFIX_LENGTH = 5;
 const BACKUP_TEXT_COMPRESSION_LEVEL = 0;
 const BACKUP_JSON_INDENT = 2;
 const MAX_BACKUP_ARCHIVE_BYTES = 64 * 1024 * 1024;
@@ -79,13 +89,6 @@ export interface BackupArchiveBundle {
 	manifest: BackupManifest;
 }
 
-export interface BackupFileIntegrityCheckResult {
-	hasChecksumPrefix: boolean;
-	expectedPrefix: string | null;
-	actualPrefix: string;
-	matches: boolean;
-}
-
 export interface BuildBackupArchiveOptions {
 	includeAttachments?: boolean;
 	blobStore?: BlobStore | null;
@@ -122,71 +125,6 @@ function sanitizeConfigRowsForExport(rows: SqlRow[]): SqlRow[] {
 		sanitized.push({ ...row });
 	}
 	return sanitized;
-}
-
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
-	const digest = await crypto.subtle.digest("SHA-256", bytes);
-	return Array.from(new Uint8Array(digest))
-		.map((byte) => byte.toString(16).padStart(2, "0"))
-		.join("");
-}
-
-function getDateParts(date: Date, timeZone: string): string {
-	const formatter = new Intl.DateTimeFormat("en-CA", {
-		timeZone,
-		year: "numeric",
-		month: "2-digit",
-		day: "2-digit",
-		hour: "2-digit",
-		minute: "2-digit",
-		second: "2-digit",
-		hourCycle: "h23",
-	});
-	const parts = formatter.formatToParts(date);
-	const pick = (type: string): string =>
-		parts.find((part) => part.type === type)?.value || "";
-	return `${pick("year")}${pick("month")}${pick("day")}_${pick("hour")}${pick("minute")}${pick("second")}`;
-}
-
-function buildBackupFileNameInTimeZone(
-	date: Date = new Date(),
-	checksumPrefix: string | null = null,
-	timeZone = "UTC",
-): string {
-	const parts = getDateParts(date, timeZone);
-	const suffix = checksumPrefix ? `_${checksumPrefix}` : "";
-	return `edgewarden_backup_${parts}${suffix}.zip`;
-}
-
-export function extractBackupFileChecksumPrefix(
-	fileName: string,
-): string | null {
-	const normalized = String(fileName || "").trim();
-	const match = normalized.match(/_([0-9a-f]{5})\.zip$/i);
-	return match ? match[1].toLowerCase() : null;
-}
-
-export async function inspectBackupArchiveFileNameChecksum(
-	bytes: Uint8Array,
-	fileName: string,
-): Promise<BackupFileIntegrityCheckResult> {
-	const expectedPrefix = extractBackupFileChecksumPrefix(fileName);
-	const actualHash = await sha256Hex(bytes);
-	const actualPrefix = actualHash.slice(0, BACKUP_FILE_HASH_PREFIX_LENGTH);
-	return {
-		hasChecksumPrefix: !!expectedPrefix,
-		expectedPrefix,
-		actualPrefix,
-		matches: !expectedPrefix || actualPrefix === expectedPrefix,
-	};
-}
-
-export async function verifyBackupArchiveFileNameChecksum(
-	bytes: Uint8Array,
-	fileName: string,
-): Promise<boolean> {
-	const result = await inspectBackupArchiveFileNameChecksum(bytes, fileName);
-	return result.matches;
 }
 
 function validateArchiveSize(bytes: Uint8Array): void {
@@ -518,10 +456,7 @@ export async function buildBackupArchive(
 		includeAttachments,
 	});
 	const bytes = zipSync(createZipEntries(files));
-	const fileHashPrefix = (await sha256Hex(bytes)).slice(
-		0,
-		BACKUP_FILE_HASH_PREFIX_LENGTH,
-	);
+	const fileHashPrefix = await getBackupArchiveChecksumPrefix(bytes);
 	const backupTimeZone = options.timeZone || "UTC";
 	const fileName = buildBackupFileNameInTimeZone(
 		date,
