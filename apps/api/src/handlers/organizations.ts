@@ -1,4 +1,5 @@
 import { vValidator } from "@hono/valibot-validator";
+import { sql } from "kysely";
 import { factory } from "../http/factory";
 import {
 	CreateOrganizationSchema,
@@ -10,7 +11,6 @@ import { verifyPassword } from "../services/auth";
 import {
 	conditionalOrganizationRevisionQuery,
 	executeBatch,
-	organizationRevisionQuery,
 	revisionQuery,
 } from "../services/db/batch";
 import { errorResponse } from "../utils/response";
@@ -150,16 +150,47 @@ export const updateOrganization = factory.createHandlers(
 	async (c) => {
 		const db = c.get("db");
 		const member = c.get("orgMember");
-		const ts = now();
+		const existing = await db
+			.selectFrom("organizations")
+			.selectAll()
+			.where("id", "=", member.org_id)
+			.where("deletion_requested_at", "is", null)
+			.executeTakeFirst();
+		if (!existing) return errorResponse("Organization not found", 404);
+		const ts = Math.max(now(), existing.updated_at + 1);
 		const name = c.req.valid("json").name;
-		await executeBatch(c.get("dbDialect"), [
+		const mutationToken = crypto.randomUUID();
+		const [updated] = await c.get("dbDialect").batch([
 			db
 				.updateTable("organizations")
-				.set({ name, updated_at: ts })
+				.set({ name, updated_at: ts, deletion_token: mutationToken })
 				.where("id", "=", member.org_id)
+				.where("deletion_requested_at", "is", null)
+				.where(sql<boolean>`deletion_token IS ${existing.deletion_token}`)
+				.where((eb) =>
+					eb.exists(
+						db
+							.selectFrom("org_members as current_owner")
+							.select("current_owner.id")
+							.where("current_owner.id", "=", member.id)
+							.where("current_owner.org_id", "=", member.org_id)
+							.where("current_owner.role", "=", "owner")
+							.where("current_owner.status", "=", "confirmed")
+							.where(
+								sql<boolean>`current_owner.mutation_token IS ${member.mutation_token}`,
+							),
+					),
+				)
 				.compile(),
-			organizationRevisionQuery(db, member.org_id, ts),
+			conditionalOrganizationRevisionQuery(
+				db,
+				member.org_id,
+				mutationToken,
+				ts,
+			),
 		]);
+		if (updated.numAffectedRows !== 1n)
+			return errorResponse("Organization changed during update", 409);
 		const org = await db
 			.selectFrom("organizations")
 			.selectAll()
@@ -186,6 +217,14 @@ export const deleteOrganization = factory.createHandlers(
 		const db = c.get("db");
 		const timestamp = now();
 		const deletionToken = crypto.randomUUID();
+		const member = c.get("orgMember");
+		const existing = await db
+			.selectFrom("organizations")
+			.select("deletion_token")
+			.where("id", "=", orgId)
+			.where("deletion_requested_at", "is", null)
+			.executeTakeFirst();
+		if (!existing) return new Response(null, { status: 204 });
 		const ownsDeletion = db
 			.selectFrom("organizations")
 			.select("id")
@@ -201,20 +240,39 @@ export const deleteOrganization = factory.createHandlers(
 				})
 				.where("id", "=", orgId)
 				.where("deletion_requested_at", "is", null)
+				.where(sql<boolean>`deletion_token IS ${existing.deletion_token}`)
+				.where((eb) =>
+					eb.exists(
+						db
+							.selectFrom("org_members as current_owner")
+							.select("current_owner.id")
+							.where("current_owner.id", "=", member.id)
+							.where("current_owner.org_id", "=", orgId)
+							.where("current_owner.role", "=", "owner")
+							.where("current_owner.status", "=", "confirmed")
+							.where(
+								sql<boolean>`current_owner.mutation_token IS ${member.mutation_token}`,
+							),
+					),
+				)
 				.compile(),
 			db
 				.updateTable("ciphers")
 				.set({
 					deleted_at: timestamp,
 					purge_after: timestamp,
-					updated_at: timestamp,
+					updated_at: sql<number>`MAX(updated_at + 1, ${timestamp})`,
+					mutation_token: deletionToken,
 				})
 				.where("org_id", "=", orgId)
 				.where(({ exists }) => exists(ownsDeletion))
 				.compile(),
 			db
 				.updateTable("sends")
-				.set({ deletion_date: timestamp, updated_at: timestamp })
+				.set({
+					deletion_date: timestamp,
+					updated_at: sql<number>`MAX(updated_at + 1, ${timestamp})`,
+				})
 				.where("org_id", "=", orgId)
 				.where(({ exists }) => exists(ownsDeletion))
 				.compile(),
