@@ -17,6 +17,8 @@ import {
 import { drainBlobGcQueue } from "../services/blob-gc";
 import type { BlobStore } from "../services/blob-store";
 import {
+	attachmentCipherUpdateQuery,
+	attachmentRevisionQuery,
 	collectionRevisionQuery,
 	conditionalUserRevisionQuery,
 	executeBatch,
@@ -202,6 +204,101 @@ export function registerDatabaseMaintenanceScenarios(
 			await db
 				.deleteFrom("collections")
 				.where("id", "=", collectionId)
+				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("publishes attachment metadata side effects only once", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const cipher = await db
+			.selectFrom("ciphers as cipher")
+			.innerJoin("users as user", "user.id", "cipher.user_id")
+			.select(["cipher.id", "cipher.updated_at", "user.id as user_id"])
+			.where("user.email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const revision = await db
+			.selectFrom("user_revisions")
+			.select("revision_date")
+			.where("user_id", "=", cipher.user_id)
+			.executeTakeFirstOrThrow();
+		const attachmentId = crypto.randomUUID();
+		const timestamp = Math.max(
+			Math.floor(Date.now() / 1000),
+			cipher.updated_at + 1,
+		);
+		const keys = [
+			`attachments/${cipher.id}/${attachmentId}.first.bin`,
+			`attachments/${cipher.id}/${attachmentId}.second.bin`,
+		];
+		let revisionAfterFirst = revision.revision_date;
+		try {
+			for (const [index, storageKey] of keys.entries()) {
+				await executeBatch(dialect, [
+					db
+						.insertInto("attachments")
+						.values({
+							id: attachmentId,
+							cipher_id: cipher.id,
+							file_name: "encrypted-name",
+							size: 4,
+							size_name: "4 Bytes",
+							key: "encrypted-key",
+							storage_key: storageKey,
+							created_at: timestamp,
+						})
+						.onConflict((conflict) => conflict.column("id").doNothing())
+						.compile(),
+					attachmentCipherUpdateQuery(
+						db,
+						cipher.id,
+						attachmentId,
+						storageKey,
+						timestamp,
+					),
+					attachmentRevisionQuery(db, attachmentId, storageKey, timestamp),
+				]);
+				if (index === 0)
+					revisionAfterFirst = await db
+						.selectFrom("user_revisions")
+						.select("revision_date")
+						.where("user_id", "=", cipher.user_id)
+						.executeTakeFirstOrThrow()
+						.then((row) => row.revision_date);
+			}
+			assert.ok(revisionAfterFirst > revision.revision_date);
+			assert.equal(
+				await db
+					.selectFrom("attachments")
+					.select("storage_key")
+					.where("id", "=", attachmentId)
+					.executeTakeFirstOrThrow()
+					.then((row) => row.storage_key),
+				keys[0],
+			);
+			assert.equal(
+				await db
+					.selectFrom("user_revisions")
+					.select("revision_date")
+					.where("user_id", "=", cipher.user_id)
+					.executeTakeFirstOrThrow()
+					.then((row) => row.revision_date),
+				revisionAfterFirst,
+			);
+		} finally {
+			await db
+				.deleteFrom("attachments")
+				.where("id", "=", attachmentId)
+				.execute();
+			await db
+				.updateTable("ciphers")
+				.set({ updated_at: cipher.updated_at })
+				.where("id", "=", cipher.id)
+				.execute();
+			await db
+				.updateTable("user_revisions")
+				.set({ revision_date: revision.revision_date })
+				.where("user_id", "=", cipher.user_id)
 				.execute();
 			await db.destroy();
 		}
