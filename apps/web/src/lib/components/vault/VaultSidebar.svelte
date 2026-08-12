@@ -39,6 +39,7 @@ let {
 	onRenameFolder,
 	onDeleteFolder,
 	onDeleteAllFolders,
+	onNavigate,
 }: {
 	activeCategory: VaultCategory;
 	activeFolder: string | null;
@@ -48,6 +49,7 @@ let {
 	onRenameFolder: (folder: FolderResponse) => void;
 	onDeleteFolder: (folder: FolderResponse) => void;
 	onDeleteAllFolders: () => void;
+	onNavigate?: () => void;
 } = $props();
 
 const filters = $derived([
@@ -116,10 +118,16 @@ const adminTools = [
 function selectCategory(category: VaultCategory) {
 	activeCategory = category;
 	activeFolder = null;
+	onNavigate?.();
+}
+
+function navigateTo(href: string) {
+	onNavigate?.();
+	void goto(href);
 }
 </script>
 
-<aside class="flex w-64 shrink-0 flex-col overflow-y-auto border-r bg-background p-4">
+<aside class="flex h-full w-64 shrink-0 flex-col overflow-y-auto border-r bg-background p-4">
 	<Button class="mb-6 w-full gap-2" onclick={onCreate}>
 		<Plus data-icon="inline-start" />
 		添加新条目
@@ -152,7 +160,7 @@ function selectCategory(category: VaultCategory) {
 		<Separator class="my-2" />
 		<p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">工具与设置</p>
 		{#each tools as item (item.href)}
-			<button class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted" onclick={() => goto(item.href)}>
+			<button class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted" onclick={() => navigateTo(item.href)}>
 				<item.icon class="size-4" />
 				<span>{item.label}</span>
 			</button>
@@ -162,7 +170,7 @@ function selectCategory(category: VaultCategory) {
 			<Separator class="my-2" />
 			<p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">管理</p>
 			{#each adminTools as item (item.href)}
-				<button class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted" onclick={() => goto(item.href)}>
+				<button class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted" onclick={() => navigateTo(item.href)}>
 					<item.icon class="size-4" />
 					<span>{item.label}</span>
 				</button>
@@ -182,7 +190,7 @@ function selectCategory(category: VaultCategory) {
 		</div>
 		{#each vault.folders as folder (folder.id)}
 			<div class="group flex w-full items-center justify-between rounded-lg text-left text-sm font-medium transition-colors {activeFolder === folder.id ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'}">
-				<button class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left font-medium" onclick={() => { activeFolder = folder.id; activeCategory = 'all'; }}>
+				<button class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left font-medium" onclick={() => { activeFolder = folder.id; activeCategory = 'all'; onNavigate?.(); }}>
 					<Folder class="size-4 shrink-0" />
 					<span class="truncate">{folder.name}</span>
 				</button>

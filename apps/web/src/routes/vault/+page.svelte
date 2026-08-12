@@ -667,6 +667,7 @@ async function toggleFavorite(item: any) {
 				onRenameFolder={openRenameFolder}
 				onDeleteFolder={openDeleteFolder}
 				onDeleteAllFolders={() => (deleteAllFoldersDialogOpen = true)}
+				onNavigate={() => mobileSidebarOpen = false}
 			/>
 		</div>
 
