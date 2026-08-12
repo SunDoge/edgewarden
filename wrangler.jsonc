@@ -11,12 +11,14 @@
 	"d1_databases": [
 		{
 			"binding": "DB",
+			"database_name": "edgewarden-db",
 			"migrations_dir": "apps/api/migrations"
 		}
 	],
 	"r2_buckets": [
 		{
-			"binding": "ATTACHMENTS_R2"
+			"binding": "ATTACHMENTS_R2",
+			"bucket_name": "edgewarden-attachments"
 		}
 	],
 	"secrets": {

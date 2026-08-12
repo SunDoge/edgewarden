@@ -13,7 +13,7 @@ Build command:  pnpm build
 Deploy command: pnpm deploy
 ```
 
-Cloudflare automatically provisions and binds the required D1 database and R2 bucket. On the first deployment, the deploy command bootstraps missing auto-provisioned resources, applies every pending D1 migration through the `DB` binding, and publishes the Worker again. Later deployments retain the safer migration-before-publish order.
+Cloudflare automatically provisions and binds the named D1 database and R2 bucket. Deployment publishes the Worker once; on its first request, the Worker applies pending generated D1 migrations before any route handler runs. Runtime initialization and Wrangler share the standard `d1_migrations` ledger, so later requests and explicit migration commands skip migrations already applied.
 
 Configure these required secrets in the deployment form:
 
@@ -62,7 +62,7 @@ pnpm db:migrate:local
 pnpm db:migrate:remote
 ```
 
-`pnpm deploy` intentionally runs the remote migration command before `wrangler deploy`. Applied migrations are tracked by D1 and are not executed again.
+Normally `pnpm deploy` is sufficient. The remote migration command remains available for operators who deliberately want to apply a migration before publishing compatible application code; both paths share Wrangler's migration ledger and remain safe to run repeatedly.
 
 ## Development and operations
 

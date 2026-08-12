@@ -11,6 +11,7 @@
 	"d1_databases": [
 		{
 			"binding": "DB",
+			"database_name": "edgewarden-db",
 			"migrations_dir": "apps/api/migrations"
 		}
 	],

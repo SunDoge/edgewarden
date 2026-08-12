@@ -10,6 +10,7 @@ import {
 	generate,
 	SqliteDialect as CodegenSqliteDialect,
 } from "kysely-codegen";
+import "./generate-runtime-migrations.mjs";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dir, "..");

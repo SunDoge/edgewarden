@@ -4,10 +4,10 @@
 
 1. Export an instance backup and verify its filename checksum in the backup center.
 2. Read the release notes for new bindings or secrets.
-3. Deploy normally. `pnpm deploy` applies pending D1 migrations before publishing; `deploy:kv` does the same for the KV configuration.
+3. Deploy normally. `pnpm deploy` publishes once; the first request applies pending generated D1 migrations before entering any route. `deploy:kv` does the same with the KV configuration.
 4. Run the compatibility smoke test and verify Web Vault login, sync, and attachment download.
 
-After the first real deployment, never rewrite an applied migration. Add a new numbered migration, regenerate `apps/api/src/types/db.d.ts`, and test both a fresh schema and an upgrade from the preceding release.
+After the first real deployment, never rewrite an applied migration. Add a new numbered migration, run `pnpm --filter @edgewarden/api db:codegen` to regenerate both `apps/api/src/types/db.d.ts` and the runtime migration bundle, and test both a fresh schema and an upgrade from the preceding release.
 
 ## Backup and restore
 
