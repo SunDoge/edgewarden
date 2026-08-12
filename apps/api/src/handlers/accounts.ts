@@ -6,26 +6,27 @@ import {
 	UpdateProfileSchema,
 	VerifyPasswordSchema,
 } from "../schemas/accounts";
+import { rotateUserApiKey } from "../services/account-api-key";
 import {
 	hashPasswordServer,
 	invalidateUserCache,
 	verifyPassword,
 } from "../services/auth";
 import {
-	conditionalRefreshTokenDeletionQuery,
-	conditionalUserRevisionQuery,
-} from "../services/db/batch";
-import {
 	decryptCredential,
 	encryptCredential,
 	hashCredential,
 } from "../services/credential-protection";
+import {
+	conditionalRefreshTokenDeletionQuery,
+	conditionalUserRevisionQuery,
+} from "../services/db/batch";
 import * as revisionsDb from "../services/db/revisions";
 import * as usersDb from "../services/db/users";
 import * as webauthnDb from "../services/db/webauthn";
-import { userYubicoPublicIds } from "../utils/yubico";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
+import { userYubicoPublicIds } from "../utils/yubico";
 
 function buildProfileResponse(
 	user: NonNullable<Awaited<ReturnType<typeof usersDb.getUserById>>>,
@@ -79,12 +80,22 @@ export const updateProfile = factory.createHandlers(
 		const user = c.get("user");
 		const db = c.get("db");
 
-		await usersDb.updateUser(db, user.id, {
-			name: body.name ?? user.name,
-			master_password_hint:
-				body.masterPasswordHint ?? user.master_password_hint,
-			updated_at: now(),
-		});
+		let query = db
+			.updateTable("users")
+			.set({
+				name: body.name ?? user.name,
+				master_password_hint:
+					body.masterPasswordHint ?? user.master_password_hint,
+				updated_at: now(),
+			})
+			.where("id", "=", user.id)
+			.where("name", "=", user.name);
+		query = user.master_password_hint
+			? query.where("master_password_hint", "=", user.master_password_hint)
+			: query.where("master_password_hint", "is", null);
+		const changed = await query.executeTakeFirst();
+		if (changed.numUpdatedRows !== 1n)
+			return errorResponse("Profile was changed by another request.", 409);
 		invalidateUserCache(user.id);
 
 		const updated = await usersDb.getUserById(db, user.id);
@@ -106,11 +117,26 @@ export const setKeys = factory.createHandlers(
 		const user = c.get("user");
 		const db = c.get("db");
 
-		await usersDb.updateUser(db, user.id, {
-			public_key: body.publicKey,
-			private_key: body.encryptedPrivateKey,
-			updated_at: now(),
-		});
+		let query = db
+			.updateTable("users")
+			.set({
+				public_key: body.publicKey,
+				private_key: body.encryptedPrivateKey,
+				updated_at: now(),
+			})
+			.where("id", "=", user.id);
+		query = user.public_key
+			? query.where("public_key", "=", user.public_key)
+			: query.where("public_key", "is", null);
+		query = user.private_key
+			? query.where("private_key", "=", user.private_key)
+			: query.where("private_key", "is", null);
+		const changed = await query.executeTakeFirst();
+		if (changed.numUpdatedRows !== 1n)
+			return errorResponse(
+				"Account keys were changed by another request.",
+				409,
+			);
 		invalidateUserCache(user.id);
 		return new Response(null, { status: 200 });
 	},
@@ -254,25 +280,13 @@ export const getApiKey = factory.createHandlers(async (c) => {
 
 export const rotateApiKey = factory.createHandlers(async (c) => {
 	const user = c.get("user");
-	const db = c.get("db");
-	const key = crypto.randomUUID().replace(/-/g, "");
-	const [hash, encrypted] = await Promise.all([
-		hashCredential(key),
-		encryptCredential(key, c.env.DATA_ENCRYPTION_SECRET, "api-key"),
-	]);
-	let query = db
-		.updateTable("users")
-		.set({
-			api_key_hash: hash,
-			api_key_encrypted: encrypted,
-			updated_at: now(),
-		})
-		.where("id", "=", user.id);
-	query = user.api_key_encrypted
-		? query.where("api_key_encrypted", "=", user.api_key_encrypted)
-		: query.where("api_key_encrypted", "is", null);
-	const rotated = await query.executeTakeFirst();
-	if (rotated.numUpdatedRows !== 1n)
+	const key = await rotateUserApiKey(
+		c.get("db"),
+		user.id,
+		user.api_key_encrypted,
+		c.env.DATA_ENCRYPTION_SECRET,
+	);
+	if (!key)
 		return errorResponse("API key was rotated by another request.", 409);
 	invalidateUserCache(user.id);
 	return c.json({ apiKey: key, object: "apiKey" });

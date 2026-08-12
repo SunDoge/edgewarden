@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { unzipSync } from "fflate";
 import { test } from "vitest";
+import { invalidateUserCache } from "../services/auth";
 import { hashCredential } from "../services/credential-protection";
 
 export interface VaultScenarioContext {
@@ -858,6 +859,88 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 				.then((row) => Number(row?.count)),
 			beforeAudit + 1,
 		);
+	});
+
+	test("fences concurrent account profile and key updates", async () => {
+		const auth = { authorization: `Bearer ${context.accessToken}` };
+		const original = await context.database
+			.prepare(
+				"SELECT id, name, master_password_hint, public_key, private_key FROM users WHERE email = ?",
+			)
+			.bind(EMAIL)
+			.first<{
+				id: string;
+				name: string | null;
+				master_password_hint: string | null;
+				public_key: string | null;
+				private_key: string | null;
+			}>();
+		assert.ok(original);
+		try {
+			const profiles = await Promise.all(
+				Array.from({ length: 8 }, (_, index) =>
+					request("/api/accounts/profile", {
+						method: "PUT",
+						headers: { ...auth, "content-type": "application/json" },
+						body: JSON.stringify({
+							name: `Concurrent profile ${index}`,
+							masterPasswordHint: `hint-${index}`,
+						}),
+					}),
+				),
+			);
+			assert.equal(
+				profiles.filter((response) => response.status === 200).length,
+				1,
+			);
+			assert.equal(
+				profiles.filter((response) => response.status === 409).length,
+				7,
+			);
+
+			await context.database
+				.prepare(
+					"UPDATE users SET name = ?, master_password_hint = ? WHERE id = ?",
+				)
+				.bind(original.name, original.master_password_hint, original.id)
+				.run();
+			invalidateUserCache(original.id);
+
+			const keyUpdates = await Promise.all(
+				Array.from({ length: 8 }, (_, index) =>
+					request("/api/accounts/keys", {
+						method: "POST",
+						headers: { ...auth, "content-type": "application/json" },
+						body: JSON.stringify({
+							publicKey: `public-key-${index}`,
+							encryptedPrivateKey: `private-key-${index}`,
+						}),
+					}),
+				),
+			);
+			assert.equal(
+				keyUpdates.filter((response) => response.status === 200).length,
+				1,
+			);
+			assert.equal(
+				keyUpdates.filter((response) => response.status === 409).length,
+				7,
+			);
+		} finally {
+			await context.database
+				.prepare(
+					"UPDATE users SET name = ?, master_password_hint = ?, public_key = ?, private_key = ? WHERE id = ?",
+				)
+				.bind(
+					original.name,
+					original.master_password_hint,
+					original.public_key,
+					original.private_key,
+					original.id,
+				)
+				.run();
+			invalidateUserCache(original.id);
+		}
 	});
 
 	test("validates device updates and hides resources outside the user scope", async () => {
