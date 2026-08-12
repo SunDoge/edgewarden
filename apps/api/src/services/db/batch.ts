@@ -19,6 +19,25 @@ export function revisionQuery(
 		.compile();
 }
 
+export function organizationRevisionQuery(
+	db: Kysely<DB>,
+	organizationId: string,
+	timestamp = now(),
+) {
+	return sql`
+		INSERT INTO user_revisions (user_id, revision_date)
+		SELECT DISTINCT user_id, ${timestamp}
+		FROM org_members
+		WHERE org_id = ${organizationId}
+		  AND status = 'confirmed'
+		  AND user_id IS NOT NULL
+		ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
+			user_revisions.revision_date + 1,
+			excluded.revision_date
+		)
+	`.compile(db);
+}
+
 export async function executeBatch(
 	dialect: D1Dialect,
 	queries: readonly CompiledQuery[],

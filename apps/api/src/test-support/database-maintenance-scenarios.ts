@@ -14,7 +14,11 @@ import {
 } from "../services/backup/operation-lease";
 import { drainBlobGcQueue } from "../services/blob-gc";
 import type { BlobStore } from "../services/blob-store";
-import { executeBatch, revisionQuery } from "../services/db/batch";
+import {
+	executeBatch,
+	organizationRevisionQuery,
+	revisionQuery,
+} from "../services/db/batch";
 import {
 	deleteConfigValue,
 	getConfigValue,
@@ -57,6 +61,52 @@ export function registerDatabaseMaintenanceScenarios(
 				.executeTakeFirstOrThrow();
 			assert.equal(second.revision_date, first.revision_date + 1);
 		} finally {
+			await db.destroy();
+		}
+	});
+
+	test("selects organization revision recipients inside the atomic batch", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const member = await db
+			.selectFrom("org_members as member")
+			.innerJoin("users as user", "user.id", "member.user_id")
+			.select(["member.id", "member.org_id", "member.user_id"])
+			.where("user.email", "=", EMAIL)
+			.where("member.status", "=", "confirmed")
+			.executeTakeFirstOrThrow();
+		assert.ok(member.user_id);
+		const timestamp = Math.floor(Date.now() / 1000);
+		try {
+			await db
+				.updateTable("org_members")
+				.set({ status: "invited" })
+				.where("id", "=", member.id)
+				.execute();
+			const before = await db
+				.selectFrom("user_revisions")
+				.select("revision_date")
+				.where("user_id", "=", member.user_id)
+				.executeTakeFirstOrThrow();
+			await executeBatch(dialect, [
+				db
+					.updateTable("org_members")
+					.set({ status: "confirmed", updated_at: timestamp })
+					.where("id", "=", member.id)
+					.compile(),
+				organizationRevisionQuery(db, member.org_id, timestamp),
+			]);
+			const after = await db
+				.selectFrom("user_revisions")
+				.select("revision_date")
+				.where("user_id", "=", member.user_id)
+				.executeTakeFirstOrThrow();
+			assert.equal(after.revision_date, before.revision_date + 1);
+		} finally {
+			await db
+				.updateTable("org_members")
+				.set({ status: "confirmed" })
+				.where("id", "=", member.id)
+				.execute();
 			await db.destroy();
 		}
 	});
