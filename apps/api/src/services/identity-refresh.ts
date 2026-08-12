@@ -24,6 +24,49 @@ export type RefreshIdentitySessionResult =
 	  }
 	| { ok: false; reason: RefreshIdentitySessionFailure };
 
+export function refreshTokenRotationInsertQuery(
+	db: Kysely<DB>,
+	args: {
+		oldTokenHash: string;
+		newTokenHash: string;
+		userId: string;
+		expectedSecurityStamp: string;
+		sessionTime: number;
+	},
+) {
+	return sql`
+		INSERT INTO refresh_tokens (
+			token, user_id, expires_at, device_identifier, device_session_stamp
+		)
+		SELECT
+			${args.newTokenHash}, current_token.user_id,
+			${args.sessionTime + LIMITS.auth.refreshTokenTtlSeconds},
+			current_token.device_identifier,
+			current_token.device_session_stamp
+		FROM refresh_tokens current_token
+		INNER JOIN users current_user ON current_user.id = current_token.user_id
+		WHERE current_token.token = ${args.oldTokenHash}
+		  AND current_token.user_id = ${args.userId}
+		  AND current_token.expires_at > ${args.sessionTime}
+		  AND current_user.status = 'active'
+		  AND current_user.deletion_requested_at IS NULL
+		  AND current_user.security_stamp = ${args.expectedSecurityStamp}
+		  AND (
+		    (
+		      current_token.device_identifier IS NULL
+		      AND current_token.device_session_stamp IS NULL
+		    )
+		    OR EXISTS (
+		      SELECT 1 FROM devices current_device
+		      WHERE current_device.user_id = current_token.user_id
+		        AND current_device.device_identifier = current_token.device_identifier
+		        AND current_device.session_stamp = current_token.device_session_stamp
+		        AND current_device.banned = 0
+		    )
+		  )
+	`.compile(db);
+}
+
 export async function refreshIdentitySession(args: {
 	db: Kysely<DB>;
 	dialect: D1Dialect;
@@ -43,6 +86,13 @@ export async function refreshIdentitySession(args: {
 	}
 
 	let deviceSession: LoginDeviceSession | null = null;
+	if (
+		(record.deviceIdentifier === null) !==
+		(record.deviceSessionStamp === null)
+	) {
+		await refreshTokensDb.deleteRefreshToken(args.db, args.rawToken);
+		return { ok: false, reason: "invalid_device_session" };
+	}
 	if (record.deviceIdentifier && record.deviceSessionStamp) {
 		const device = await devicesDb.getDevice(
 			args.db,
@@ -67,18 +117,13 @@ export async function refreshIdentitySession(args: {
 	const oldTokenHash = await hashRefreshToken(args.rawToken);
 	const newTokenHash = await hashRefreshToken(refreshToken);
 	const [inserted] = await args.dialect.batch([
-		sql`
-			insert into refresh_tokens (
-				token, user_id, expires_at, device_identifier, device_session_stamp
-			)
-			select
-				${newTokenHash}, user_id,
-				${sessionTime + LIMITS.auth.refreshTokenTtlSeconds},
-				device_identifier, device_session_stamp
-			from refresh_tokens
-			where token = ${oldTokenHash}
-			  and user_id = ${user.id}
-		`.compile(args.db),
+		refreshTokenRotationInsertQuery(args.db, {
+			oldTokenHash,
+			newTokenHash,
+			userId: user.id,
+			expectedSecurityStamp: user.security_stamp,
+			sessionTime,
+		}),
 		args.db
 			.deleteFrom("refresh_tokens")
 			.where("token", "=", oldTokenHash)

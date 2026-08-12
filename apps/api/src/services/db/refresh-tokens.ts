@@ -1,7 +1,7 @@
 import type { Kysely } from "kysely";
 import type { DB } from "../../types/db";
-import { now } from "../../utils/time";
 import { hashRefreshToken } from "../../utils/jwt";
+import { now } from "../../utils/time";
 
 export async function saveRefreshToken(
 	db: Kysely<DB>,
@@ -48,7 +48,7 @@ export async function getRefreshTokenRecord(
 		.executeTakeFirst();
 
 	if (!row) return null;
-	if (row.expires_at < now()) {
+	if (row.expires_at <= now()) {
 		await deleteRefreshToken(db, rawToken);
 		return null;
 	}
