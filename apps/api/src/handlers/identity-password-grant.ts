@@ -8,17 +8,17 @@ import {
 	hashCredential,
 } from "../services/credential-protection";
 import * as authRequestsDb from "../services/db/auth-requests";
-import * as usersDb from "../services/db/users";
 import {
 	conditionalRefreshTokenDeletionQuery,
 	conditionalTwoFactorCredentialDeletionQuery,
 	conditionalUserRevisionQuery,
 } from "../services/db/batch";
+import * as usersDb from "../services/db/users";
 import * as webauthnDb from "../services/db/webauthn";
 import { issueIdentitySession } from "../services/identity-session";
 import {
-	clearLoginFailures,
 	isLoginLocked,
+	loginAttemptIdentifierHash,
 	recordLoginFailure,
 } from "../services/login-attempts";
 import { turnstileEnabled, verifyTurnstileToken } from "../services/turnstile";
@@ -133,8 +133,6 @@ export async function handlePasswordGrant(
 			400,
 		);
 	}
-	await clearLoginFailures(db, email);
-
 	const twoFactorPasskeys =
 		await webauthnDb.countAccountPasskeyCredentialsByUserId(
 			db,
@@ -281,6 +279,7 @@ export async function handlePasswordGrant(
 		user,
 		device: deviceInfo,
 		jwtSecret: c.env.JWT_SECRET,
+		loginFailureIdentifierHash: await loginAttemptIdentifierHash(email),
 		authRequest: validatedAuthRequestId
 			? { id: validatedAuthRequestId, token: crypto.randomUUID() }
 			: null,

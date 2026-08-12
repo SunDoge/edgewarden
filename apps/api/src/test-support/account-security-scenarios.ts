@@ -3,6 +3,11 @@ import { test } from "vitest";
 import { createDatabase } from "../middleware/db";
 import { invalidateUserCache } from "../services/auth";
 import { encryptCredential } from "../services/credential-protection";
+import {
+	clearLoginFailures,
+	loginAttemptIdentifierHash,
+	recordLoginFailure,
+} from "../services/login-attempts";
 import { runMaintenance } from "../services/maintenance";
 import { loadYubicoCredentials } from "../services/yubico-config";
 
@@ -83,6 +88,38 @@ export function registerAccountSecurityScenarios(
 			}),
 		});
 		assert.equal(invalid.status, 400);
+
+		const { db: loginAttemptDb } = await createDatabase(context.database);
+		try {
+			await recordLoginFailure(loginAttemptDb, EMAIL);
+			const incompleteLogin = await request("/identity/connect/token", {
+				method: "POST",
+				headers: { "content-type": "application/x-www-form-urlencoded" },
+				body: new URLSearchParams({
+					grant_type: "password",
+					username: EMAIL,
+					password: MASTER_PASSWORD_HASH,
+					deviceIdentifier: `incomplete-2fa-${crypto.randomUUID()}`,
+					deviceName: "Incomplete 2FA test",
+					deviceType: "14",
+				}),
+			});
+			assert.equal(incompleteLogin.status, 400);
+			assert.ok(
+				await loginAttemptDb
+					.selectFrom("login_attempts")
+					.select("identifier_hash")
+					.where(
+						"identifier_hash",
+						"=",
+						await loginAttemptIdentifierHash(EMAIL),
+					)
+					.executeTakeFirst(),
+			);
+		} finally {
+			await clearLoginFailures(loginAttemptDb, EMAIL);
+			await loginAttemptDb.destroy();
+		}
 
 		const recovered = await request("/identity/accounts/recover-2fa", {
 			method: "POST",

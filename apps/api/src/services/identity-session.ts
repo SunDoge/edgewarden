@@ -159,6 +159,25 @@ export function refreshTokenRevisionQuery(
 	`.compile(db);
 }
 
+export function successfulLoginFailureClearQuery(
+	db: Kysely<DB>,
+	args: {
+		identifierHash: string;
+		refreshTokenHash: string;
+		userId: string;
+	},
+) {
+	return sql`
+		DELETE FROM login_attempts
+		WHERE identifier_hash = ${args.identifierHash}
+		  AND EXISTS (
+		    SELECT 1 FROM refresh_tokens
+		    WHERE token = ${args.refreshTokenHash}
+		      AND user_id = ${args.userId}
+		  )
+	`.compile(db);
+}
+
 export function authRequestConsumptionClaimQuery(
 	db: Kysely<DB>,
 	args: {
@@ -209,6 +228,7 @@ export async function issueIdentitySession(
 		user: Selectable<Users>;
 		device: LoginDeviceInfo;
 		jwtSecret: string;
+		loginFailureIdentifierHash?: string | null;
 		authRequest?: AuthRequestConsumption | null;
 	},
 	deviceConflictRetries = 1,
@@ -262,6 +282,15 @@ export async function issueIdentitySession(
 				refreshTokenHash,
 				sessionTime,
 			),
+			...(args.loginFailureIdentifierHash
+				? [
+						successfulLoginFailureClearQuery(args.db, {
+							identifierHash: args.loginFailureIdentifierHash,
+							refreshTokenHash,
+							userId: args.user.id,
+						}),
+					]
+				: []),
 		];
 		const results = await args.dialect.batch(queries);
 		const consumed = results[0];
@@ -298,6 +327,15 @@ export async function issueIdentitySession(
 				refreshTokenHash,
 				sessionTime,
 			),
+			...(args.loginFailureIdentifierHash
+				? [
+						successfulLoginFailureClearQuery(args.db, {
+							identifierHash: args.loginFailureIdentifierHash,
+							refreshTokenHash,
+							userId: args.user.id,
+						}),
+					]
+				: []),
 		];
 		const results = await args.dialect.batch(queries);
 		const inserted = results[deviceSession ? 1 : 0];
