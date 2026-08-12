@@ -4,17 +4,20 @@ import {
 	ArrowLeft,
 	Check,
 	Database,
-	Info,
 	Lock,
 	RefreshCw,
-	Save,
 	Settings2,
-	Trash2,
 } from "@lucide/svelte";
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
+import BackupDestinationForm from "$lib/components/backup/BackupDestinationForm.svelte";
 import BackupDestinationList from "$lib/components/backup/BackupDestinationList.svelte";
 import BackupRuntimePanel from "$lib/components/backup/BackupRuntimePanel.svelte";
+import {
+	applyBackupDestinationForm,
+	backupDestinationToForm,
+	createDefaultBackupDestinationForm,
+} from "$lib/components/backup/destination-form";
 import LocalBackupPanel from "$lib/components/backup/LocalBackupPanel.svelte";
 import RemoteBackupBrowser, {
 	type RemoteBackupItem,
@@ -24,7 +27,6 @@ import type {
 	BackupSettings,
 } from "$lib/components/backup/types";
 import { Button } from "$lib/components/ui/button/index.js";
-import { Input } from "$lib/components/ui/input/index.js";
 import {
 	deleteRemoteBackupApi,
 	downloadRemoteBackupApi,
@@ -55,34 +57,7 @@ let successMsg = $state("");
 let settings = $state<BackupSettings>({ destinations: [] });
 let selectedDestId = $state<string | null>(null);
 
-// Forms
-let destName = $state("");
-let destType = $state<"s3" | "webdav">("webdav");
-let includeAttachments = $state(false);
-
-// S3 connection fields
-let s3Endpoint = $state("");
-let s3Bucket = $state("");
-let s3Region = $state("auto");
-let s3AccessKeyId = $state("");
-let s3SecretAccessKey = $state("");
-let s3RootPath = $state("edgewarden");
-let s3AddressingStyle = $state<"path-style" | "virtual-hosted-style">(
-	"path-style",
-);
-
-// WebDAV connection fields
-let davBaseUrl = $state("");
-let davUsername = $state("");
-let davPassword = $state("");
-let davRemotePath = $state("edgewarden");
-
-// Schedule settings
-let scheduleEnabled = $state(false);
-let scheduleInterval = $state(24);
-let scheduleStartTime = $state("03:00");
-let scheduleTimezone = $state("UTC");
-let scheduleRetention = $state<number | null>(30);
+let form = $state(createDefaultBackupDestinationForm());
 
 // Remote backup file browser
 let remoteFiles = $state<RemoteBackupItem[]>([]);
@@ -128,30 +103,7 @@ function selectDestination(id: string) {
 	const dest = settings.destinations.find((d) => d.id === id);
 	if (!dest) return;
 
-	destName = dest.name;
-	destType = dest.type;
-	includeAttachments = dest.includeAttachments;
-
-	if (dest.type === "s3") {
-		s3Endpoint = dest.destination.endpoint || "";
-		s3Bucket = dest.destination.bucket || "";
-		s3Region = dest.destination.region || "auto";
-		s3AccessKeyId = dest.destination.accessKeyId || "";
-		s3SecretAccessKey = dest.destination.secretAccessKey || "";
-		s3RootPath = dest.destination.rootPath || "edgewarden";
-		s3AddressingStyle = dest.destination.addressingStyle || "path-style";
-	} else {
-		davBaseUrl = dest.destination.baseUrl || "";
-		davUsername = dest.destination.username || "";
-		davPassword = dest.destination.password || "";
-		davRemotePath = dest.destination.remotePath || "edgewarden";
-	}
-
-	scheduleEnabled = dest.schedule.enabled;
-	scheduleInterval = dest.schedule.intervalHours;
-	scheduleStartTime = dest.schedule.startTime;
-	scheduleTimezone = dest.schedule.timezone;
-	scheduleRetention = dest.schedule.retentionCount;
+	form = backupDestinationToForm(dest);
 
 	// Load remote file browser
 	currentRemotePath = "";
@@ -221,40 +173,10 @@ async function saveSettings() {
 		);
 		if (destIndex === -1) throw new Error("Destination not found");
 
-		const destConfig: any =
-			destType === "s3"
-				? {
-						endpoint: s3Endpoint.trim(),
-						bucket: s3Bucket.trim(),
-						addressingStyle: s3AddressingStyle,
-						region: s3Region.trim(),
-						accessKeyId: s3AccessKeyId.trim(),
-						secretAccessKey: s3SecretAccessKey,
-						rootPath: s3RootPath.trim(),
-					}
-				: {
-						baseUrl: davBaseUrl.trim(),
-						username: davUsername.trim(),
-						password: davPassword,
-						remotePath: davRemotePath.trim(),
-					};
-
-		const updatedDest: BackupDestinationRecord = {
-			...settings.destinations[destIndex],
-			name: destName.trim() || (destType === "s3" ? "S3 备份" : "WebDAV 备份"),
-			type: destType,
-			includeAttachments,
-			destination: destConfig,
-			schedule: {
-				enabled: scheduleEnabled,
-				intervalHours: scheduleInterval,
-				startTime: scheduleStartTime,
-				timezone: scheduleTimezone,
-				retentionCount: scheduleRetention,
-			},
-		};
-
-		settings.destinations[destIndex] = updatedDest;
+		settings.destinations[destIndex] = applyBackupDestinationForm(
+			settings.destinations[destIndex],
+			form,
+		);
 
 		const res = await updateBackupSettingsApi(settings);
 		settings = res;
@@ -409,7 +331,7 @@ async function handleRestoreRemote(path: string) {
 
 async function handleLocalExport() {
 	try {
-		const blob = await exportBackupLocalApi(includeAttachments);
+		const blob = await exportBackupLocalApi(form.includeAttachments);
 		const url = window.URL.createObjectURL(blob);
 		const a = document.createElement("a");
 		a.href = url;
@@ -550,142 +472,12 @@ function showSuccess(msg: string) {
 					{:else}
 						{@const currentDest = settings.destinations.find(d => d.id === selectedDestId)}
 						
-						<!-- Config Form Card -->
-						<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-6">
-							<div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-								<div>
-									<h2 class="text-base font-bold text-slate-900 dark:text-slate-50">备份服务配置</h2>
-									<p class="text-xs text-slate-500">修改远程 WebDAV 或 S3 连接密钥及桶目录</p>
-								</div>
-								<div class="flex gap-2">
-									<Button variant="ghost" size="sm" onclick={deleteDestination} disabled={saving} class="text-red-500 hover:text-red-600">
-										<Trash2 class="size-4 mr-1.5" />
-										删除目的地
-									</Button>
-									<Button size="sm" onclick={saveSettings} disabled={saving} class="gap-1.5">
-										{#if saving}
-											<RefreshCw class="size-3.5 animate-spin" />
-										{:else}
-											<Save class="size-3.5" />
-										{/if}
-										保存修改
-									</Button>
-								</div>
-							</div>
-
-							<!-- Generic fields -->
-							<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-								<div class="space-y-1.5">
-									<label for="backup-name" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">目的地名称</label>
-									<Input id="backup-name" type="text" bind:value={destName} placeholder="例如：我的 Nextcloud 备份" />
-								</div>
-								<div class="space-y-1.5">
-									<label for="backup-type" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">存储协议</label>
-									<select id="backup-type" bind:value={destType} class="w-full flex h-10 rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-										<option value="webdav">WebDAV 协议</option>
-										<option value="s3">S3 兼容协议</option>
-									</select>
-								</div>
-								<div class="md:col-span-2 flex items-center gap-2 pt-1.5">
-									<input type="checkbox" id="attachments" bind:checked={includeAttachments} class="rounded text-primary focus:ring-primary" />
-									<label for="attachments" class="text-xs text-slate-700 dark:text-slate-300 select-none cursor-pointer flex items-center gap-1.5">
-										同时备份附件文件 (包含 KV/R2 中的文件)
-										<Info class="size-3.5 text-slate-400" title="勾选后，备份流程将同步读取附件的二进制流文件放入 ZIP 压缩包。" />
-									</label>
-								</div>
-							</div>
-
-							<!-- WebDAV Protocol Fields -->
-							{#if destType === "webdav"}
-								<div class="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-800">
-									<h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">WebDAV 存储节点设置</h3>
-									<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-										<div class="md:col-span-2 space-y-1.5">
-											<label for="dav-url" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">WebDAV 服务器基础 URL</label>
-											<Input id="dav-url" type="url" bind:value={davBaseUrl} placeholder="https://nextcloud.example.com/remote.php/dav/files/username" />
-										</div>
-										<div class="space-y-1.5">
-											<label for="dav-username" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">用户名</label>
-											<Input id="dav-username" type="text" bind:value={davUsername} placeholder="用户名" />
-										</div>
-										<div class="space-y-1.5">
-											<label for="dav-password" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">应用密码 / 访问密码</label>
-											<Input id="dav-password" type="password" bind:value={davPassword} placeholder="密码 (密文显示)" />
-										</div>
-										<div class="space-y-1.5 md:col-span-2">
-											<label for="dav-path" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">备份根目录</label>
-											<Input id="dav-path" type="text" bind:value={davRemotePath} placeholder="edgewarden" />
-										</div>
-									</div>
-								</div>
-							{:else}
-								<!-- S3 Protocol Fields -->
-								<div class="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-800">
-									<h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">S3 兼容对象存储设置</h3>
-									<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-										<div class="md:col-span-2 space-y-1.5">
-											<label for="s3-endpoint" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">Endpoint 端点 URL</label>
-											<Input id="s3-endpoint" type="url" bind:value={s3Endpoint} placeholder="https://s3.us-east-1.amazonaws.com" />
-										</div>
-										<div class="space-y-1.5">
-											<label for="s3-bucket" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">Bucket 存储桶</label>
-											<Input id="s3-bucket" type="text" bind:value={s3Bucket} placeholder="my-edgewarden-backups" />
-										</div>
-										<div class="space-y-1.5">
-											<label for="s3-region" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">Region 区域</label>
-											<Input id="s3-region" type="text" bind:value={s3Region} placeholder="auto" />
-										</div>
-										<div class="space-y-1.5">
-											<label for="s3-access-key" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">Access Key ID</label>
-											<Input id="s3-access-key" type="text" bind:value={s3AccessKeyId} placeholder="Access Key ID" />
-										</div>
-										<div class="space-y-1.5">
-											<label for="s3-secret-key" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">Secret Access Key</label>
-											<Input id="s3-secret-key" type="password" bind:value={s3SecretAccessKey} placeholder="Secret Access Key" />
-										</div>
-										<div class="space-y-1.5">
-											<label for="s3-addressing" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">Addressing Style 地址模式</label>
-											<select id="s3-addressing" bind:value={s3AddressingStyle} class="w-full flex h-10 rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-												<option value="path-style">Path Style (路径风格模式)</option>
-												<option value="virtual-hosted-style">Virtual Hosted Style (虚拟主机名模式)</option>
-											</select>
-										</div>
-										<div class="space-y-1.5">
-											<label for="s3-path" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">备份根目录</label>
-											<Input id="s3-path" type="text" bind:value={s3RootPath} placeholder="edgewarden" />
-										</div>
-									</div>
-								</div>
-							{/if}
-
-							<!-- Schedule Settings Section -->
-							<div class="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-								<h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">定时自动备份设定 (Cron Trigger)</h3>
-								<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-									<div class="md:col-span-3 flex items-center gap-2">
-										<input type="checkbox" id="schedEnabled" bind:checked={scheduleEnabled} class="rounded text-primary focus:ring-primary" />
-										<label for="schedEnabled" class="text-xs text-slate-700 dark:text-slate-300 select-none cursor-pointer font-semibold">
-											启用此目的地的自动定时备份任务
-										</label>
-									</div>
-
-									<div class="space-y-1.5">
-										<label for="schedule-interval" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">备份执行间隔 (小时)</label>
-										<Input id="schedule-interval" type="number" bind:value={scheduleInterval} min="1" max="99" disabled={!scheduleEnabled} />
-									</div>
-
-									<div class="space-y-1.5">
-										<label for="schedule-time" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">每日首发启动时间</label>
-										<Input id="schedule-time" type="text" bind:value={scheduleStartTime} placeholder="03:00" disabled={!scheduleEnabled} />
-									</div>
-
-									<div class="space-y-1.5">
-										<label for="schedule-retention" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">最大保留历史文件数 (Retention)</label>
-										<Input id="schedule-retention" type="number" bind:value={scheduleRetention} placeholder="30" disabled={!scheduleEnabled} />
-									</div>
-								</div>
-							</div>
-						</div>
+						<BackupDestinationForm
+							bind:form
+							{saving}
+							onSave={saveSettings}
+							onDelete={deleteDestination}
+						/>
 
 						<BackupRuntimePanel
 							destination={currentDest}
