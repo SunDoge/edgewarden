@@ -288,7 +288,16 @@ export function registerAdminOrganizationScenarios(
 			await defaultSettings
 				.json<any>()
 				.then((value) => [value.retentionDays, value.maxEntries]),
-			[90, null],
+			[null, null],
+		);
+		assert.equal(
+			(
+				await request("/api/admin/logs", {
+					method: "DELETE",
+					headers: adminAuth,
+				})
+			).status,
+			404,
 		);
 		assert.equal(
 			(

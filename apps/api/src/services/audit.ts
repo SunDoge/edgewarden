@@ -1,7 +1,7 @@
 import type { Kysely } from "kysely";
 import type { DB } from "../types/db";
-import { textColumnInJson } from "./db/json-array";
 import { now } from "../utils/time";
+import { textColumnInJson } from "./db/json-array";
 
 export type AuditLogCategory = "auth" | "vault" | "admin" | "system" | "org";
 export type AuditLogLevel = "info" | "warning" | "error";
@@ -46,7 +46,7 @@ export interface AuditLogSettings {
 	maxEntries: number | null;
 }
 const DEFAULT_AUDIT_SETTINGS: AuditLogSettings = {
-	retentionDays: 90,
+	retentionDays: null,
 	maxEntries: null,
 };
 

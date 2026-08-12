@@ -8,8 +8,8 @@ import {
 	RegistrationPolicySchema,
 	SetUserStatusSchema,
 } from "../schemas/admin";
-import { verifyAdminPassword } from "../services/admin-auth";
 import { deleteAccountData } from "../services/account-deletion";
+import { verifyAdminPassword } from "../services/admin-auth";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import { invalidateUserCache } from "../services/auth";
 import {
@@ -362,7 +362,6 @@ export const deleteAdminUser = factory.createHandlers(
 );
 
 export {
-	clearAuditLogs,
 	getAuditSettings,
 	listAuditLogs,
 	updateAuditSettings,
