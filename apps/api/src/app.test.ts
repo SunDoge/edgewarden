@@ -1,7 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { unzipSync } from "fflate";
 import { afterAll as after, beforeAll as before, describe, test } from "vitest";
 import { createDatabase } from "./middleware/db";
@@ -18,6 +15,7 @@ import {
 	type ApiTestHarness,
 	createApiTestHarness,
 } from "./test-support/api-harness";
+import { registerInfrastructureScenarios } from "./test-support/infrastructure-scenarios";
 
 const JWT_SECRET = "test-secret-that-is-at-least-thirty-two-characters";
 const DATA_ENCRYPTION_SECRET =
@@ -65,169 +63,7 @@ after(async () => {
 });
 
 describe("Edgewarden API", () => {
-	test("declares every TEXT primary-key column as NOT NULL", () => {
-		const migration = readFileSync(
-			resolve(
-				dirname(fileURLToPath(import.meta.url)),
-				"../migrations/0001_init.sql",
-			),
-			"utf8",
-		);
-		const nullableTextPrimaryKeys = migration.match(
-			/^\s*[a-z_][a-z0-9_]*\s+TEXT\s+PRIMARY KEY(?!\s+NOT NULL).*$/gim,
-		);
-		assert.deepEqual(nullableTextPrimaryKeys, null);
-	});
-
-	test("advertises same-origin Fill Assist compatibility", async () => {
-		const response = await request("https://vault.example.test/config");
-		assert.equal(response.status, 200);
-		const body = await response.json<{
-			environment: { fillAssistRules: string };
-			featureStates: Record<string, boolean>;
-		}>();
-		assert.equal(
-			body.environment.fillAssistRules,
-			"https://vault.example.test/fill-assist/",
-		);
-		assert.equal(body.featureStates["fill-assist-targeting-rules"], true);
-	});
-
-	test("requires a dedicated persisted-data encryption secret", async () => {
-		const secret = bindings.DATA_ENCRYPTION_SECRET;
-		delete (bindings as unknown as Record<string, unknown>)
-			.DATA_ENCRYPTION_SECRET;
-		try {
-			const response = await request("/api/version");
-			assert.equal(response.status, 500);
-			assert.match(await response.text(), /DATA_ENCRYPTION_SECRET/);
-		} finally {
-			bindings.DATA_ENCRYPTION_SECRET = secret;
-		}
-	});
-
-	test("sets strict browser security headers and rejects unknown CORS origins", async () => {
-		const response = await request("/api/version", {
-			headers: { origin: "https://evil.example" },
-		});
-		assert.equal(response.headers.get("access-control-allow-origin"), null);
-		const csp = response.headers.get("content-security-policy") ?? "";
-		assert.match(csp, /default-src 'self'/);
-		assert.match(csp, /object-src 'none'/);
-		assert.match(csp, /script-src-attr 'none'/);
-	});
-
-	test("rejects oversized JSON bodies before parsing", async () => {
-		const response = await request("/api/accounts/register", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: "x".repeat(10 * 1024 * 1024 + 1),
-		});
-		assert.equal(response.status, 413);
-	});
-
-	test("serves the empty Fill Assist ruleset with public caching", async () => {
-		const manifest = await request("/fill-assist/manifest.json");
-		assert.equal(manifest.status, 200);
-		assert.equal(manifest.headers.get("cache-control"), "public, max-age=3600");
-		const manifestBody = await manifest.json<{
-			maps: { forms: { v1: { filename: string; schema: string } } };
-		}>();
-		assert.equal(manifestBody.maps.forms.v1.filename, "forms.v1.json");
-
-		for (const filename of [
-			manifestBody.maps.forms.v1.filename,
-			manifestBody.maps.forms.v1.schema,
-		]) {
-			const response = await request(`/fill-assist/${filename}`);
-			assert.equal(response.status, 200);
-			assert.equal(
-				response.headers.get("cache-control"),
-				"public, max-age=3600",
-			);
-		}
-		assert.equal((await request("/fill-assist/unknown.json")).status, 404);
-		assert.deepEqual(
-			await (await request("/.well-known/assetlinks/check")).json(),
-			{
-				linked: false,
-				maxAge: "86400s",
-				debugString:
-					"No matching digital asset link policy is configured for this server.",
-			},
-		);
-	});
-
-	test("serves a local safe icon for invalid or private hosts", async () => {
-		for (const host of ["localhost", "127.0.0.1", "internal.local"]) {
-			const response = await request(`/icons/${host}/icon.png`);
-			assert.equal(response.status, 200);
-			assert.equal(response.headers.get("content-type"), "image/svg+xml");
-			assert.match(response.headers.get("cache-control") ?? "", /public/);
-		}
-	});
-
-	test("caches validated public website icons at the edge", async () => {
-		const originalFetch = globalThis.fetch;
-		const originalCaches = Object.getOwnPropertyDescriptor(
-			globalThis,
-			"caches",
-		);
-		const cachedResponses = new Map<string, Response>();
-		const backgroundTasks: Promise<unknown>[] = [];
-		let upstreamRequests = 0;
-		Object.defineProperty(globalThis, "caches", {
-			configurable: true,
-			value: {
-				default: {
-					match: async (key: Request) => cachedResponses.get(key.url)?.clone(),
-					put: async (key: Request, response: Response) => {
-						cachedResponses.set(key.url, response.clone());
-					},
-				},
-			},
-		});
-		globalThis.fetch = async () => {
-			upstreamRequests += 1;
-			return new Response(new Uint8Array([137, 80, 78, 71]), {
-				headers: {
-					"content-type": "image/png",
-					"content-length": "4",
-				},
-			});
-		};
-
-		try {
-			const first = await request("/icons/example.com/icon.png", {}, {
-				waitUntil: (task: Promise<unknown>) => {
-					backgroundTasks.push(task);
-				},
-				passThroughOnException: () => undefined,
-				props: {},
-			} as unknown as ExecutionContext);
-			assert.equal(backgroundTasks.length, 1);
-			await Promise.all(backgroundTasks);
-			const second = await request("/icons/example.com/icon.png");
-			assert.equal(first.status, 200);
-			assert.equal(second.status, 200);
-			assert.equal(upstreamRequests, 1);
-			assert.equal(
-				first.headers.get("cache-control"),
-				"public, max-age=604800",
-			);
-			assert.deepEqual(
-				new Uint8Array(await second.arrayBuffer()),
-				new Uint8Array([137, 80, 78, 71]),
-			);
-		} finally {
-			globalThis.fetch = originalFetch;
-			if (originalCaches) {
-				Object.defineProperty(globalThis, "caches", originalCaches);
-			} else {
-				delete (globalThis as { caches?: CacheStorage }).caches;
-			}
-		}
-	});
+	registerInfrastructureScenarios({ getBindings: () => bindings, request });
 
 	test("rejects invalid registration payloads through Valibot", async () => {
 		const response = await request("/api/accounts/register", {
