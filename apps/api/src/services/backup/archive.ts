@@ -11,6 +11,7 @@ import {
 	verifyBackupArchiveFileNameChecksum,
 } from "./archive-integrity";
 import { BACKUP_SETTINGS_CONFIG_KEY } from "./config";
+import { MAX_BACKUP_ARCHIVE_BYTES } from "./limits";
 import { DATA_OPERATION_LEASE_CONFIG_KEY } from "./operation-lease";
 import { exportPortableBackupSettingsEnvelope } from "./settings-crypto";
 import { readBackupDatabaseSnapshot } from "./snapshot";
@@ -27,7 +28,6 @@ type SqlRow = Record<string, string | number | null>;
 const BACKUP_FORMAT_VERSION = 3;
 const BACKUP_TEXT_COMPRESSION_LEVEL = 0;
 const BACKUP_JSON_INDENT = 2;
-const MAX_BACKUP_ARCHIVE_BYTES = 64 * 1024 * 1024;
 const MAX_BACKUP_ARCHIVE_ENTRY_COUNT = 10000;
 const MAX_BACKUP_EXTRACTED_BYTES = 64 * 1024 * 1024;
 const MAX_BACKUP_DB_JSON_BYTES = 32 * 1024 * 1024;

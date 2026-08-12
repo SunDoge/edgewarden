@@ -1,5 +1,15 @@
 import { buildAwsV4Authorization, sha256Hex } from "./aws-signature";
 import type { S3BackupDestination } from "./config";
+import {
+	MAX_BACKUP_ARCHIVE_BYTES,
+	MAX_REMOTE_LISTING_BYTES,
+	REMOTE_METADATA_TIMEOUT_MS,
+	REMOTE_TRANSFER_TIMEOUT_MS,
+} from "./limits";
+import {
+	readBoundedResponseBytes,
+	readBoundedResponseText,
+} from "./remote-http";
 import type {
 	BackupUploadResult,
 	RemoteBackupFile,
@@ -61,6 +71,7 @@ async function signedRequest(
 	url: URL,
 	body?: Uint8Array,
 	contentType?: string,
+	timeoutMs = REMOTE_METADATA_TIMEOUT_MS,
 ): Promise<Response> {
 	const payloadHashHex = await sha256Hex(body || new Uint8Array());
 	const amzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
@@ -90,6 +101,7 @@ async function signedRequest(
 			...(method === "PUT" ? { "Content-Type": headers["content-type"] } : {}),
 		},
 		body,
+		signal: AbortSignal.timeout(timeoutMs),
 	});
 }
 
@@ -105,6 +117,7 @@ export async function putToS3(
 		objectUrl(config, normalizeS3ObjectKey(config, relativePath)),
 		bytes,
 		options.contentType,
+		REMOTE_TRANSFER_TIMEOUT_MS,
 	);
 	if (!response.ok) throw new Error(`S3 upload failed: ${response.status}`);
 }
@@ -137,7 +150,11 @@ export async function listS3Entries(
 
 	const response = await signedRequest(config, "GET", url);
 	if (!response.ok) throw new Error(`S3 listing failed: ${response.status}`);
-	const xml = await response.text();
+	const xml = await readBoundedResponseText(
+		response,
+		MAX_REMOTE_LISTING_BYTES,
+		"S3 listing",
+	);
 	const rootPrefix = trimSlashes(config.rootPath);
 	const items: RemoteBackupItem[] = [];
 
@@ -205,6 +222,9 @@ export async function downloadFromS3(
 		config,
 		"GET",
 		objectUrl(config, normalizeS3ObjectKey(config, normalized)),
+		undefined,
+		undefined,
+		REMOTE_TRANSFER_TIMEOUT_MS,
 	);
 	if (!response.ok) throw new Error(`S3 download failed: ${response.status}`);
 	return {
@@ -214,7 +234,11 @@ export async function downloadFromS3(
 		contentType: String(
 			response.headers.get("Content-Type") || "application/zip",
 		).trim(),
-		bytes: new Uint8Array(await response.arrayBuffer()),
+		bytes: await readBoundedResponseBytes(
+			response,
+			MAX_BACKUP_ARCHIVE_BYTES,
+			"S3 backup download",
+		),
 	};
 }
 

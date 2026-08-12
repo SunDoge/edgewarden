@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { S3BackupDestination } from "./config";
-import { listS3Entries, normalizeS3ObjectKey, putToS3 } from "./s3-adapter";
+import { MAX_BACKUP_ARCHIVE_BYTES } from "./limits";
+import {
+	downloadFromS3,
+	listS3Entries,
+	normalizeS3ObjectKey,
+	putToS3,
+} from "./s3-adapter";
 
 const config: S3BackupDestination = {
 	endpoint: "https://s3.example.test",
@@ -61,6 +67,9 @@ describe("S3 backup adapter", () => {
 		expect(requestedUrl.pathname).toBe("/backups");
 		expect(requestedUrl.searchParams.get("list-type")).toBe("2");
 		expect(requestedUrl.searchParams.get("prefix")).toBe("edgewarden/");
+		expect(vi.mocked(fetch).mock.calls[0]?.[1]?.signal).toBeInstanceOf(
+			AbortSignal,
+		);
 	});
 
 	it("uploads to the encoded path-style object URL", async () => {
@@ -75,6 +84,23 @@ describe("S3 backup adapter", () => {
 		expect(fetchMock.mock.calls[0]?.[0]).toBe(
 			"https://s3.example.test/backups/edgewarden/folder/my%20backup.zip",
 		);
-		expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "PUT" });
+		expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+			method: "PUT",
+			signal: expect.any(AbortSignal),
+		});
+	});
+
+	it("rejects oversized backup downloads before buffering", async () => {
+		globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(null, {
+				status: 200,
+				headers: {
+					"content-length": String(MAX_BACKUP_ARCHIVE_BYTES + 1),
+				},
+			}),
+		);
+		await expect(downloadFromS3(config, "backup.zip")).rejects.toThrow(
+			"S3 backup download exceeds",
+		);
 	});
 });
