@@ -18,6 +18,8 @@ import {
 } from "@lucide/svelte";
 import { Button } from "$lib/components/ui/button/index.js";
 import LoginCipherDetail from "./LoginCipherDetail.svelte";
+import CardCipherDetail from "./CardCipherDetail.svelte";
+import IdentityCipherDetail from "./IdentityCipherDetail.svelte";
 import {
 	cipherDomain as getDomain,
 	cipherExtraData as getExtraData,
@@ -54,14 +56,12 @@ let {
 } = $props();
 
 let copiedField = $state<string | null>(null);
-let showCardCode = $state(false);
 let hiddenFieldsMap = $state<Record<number, boolean>>({});
 let attachmentInput = $state<HTMLInputElement | null>(null);
 let IconComp = $derived(getItemIcon(item.type));
 
 $effect(() => {
 	item.id;
-	showCardCode = false;
 	hiddenFieldsMap = {};
 });
 
@@ -144,142 +144,8 @@ function copyToClipboard(text: string, fieldName: string) {
 						{#key item.id}<LoginCipherDetail login={item.login} hidePasswords={item.hidePasswords} {totp} />{/key}
 					{/if}
 
-					<!-- Card -->
-					{#if item.type === CipherType.Card}
-						{@const card = item.card as Record<string, any>}
-						<div class="space-y-4">
-							{#if card?.cardholderName}
-								<div class="space-y-1.5">
-									<span class="text-xs font-semibold text-slate-400">持卡人</span>
-									<div class="p-2.5 rounded-lg bg-white dark:bg-slate-800 border text-sm font-medium">{card.cardholderName}</div>
-								</div>
-							{/if}
-							{#if card?.number}
-								<div class="space-y-1.5">
-									<span class="text-xs font-semibold text-slate-400">卡号</span>
-									<div class="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-										<span class="text-sm font-mono truncate pr-2">{card.number.replace(/(.{4})/g, "$1 ").trim()}</span>
-										<Button variant="ghost" size="icon" class="size-8" onclick={() => copyToClipboard(card.number, "card")}>
-											{#if copiedField === "card"}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}
-										</Button>
-									</div>
-								</div>
-							{/if}
-							{#if card?.brand}
-								<div class="space-y-1.5">
-									<span class="text-xs font-semibold text-slate-400">卡片品牌</span>
-									<div class="p-2.5 rounded-lg bg-white dark:bg-slate-800 border text-sm font-medium">
-										{card.brand}
-									</div>
-								</div>
-							{/if}
-							{#if card?.expMonth || card?.expYear}
-								<div class="space-y-1.5">
-									<span class="text-xs font-semibold text-slate-400">有效期</span>
-									<div class="p-2.5 rounded-lg bg-white dark:bg-slate-800 border text-sm font-medium">
-										{card.expMonth ?? ""}/{card.expYear ?? ""}
-									</div>
-								</div>
-							{/if}
-							{#if card?.code}
-								<div class="space-y-1.5">
-									<span class="text-xs font-semibold text-slate-400">安全码 (CVV)</span>
-									<div class="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-										<span class="text-sm font-mono truncate pr-2 select-all">
-											{#if showCardCode}{card.code}{:else}•••{/if}
-										</span>
-										<div class="flex items-center gap-1 shrink-0">
-											<Button variant="ghost" size="icon" class="size-8" onclick={() => showCardCode = !showCardCode}>
-												{#if showCardCode}
-													<EyeOff class="size-4 text-slate-400" />
-												{:else}
-													<Eye class="size-4 text-slate-400" />
-												{/if}
-											</Button>
-											<Button variant="ghost" size="icon" class="size-8" onclick={() => copyToClipboard(card.code, "card-code")}>
-												{#if copiedField === "card-code"}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}
-											</Button>
-										</div>
-									</div>
-								</div>
-							{/if}
-						</div>
-					{/if}
-
-					<!-- Identity -->
-					{#if item.type === CipherType.Identity}
-						{@const id = item.identity as Record<string, any>}
-						<div class="space-y-4">
-							{#if id?.firstName || id?.lastName}
-								<div class="space-y-1.5">
-									<span class="text-xs font-semibold text-slate-400">姓名</span>
-									<div class="p-2.5 rounded-lg bg-white dark:bg-slate-800 border text-sm font-medium">
-										{id.lastName ?? ""} {id.firstName ?? ""}
-									</div>
-								</div>
-							{/if}
-							{#if id?.username}
-								<div class="space-y-1.5">
-									<span class="text-xs font-semibold text-slate-400">用户名</span>
-									<div class="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-										<span class="text-sm font-medium truncate pr-2 select-all">{id.username}</span>
-										<Button variant="ghost" size="icon" class="size-8" onclick={() => copyToClipboard(id.username, "id-username")}>
-											{#if copiedField === "id-username"}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}
-										</Button>
-									</div>
-								</div>
-							{/if}
-							{#if id?.email}
-								<div class="space-y-1.5">
-									<span class="text-xs font-semibold text-slate-400">电子邮箱</span>
-									<div class="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-										<span class="text-sm font-medium truncate pr-2 select-all">{id.email}</span>
-										<Button variant="ghost" size="icon" class="size-8" onclick={() => copyToClipboard(id.email, "id-email")}>
-											{#if copiedField === "id-email"}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}
-										</Button>
-									</div>
-								</div>
-							{/if}
-							{#if id?.phone}
-								<div class="space-y-1.5">
-									<span class="text-xs font-semibold text-slate-400">电话号码</span>
-									<div class="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-										<span class="text-sm font-medium truncate pr-2 select-all">{id.phone}</span>
-										<Button variant="ghost" size="icon" class="size-8" onclick={() => copyToClipboard(id.phone, "id-phone")}>
-											{#if copiedField === "id-phone"}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}
-										</Button>
-									</div>
-								</div>
-							{/if}
-							{#if id?.company}
-								<div class="space-y-1.5">
-									<span class="text-xs font-semibold text-slate-400">公司 / 组织</span>
-									<div class="p-2.5 rounded-lg bg-white dark:bg-slate-800 border text-sm font-medium">{id.company}</div>
-								</div>
-							{/if}
-							{#if id?.number}
-								<div class="space-y-1.5">
-									<span class="text-xs font-semibold text-slate-400">证件号码</span>
-									<div class="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-										<span class="text-sm font-mono truncate pr-2">{id.number}</span>
-										<Button variant="ghost" size="icon" class="size-8" onclick={() => copyToClipboard(id.number, "id-number")}>
-											{#if copiedField === "id-number"}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}
-										</Button>
-									</div>
-								</div>
-							{/if}
-							{#if id?.address1 || id?.city || id?.country}
-								{@const fullAddress = [id.address1, id.address2, id.address3, id.city, id.state, id.postalCode, id.country].filter(Boolean).join(", ")}
-								{#if fullAddress}
-									<div class="space-y-1.5">
-										<span class="text-xs font-semibold text-slate-400">地址</span>
-										<div class="p-2.5 rounded-lg bg-white dark:bg-slate-800 border text-sm font-medium leading-relaxed">{fullAddress}</div>
-									</div>
-								{/if}
-							{/if}
-						</div>
-					{/if}
-
+					{#if item.type === CipherType.Card}<CardCipherDetail card={item.card} {copiedField} onCopy={copyToClipboard} />{/if}
+					{#if item.type === CipherType.Identity}<IdentityCipherDetail identity={item.identity} {copiedField} onCopy={copyToClipboard} />{/if}
 					{#if getExtraData(item)}
 						<div class="space-y-3">
 							{#each Object.entries(getExtraData(item) ?? {}) as [key, value]}
