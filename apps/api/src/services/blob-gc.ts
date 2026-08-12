@@ -2,6 +2,7 @@ import { type Kysely, sql } from "kysely";
 import type { DB } from "../types/db";
 import { now } from "../utils/time";
 import type { BlobStore } from "./blob-store";
+import { deleteBlobObject } from "./blob-store";
 
 const BATCH_LIMIT = 100;
 
@@ -27,6 +28,24 @@ export async function enqueueBlobGcKeys(
 				.bind(key, timestamp, timestamp),
 		),
 	);
+}
+
+export async function discardUnpublishedBlob(
+	env: CloudflareBindings,
+	objectKey: string,
+): Promise<void> {
+	try {
+		await enqueueBlobGcKeys(env.DB, [objectKey]);
+	} catch (enqueueError) {
+		try {
+			await deleteBlobObject(env, objectKey);
+		} catch (deleteError) {
+			throw new AggregateError(
+				[enqueueError, deleteError],
+				`Unable to schedule or delete unpublished blob: ${objectKey}`,
+			);
+		}
+	}
 }
 
 async function isReferenced(

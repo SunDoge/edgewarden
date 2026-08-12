@@ -3,12 +3,14 @@ import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { SendAccessSchema } from "../schemas/sends";
 import {
+	createSendFileUploadObjectKey,
 	getBlobObject,
 	getBlobStorageMaxBytes,
 	getStoredSendFileObjectKey,
 	putBlobObject,
 } from "../services/blob-store";
-import * as revisionsDb from "../services/db/revisions";
+import { discardUnpublishedBlob } from "../services/blob-gc";
+import { publishSendFileObject } from "../services/sends/file-storage";
 import * as sendsDb from "../services/db/sends";
 import { getSafeSendJwtSecret } from "../services/sends/jwt-secret";
 import {
@@ -281,20 +283,30 @@ export const uploadPublicSendFile = factory.createHandlers(async (c) => {
 		return upload;
 	}
 
-	await putBlobObject(
-		c.env,
-		getStoredSendFileObjectKey(send, fileId),
-		upload.body,
-		{
+	const candidateKey = createSendFileUploadObjectKey(send.id, fileId);
+	try {
+		await putBlobObject(c.env, candidateKey, upload.body, {
 			size: upload.size,
 			contentType: upload.contentType,
 			customMetadata: {
 				sendId: send.id,
 				fileId,
 			},
-		},
-	);
-
-	await revisionsDb.touchRevision(db, claims.userId);
+		});
+		if (
+			!(await publishSendFileObject(c.env.DB, {
+				sendId: send.id,
+				userId: claims.userId,
+				fileId,
+				storageKey: candidateKey,
+			}))
+		) {
+			await discardUnpublishedBlob(c.env, candidateKey);
+			return errorResponse("Send not found. Unable to save the file.", 404);
+		}
+	} catch (error) {
+		await discardUnpublishedBlob(c.env, candidateKey).catch(() => undefined);
+		throw error;
+	}
 	return new Response(null, { status: 201 });
 });

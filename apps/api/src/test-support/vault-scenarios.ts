@@ -837,16 +837,12 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		);
 		assert.equal(gone.status, 404);
 		const tombstone = await context.database
-			.prepare("SELECT deleted_at FROM attachments WHERE id = ?")
+			.prepare("SELECT deleted_at, storage_key FROM attachments WHERE id = ?")
 			.bind(metadata.attachmentId)
-			.first<{ deleted_at: number | null }>();
+			.first<{ deleted_at: number | null; storage_key: string | null }>();
 		assert.ok(tombstone?.deleted_at);
-		assert.equal(
-			context.r2Values.has(
-				`attachments/${context.cipherId}/${metadata.attachmentId}.bin`,
-			),
-			true,
-		);
+		assert.ok(tombstone?.storage_key);
+		assert.equal(context.r2Values.has(tombstone.storage_key), true);
 	});
 
 	test("retries attachment publication after a D1 failure", async () => {
@@ -905,6 +901,14 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 				.then(Boolean),
 			false,
 		);
+		const failedCandidate = await context.database
+			.prepare(
+				"SELECT object_key FROM blob_gc_queue WHERE instr(object_key, ?) = 1 ORDER BY created_at DESC LIMIT 1",
+			)
+			.bind(`attachments/${context.cipherId}/${metadata.attachmentId}.`)
+			.first<{ object_key: string }>();
+		assert.ok(failedCandidate?.object_key);
+		assert.equal(context.r2Values.has(failedCandidate.object_key), true);
 
 		const retried = await upload();
 		assert.equal(retried.status, 201, await retried.clone().text());
@@ -916,6 +920,13 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 				.then(Boolean),
 			true,
 		);
+		const publishedStorageKey = await context.database
+			.prepare("SELECT storage_key FROM attachments WHERE id = ?")
+			.bind(metadata.attachmentId)
+			.first<{ storage_key: string }>()
+			.then((row) => row?.storage_key);
+		assert.ok(publishedStorageKey);
+		assert.notEqual(publishedStorageKey, failedCandidate.object_key);
 		const downloaded = await request(
 			`/api/ciphers/${context.cipherId}/attachment/${metadata.attachmentId}`,
 			{ headers: auth },

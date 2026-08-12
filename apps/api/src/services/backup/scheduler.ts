@@ -13,6 +13,7 @@ import {
 import {
 	acquireDataOperationLease,
 	releaseDataOperationLease,
+	requireDataOperationLeaseRenewal,
 } from "./operation-lease";
 import {
 	createRemoteBackupTransferSession,
@@ -80,17 +81,20 @@ export async function runScheduledBackupIfDue(
 					blobStore,
 					timeZone: destination.schedule.timezone,
 				});
+				await requireDataOperationLeaseRenewal(env.DB, lease);
 				const session = createRemoteBackupTransferSession(destination);
 				const upload = await session.uploadArchive(
 					archive.bytes,
 					archive.fileName,
 				);
+				await requireDataOperationLeaseRenewal(env.DB, lease);
 				const remoteFile = await session.download(archive.fileName);
 				await assertBackupArchiveIntegrity(
 					remoteFile.bytes,
 					archive.fileName,
 					archive.bytes.byteLength,
 				);
+				await requireDataOperationLeaseRenewal(env.DB, lease);
 
 				if (destination.schedule.retentionCount !== null) {
 					await pruneRemoteBackupArchives(

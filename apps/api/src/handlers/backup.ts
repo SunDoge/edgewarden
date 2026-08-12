@@ -24,6 +24,7 @@ import { importBackupArchiveBytes } from "../services/backup/import";
 import {
 	acquireDataOperationLease,
 	releaseDataOperationLease,
+	requireDataOperationLeaseRenewal,
 	withDataOperationLease,
 } from "../services/backup/operation-lease";
 import {
@@ -192,17 +193,20 @@ export const runBackup = factory.createHandlers(
 				blobStore,
 				timeZone: destination.schedule.timezone,
 			});
+			await requireDataOperationLeaseRenewal(c.env.DB, lease);
 			const remoteSession = createRemoteBackupTransferSession(destination);
 			const upload = await remoteSession.uploadArchive(
 				archive.bytes,
 				archive.fileName,
 			);
+			await requireDataOperationLeaseRenewal(c.env.DB, lease);
 			const remoteFile = await remoteSession.download(archive.fileName);
 			await assertBackupArchiveIntegrity(
 				remoteFile.bytes,
 				archive.fileName,
 				archive.bytes.byteLength,
 			);
+			await requireDataOperationLeaseRenewal(c.env.DB, lease);
 
 			let prunedCount = 0;
 			if (destination.schedule.retentionCount !== null) {
@@ -297,7 +301,7 @@ export const importBackup = factory.createHandlers(
 				c.env.DATA_ENCRYPTION_SECRET,
 				c.get("user").id,
 				body.replaceExisting === "1",
-				undefined,
+				async () => requireDataOperationLeaseRenewal(c.env.DB, lease),
 				fileName || "edgewarden_backup.zip",
 			);
 			await safeWriteAuditEvent(c.get("db"), {
