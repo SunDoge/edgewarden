@@ -124,6 +124,25 @@ export function organizationMemberCollectionAccessQuery(
 	`.compile(db);
 }
 
+export function webauthnCredentialRevisionQuery(
+	db: Kysely<DB>,
+	userId: string,
+	credentialId: string,
+	timestamp = now(),
+) {
+	return sql`
+		INSERT INTO user_revisions (user_id, revision_date)
+		SELECT user_id, ${timestamp}
+		FROM webauthn_credentials
+		WHERE id = ${credentialId}
+		  AND user_id = ${userId}
+		ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
+			user_revisions.revision_date + 1,
+			excluded.revision_date
+		)
+	`.compile(db);
+}
+
 export function folderRevisionQuery(
 	db: Kysely<DB>,
 	userId: string,

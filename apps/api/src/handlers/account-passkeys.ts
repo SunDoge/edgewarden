@@ -18,7 +18,11 @@ import {
 	handleGetAccountPasskeyAssertionOptions,
 	verifyUserSecret,
 } from "../services/account-passkey-auth";
-import { executeBatch, revisionQuery } from "../services/db/batch";
+import {
+	executeBatch,
+	revisionQuery,
+	webauthnCredentialRevisionQuery,
+} from "../services/db/batch";
 import * as webauthnDb from "../services/db/webauthn";
 import type { WebauthnCredentials } from "../types/db";
 import {
@@ -411,7 +415,7 @@ export const updateAccountPasskeyEncryption = factory.createHandlers(
 		}
 
 		const ts = now();
-		await executeBatch(c.get("dbDialect"), [
+		const [updated] = await c.get("dbDialect").batch([
 			db
 				.updateTable("webauthn_credentials")
 				.set({
@@ -424,8 +428,10 @@ export const updateAccountPasskeyEncryption = factory.createHandlers(
 				.where("user_id", "=", user.id)
 				.where("credential_id", "=", assertion.credential.credential_id)
 				.compile(),
-			revisionQuery(db, user.id, ts),
+			webauthnCredentialRevisionQuery(db, user.id, assertion.credential.id, ts),
 		]);
+		if (updated.numAffectedRows !== 1n)
+			return errorResponse("Passkey not found", 404);
 
 		await safeWriteAuditEvent(db, {
 			actorUserId: user.id,
@@ -454,14 +460,18 @@ export const deleteAccountPasskey = factory.createHandlers(
 			return errorResponse("Master password verification failed", 400);
 		}
 
-		await executeBatch(c.get("dbDialect"), [
-			db
-				.deleteFrom("webauthn_credentials")
-				.where("user_id", "=", user.id)
-				.where("id", "=", id)
-				.compile(),
-			revisionQuery(db, user.id),
-		]);
+		const [, deleted] = await c
+			.get("dbDialect")
+			.batch([
+				webauthnCredentialRevisionQuery(db, user.id, id),
+				db
+					.deleteFrom("webauthn_credentials")
+					.where("user_id", "=", user.id)
+					.where("id", "=", id)
+					.compile(),
+			]);
+		if (deleted.numAffectedRows !== 1n)
+			return errorResponse("Passkey not found", 404);
 
 		await safeWriteAuditEvent(db, {
 			actorUserId: user.id,
