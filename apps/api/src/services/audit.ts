@@ -40,6 +40,10 @@ const ALLOWED_METADATA_KEYS = new Set([
 	"invitationsAllowed",
 ]);
 
+export const MAX_AUDIT_METADATA_BYTES = 4 * 1024;
+export const MAX_AUDIT_METADATA_STRING_BYTES = 1024;
+const utf8 = new TextEncoder();
+
 const AUDIT_SETTINGS_KEY = "audit.log.settings.v1";
 export interface AuditLogSettings {
 	retentionDays: 7 | 30 | 90 | 180 | 365 | null;
@@ -150,22 +154,47 @@ export function auditRequestMetadata(
 	};
 }
 
-function sanitizeMetadata(
+function truncateUtf8(value: string, maximumBytes: number): string {
+	if (utf8.encode(value).byteLength <= maximumBytes) return value;
+	const characters: string[] = [];
+	let bytes = 0;
+	for (const character of value) {
+		const characterBytes = utf8.encode(character).byteLength;
+		if (bytes + characterBytes > maximumBytes) break;
+		characters.push(character);
+		bytes += characterBytes;
+	}
+	return characters.join("");
+}
+
+export function serializeAuditMetadata(
 	metadata: Record<string, unknown>,
-): Record<string, unknown> {
+): string {
 	const clean: Record<string, unknown> = {};
 	for (const [key, value] of Object.entries(metadata)) {
 		if (!ALLOWED_METADATA_KEYS.has(key)) continue;
 		if (value === undefined || value === null || value === "") continue;
 		if (/(token|secret|password|key|hash|code|private)/i.test(key)) continue;
+		let cleanValue: string | number | boolean;
 		if (Array.isArray(value)) {
-			clean[key] = value.length;
+			cleanValue = value.length;
+		} else if (typeof value === "string") {
+			cleanValue = truncateUtf8(value, MAX_AUDIT_METADATA_STRING_BYTES);
+		} else if (typeof value === "number") {
+			if (!Number.isFinite(value)) continue;
+			cleanValue = value;
+		} else if (typeof value === "boolean") {
+			cleanValue = value;
+		} else {
 			continue;
 		}
-		if (typeof value === "object") continue;
-		clean[key] = value;
+		clean[key] = cleanValue;
+		if (
+			utf8.encode(JSON.stringify(clean)).byteLength > MAX_AUDIT_METADATA_BYTES
+		)
+			delete clean[key];
 	}
-	return clean;
+	return JSON.stringify(clean);
 }
 
 /**
@@ -181,7 +210,7 @@ export function auditEventInsertQuery(
 	condition: RawBuilder<boolean> = sql<boolean>`TRUE`,
 	createdAt = now(),
 ): CompiledQuery {
-	const metadata = sanitizeMetadata(event.metadata || {});
+	const metadata = serializeAuditMetadata(event.metadata || {});
 	return sql`
 		INSERT INTO audit_logs (
 			id, actor_user_id, action, category, level,
@@ -190,7 +219,7 @@ export function auditEventInsertQuery(
 		SELECT
 			${crypto.randomUUID()}, ${event.actorUserId ?? null}, ${event.action},
 			${event.category}, ${event.level || "info"}, ${event.targetType ?? null},
-			${event.targetId ?? null}, ${JSON.stringify(metadata)},
+			${event.targetId ?? null}, ${metadata},
 			${isAuditTombstoneAction(event.action) ? 1 : 0}, ${createdAt}
 		WHERE ${condition}
 	`.compile(db);
