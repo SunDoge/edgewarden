@@ -92,6 +92,6 @@ export async function cleanupExpiredRefreshTokens(
 ): Promise<void> {
 	await db
 		.deleteFrom("refresh_tokens")
-		.where("expires_at", "<", now())
+		.where("expires_at", "<=", now())
 		.execute();
 }

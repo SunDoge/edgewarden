@@ -316,6 +316,66 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
 			"refresh_token" in (await refreshed.json<Record<string, unknown>>()),
 			false,
 		);
+		const refreshedCookie =
+			(refreshed.headers.get("set-cookie") ?? "").split(";")[0] ||
+			cookie.split(";")[0];
+		const revoked = await request("/identity/connect/revocation", {
+			method: "POST",
+			headers: {
+				"content-type": "application/x-www-form-urlencoded",
+				cookie: refreshedCookie,
+			},
+			body: new URLSearchParams(),
+		});
+		assert.equal(revoked.status, 200, await revoked.clone().text());
+		assert.match(revoked.headers.get("set-cookie") ?? "", /Max-Age=0/i);
+		const replay = await request("/identity/connect/token", {
+			method: "POST",
+			headers: {
+				"content-type": "application/x-www-form-urlencoded",
+				cookie: refreshedCookie,
+			},
+			body: new URLSearchParams({
+				grant_type: "refresh_token",
+				client_id: "web",
+			}),
+		});
+		assert.equal(replay.status, 400);
+	});
+
+	test("revokes an explicit refresh token idempotently", async () => {
+		const login = await request("/identity/connect/token", {
+			method: "POST",
+			headers: { "content-type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				grant_type: "password",
+				username: EMAIL,
+				password: MASTER_PASSWORD_HASH,
+				deviceIdentifier: `revocation-${crypto.randomUUID()}`,
+				deviceName: "Revocation test",
+				deviceType: "14",
+			}),
+		});
+		assert.equal(login.status, 200, await login.clone().text());
+		const refreshToken = (await login.json<{ refresh_token: string }>())
+			.refresh_token;
+		const revoke = () =>
+			request("/identity/connect/revoke", {
+				method: "POST",
+				headers: { "content-type": "application/x-www-form-urlencoded" },
+				body: new URLSearchParams({ token: refreshToken }),
+			});
+		assert.equal((await revoke()).status, 200);
+		assert.equal((await revoke()).status, 200);
+		const replay = await request("/identity/connect/token", {
+			method: "POST",
+			headers: { "content-type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				grant_type: "refresh_token",
+				refresh_token: refreshToken,
+			}),
+		});
+		assert.equal(replay.status, 400);
 	});
 
 	test("persists account login lockout across requests", async () => {
