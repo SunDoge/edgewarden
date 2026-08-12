@@ -17,6 +17,7 @@ import {
 } from "./test-support/api-harness";
 import { registerAuthScenarios } from "./test-support/auth-scenarios";
 import { registerInfrastructureScenarios } from "./test-support/infrastructure-scenarios";
+import { registerSendScenarios } from "./test-support/send-scenarios";
 import { registerVaultScenarios } from "./test-support/vault-scenarios";
 
 const JWT_SECRET = "test-secret-that-is-at-least-thirty-two-characters";
@@ -117,167 +118,33 @@ describe("Edgewarden API", () => {
 		email: EMAIL,
 		masterPasswordHash: MASTER_PASSWORD_HASH,
 	});
-
-	test("validates and creates a text Send with an atomic revision update", async () => {
-		const auth = { authorization: `Bearer ${accessToken}` };
-		const invalid = await request("/api/sends", {
-			method: "POST",
-			headers: { ...auth, "content-type": "application/json" },
-			body: JSON.stringify({ type: 0, name: "missing-required-fields" }),
-		});
-		assert.equal(invalid.status, 400);
-
-		const created = await request("/api/sends", {
-			method: "POST",
-			headers: { ...auth, "content-type": "application/json" },
-			body: JSON.stringify({
-				type: 0,
-				name: "encrypted-send-name",
-				key: "encrypted-send-key",
-				text: { text: "encrypted-send-text", hidden: false },
-				deletionDate: new Date(Date.now() + 86_400_000).toISOString(),
-			}),
-		});
-		assert.equal(created.status, 200, await created.clone().text());
-		const send = await created.json<{ id: string; accessId: string }>();
-		sendId = send.id;
-		sendAccessId = send.accessId;
-	});
-
-	test("serves public Sends while private Send middleware hides unknown ids", async () => {
-		const missing = await request(`/api/sends/${crypto.randomUUID()}`, {
-			headers: { authorization: `Bearer ${accessToken}` },
-		});
-		assert.equal(missing.status, 404);
-
-		const accessed = await request(`/api/sends/access/${sendAccessId}`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({}),
-		});
-		assert.equal(accessed.status, 200, await accessed.clone().text());
-		const body = await accessed.json<{
-			id: string;
-			text: { text: string };
-		}>();
-		assert.equal(body.id, sendId);
-		assert.equal(body.text.text, "encrypted-send-text");
-	});
-
-	test("updates text Send data without replacing it with an incompatible shape", async () => {
-		const updated = await request(`/api/sends/${sendId}`, {
-			method: "PUT",
-			headers: {
-				authorization: `Bearer ${accessToken}`,
-				"content-type": "application/json",
-			},
-			body: JSON.stringify({
-				text: { text: "updated-encrypted-text", hidden: false },
-			}),
-		});
-		assert.equal(updated.status, 200, await updated.clone().text());
-		assert.equal(
-			(await updated.json<{ text: { text: string } }>()).text.text,
-			"updated-encrypted-text",
-		);
-
-		const accessed = await request(`/api/sends/access/${sendAccessId}`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({}),
-		});
-		assert.equal(accessed.status, 200);
-		assert.equal(
-			(await accessed.json<{ text: { text: string } }>()).text.text,
-			"updated-encrypted-text",
-		);
-	});
-
-	test("validates passkey requests before WebAuthn processing", async () => {
-		const auth = { authorization: `Bearer ${accessToken}` };
-		const invalidOptions = await request("/api/webauthn/attestation-options", {
-			method: "POST",
-			headers: { ...auth, "content-type": "application/json" },
-			body: JSON.stringify({}),
-		});
-		assert.equal(invalidOptions.status, 400);
-
-		const unknownCredential = await request(
-			`/api/webauthn/${crypto.randomUUID()}/delete`,
-			{
-				method: "POST",
-				headers: { ...auth, "content-type": "application/json" },
-				body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
-			},
-		);
-		assert.equal(unknownCredential.status, 404);
-	});
-
-	test("includes independently stored cipher fields and Sends in sync", async () => {
-		const response = await request("/api/sync", {
-			headers: { authorization: `Bearer ${accessToken}` },
-		});
-		assert.equal(response.status, 200);
-		const sync = await response.json<{
-			ciphers: Array<{ id: string; fields: unknown[] | null }>;
-			sends: Array<{ id: string }>;
-		}>();
-		assert.equal(
-			sync.ciphers.find((cipher) => cipher.id === cipherId)?.fields?.length,
-			1,
-		);
-		assert.ok(sync.sends.some((send) => send.id === sendId));
-	});
-
-	test("bulk deletes only Sends owned by the authenticated user", async () => {
-		const createSend = async (token: string, name: string) => {
-			const response = await request("/api/sends", {
-				method: "POST",
-				headers: {
-					authorization: `Bearer ${token}`,
-					"content-type": "application/json",
-				},
-				body: JSON.stringify({
-					type: 0,
-					name,
-					key: "encrypted-key",
-					text: { text: "encrypted-text", hidden: false },
-					deletionDate: new Date(Date.now() + 86_400_000).toISOString(),
-				}),
-			});
-			assert.equal(response.status, 200, await response.clone().text());
-			return (await response.json<{ id: string }>()).id;
-		};
-		const ownedId = await createSend(accessToken, "encrypted-bulk-send");
-		const otherUserId = await createSend(
-			memberAccessToken,
-			"encrypted-other-send",
-		);
-		const deleted = await request("/api/sends/delete", {
-			method: "POST",
-			headers: {
-				authorization: `Bearer ${accessToken}`,
-				"content-type": "application/json",
-			},
-			body: JSON.stringify({ ids: [ownedId, otherUserId] }),
-		});
-		assert.equal(deleted.status, 200, await deleted.clone().text());
-		assert.equal(
-			await testDatabase
-				.prepare("SELECT COUNT(*) AS count FROM sends WHERE id = ?")
-				.bind(ownedId)
-				.first<{ count: number }>()
-				.then((row) => Number(row?.count)),
-			0,
-		);
-		assert.equal(
-			await testDatabase
-				.prepare("SELECT COUNT(*) AS count FROM sends WHERE id = ?")
-				.bind(otherUserId)
-				.first<{ count: number }>()
-				.then((row) => Number(row?.count)),
-			1,
-		);
+	registerSendScenarios({
+		get database() {
+			return testDatabase;
+		},
+		get accessToken() {
+			return accessToken;
+		},
+		get memberAccessToken() {
+			return memberAccessToken;
+		},
+		get cipherId() {
+			return cipherId;
+		},
+		get sendId() {
+			return sendId;
+		},
+		set sendId(value) {
+			sendId = value;
+		},
+		get sendAccessId() {
+			return sendAccessId;
+		},
+		set sendAccessId(value) {
+			sendAccessId = value;
+		},
+		request,
+		masterPasswordHash: MASTER_PASSWORD_HASH,
 	});
 
 	test("validates backup settings before normalization", async () => {

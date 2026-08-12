@@ -1,0 +1,189 @@
+import assert from "node:assert/strict";
+import { test } from "vitest";
+
+export interface SendScenarioContext {
+	readonly database: D1Database;
+	readonly accessToken: string;
+	readonly memberAccessToken: string;
+	readonly cipherId: string;
+	sendId: string;
+	sendAccessId: string;
+	request: (path: string, init?: RequestInit) => Promise<Response>;
+	masterPasswordHash: string;
+}
+
+export function registerSendScenarios(context: SendScenarioContext): void {
+	const request = context.request;
+	const MASTER_PASSWORD_HASH = context.masterPasswordHash;
+	test("validates and creates a text Send with an atomic revision update", async () => {
+		const auth = { authorization: `Bearer ${context.accessToken}` };
+		const invalid = await request("/api/sends", {
+			method: "POST",
+			headers: { ...auth, "content-type": "application/json" },
+			body: JSON.stringify({ type: 0, name: "missing-required-fields" }),
+		});
+		assert.equal(invalid.status, 400);
+
+		const created = await request("/api/sends", {
+			method: "POST",
+			headers: { ...auth, "content-type": "application/json" },
+			body: JSON.stringify({
+				type: 0,
+				name: "encrypted-send-name",
+				key: "encrypted-send-key",
+				text: { text: "encrypted-send-text", hidden: false },
+				deletionDate: new Date(Date.now() + 86_400_000).toISOString(),
+			}),
+		});
+		assert.equal(created.status, 200, await created.clone().text());
+		const send = await created.json<{ id: string; accessId: string }>();
+		context.sendId = send.id;
+		context.sendAccessId = send.accessId;
+	});
+
+	test("serves public Sends while private Send middleware hides unknown ids", async () => {
+		const missing = await request(`/api/sends/${crypto.randomUUID()}`, {
+			headers: { authorization: `Bearer ${context.accessToken}` },
+		});
+		assert.equal(missing.status, 404);
+
+		const accessed = await request(
+			`/api/sends/access/${context.sendAccessId}`,
+			{
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({}),
+			},
+		);
+		assert.equal(accessed.status, 200, await accessed.clone().text());
+		const body = await accessed.json<{
+			id: string;
+			text: { text: string };
+		}>();
+		assert.equal(body.id, context.sendId);
+		assert.equal(body.text.text, "encrypted-send-text");
+	});
+
+	test("updates text Send data without replacing it with an incompatible shape", async () => {
+		const updated = await request(`/api/sends/${context.sendId}`, {
+			method: "PUT",
+			headers: {
+				authorization: `Bearer ${context.accessToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({
+				text: { text: "updated-encrypted-text", hidden: false },
+			}),
+		});
+		assert.equal(updated.status, 200, await updated.clone().text());
+		assert.equal(
+			(await updated.json<{ text: { text: string } }>()).text.text,
+			"updated-encrypted-text",
+		);
+
+		const accessed = await request(
+			`/api/sends/access/${context.sendAccessId}`,
+			{
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({}),
+			},
+		);
+		assert.equal(accessed.status, 200);
+		assert.equal(
+			(await accessed.json<{ text: { text: string } }>()).text.text,
+			"updated-encrypted-text",
+		);
+	});
+
+	test("validates passkey requests before WebAuthn processing", async () => {
+		const auth = { authorization: `Bearer ${context.accessToken}` };
+		const invalidOptions = await request("/api/webauthn/attestation-options", {
+			method: "POST",
+			headers: { ...auth, "content-type": "application/json" },
+			body: JSON.stringify({}),
+		});
+		assert.equal(invalidOptions.status, 400);
+
+		const unknownCredential = await request(
+			`/api/webauthn/${crypto.randomUUID()}/delete`,
+			{
+				method: "POST",
+				headers: { ...auth, "content-type": "application/json" },
+				body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
+			},
+		);
+		assert.equal(unknownCredential.status, 404);
+	});
+
+	test("includes independently stored cipher fields and Sends in sync", async () => {
+		const response = await request("/api/sync", {
+			headers: { authorization: `Bearer ${context.accessToken}` },
+		});
+		assert.equal(response.status, 200);
+		const sync = await response.json<{
+			ciphers: Array<{ id: string; fields: unknown[] | null }>;
+			sends: Array<{ id: string }>;
+		}>();
+		assert.equal(
+			sync.ciphers.find((cipher) => cipher.id === context.cipherId)?.fields
+				?.length,
+			1,
+		);
+		assert.ok(sync.sends.some((send) => send.id === context.sendId));
+	});
+
+	test("bulk deletes only Sends owned by the authenticated user", async () => {
+		const createSend = async (token: string, name: string) => {
+			const response = await request("/api/sends", {
+				method: "POST",
+				headers: {
+					authorization: `Bearer ${token}`,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					type: 0,
+					name,
+					key: "encrypted-key",
+					text: { text: "encrypted-text", hidden: false },
+					deletionDate: new Date(Date.now() + 86_400_000).toISOString(),
+				}),
+			});
+			assert.equal(response.status, 200, await response.clone().text());
+			return (await response.json<{ id: string }>()).id;
+		};
+		const ownedId = await createSend(
+			context.accessToken,
+			"encrypted-bulk-send",
+		);
+		const otherUserId = await createSend(
+			context.memberAccessToken,
+			"encrypted-other-send",
+		);
+		const deleted = await request("/api/sends/delete", {
+			method: "POST",
+			headers: {
+				authorization: `Bearer ${context.accessToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({ ids: [ownedId, otherUserId] }),
+		});
+		assert.equal(deleted.status, 200, await deleted.clone().text());
+		assert.equal(
+			await context.database
+				.prepare("SELECT COUNT(*) AS count FROM sends WHERE id = ?")
+				.bind(ownedId)
+				.first<{ count: number }>()
+				.then((row) => Number(row?.count)),
+			0,
+		);
+		assert.equal(
+			await context.database
+				.prepare("SELECT COUNT(*) AS count FROM sends WHERE id = ?")
+				.bind(otherUserId)
+				.first<{ count: number }>()
+				.then((row) => Number(row?.count)),
+			1,
+		);
+	});
+}
