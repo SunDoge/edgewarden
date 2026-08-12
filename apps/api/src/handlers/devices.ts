@@ -11,6 +11,7 @@ import { textColumnInJson } from "../services/db/json-array";
 import type { Devices } from "../types/db";
 import { toIso } from "../utils/time";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import { errorResponse } from "../utils/response";
 
 function deviceToResponse(device: Selectable<Devices>) {
 	return {
@@ -67,18 +68,22 @@ export const deleteDevice = factory.createHandlers(async (c) => {
 	const db = c.get("db");
 	const userId = c.get("user").id;
 	const id = c.get("device").device_identifier;
-	await executeBatch(c.get("dbDialect"), [
-		db
-			.deleteFrom("refresh_tokens")
-			.where("user_id", "=", userId)
-			.where("device_identifier", "=", id)
-			.compile(),
-		db
-			.deleteFrom("devices")
-			.where("user_id", "=", userId)
-			.where("device_identifier", "=", id)
-			.compile(),
-	]);
+	const [, deleted] = await c
+		.get("dbDialect")
+		.batch([
+			db
+				.deleteFrom("refresh_tokens")
+				.where("user_id", "=", userId)
+				.where("device_identifier", "=", id)
+				.compile(),
+			db
+				.deleteFrom("devices")
+				.where("user_id", "=", userId)
+				.where("device_identifier", "=", id)
+				.compile(),
+		]);
+	if (deleted.numAffectedRows !== 1n)
+		return errorResponse("Device not found", 404);
 	invalidateUserCache(userId);
 	return new Response(null, { status: 200 });
 });
@@ -98,29 +103,38 @@ export const deleteDevices = factory.createHandlers(
 				.execute()
 		).map((device) => device.device_identifier);
 		if (ownedIds.length) {
-			await executeBatch(c.get("dbDialect"), [
-				db
-					.deleteFrom("refresh_tokens")
-					.where("user_id", "=", userId)
-					.where(textColumnInJson("device_identifier", ownedIds))
-					.compile(),
-				db
-					.deleteFrom("devices")
-					.where("user_id", "=", userId)
-					.where(textColumnInJson("device_identifier", ownedIds))
-					.compile(),
-			]);
-			invalidateUserCache(userId);
-			await safeWriteAuditEvent(db, {
-				actorUserId: userId,
-				action: "device.delete.bulk",
-				category: "auth",
-				level: "warning",
-				targetType: "device",
-				metadata: { ...auditRequestMetadata(c.req.raw), size: ownedIds.length },
-			});
+			const [, deleted] = await c
+				.get("dbDialect")
+				.batch([
+					db
+						.deleteFrom("refresh_tokens")
+						.where("user_id", "=", userId)
+						.where(textColumnInJson("device_identifier", ownedIds))
+						.compile(),
+					db
+						.deleteFrom("devices")
+						.where("user_id", "=", userId)
+						.where(textColumnInJson("device_identifier", ownedIds))
+						.compile(),
+				]);
+			const deletedCount = Number(deleted.numAffectedRows ?? 0n);
+			if (deletedCount) {
+				invalidateUserCache(userId);
+				await safeWriteAuditEvent(db, {
+					actorUserId: userId,
+					action: "device.delete.bulk",
+					category: "auth",
+					level: "warning",
+					targetType: "device",
+					metadata: {
+						...auditRequestMetadata(c.req.raw),
+						size: deletedCount,
+					},
+				});
+			}
+			return c.json({ deleted: deletedCount });
 		}
-		return c.json({ deleted: ownedIds.length });
+		return c.json({ deleted: 0 });
 	},
 );
 
@@ -130,20 +144,22 @@ export const updateDeviceName = factory.createHandlers(
 		const db = c.get("db");
 		const userId = c.get("user").id;
 		const device = c.get("device");
-		await devicesDb.upsertDevice(
-			db,
-			userId,
-			device.device_identifier,
-			c.req.valid("json").name,
-			device.type,
-			device.session_stamp!,
-		);
+		if (
+			!(await devicesDb.updateDeviceName(
+				db,
+				userId,
+				device.device_identifier,
+				c.req.valid("json").name,
+			))
+		)
+			return errorResponse("Device not found", 404);
 		const updated = await devicesDb.getDevice(
 			db,
 			userId,
 			device.device_identifier,
 		);
-		return c.json(deviceToResponse(updated!));
+		if (!updated) return errorResponse("Device not found", 404);
+		return c.json(deviceToResponse(updated));
 	},
 );
 
@@ -155,20 +171,24 @@ export const updateDeviceKeys = factory.createHandlers(
 		const device = c.get("device");
 		const { encryptedUserKey, encryptedPublicKey, encryptedPrivateKey } =
 			c.req.valid("json");
-		await devicesDb.updateDeviceKeys(
-			db,
-			userId,
-			device.device_identifier,
-			encryptedUserKey,
-			encryptedPublicKey,
-			encryptedPrivateKey,
-		);
+		if (
+			!(await devicesDb.updateDeviceKeys(
+				db,
+				userId,
+				device.device_identifier,
+				encryptedUserKey,
+				encryptedPublicKey,
+				encryptedPrivateKey,
+			))
+		)
+			return errorResponse("Device not found", 404);
 		const updated = await devicesDb.getDevice(
 			db,
 			userId,
 			device.device_identifier,
 		);
-		return c.json(deviceToResponse(updated!));
+		if (!updated) return errorResponse("Device not found", 404);
+		return c.json(deviceToResponse(updated));
 	},
 );
 

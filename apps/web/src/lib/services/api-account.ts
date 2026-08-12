@@ -52,7 +52,9 @@ export async function fetchApiKeyApi(): Promise<{ apiKey: string }> {
 }
 
 export async function rotateApiKeyApi(): Promise<{ apiKey: string }> {
-	return rpcJson(await rpc.api.accounts["rotate-api-key"].$post());
+	return rpcJson(await rpc.api.accounts["rotate-api-key"].$post()) as Promise<{
+		apiKey: string;
+	}>;
 }
 
 export async function fetchDevicesApi(): Promise<{ data: any[] }> {

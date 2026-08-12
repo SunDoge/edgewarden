@@ -68,8 +68,8 @@ export async function updateDeviceKeys(
 	encryptedUserKey: string,
 	encryptedPublicKey: string,
 	encryptedPrivateKey: string,
-): Promise<void> {
-	await db
+): Promise<boolean> {
+	const result = await db
 		.updateTable("devices")
 		.set({
 			encrypted_user_key: encryptedUserKey,
@@ -79,7 +79,23 @@ export async function updateDeviceKeys(
 		})
 		.where("user_id", "=", userId)
 		.where("device_identifier", "=", deviceIdentifier)
-		.execute();
+		.executeTakeFirst();
+	return result.numUpdatedRows === 1n;
+}
+
+export async function updateDeviceName(
+	db: Kysely<DB>,
+	userId: string,
+	deviceIdentifier: string,
+	name: string,
+): Promise<boolean> {
+	const result = await db
+		.updateTable("devices")
+		.set({ name, updated_at: now() })
+		.where("user_id", "=", userId)
+		.where("device_identifier", "=", deviceIdentifier)
+		.executeTakeFirst();
+	return result.numUpdatedRows === 1n;
 }
 
 export async function deleteDevice(

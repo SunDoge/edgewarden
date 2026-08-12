@@ -29,6 +29,7 @@ import {
 	getConfigValue,
 	setConfigValue,
 } from "../services/db/config";
+import * as devicesDb from "../services/db/devices";
 import { runMaintenance } from "../services/maintenance";
 import { publishSendFileObject } from "../services/sends/file-storage";
 
@@ -377,6 +378,162 @@ export function registerDatabaseMaintenanceScenarios(
 				.set({ revision_date: revision.revision_date })
 				.where("user_id", "=", user.id)
 				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("changes a password once for a verified old hash", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select(["id", "master_password_hash", "security_stamp"])
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const revision = await db
+			.selectFrom("user_revisions")
+			.select("revision_date")
+			.where("user_id", "=", user.id)
+			.executeTakeFirstOrThrow();
+		const timestamp = Math.floor(Date.now() / 1000);
+		try {
+			const affected: bigint[] = [];
+			for (let attempt = 0; attempt < 2; attempt += 1) {
+				const securityStamp = crypto.randomUUID();
+				const [updated] = await dialect.batch([
+					db
+						.updateTable("users")
+						.set({
+							master_password_hash: `replacement-hash-${attempt}`,
+							security_stamp: securityStamp,
+							updated_at: timestamp,
+						})
+						.where("id", "=", user.id)
+						.where("master_password_hash", "=", user.master_password_hash)
+						.compile(),
+					conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
+				]);
+				affected.push(updated.numAffectedRows ?? 0n);
+			}
+			assert.deepEqual(affected, [1n, 0n]);
+			const after = await db
+				.selectFrom("user_revisions")
+				.select("revision_date")
+				.where("user_id", "=", user.id)
+				.executeTakeFirstOrThrow();
+			assert.equal(after.revision_date, revision.revision_date + 1);
+		} finally {
+			await db
+				.updateTable("users")
+				.set({
+					master_password_hash: user.master_password_hash,
+					security_stamp: user.security_stamp,
+				})
+				.where("id", "=", user.id)
+				.execute();
+			await db
+				.updateTable("user_revisions")
+				.set({ revision_date: revision.revision_date })
+				.where("user_id", "=", user.id)
+				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("creates only one initial API key", async () => {
+		const { db } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select(["id", "api_key_hash", "api_key_encrypted"])
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const firstEnvelope = JSON.stringify({ v: 1, iv: "first", data: "first" });
+		const secondEnvelope = JSON.stringify({
+			v: 1,
+			iv: "second",
+			data: "second",
+		});
+		try {
+			await db
+				.updateTable("users")
+				.set({ api_key_hash: null, api_key_encrypted: null })
+				.where("id", "=", user.id)
+				.execute();
+			const affected: bigint[] = [];
+			for (const [hash, encrypted] of [
+				["first-hash", firstEnvelope],
+				["second-hash", secondEnvelope],
+			] as const) {
+				const result = await db
+					.updateTable("users")
+					.set({ api_key_hash: hash, api_key_encrypted: encrypted })
+					.where("id", "=", user.id)
+					.where("api_key_encrypted", "is", null)
+					.executeTakeFirst();
+				affected.push(result.numUpdatedRows);
+			}
+			assert.deepEqual(affected, [1n, 0n]);
+			assert.deepEqual(
+				await db
+					.selectFrom("users")
+					.select(["api_key_hash", "api_key_encrypted"])
+					.where("id", "=", user.id)
+					.executeTakeFirstOrThrow(),
+				{ api_key_hash: "first-hash", api_key_encrypted: firstEnvelope },
+			);
+		} finally {
+			await db
+				.updateTable("users")
+				.set({
+					api_key_hash: user.api_key_hash,
+					api_key_encrypted: user.api_key_encrypted,
+				})
+				.where("id", "=", user.id)
+				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("does not resurrect a deleted device during updates", async () => {
+		const { db } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const deviceId = crypto.randomUUID();
+		try {
+			await devicesDb.upsertDevice(
+				db,
+				user.id,
+				deviceId,
+				"temporary-device",
+				0,
+				crypto.randomUUID(),
+			);
+			await devicesDb.deleteDevice(db, user.id, deviceId);
+			assert.equal(
+				await devicesDb.updateDeviceName(
+					db,
+					user.id,
+					deviceId,
+					"resurrected-device",
+				),
+				false,
+			);
+			assert.equal(
+				await devicesDb.updateDeviceKeys(
+					db,
+					user.id,
+					deviceId,
+					"user-key",
+					"public-key",
+					"private-key",
+				),
+				false,
+			);
+			assert.equal(await devicesDb.getDevice(db, user.id, deviceId), null);
+		} finally {
+			await devicesDb.deleteDevice(db, user.id, deviceId);
 			await db.destroy();
 		}
 	});
