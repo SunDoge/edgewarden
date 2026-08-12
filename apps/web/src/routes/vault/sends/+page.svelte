@@ -46,6 +46,7 @@ let searchQuery = $state("");
 let typeFilter = $state<"all" | "text" | "file">("all");
 let selectedIds = $state<Record<string, boolean>>({});
 let selectedSend = $state<any | null>(null);
+let mobileDetailOpen = $state(false);
 
 // Form editor state
 let isCreating = $state(false);
@@ -125,6 +126,7 @@ let selectedIdList = $derived(
 function startCreate() {
 	isEditing = false;
 	isCreating = true;
+	mobileDetailOpen = true;
 	sendType = 0;
 	sendName = "";
 	sendNotes = "";
@@ -143,6 +145,7 @@ function startEdit(send: any) {
 	selectedSend = send;
 	isEditing = true;
 	isCreating = false;
+	mobileDetailOpen = true;
 	sendType = send.type;
 	sendName = send.name;
 	sendNotes = send.notes ?? "";
@@ -169,12 +172,14 @@ function startEdit(send: any) {
 function cancelEdit() {
 	isCreating = false;
 	isEditing = false;
+	if (!selectedSend) mobileDetailOpen = false;
 }
 
 function selectSend(send: any) {
 	selectedSend = send;
 	isCreating = false;
 	isEditing = false;
+	mobileDetailOpen = true;
 }
 
 async function handleSaveSend() {
@@ -353,14 +358,14 @@ function copyShareLink(send: any) {
 
 <div class="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col">
 	<!-- Navbar -->
-	<header class="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 flex items-center justify-between shrink-0">
+	<header class="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-2 sm:px-4 md:px-6">
 		<div class="flex items-center gap-2.5">
-			<Button variant="ghost" size="sm" onclick={() => goto("/vault")} class="mr-1">
-				<ArrowLeft class="size-4 mr-2" />
-				返回保险库
+			<Button variant="ghost" size="sm" onclick={() => goto("/vault")} class="mr-1" aria-label="返回保险库">
+				<ArrowLeft />
+				<span class="hidden sm:inline">返回保险库</span>
 			</Button>
 			<span class="h-4 w-px bg-slate-200 dark:bg-slate-800"></span>
-			<span class="font-bold text-lg text-slate-800 dark:text-slate-100 flex items-center gap-2">
+			<span class="flex items-center gap-2 text-base font-bold sm:text-lg">
 				<Share2 class="size-5 text-primary" />
 				Send 传输中心
 			</span>
@@ -378,17 +383,17 @@ function copyShareLink(send: any) {
 		</div>
 	</header>
 
-	<div class="flex-1 flex overflow-hidden">
+	<div class="relative flex flex-1 overflow-hidden">
 		<!-- Left Panel: Sends List -->
-		<section class="flex-1 flex flex-col bg-white dark:bg-slate-900 overflow-hidden border-r border-slate-200 dark:border-slate-800">
-			<div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3 shrink-0">
+		<section class="{mobileDetailOpen ? 'hidden md:flex' : 'flex'} min-w-0 flex-1 flex-col overflow-hidden border-r border-border bg-background">
+			<div class="flex shrink-0 items-center gap-2 border-b border-border p-3 sm:gap-3 sm:p-4">
 				<div class="relative flex-1">
 					<Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
 					<Input type="search" placeholder="搜索您创建的分享..." class="pl-10" bind:value={searchQuery} />
 				</div>
-				<Button class="gap-2 shrink-0 bg-primary text-primary-foreground font-semibold" onclick={startCreate}>
+				<Button class="shrink-0 font-semibold" onclick={startCreate} aria-label="新建 Send">
 					<Plus class="size-4" />
-					新建 Send
+					<span class="hidden sm:inline">新建 Send</span>
 				</Button>
 			</div>
 			<div class="flex items-center gap-2 border-b px-4 py-2">
@@ -461,7 +466,8 @@ function copyShareLink(send: any) {
 		</section>
 
 		<!-- Right Panel: Send Details / Form Editor -->
-		<section class="w-96 bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shrink-0 overflow-y-auto p-6">
+		<section class="{mobileDetailOpen ? 'flex' : 'hidden'} absolute inset-0 z-10 w-full flex-col overflow-y-auto border-l bg-background p-4 md:static md:flex md:w-96 md:shrink-0 md:p-6">
+			<div class="mb-4 md:hidden"><Button variant="ghost" size="sm" onclick={() => { if (isCreating || isEditing) cancelEdit(); else mobileDetailOpen = false; }}><ArrowLeft />返回列表</Button></div>
 			{#if isCreating || isEditing}
 				<SendEditorForm
 					{isCreating}

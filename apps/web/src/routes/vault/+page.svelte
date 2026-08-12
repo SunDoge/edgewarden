@@ -12,6 +12,7 @@ import {
 	KeyRound,
 	Landmark,
 	Lock,
+	Menu,
 	LogOut,
 	RefreshCw,
 	ScrollText,
@@ -94,6 +95,8 @@ let totpLive = $state<{ code: string; remain: number } | null>(null);
 let deleteDialogOpen = $state(false);
 let deleteLoading = $state(false);
 let attachmentBusy = $state<string | null>(null);
+let mobileSidebarOpen = $state(false);
+let mobileDetailOpen = $state(false);
 
 // Folder management dialog state
 let folderDialogOpen = $state(false);
@@ -340,6 +343,7 @@ function startCreate() {
 	selectedItem = null;
 	isEditing = false;
 	isCreating = true;
+	mobileDetailOpen = true;
 	editor = createVaultEditorForm(activeFolder);
 }
 
@@ -351,11 +355,13 @@ function startEdit() {
 	}
 	isCreating = false;
 	isEditing = true;
+	mobileDetailOpen = true;
 	editor = vaultCipherToEditorForm(selectedItem);
 }
 
 function cancelEdit() {
 	isCreating = false;
+	if (!selectedItem) mobileDetailOpen = false;
 	isEditing = false;
 }
 
@@ -606,12 +612,13 @@ async function toggleFavorite(item: any) {
 
 <div class="h-screen bg-slate-50 dark:bg-slate-950 flex flex-col overflow-hidden">
 	<!-- Navbar -->
-	<header class="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 flex items-center justify-between shrink-0">
+	<header class="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-2 sm:px-4 md:px-6">
 		<div class="flex items-center gap-2.5">
+			<Button variant="ghost" size="icon" class="md:hidden" onclick={() => mobileSidebarOpen = true} aria-label="打开保险库导航"><Menu /></Button>
 			<div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground">
 				<ShieldCheck class="size-5" />
 			</div>
-			<span class="font-bold text-lg text-slate-800 dark:text-slate-100">Edgewarden</span>
+			<span class="hidden text-lg font-bold sm:inline">Edgewarden</span>
 
 			{#if vault.isOffline}
 				<span class="px-2 py-0.5 text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 rounded-full border border-amber-200 dark:border-amber-900/50 flex items-center gap-1">
@@ -639,27 +646,31 @@ async function toggleFavorite(item: any) {
 			>
 				<RefreshCw class="size-4 {vault.isSyncing ? 'animate-spin' : ''}" />
 			</Button>
-			<Button variant="ghost" size="sm" onclick={handleLogout} class="text-slate-500 hover:text-red-600">
-				<LogOut class="size-4 mr-2" />
-				锁定并退出
+			<Button variant="ghost" size="sm" onclick={handleLogout} class="text-muted-foreground" aria-label="锁定并退出">
+				<LogOut />
+				<span class="hidden sm:inline">锁定并退出</span>
 			</Button>
 		</div>
 	</header>
 	{#if vault.warning}<div class="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">{vault.warning}</div>{/if}
 
-	<div class="flex-1 flex overflow-hidden">
+	<div class="relative flex flex-1 overflow-hidden">
 		<!-- Sidebar -->
-		<VaultSidebar
-			bind:activeCategory
-			bind:activeFolder
-			{duplicateCount}
-			onCreate={startCreate}
-			onCreateFolder={openCreateFolder}
-			onRenameFolder={openRenameFolder}
-			onDeleteFolder={openDeleteFolder}
-			onDeleteAllFolders={() => (deleteAllFoldersDialogOpen = true)}
-		/>
+		{#if mobileSidebarOpen}<button class="absolute inset-0 z-20 bg-black/40 md:hidden" onclick={() => mobileSidebarOpen = false} aria-label="关闭保险库导航"></button>{/if}
+		<div class="absolute inset-y-0 left-0 z-30 transition-transform md:static md:z-auto md:translate-x-0 {mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}">
+			<VaultSidebar
+				bind:activeCategory
+				bind:activeFolder
+				{duplicateCount}
+				onCreate={() => { mobileSidebarOpen = false; startCreate(); }}
+				onCreateFolder={openCreateFolder}
+				onRenameFolder={openRenameFolder}
+				onDeleteFolder={openDeleteFolder}
+				onDeleteAllFolders={() => (deleteAllFoldersDialogOpen = true)}
+			/>
+		</div>
 
+		<div class="flex min-w-0 flex-1 {mobileDetailOpen ? 'hidden md:flex' : 'flex'}">
 		<VaultItemList
 			items={filteredItems}
 			isSyncing={vault.isSyncing}
@@ -675,10 +686,13 @@ async function toggleFavorite(item: any) {
 			onBulkAction={runBulkAction}
 			onClearSelection={clearSelection}
 			onMove={() => { moveFolderId = null; moveDialogOpen = true; }}
+			onSelectItem={() => mobileDetailOpen = true}
 		/>
+		</div>
 
 		<!-- Detail Panel -->
-		<section class="w-96 bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shrink-0 overflow-y-auto p-6">
+		<section class="{mobileDetailOpen ? 'flex' : 'hidden'} absolute inset-0 z-10 w-full flex-col overflow-y-auto border-l bg-background p-4 md:static md:flex md:w-96 md:shrink-0 md:p-6">
+			<div class="mb-4 md:hidden"><Button variant="ghost" size="sm" onclick={() => { if (isCreating || isEditing) cancelEdit(); else mobileDetailOpen = false; }}><ArrowLeft />返回列表</Button></div>
 			{#if isCreating || isEditing}
 				<VaultEditorForm
 					bind:form={editor}

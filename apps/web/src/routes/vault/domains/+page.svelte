@@ -247,7 +247,7 @@ function showTimedError(msg: string) {
 
 <div class="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col">
 	<!-- Navbar Header -->
-	<header class="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 flex items-center justify-between shrink-0">
+	<header class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-background px-3 py-2 sm:h-14 sm:flex-nowrap sm:px-6 sm:py-0">
 		<div class="flex items-center gap-3">
 			<Button variant="ghost" size="icon" onclick={() => goto("/vault")} class="size-9 rounded-lg">
 				<ArrowLeft class="size-4" />
@@ -267,7 +267,7 @@ function showTimedError(msg: string) {
 				class="gap-1.5 h-9"
 			>
 				<RefreshCw class="size-3.5 {loading ? 'animate-spin' : ''}" />
-				同步刷新
+				<span class="hidden sm:inline">同步刷新</span>
 			</Button>
 			<Button
 				onclick={handleSave}
@@ -275,12 +275,12 @@ function showTimedError(msg: string) {
 				class="gap-1.5 h-9 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
 			>
 				<Save class="size-3.5" />
-				{saving ? "正在保存..." : "保存并应用"}
+				{saving ? "保存中..." : "保存"}<span class="hidden sm:inline">并应用</span>
 			</Button>
 		</div>
 	</header>
 
-	<main class="flex-1 overflow-y-auto p-6 md:p-8 max-w-6xl w-full mx-auto space-y-6">
+	<main class="mx-auto flex w-full min-w-0 max-w-6xl flex-1 flex-col gap-6 overflow-y-auto p-3 sm:p-6 md:p-8">
 		<!-- Notification Alerts -->
 		{#if error}
 			<div class="p-4 rounded-xl border border-red-200 bg-red-50 text-red-700 dark:bg-red-950/20 dark:border-red-900/50 dark:text-red-400 flex gap-3 items-start animate-in fade-in slide-in-from-top-2 duration-200">
@@ -335,7 +335,7 @@ function showTimedError(msg: string) {
 			<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 				
 				<!-- LEFT: Custom Equivalent Domains -->
-				<section class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-sm flex flex-col gap-5 min-h-[500px]">
+				<section class="flex min-h-[500px] min-w-0 flex-col gap-5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800/80 dark:bg-slate-900 sm:p-6">
 					<div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-850 pb-4 shrink-0">
 						<div>
 							<h3 class="font-bold text-slate-850 dark:text-slate-100 text-sm">自定义规则</h3>

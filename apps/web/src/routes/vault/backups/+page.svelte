@@ -264,8 +264,8 @@ function showSuccess(msg: string) {
 	<title>云备份中心 - Edgewarden</title>
 </svelte:head>
 
-<div class="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 flex flex-col">
-	<div class="max-w-6xl w-full mx-auto space-y-6 flex-1 flex flex-col">
+<div class="flex min-h-screen flex-col bg-background p-3 sm:p-6">
+	<div class="mx-auto flex w-full min-w-0 max-w-6xl flex-1 flex-col gap-6">
 		<!-- Header -->
 		<div class="flex items-center justify-between">
 			<div class="flex items-center gap-3">
