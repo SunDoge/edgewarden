@@ -2,7 +2,11 @@ import { type Kysely, sql } from "kysely";
 import { createDatabase } from "../middleware/db";
 import type { DB } from "../types/db";
 import { now } from "../utils/time";
-import { drainBlobGcQueue, type BlobGcResult } from "./blob-gc";
+import {
+	requireFreshDataOperationLease,
+	withDataOperationLease,
+} from "./backup/operation-lease";
+import { type BlobGcResult, drainBlobGcQueue } from "./blob-gc";
 import {
 	createBlobStore,
 	deleteBlobObject,
@@ -10,7 +14,6 @@ import {
 	getStoredSendFileObjectKey,
 } from "./blob-store";
 import * as attachmentsDb from "./db/attachments";
-import { withDataOperationLease } from "./backup/operation-lease";
 
 const BATCH_LIMIT = 100;
 const AUTH_REQUEST_RETENTION_SECONDS = 24 * 60 * 60;
@@ -393,6 +396,7 @@ export async function runMaintenance(
 	db: Kysely<DB>,
 	env: CloudflareBindings,
 	timestamp = now(),
+	checkpoint?: () => Promise<void>,
 ): Promise<MaintenanceResult> {
 	const blobStore = createBlobStore(env);
 	if (!blobStore) throw new Error("Attachment storage is not configured");
@@ -447,11 +451,17 @@ export async function runMaintenance(
 			.where("expires_at", "<=", timestamp)
 			.executeTakeFirst(),
 	);
+	await checkpoint?.();
 	const purgedAttachments = await purgeAttachments(db, env, timestamp);
+	await checkpoint?.();
 	const purgedCiphers = await purgeCiphers(db, env, timestamp);
+	await checkpoint?.();
 	const purgedSends = await purgeSends(db, env, timestamp);
+	await checkpoint?.();
 	const purgedOrganizations = await purgeOrganizations(db, env, timestamp);
+	await checkpoint?.();
 	const purgedUsers = await purgeUsers(db, env, timestamp);
+	await checkpoint?.();
 	const blobGc = await drainBlobGcQueue(db, blobStore, timestamp);
 	return {
 		refreshTokens,
@@ -473,12 +483,18 @@ export async function runMaintenance(
 export async function runScheduledMaintenance(
 	env: CloudflareBindings,
 ): Promise<MaintenanceResult> {
-	return withDataOperationLease(env.DB, "maintenance.scheduled", async () => {
-		const { db } = await createDatabase(env.DB);
-		try {
-			return await runMaintenance(db, env);
-		} finally {
-			await db.destroy();
-		}
-	});
+	return withDataOperationLease(
+		env.DB,
+		"maintenance.scheduled",
+		async (lease) => {
+			const { db } = await createDatabase(env.DB);
+			try {
+				return await runMaintenance(db, env, now(), () =>
+					requireFreshDataOperationLease(env.DB, lease),
+				);
+			} finally {
+				await db.destroy();
+			}
+		},
+	);
 }

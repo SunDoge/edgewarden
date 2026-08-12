@@ -14,6 +14,7 @@ import {
 	acquireDataOperationLease,
 	releaseDataOperationLease,
 	requireDataOperationLeaseRenewal,
+	requireFreshDataOperationLease,
 } from "./operation-lease";
 import {
 	createRemoteBackupTransferSession,
@@ -79,6 +80,7 @@ export async function runScheduledBackupIfDue(
 				const archive = await buildBackupArchive(env.DB, currentTime, {
 					includeAttachments: destination.includeAttachments,
 					blobStore,
+					checkpoint: () => requireFreshDataOperationLease(env.DB, lease),
 					timeZone: destination.schedule.timezone,
 				});
 				await requireDataOperationLeaseRenewal(env.DB, lease);

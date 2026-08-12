@@ -1,6 +1,5 @@
 import { vValidator } from "@hono/valibot-validator";
 import { factory } from "../http/factory";
-import { safeWriteAuditEvent } from "../services/audit";
 import {
 	BackupBlobQuerySchema,
 	BackupExportSchema,
@@ -8,6 +7,7 @@ import {
 	BackupRunSchema,
 	BackupSettingsSchema,
 } from "../schemas/backup";
+import { safeWriteAuditEvent } from "../services/audit";
 import {
 	assertBackupArchiveIntegrity,
 	buildBackupArchive,
@@ -25,6 +25,7 @@ import {
 	acquireDataOperationLease,
 	releaseDataOperationLease,
 	requireDataOperationLeaseRenewal,
+	requireFreshDataOperationLease,
 	withDataOperationLease,
 } from "../services/backup/operation-lease";
 import {
@@ -50,6 +51,10 @@ function ensureBackupBlobName(value: string): string {
 	return parts.join("/");
 }
 
+function backupErrorMessage(error: unknown, fallback: string): string {
+	return error instanceof Error && error.message ? error.message : fallback;
+}
+
 export const exportBackup = factory.createHandlers(
 	vValidator("json", BackupExportSchema),
 	async (c) => {
@@ -57,10 +62,11 @@ export const exportBackup = factory.createHandlers(
 			return await withDataOperationLease(
 				c.env.DB,
 				"backup.export",
-				async () => {
+				async (lease) => {
 					const archive = await buildBackupArchive(c.env.DB, new Date(), {
 						includeAttachments: !!c.req.valid("json")?.includeAttachments,
 						blobStore: createBlobStore(c.env),
+						checkpoint: () => requireFreshDataOperationLease(c.env.DB, lease),
 					});
 					await safeWriteAuditEvent(c.get("db"), {
 						actorUserId: c.get("user").id,
@@ -80,8 +86,8 @@ export const exportBackup = factory.createHandlers(
 					});
 				},
 			);
-		} catch (error: any) {
-			const message = error.message || "Backup export failed";
+		} catch (error: unknown) {
+			const message = backupErrorMessage(error, "Backup export failed");
 			return errorResponse(
 				message,
 				message.includes("operation is running") ? 409 : 500,
@@ -110,9 +116,9 @@ export const getBackupBlob = factory.createHandlers(
 					"Cache-Control": "no-store",
 				},
 			});
-		} catch (error: any) {
+		} catch (error: unknown) {
 			return errorResponse(
-				error.message || "Backup attachment download failed",
+				backupErrorMessage(error, "Backup attachment download failed"),
 				400,
 			);
 		}
@@ -128,9 +134,9 @@ export const getBackupSettings = factory.createHandlers(async (c) => {
 				"UTC",
 			),
 		);
-	} catch (error: any) {
+	} catch (error: unknown) {
 		return errorResponse(
-			error.message || "Backup settings could not be loaded",
+			backupErrorMessage(error, "Backup settings could not be loaded"),
 			409,
 		);
 	}
@@ -155,8 +161,11 @@ export const updateBackupSettings = factory.createHandlers(
 				normalized,
 			);
 			return c.json(normalized);
-		} catch (error: any) {
-			return errorResponse(error.message || "Backup settings save failed", 400);
+		} catch (error: unknown) {
+			return errorResponse(
+				backupErrorMessage(error, "Backup settings save failed"),
+				400,
+			);
 		}
 	},
 );
@@ -191,6 +200,7 @@ export const runBackup = factory.createHandlers(
 			const archive = await buildBackupArchive(c.env.DB, date, {
 				includeAttachments: destination.includeAttachments,
 				blobStore,
+				checkpoint: () => requireFreshDataOperationLease(c.env.DB, lease),
 				timeZone: destination.schedule.timezone,
 			});
 			await requireDataOperationLeaseRenewal(c.env.DB, lease);
@@ -245,18 +255,18 @@ export const runBackup = factory.createHandlers(
 				},
 				settings,
 			});
-		} catch (error: any) {
+		} catch (error: unknown) {
+			const message = backupErrorMessage(error, "Backup upload failed");
 			const settings = await loadBackupSettings(db, secret, "UTC").catch(
 				() => null,
 			);
 			if (settings) {
 				const destination = requireBackupDestination(settings, destinationId);
 				destination.runtime.lastErrorAt = new Date().toISOString();
-				destination.runtime.lastErrorMessage =
-					error.message || "Backup upload failed";
+				destination.runtime.lastErrorMessage = message;
 				await saveBackupSettings(db, secret, settings).catch(() => null);
 			}
-			return errorResponse(error.message || "Backup run failed", 500);
+			return errorResponse(message, 500);
 		} finally {
 			await releaseDataOperationLease(c.env.DB, lease).catch(() => undefined);
 		}
@@ -314,8 +324,8 @@ export const importBackup = factory.createHandlers(
 				metadata: { fileName: fileName || null, status: "success" },
 			});
 			return c.json(imported.result);
-		} catch (error: any) {
-			const message = error.message || "Backup import failed";
+		} catch (error: unknown) {
+			const message = backupErrorMessage(error, "Backup import failed");
 			return errorResponse(
 				message,
 				message.includes("requires a fresh instance") ? 409 : 500,
