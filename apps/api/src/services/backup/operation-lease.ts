@@ -8,6 +8,16 @@ export interface DataOperationLease {
 	expiresAt: number;
 }
 
+export class DataOperationLeaseLostError extends Error {
+	readonly operation: string;
+
+	constructor(operation: string) {
+		super(`Data operation lease was lost: ${operation}`);
+		this.name = "DataOperationLeaseLostError";
+		this.operation = operation;
+	}
+}
+
 export async function acquireDataOperationLease(
 	db: D1Database,
 	operation: string,
@@ -82,7 +92,7 @@ export async function requireDataOperationLeaseRenewal(
 	lease: DataOperationLease,
 ): Promise<void> {
 	if (!(await renewDataOperationLease(db, lease))) {
-		throw new Error(`Data operation lease was lost: ${lease.operation}`);
+		throw new DataOperationLeaseLostError(lease.operation);
 	}
 }
 
@@ -94,7 +104,7 @@ export async function requireFreshDataOperationLease(
 	const timestamp = Math.floor(Date.now() / 1000);
 	if (lease.expiresAt - timestamp > minimumRemainingSeconds) return;
 	if (!(await renewDataOperationLease(db, lease, timestamp))) {
-		throw new Error(`Data operation lease was lost: ${lease.operation}`);
+		throw new DataOperationLeaseLostError(lease.operation);
 	}
 }
 

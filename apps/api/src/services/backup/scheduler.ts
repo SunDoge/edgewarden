@@ -12,6 +12,7 @@ import {
 } from "./config";
 import {
 	acquireDataOperationLease,
+	DataOperationLeaseLostError,
 	releaseDataOperationLease,
 	requireDataOperationLeaseRenewal,
 	requireFreshDataOperationLease,
@@ -105,6 +106,7 @@ export async function runScheduledBackupIfDue(
 						archive.fileName,
 					);
 				}
+				await requireDataOperationLeaseRenewal(env.DB, lease);
 				destination.runtime.lastSuccessAt = new Date().toISOString();
 				destination.runtime.lastErrorAt = null;
 				destination.runtime.lastErrorMessage = null;
@@ -126,6 +128,7 @@ export async function runScheduledBackupIfDue(
 				});
 				result.succeeded += 1;
 			} catch (error: unknown) {
+				if (error instanceof DataOperationLeaseLostError) throw error;
 				result.failed += 1;
 				destination.runtime.lastErrorAt = new Date().toISOString();
 				destination.runtime.lastErrorMessage = errorMessage(

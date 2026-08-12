@@ -10,8 +10,10 @@ import {
 } from "../services/backup/config";
 import {
 	acquireDataOperationLease,
+	DataOperationLeaseLostError,
 	releaseDataOperationLease,
 	renewDataOperationLease,
+	requireDataOperationLeaseRenewal,
 	requireFreshDataOperationLease,
 } from "../services/backup/operation-lease";
 import { drainBlobGcQueue } from "../services/blob-gc";
@@ -1376,6 +1378,10 @@ export function registerDatabaseMaintenanceScenarios(
 			60,
 		);
 		assert.ok(recovered);
+		await assert.rejects(
+			requireDataOperationLeaseRenewal(context.database, first),
+			DataOperationLeaseLostError,
+		);
 		assert.equal(
 			await renewDataOperationLease(
 				context.database,
