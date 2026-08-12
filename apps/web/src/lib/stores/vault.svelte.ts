@@ -21,7 +21,9 @@ import {
 } from "$lib/services/vault-events";
 import type {
 	CipherResponse,
+	CollectionResponse,
 	FolderResponse,
+	ProfileOrganizationResponse,
 	SyncResponse,
 } from "@edgewarden/shared";
 import { decryptOwnedSend } from "$lib/services/send-crypto";
@@ -37,8 +39,8 @@ type SyncStatus = "idle" | "syncing" | "offline" | "error";
 interface VaultState {
 	ciphers: CipherResponse[];
 	folders: FolderResponse[];
-	collections: Record<string, any>[];
-	organizations: Record<string, any>[];
+	collections: CollectionResponse[];
+	organizations: ProfileOrganizationResponse[];
 	sends: Record<string, any>[];
 	profile: SyncResponse["profile"] | null;
 	syncedAt: number | null;
@@ -214,10 +216,7 @@ async function setupOrganizationKeys(
 	profile: SyncResponse["profile"],
 ): Promise<void> {
 	_organizationKeys.clear();
-	const organizations = ((profile as any).organizations ?? []) as Record<
-		string,
-		any
-	>[];
+	const organizations = profile.organizations ?? [];
 	if (!organizations.length) return;
 	if (!_symEncKey || !_symMacKey || !profile.privateKey)
 		throw new Error("Account private key unavailable");
@@ -249,12 +248,11 @@ async function setupOrganizationKeys(
 }
 
 async function decryptCollections(
-	collections: unknown[],
-): Promise<Record<string, any>[]> {
-	const output: Record<string, any>[] = [];
+	collections: CollectionResponse[],
+): Promise<CollectionResponse[]> {
+	const output: CollectionResponse[] = [];
 	let failures = 0;
-	for (const raw of collections) {
-		const collection = raw as Record<string, any>;
+	for (const collection of collections) {
 		try {
 			const key = _organizationKeys.get(
 				String(collection.organizationId ?? ""),
@@ -280,7 +278,12 @@ async function decryptCollections(
 
 export function applyOrganizationAccess(
 	ciphers: CipherResponse[],
-	collections: Record<string, any>[],
+	collections: Array<{
+		id: string;
+		organizationId?: string;
+		readOnly?: boolean;
+		hidePasswords?: boolean;
+	}>,
 ): CipherResponse[] {
 	const visible = new Map(
 		collections.map((collection) => [String(collection.id), collection]),
@@ -290,9 +293,7 @@ export function applyOrganizationAccess(
 		const ids = cipher.collectionIds ?? [];
 		const access = ids
 			.map((id) => visible.get(id))
-			.filter((collection): collection is Record<string, any> =>
-				Boolean(collection),
-			);
+			.filter((collection) => collection !== undefined);
 		const readOnly =
 			!ids.length ||
 			access.length !== ids.length ||
@@ -362,8 +363,7 @@ async function hydrateVaultSnapshot(
 	_vault.folders = folders;
 	_vault.collections = collections;
 	_vault.ciphers = applyOrganizationAccess(decryptedCiphers, collections);
-	_vault.organizations = ((snapshot.profile as any).organizations ??
-		[]) as Record<string, any>[];
+	_vault.organizations = snapshot.profile.organizations ?? [];
 	_vault.sends = sends;
 	_vault.profile = snapshot.profile;
 	_vault.syncedAt = snapshot.syncedAt;
