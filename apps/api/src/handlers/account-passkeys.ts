@@ -12,15 +12,18 @@ import {
 	PasskeyRegistrationSchema,
 	PasskeySecretSchema,
 } from "../schemas/passkeys";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import {
 	assertAccountPasskeyCredential,
 	handleGetAccountPasskeyAssertionOptions,
 	verifyUserSecret,
 } from "../services/account-passkey-auth";
+import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import { invalidateUserCache } from "../services/auth";
 import {
-	executeBatch,
-	revisionQuery,
+	conditionalAccountPasskeyClaimQuery,
+	conditionalRefreshTokenDeletionQuery,
+	conditionalUserRevisionQuery,
+	conditionalWebauthnCredentialInsertQuery,
 	webauthnCredentialRevisionQuery,
 } from "../services/db/batch";
 import * as webauthnDb from "../services/db/webauthn";
@@ -358,10 +361,31 @@ export const createAccountPasskey = factory.createHandlers(
 			updated_at: ts,
 		};
 
-		await executeBatch(c.get("dbDialect"), [
-			db.insertInto("webauthn_credentials").values(credential).compile(),
-			revisionQuery(db, user.id, ts),
-		]);
+		const securityStamp = crypto.randomUUID();
+		const [claimed, inserted] = await c
+			.get("dbDialect")
+			.batch([
+				conditionalAccountPasskeyClaimQuery(
+					db,
+					user.id,
+					user.security_stamp,
+					credential.credential_id,
+					securityStamp,
+					MAX_ACCOUNT_PASSKEYS,
+					ts,
+				),
+				conditionalWebauthnCredentialInsertQuery(db, credential, securityStamp),
+				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+				conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
+			]);
+		if (claimed.numAffectedRows !== 1n)
+			return errorResponse(
+				"Passkey settings changed or reached their limit",
+				409,
+			);
+		if (inserted.numAffectedRows !== 1n)
+			return errorResponse("Passkey registration could not be persisted", 500);
+		invalidateUserCache(user.id);
 
 		await safeWriteAuditEvent(db, {
 			actorUserId: user.id,

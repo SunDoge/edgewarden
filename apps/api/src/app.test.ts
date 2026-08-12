@@ -19,6 +19,7 @@ import {
 	type ApiTestHarness,
 	createApiTestHarness,
 } from "./test-support/api-harness";
+import { registerAuthReliabilityScenarios } from "./test-support/auth-reliability-scenarios";
 import { registerAuthScenarios } from "./test-support/auth-scenarios";
 import { registerDatabaseMaintenanceScenarios } from "./test-support/database-maintenance-scenarios";
 import { registerInfrastructureScenarios } from "./test-support/infrastructure-scenarios";
@@ -102,6 +103,12 @@ describe("Edgewarden API", () => {
 		memberEmail: MEMBER_EMAIL,
 		masterPasswordHash: MASTER_PASSWORD_HASH,
 		adminPassword: ADMIN_PASSWORD,
+	});
+	registerAuthReliabilityScenarios({
+		get database() {
+			return testDatabase;
+		},
+		email: EMAIL,
 	});
 	registerVaultScenarios({
 		get database() {
