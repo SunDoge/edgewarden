@@ -143,6 +143,58 @@ export function webauthnCredentialRevisionQuery(
 	`.compile(db);
 }
 
+export function conditionalUserRevisionQuery(
+	db: Kysely<DB>,
+	userId: string,
+	securityStamp: string,
+	timestamp = now(),
+) {
+	return sql`
+		INSERT INTO user_revisions (user_id, revision_date)
+		SELECT id, ${timestamp}
+		FROM users
+		WHERE id = ${userId}
+		  AND security_stamp = ${securityStamp}
+		ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
+			user_revisions.revision_date + 1,
+			excluded.revision_date
+		)
+	`.compile(db);
+}
+
+export function conditionalRefreshTokenDeletionQuery(
+	db: Kysely<DB>,
+	userId: string,
+	securityStamp: string,
+) {
+	return sql`
+		DELETE FROM refresh_tokens
+		WHERE user_id = ${userId}
+		  AND EXISTS (
+			SELECT 1 FROM users
+			WHERE id = ${userId}
+			  AND security_stamp = ${securityStamp}
+		  )
+	`.compile(db);
+}
+
+export function conditionalTwoFactorCredentialDeletionQuery(
+	db: Kysely<DB>,
+	userId: string,
+	securityStamp: string,
+) {
+	return sql`
+		DELETE FROM webauthn_credentials
+		WHERE user_id = ${userId}
+		  AND purpose = 'twoFactor'
+		  AND EXISTS (
+			SELECT 1 FROM users
+			WHERE id = ${userId}
+			  AND security_stamp = ${securityStamp}
+		  )
+	`.compile(db);
+}
+
 export function folderRevisionQuery(
 	db: Kysely<DB>,
 	userId: string,
