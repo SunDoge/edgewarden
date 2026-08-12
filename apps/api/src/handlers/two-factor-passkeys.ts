@@ -17,9 +17,9 @@ import { encryptCredential } from "../services/credential-protection";
 import {
 	conditionalRefreshTokenDeletionQuery,
 	conditionalTwoFactorPasskeyClaimQuery,
-	conditionalTwoFactorPasskeyDeletionClaimQuery,
-	conditionalTwoFactorPasskeyDeletionQuery,
 	conditionalUserRevisionQuery,
+	conditionalWebauthnCredentialDeletionClaimQuery,
+	conditionalWebauthnCredentialDeletionQuery,
 	conditionalWebauthnCredentialInsertQuery,
 } from "../services/db/batch";
 import * as webauthnDb from "../services/db/webauthn";
@@ -327,18 +327,20 @@ export const deleteTwoFactorPasskey = factory.createHandlers(
 		const [claimed, deleted] = await c
 			.get("dbDialect")
 			.batch([
-				conditionalTwoFactorPasskeyDeletionClaimQuery(
+				conditionalWebauthnCredentialDeletionClaimQuery(
 					db,
 					user.id,
 					body.id,
+					"twoFactor",
 					user.security_stamp,
 					securityStamp,
 					ts,
 				),
-				conditionalTwoFactorPasskeyDeletionQuery(
+				conditionalWebauthnCredentialDeletionQuery(
 					db,
 					user.id,
 					body.id,
+					"twoFactor",
 					securityStamp,
 				),
 				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
