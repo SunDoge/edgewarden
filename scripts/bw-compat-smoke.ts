@@ -15,7 +15,11 @@ if (!server || !email || !password) {
 }
 
 const appDataDirectory = await mkdtemp(join(tmpdir(), "edgewarden-bw-"));
+const verificationDirectory = await mkdtemp(
+	join(tmpdir(), "edgewarden-bw-verify-"),
+);
 let session = "";
+let verificationSession = "";
 let folderId = "";
 let itemId = "";
 let attachmentPath = "";
@@ -23,6 +27,7 @@ let attachmentPath = "";
 type BwOptions = {
 	session?: string;
 	quiet?: boolean;
+	appDataDirectory?: string;
 };
 
 const execFileAsync = promisify(execFile);
@@ -31,11 +36,12 @@ async function bw(args: string[], options: BwOptions = {}): Promise<string> {
 	const { stdout, stderr } = await execFileAsync("bw", args, {
 		env: {
 			...process.env,
-			BITWARDENCLI_APPDATA_DIR: appDataDirectory,
+			BITWARDENCLI_APPDATA_DIR: options.appDataDirectory ?? appDataDirectory,
 			BW_PASSWORD: password,
 			...(options.session ? { BW_SESSION: options.session } : {}),
 		},
 		maxBuffer: 10 * 1024 * 1024,
+		timeout: 30_000,
 	});
 	if (!options.quiet && stderr.trim()) process.stderr.write(stderr);
 	return stdout.trim();
@@ -46,6 +52,11 @@ function encode(value: unknown): string {
 }
 
 async function cleanup(): Promise<void> {
+	if (verificationSession)
+		await bw(["logout"], {
+			quiet: true,
+			appDataDirectory: verificationDirectory,
+		}).catch(() => {});
 	if (session && itemId)
 		await bw(["delete", "item", itemId, "--permanent"], {
 			session,
@@ -58,6 +69,9 @@ async function cleanup(): Promise<void> {
 	await bw(["logout"], { quiet: true }).catch(() => {});
 	if (appDataDirectory.startsWith(`${tmpdir()}/edgewarden-bw-`)) {
 		await rm(appDataDirectory, { recursive: true, force: true });
+	}
+	if (verificationDirectory.startsWith(`${tmpdir()}/edgewarden-bw-verify-`)) {
+		await rm(verificationDirectory, { recursive: true, force: true });
 	}
 }
 
@@ -133,6 +147,30 @@ try {
 	) as { name?: string };
 	if (edited.name !== "Edgewarden CLI smoke edited") {
 		throw new Error("CLI item update did not round-trip");
+	}
+
+	await bw(["config", "server", server], {
+		quiet: true,
+		appDataDirectory: verificationDirectory,
+	});
+	verificationSession = await bw(
+		["login", email, "--passwordenv", "BW_PASSWORD", "--raw"],
+		{ quiet: true, appDataDirectory: verificationDirectory },
+	);
+	await bw(["sync"], {
+		session: verificationSession,
+		quiet: true,
+		appDataDirectory: verificationDirectory,
+	});
+	const cloudCopy = JSON.parse(
+		await bw(["get", "item", itemId], {
+			session: verificationSession,
+			quiet: true,
+			appDataDirectory: verificationDirectory,
+		}),
+	) as { name?: string };
+	if (cloudCopy.name !== "Edgewarden CLI smoke edited") {
+		throw new Error("Independent CLI did not receive the saved item update");
 	}
 
 	attachmentPath = join(appDataDirectory, "encrypted-smoke-attachment.bin");
