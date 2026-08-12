@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { unzipSync } from "fflate";
@@ -13,7 +13,6 @@ import {
 	encryptCredential,
 	hashCredential,
 } from "./services/credential-protection";
-import { ensureDatabaseSchema } from "./services/database-migrations";
 import { executeBatch } from "./services/db/batch";
 import { runMaintenance } from "./services/maintenance";
 import { loadYubicoCredentials } from "./services/yubico-config";
@@ -76,8 +75,30 @@ before(async () => {
 	});
 	const db = await miniflare.getD1Database("DB");
 	testDatabase = db;
-	// Production initializes a fresh D1 binding through this same generated bundle.
-	await Promise.all([ensureDatabaseSchema(db), ensureDatabaseSchema(db)]);
+	const migrationsDirectory = resolve(
+		dirname(fileURLToPath(import.meta.url)),
+		"../migrations",
+	);
+	const migrationStatements = readdirSync(migrationsDirectory)
+		.filter((file) => /^\d+.*\.sql$/.test(file))
+		.sort()
+		.map((file) => readFileSync(resolve(migrationsDirectory, file), "utf8"))
+		.join("\n")
+		.replace(/--.*$/gm, "")
+		.split(";")
+		.map((statement) => statement.trim())
+		.filter(
+			(statement) => statement && !statement.startsWith("PRAGMA foreign_keys"),
+		);
+	for (const [index, statement] of migrationStatements.entries()) {
+		try {
+			await db.prepare(statement).run();
+		} catch (error) {
+			throw new Error(`Migration statement ${index + 1} failed: ${statement}`, {
+				cause: error,
+			});
+		}
+	}
 	const rateLimiter = { limit: async () => ({ success: true }) };
 	bindings = {
 		DB: db,
@@ -120,13 +141,6 @@ after(async () => {
 });
 
 describe("Edgewarden API", () => {
-	test("records the generated runtime migration exactly once", async () => {
-		const applied = await testDatabase
-			.prepare("SELECT name FROM d1_migrations ORDER BY name")
-			.all<{ name: string }>();
-		assert.deepEqual(applied.results, [{ name: "0001_init.sql" }]);
-	});
-
 	test("declares every TEXT primary-key column as NOT NULL", () => {
 		const migration = readFileSync(
 			resolve(

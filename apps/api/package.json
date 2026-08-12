@@ -17,7 +17,7 @@
 		"db:apply:remote:kv": "wrangler d1 migrations apply DB --config ../../wrangler.kv.jsonc --remote",
 		"db:codegen": "node scripts/codegen.mjs",
 		"rpc:types": "tsc --project tsconfig.rpc.json",
-		"check": "node scripts/generate-runtime-migrations.mjs --check && tsc --noEmit",
+		"check": "tsc --noEmit",
 		"test": "vitest run"
 	},
 	"dependencies": {

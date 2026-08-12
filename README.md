@@ -13,7 +13,7 @@ Build command:  pnpm build
 Deploy command: pnpm deploy
 ```
 
-Cloudflare automatically provisions and binds the named D1 database and R2 bucket. Deployment publishes the Worker once; on its first request, the Worker applies pending generated D1 migrations before any route handler runs. Runtime initialization and Wrangler share the standard `d1_migrations` ledger, so later requests and explicit migration commands skip migrations already applied.
+The deploy command resolves or creates the named D1 database, applies every pending migration with Wrangler, and only then publishes the Worker once. It uses a temporary ignored config for the account-specific D1 ID, so deployment never rewrites the portable repository config. Wrangler provisions the named R2 bucket during the final deployment.
 
 Configure these required secrets in the deployment form:
 
@@ -37,7 +37,7 @@ R2 is the recommended storage backend for encrypted attachments and backup files
 pnpm deploy:kv
 ```
 
-The KV deployment uses `wrangler.kv.jsonc`, provisions D1 and KV only, and never declares or provisions an R2 bucket. KV limits each encrypted object to 25 MiB. Do not switch an existing deployment between R2 and KV without first migrating or backing up its stored objects.
+The KV deployment uses `wrangler.kv.jsonc`, resolves or creates both D1 and the named KV namespace, and never declares or provisions an R2 bucket. Account-specific IDs exist only in the temporary deployment config. KV limits each encrypted object to 25 MiB. Do not switch an existing deployment between R2 and KV without first migrating or backing up its stored objects.
 
 ## Manual deployment
 
@@ -62,7 +62,7 @@ pnpm db:migrate:local
 pnpm db:migrate:remote
 ```
 
-Normally `pnpm deploy` is sufficient. The remote migration command remains available for operators who deliberately want to apply a migration before publishing compatible application code; both paths share Wrangler's migration ledger and remain safe to run repeatedly.
+Normally `pnpm deploy` is sufficient. It stops before publishing if resource initialization or migration fails. The remote migration command remains available for operators who deliberately want to apply migrations separately; both paths use Wrangler's ordered `d1_migrations` ledger.
 
 ## Development and operations
 

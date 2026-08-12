@@ -32,10 +32,23 @@ function portableD1Config(config: WranglerConfig): unknown {
 	);
 }
 
+function assertPortableD1Bindings(config: WranglerConfig, filename: string): void {
+	for (const database of config.d1_databases as Record<string, unknown>[]) {
+		assert.equal(
+			"database_id" in database,
+			false,
+			`${filename} must not commit an account-specific D1 database_id`,
+		);
+	}
+}
+
 const [r2, kv] = await Promise.all([
 	readConfig("wrangler.jsonc"),
 	readConfig("wrangler.kv.jsonc"),
 ]);
+
+assertPortableD1Bindings(r2, "wrangler.jsonc");
+assertPortableD1Bindings(kv, "wrangler.kv.jsonc");
 
 assert.deepEqual(commonConfig(kv), commonConfig(r2));
 assert.deepEqual(portableD1Config(r2), [
