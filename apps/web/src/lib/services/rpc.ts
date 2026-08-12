@@ -161,3 +161,6 @@ export const rpc = createRpcClient(apiOrigin);
 export async function rpcJson<T>(response: { json(): Promise<T> }): Promise<T> {
 	return response.json();
 }
+
+/** Await a successful RPC whose response deliberately has no body (for example 204). */
+export function rpcVoid(_response: Response): void {}

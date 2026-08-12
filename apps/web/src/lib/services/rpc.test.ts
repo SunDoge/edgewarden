@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	createRpcClient,
 	getMemoryAccessToken,
+	rpcVoid,
 	setMemoryAccessToken,
 } from "./rpc";
 
@@ -54,6 +55,23 @@ describe("Hono RPC client", () => {
 				payload: { message: "Invalid request payload" },
 			}),
 		);
+	});
+
+	it("accepts an empty 204 RPC response without parsing JSON", async () => {
+		const client = createRpcClient("http://localhost", {
+			fetch: vi.fn(async () => new Response(null, { status: 204 })),
+		});
+
+		const response = await client.api.accounts.register.$post({
+			json: {
+				email: "first@example.com",
+				masterPasswordHash: "hash",
+				key: "encrypted-key",
+				kdf: 0,
+				kdfIterations: 600_000,
+			},
+		});
+		expect(() => rpcVoid(response)).not.toThrow();
 	});
 
 	it("keeps the access token in memory and sends same-origin credentials", async () => {

@@ -22,6 +22,7 @@ import {
 	getMemoryAccessToken,
 	rpc,
 	rpcJson,
+	rpcVoid,
 	setMemoryAccessToken,
 } from "./rpc";
 import { ApiError } from "./rpc";
@@ -632,7 +633,7 @@ export async function register(
 		},
 	};
 
-	await rpcJson(await rpc.api.accounts.register.$post({ json: payload }));
+	rpcVoid(await rpc.api.accounts.register.$post({ json: payload }));
 }
 
 /**

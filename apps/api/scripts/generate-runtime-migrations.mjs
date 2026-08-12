@@ -27,7 +27,9 @@ export const databaseMigrations = ${JSON.stringify(migrations, null, "\t")} as c
 `;
 
 if (process.argv.includes("--check")) {
-	if (readFileSync(outputFile, "utf8") !== generated) {
+	const current = readFileSync(outputFile, "utf8");
+	const currentSourceHash = current.match(/Source SHA-256: ([a-f0-9]{64})/)?.[1];
+	if (currentSourceHash !== sourceHash) {
 		throw new Error(
 			"Runtime migrations are stale. Run `pnpm --filter @edgewarden/api db:codegen`.",
 		);
