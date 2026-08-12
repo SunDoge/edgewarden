@@ -45,6 +45,29 @@ export function registerInfrastructureScenarios(
 		assert.equal(body.featureStates["fill-assist-targeting-rules"], true);
 	});
 
+	test("reports readiness only when database and blob storage are available", async () => {
+		const ready = await request("/api/health");
+		assert.equal(ready.status, 200, await ready.clone().text());
+		assert.deepEqual(await ready.json(), {
+			status: "ok",
+			edgewardenVersion: "1.0.0",
+		});
+
+		const bindings = getBindings() as unknown as Record<string, unknown>;
+		const r2 = bindings.ATTACHMENTS_R2;
+		const kv = bindings.ATTACHMENTS_KV;
+		delete bindings.ATTACHMENTS_R2;
+		delete bindings.ATTACHMENTS_KV;
+		try {
+			const unavailable = await request("/api/health");
+			assert.equal(unavailable.status, 503);
+			assert.deepEqual(await unavailable.json(), { status: "unavailable" });
+		} finally {
+			bindings.ATTACHMENTS_R2 = r2;
+			bindings.ATTACHMENTS_KV = kv;
+		}
+	});
+
 	test("requires a dedicated persisted-data encryption secret", async () => {
 		const bindings = getBindings();
 		const secret = bindings.DATA_ENCRYPTION_SECRET;

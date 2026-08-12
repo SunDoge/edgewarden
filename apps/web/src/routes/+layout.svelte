@@ -39,7 +39,7 @@ onMount(() => {
 onMount(() => {
 	const monitor = new NetworkStatusMonitor({
 		probe: async () => {
-			const response = await fetch("/api/version", {
+			const response = await fetch("/api/health", {
 				cache: "no-store",
 				signal: AbortSignal.timeout(5_000),
 			});

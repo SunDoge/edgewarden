@@ -23,6 +23,8 @@ import {
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
 import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
+import { getBlobStorageKind } from "../services/blob-store";
+import { getSafeJwtSecret } from "../utils/direct-upload";
 
 export const registerAccount = factory.createHandlers(
 	vValidator("json", RegisterSchema),
@@ -233,3 +235,21 @@ export const getVersion = factory.createHandlers(async (c) =>
 		edgewardenVersion: EDGEWARDEN_VERSION,
 	}),
 );
+
+export const getHealth = factory.createHandlers(async (c) => {
+	try {
+		if (!getSafeJwtSecret(c.env) || !c.env.DATA_ENCRYPTION_SECRET) {
+			throw new Error("Required secrets are not configured");
+		}
+		if (!getBlobStorageKind(c.env)) {
+			throw new Error("Attachment storage is not configured");
+		}
+		// Probe both the binding and the newest schema contract. LIMIT 0 avoids
+		// reading user data while still failing when a migration is missing.
+		await c.env.DB.prepare("SELECT storage_key FROM attachments LIMIT 0").run();
+		return c.json({ status: "ok", edgewardenVersion: EDGEWARDEN_VERSION });
+	} catch (error) {
+		console.error("Readiness check failed", error);
+		return c.json({ status: "unavailable" }, 503);
+	}
+});
