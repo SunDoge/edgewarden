@@ -12,30 +12,22 @@ import { onMount } from "svelte";
 import { goto } from "$app/navigation";
 import BackupDestinationForm from "$lib/components/backup/BackupDestinationForm.svelte";
 import BackupDestinationList from "$lib/components/backup/BackupDestinationList.svelte";
-import BackupRuntimePanel from "$lib/components/backup/BackupRuntimePanel.svelte";
+import RemoteBackupManager from "$lib/components/backup/RemoteBackupManager.svelte";
 import {
 	applyBackupDestinationForm,
 	backupDestinationToForm,
 	createDefaultBackupDestinationForm,
 } from "$lib/components/backup/destination-form";
 import LocalBackupPanel from "$lib/components/backup/LocalBackupPanel.svelte";
-import RemoteBackupBrowser, {
-	type RemoteBackupItem,
-} from "$lib/components/backup/RemoteBackupBrowser.svelte";
 import type {
 	BackupDestinationRecord,
 	BackupSettings,
 } from "$lib/components/backup/types";
 import { Button } from "$lib/components/ui/button/index.js";
 import {
-	deleteRemoteBackupApi,
-	downloadRemoteBackupApi,
 	exportBackupLocalApi,
 	fetchBackupSettingsApi,
 	importBackupLocalApi,
-	inspectRemoteBackupApi,
-	listRemoteBackupsApi,
-	restoreRemoteBackupApi,
 	runBackupApi,
 	updateBackupSettingsApi,
 } from "$lib/services/api";
@@ -45,11 +37,7 @@ import { vault } from "$lib/stores/vault.svelte";
 let loading = $state(true);
 let saving = $state(false);
 let running = $state(false);
-let browsing = $state(false);
-let downloading = $state<string | null>(null);
 let restoring = $state(false);
-let deleting = $state<string | null>(null);
-let inspecting = $state<string | null>(null);
 let error = $state("");
 let successMsg = $state("");
 
@@ -58,10 +46,6 @@ let settings = $state<BackupSettings>({ destinations: [] });
 let selectedDestId = $state<string | null>(null);
 
 let form = $state(createDefaultBackupDestinationForm());
-
-// Remote backup file browser
-let remoteFiles = $state<RemoteBackupItem[]>([]);
-let currentRemotePath = $state("");
 
 // Local backups forms
 let localFile = $state<File | null>(null);
@@ -104,25 +88,6 @@ function selectDestination(id: string) {
 	if (!dest) return;
 
 	form = backupDestinationToForm(dest);
-
-	// Load remote file browser
-	currentRemotePath = "";
-	remoteFiles = [];
-	loadRemoteFiles();
-}
-
-async function loadRemoteFiles() {
-	if (!selectedDestId) return;
-	browsing = true;
-	try {
-		const list = await listRemoteBackupsApi(selectedDestId, currentRemotePath);
-		remoteFiles = list.items || [];
-	} catch (e: any) {
-		console.warn("Failed to browse remote backups:", e);
-		remoteFiles = [];
-	} finally {
-		browsing = false;
-	}
 }
 
 function addDestination() {
@@ -229,103 +194,6 @@ async function deleteDestination() {
 		error = e.message || "删除备份目的地失败。";
 	} finally {
 		saving = false;
-	}
-}
-
-async function handleDownloadFile(path: string, fileName: string) {
-	if (!selectedDestId) return;
-	downloading = path;
-	try {
-		const blob = await downloadRemoteBackupApi(selectedDestId, path);
-		const url = window.URL.createObjectURL(blob);
-		const a = document.createElement("a");
-		a.href = url;
-		a.download = fileName;
-		document.body.appendChild(a);
-		a.click();
-		window.URL.revokeObjectURL(url);
-		document.body.removeChild(a);
-	} catch (e: any) {
-		alert("下载备份文件失败：" + (e.message || e));
-	} finally {
-		downloading = null;
-	}
-}
-
-async function handleDeleteFile(path: string) {
-	if (!selectedDestId) return;
-	if (
-		!confirm(`确定要从远程服务器删除此备份文件 "${path}" 吗？此操作无法撤销。`)
-	)
-		return;
-
-	deleting = path;
-	try {
-		await deleteRemoteBackupApi(selectedDestId, path);
-		await loadRemoteFiles();
-		showSuccess("文件删除成功！");
-	} catch (e: any) {
-		alert("删除远程备份文件失败：" + (e.message || e));
-	} finally {
-		deleting = null;
-	}
-}
-
-async function handleInspectFile(path: string) {
-	if (!selectedDestId) return;
-	inspecting = path;
-	try {
-		const result = await inspectRemoteBackupApi(selectedDestId, path);
-		const integrity = result.integrity ?? {};
-		if (integrity.matches === true || integrity.valid === true)
-			showSuccess("备份文件校验和验证通过。");
-		else error = integrity.reason || "备份文件校验和与文件名不匹配。";
-	} catch (e: any) {
-		error = e.message || "检查备份完整性失败。";
-	} finally {
-		inspecting = null;
-	}
-}
-
-function openRemoteDirectory(path: string) {
-	currentRemotePath = path;
-	loadRemoteFiles();
-}
-
-function openParentDirectory() {
-	const parts = currentRemotePath
-		.replace(/\/+$/, "")
-		.split("/")
-		.filter(Boolean);
-	parts.pop();
-	openRemoteDirectory(parts.join("/"));
-}
-
-async function handleRestoreRemote(path: string) {
-	if (!selectedDestId) return;
-	const msg =
-		"确定要从远程备份文件恢复吗？\n警告：此操作将使用该备份全量覆盖系统中的所有数据，包括其他用户和保险库条目！此操作不可逆！\n\n请在下方输入 REVERT 确认：";
-	const confirmVal = prompt(msg);
-	if (confirmVal !== "REVERT") {
-		alert("操作已取消");
-		return;
-	}
-
-	restoring = true;
-	error = "";
-	try {
-		await restoreRemoteBackupApi(
-			selectedDestId,
-			path,
-			true, // replaceExisting
-			allowChecksumMismatch,
-		);
-		alert("恢复成功！由于主数据库已替换，请重新登录您的账户。");
-		goto("/login");
-	} catch (e: any) {
-		error = e.message || "从远程备份恢复失败。";
-	} finally {
-		restoring = false;
 	}
 }
 
@@ -479,27 +347,14 @@ function showSuccess(msg: string) {
 							onDelete={deleteDestination}
 						/>
 
-						<BackupRuntimePanel
+						<RemoteBackupManager
+							destinationId={selectedDestId}
 							destination={currentDest}
-							currentPath={currentRemotePath}
 							{running}
-							{browsing}
+							{allowChecksumMismatch}
 							onRun={triggerBackup}
-							onOpenParent={openParentDirectory}
-						/>
-						<RemoteBackupBrowser
-							items={remoteFiles}
-							{browsing}
-							{downloading}
-							{deleting}
-							{inspecting}
-							{restoring}
-							onRefresh={loadRemoteFiles}
-							onOpenDirectory={openRemoteDirectory}
-							onInspect={handleInspectFile}
-							onDownload={handleDownloadFile}
-							onRestore={handleRestoreRemote}
-							onDelete={handleDeleteFile}
+							onSuccess={showSuccess}
+							onError={(message) => { error = message; successMsg = ""; }}
 						/>
 					{/if}
 				</div>
