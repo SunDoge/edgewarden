@@ -23,15 +23,10 @@ import {
 	deriveMasterKey,
 	deriveMasterPasswordHash,
 } from "$lib/services/crypto";
-import {
-	encryptVaultKeyForAuthRequest,
-	listPendingAuthRequestsApi,
-	respondToAuthRequestApi,
-	type AuthRequest,
-} from "$lib/services/auth-requests";
 import { vault, syncVaultData, logout } from "$lib/stores/vault.svelte";
 import { Button } from "$lib/components/ui/button/index.js";
 import AccountPasskeys from "$lib/components/settings/AccountPasskeys.svelte";
+import AuthRequestSettings from "$lib/components/settings/AuthRequestSettings.svelte";
 import TwoFactorPasskeys from "$lib/components/settings/TwoFactorPasskeys.svelte";
 import YubikeySettings from "$lib/components/settings/YubikeySettings.svelte";
 import { Input } from "$lib/components/ui/input/index.js";
@@ -58,7 +53,6 @@ import {
 	ShieldCheck,
 	Trash2,
 } from "@lucide/svelte";
-import { match } from "ts-pattern";
 import { getCurrentDeviceIdentifier } from "$lib/services/client-device";
 
 let loading = $state(true);
@@ -67,7 +61,6 @@ let message = $state("");
 let error = $state("");
 let profile = $state<any>(null);
 let devices = $state<any[]>([]);
-let authRequests = $state<AuthRequest[]>([]);
 let apiKey = $state("");
 let name = $state("");
 let hint = $state("");
@@ -112,7 +105,6 @@ async function load() {
 		]);
 		name = profile.name ?? "";
 		hint = profile.masterPasswordHint ?? "";
-		authRequests = await listPendingAuthRequestsApi(profile.email);
 	} catch (e) {
 		fail(e);
 	} finally {
@@ -382,49 +374,6 @@ async function changeMasterPassword() {
 		busy = "";
 	}
 }
-
-function deviceTypeLabel(type: number): string {
-	return match(type)
-		.with(0, () => "浏览器")
-		.with(1, () => "Android")
-		.with(2, () => "iOS")
-		.with(3, () => "桌面客户端")
-		.otherwise(() => `设备类型 ${type}`);
-}
-
-async function refreshAuthRequests() {
-	busy = "auth-requests";
-	try {
-		authRequests = await listPendingAuthRequestsApi(profile.email);
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
-}
-
-async function respondToAuthRequest(request: AuthRequest, approved: boolean) {
-	busy = `auth-request-${request.id}`;
-	try {
-		let key: string | undefined;
-		if (approved) {
-			if (!vault.symEncKey || !vault.symMacKey)
-				throw new Error("保险库密钥不可用，请重新解锁");
-			key = await encryptVaultKeyForAuthRequest(
-				request.publicKey,
-				vault.symEncKey,
-				vault.symMacKey,
-			);
-		}
-		await respondToAuthRequestApi(request.id, approved, key);
-		authRequests = authRequests.filter((item) => item.id !== request.id);
-		message = approved ? "已批准设备登录" : "已拒绝设备登录";
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
-}
 </script>
 
 <svelte:head><title>账户与安全 · Edgewarden</title></svelte:head>
@@ -512,17 +461,11 @@ async function respondToAuthRequest(request: AuthRequest, approved: boolean) {
 			onError={fail}
 		/>
 
-		<Card.Root>
-			<Card.Header class="flex-row items-start justify-between"><div><Card.Title>待审批设备登录</Card.Title><Card.Description>批准前请在请求设备上核对公钥指纹和设备信息。</Card.Description></div><Button variant="outline" size="sm" onclick={refreshAuthRequests} disabled={busy === "auth-requests"}><RefreshCw class={busy === "auth-requests" ? "animate-spin" : ""} />刷新</Button></Card.Header>
-			<Card.Content class="flex flex-col gap-3">
-				{#each authRequests as request (request.id)}
-					<div class="flex flex-col gap-3 rounded-md border p-3 md:flex-row md:items-center md:justify-between">
-						<div class="min-w-0"><div class="font-medium">{deviceTypeLabel(request.requestDeviceType)}</div><div class="truncate text-xs text-muted-foreground">{request.requestDeviceIdentifier}</div><div class="text-xs text-muted-foreground">{new Date(request.creationDate).toLocaleString()}{request.requestIpAddress ? ` · ${request.requestIpAddress}` : ""}</div><code class="mt-2 block break-all text-xs">{request.fingerprint || "指纹不可用"}</code></div>
-						<div class="flex shrink-0 gap-2"><Button size="sm" onclick={() => respondToAuthRequest(request, true)} disabled={busy.startsWith("auth-request-")}><ShieldCheck />批准</Button><Button size="sm" variant="destructive" onclick={() => respondToAuthRequest(request, false)} disabled={busy.startsWith("auth-request-")}>拒绝</Button></div>
-					</div>
-				{:else}<p class="py-4 text-sm text-muted-foreground">没有待审批的设备登录。</p>{/each}
-			</Card.Content>
-		</Card.Root>
+		<AuthRequestSettings
+			email={profile.email}
+			onMessage={(value) => { message = value; error = ""; }}
+			onError={fail}
+		/>
 
 		<Card.Root>
 			<Card.Header class="flex-row items-start justify-between"><div><Card.Title>设备</Card.Title><Card.Description>查看并撤销已登录设备。</Card.Description></div><div class="flex gap-2">{#if selectedDeviceIdList.length}<Button variant="destructive" size="sm" onclick={removeSelectedDevices} disabled={busy === "selected-devices"}>移除已选（{selectedDeviceIdList.length}）</Button>{/if}<Button variant="destructive" size="sm" onclick={() => removeAllDevicesOpen = true} disabled={!devices.length || busy === "devices"}>移除全部</Button></div></Card.Header>
