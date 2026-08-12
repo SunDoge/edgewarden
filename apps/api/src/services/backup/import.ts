@@ -1,5 +1,5 @@
 import type { BlobStore } from "../blob-store";
-import { type BackupPayload, parseBackupArchive } from "./archive";
+import { parseBackupArchive } from "./archive";
 import {
 	importPreparedBackupRows,
 	prepareImportPayloadForTarget,
@@ -9,13 +9,19 @@ import {
 	type BackupImportSkipSummary,
 } from "./import-types";
 import {
+	backupTableCounts,
+	buildImportExecutionResult,
+	ensureBackupCompatibilityFields,
+	type BackupImportExecutionResult,
+	type BackupRestoreProgressReporter,
+} from "./import-contract";
+import {
 	attachmentRowKey,
 	cleanupOrphanedBlobFiles,
 	removeAttachmentRows,
 	restoreBlobFiles,
 } from "./import-attachments";
 import {
-	type BackupTableName,
 	collectCurrentBlobKeys,
 	createShadowTables,
 	ensureImportTargetIsFresh,
@@ -24,118 +30,6 @@ import {
 	swapShadowTablesIntoPlace,
 	validateShadowTableCounts,
 } from "./restore-database";
-
-export interface BackupImportResultBody {
-	object: "instance-backup-import";
-	imported: {
-		config: number;
-		users: number;
-		domainSettings: number;
-		userRevisions: number;
-		organizations: number;
-		organizationMembers: number;
-		collections: number;
-		collectionMembers: number;
-		folders: number;
-		ciphers: number;
-		cipherCollections: number;
-		attachments: number;
-		webauthnCredentials: number;
-		deviceTrustTokens: number;
-		sends: number;
-		attachmentFiles: number;
-	};
-	skipped: {
-		reason: string | null;
-		attachments: number;
-		items: Array<{
-			kind: "attachment";
-			path: string;
-			sizeBytes: number;
-		}>;
-	};
-}
-
-export interface BackupImportExecutionResult {
-	result: BackupImportResultBody;
-	auditActorUserId: string | null;
-}
-
-function backupTableCounts(
-	db: BackupPayload["db"],
-	attachmentCount = (db.attachments || []).length,
-): Partial<Record<BackupTableName, number>> {
-	return {
-		config: (db.config || []).length,
-		users: (db.users || []).length,
-		domain_settings: (db.domain_settings || []).length,
-		user_revisions: (db.user_revisions || []).length,
-		organizations: (db.organizations || []).length,
-		org_members: (db.org_members || []).length,
-		collections: (db.collections || []).length,
-		collection_members: (db.collection_members || []).length,
-		device_trust_tokens: (db.device_trust_tokens || []).length,
-		webauthn_credentials: (db.webauthn_credentials || []).length,
-		folders: (db.folders || []).length,
-		ciphers: (db.ciphers || []).length,
-		cipher_collections: (db.cipher_collections || []).length,
-		attachments: attachmentCount,
-		sends: (db.sends || []).length,
-	};
-}
-
-function buildImportExecutionResult(
-	db: BackupPayload["db"],
-	actorUserId: string,
-	restoredAttachmentCount: number,
-	skipped: BackupImportSkipSummary,
-): BackupImportExecutionResult {
-	return {
-		auditActorUserId: (db.users || []).some(
-			(row) => String(row.id || "").trim() === actorUserId,
-		)
-			? actorUserId
-			: null,
-		result: {
-			object: "instance-backup-import",
-			imported: {
-				config: (db.config || []).length,
-				users: (db.users || []).length,
-				domainSettings: (db.domain_settings || []).length,
-				userRevisions: (db.user_revisions || []).length,
-				organizations: (db.organizations || []).length,
-				organizationMembers: (db.org_members || []).length,
-				collections: (db.collections || []).length,
-				collectionMembers: (db.collection_members || []).length,
-				folders: (db.folders || []).length,
-				ciphers: (db.ciphers || []).length,
-				cipherCollections: (db.cipher_collections || []).length,
-				attachments: restoredAttachmentCount,
-				webauthnCredentials: (db.webauthn_credentials || []).length,
-				deviceTrustTokens: (db.device_trust_tokens || []).length,
-				sends: (db.sends || []).length,
-				attachmentFiles: restoredAttachmentCount,
-			},
-			skipped,
-		},
-	};
-}
-
-export interface BackupRestoreProgressEvent {
-	source: "local" | "remote";
-	step: string;
-	fileName: string;
-	stageTitle: string;
-	stageDetail: string;
-	replaceExisting: boolean;
-	done?: boolean;
-	ok?: boolean;
-	error?: string | null;
-}
-
-export type BackupRestoreProgressReporter = (
-	event: BackupRestoreProgressEvent,
-) => Promise<void> | void;
 
 export async function importBackupArchiveBytes(
 	archiveBytes: Uint8Array,
@@ -148,16 +42,7 @@ export async function importBackupArchiveBytes(
 	fileName = "edgewarden_backup.zip",
 ): Promise<BackupImportExecutionResult> {
 	const parsed = parseBackupArchive(archiveBytes);
-	// Validate database format: if sends are missing or webauthn credentials are not in payload, fallback or add defaults
-	if (!parsed.payload.db.sends) {
-		parsed.payload.db.sends = [];
-	}
-	if (!parsed.payload.db.device_trust_tokens) {
-		parsed.payload.db.device_trust_tokens = [];
-	}
-	if (!parsed.payload.db.webauthn_credentials) {
-		parsed.payload.db.webauthn_credentials = [];
-	}
+	ensureBackupCompatibilityFields(parsed.payload);
 
 	const prepared = prepareImportPayloadForTarget(
 		blobStore,
@@ -294,15 +179,7 @@ export async function importRemoteBackupArchiveBytes(
 	fileName = "edgewarden_backup.zip",
 ): Promise<BackupImportExecutionResult> {
 	const parsed = parseBackupArchive(archiveBytes);
-	if (!parsed.payload.db.sends) {
-		parsed.payload.db.sends = [];
-	}
-	if (!parsed.payload.db.device_trust_tokens) {
-		parsed.payload.db.device_trust_tokens = [];
-	}
-	if (!parsed.payload.db.webauthn_credentials) {
-		parsed.payload.db.webauthn_credentials = [];
-	}
+	ensureBackupCompatibilityFields(parsed.payload);
 
 	const storageKind = blobStore?.kind ?? null;
 	const nextAttachments: SqlRow[] = [];
