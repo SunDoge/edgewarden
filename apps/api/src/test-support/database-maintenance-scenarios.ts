@@ -496,6 +496,7 @@ export function registerDatabaseMaintenanceScenarios(
 					encrypted_public_key: null,
 					encrypted_private_key: null,
 					supports_prf: 0,
+					mutation_token: crypto.randomUUID(),
 					created_at: timestamp,
 					updated_at: timestamp,
 				})
@@ -761,6 +762,7 @@ export function registerDatabaseMaintenanceScenarios(
 					encrypted_public_key: null,
 					encrypted_private_key: null,
 					supports_prf: 0,
+					mutation_token: crypto.randomUUID(),
 					created_at: timestamp,
 					updated_at: timestamp,
 				};

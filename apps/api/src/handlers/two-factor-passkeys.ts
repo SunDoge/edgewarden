@@ -250,6 +250,7 @@ export const createTwoFactorPasskey = factory.createHandlers(
 			encrypted_public_key: null,
 			encrypted_private_key: null,
 			supports_prf: 0,
+			mutation_token: crypto.randomUUID(),
 			created_at: ts,
 			updated_at: ts,
 		};

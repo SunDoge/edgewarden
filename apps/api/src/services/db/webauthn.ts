@@ -21,6 +21,7 @@ export async function saveAccountPasskeyCredential(
 	const ts = now();
 	const values = {
 		...credential,
+		mutation_token: credential.mutation_token ?? crypto.randomUUID(),
 		created_at: credential.created_at ?? ts,
 		updated_at: credential.updated_at ?? ts,
 	};
@@ -41,6 +42,7 @@ export async function saveAccountPasskeyCredential(
 				encrypted_public_key: values.encrypted_public_key,
 				encrypted_private_key: values.encrypted_private_key,
 				supports_prf: values.supports_prf,
+				mutation_token: values.mutation_token,
 				updated_at: values.updated_at,
 			}),
 		)
@@ -144,29 +146,6 @@ export async function updateAccountPasskeyCounter(
 		.where("counter", "=", expectedCounter)
 		.executeTakeFirst();
 	return result.numUpdatedRows === 1n;
-}
-
-export async function updateAccountPasskeyEncryption(
-	db: Kysely<DB>,
-	userId: string,
-	credentialId: string,
-	encryptedUserKey: string,
-	encryptedPublicKey: string,
-	encryptedPrivateKey: string,
-): Promise<boolean> {
-	const result = await db
-		.updateTable("webauthn_credentials")
-		.set({
-			encrypted_user_key: encryptedUserKey,
-			encrypted_public_key: encryptedPublicKey,
-			encrypted_private_key: encryptedPrivateKey,
-			supports_prf: 1,
-			updated_at: now(),
-		})
-		.where("user_id", "=", userId)
-		.where("credential_id", "=", credentialId)
-		.executeTakeFirst();
-	return Number(result.numUpdatedRows ?? 0) > 0;
 }
 
 export async function deleteAccountPasskeyCredential(
