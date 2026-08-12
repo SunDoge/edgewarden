@@ -8,7 +8,12 @@ import {
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import { invalidateUserCache, verifyPassword } from "../services/auth";
 import { encryptCredential } from "../services/credential-protection";
-import { executeBatch, revisionQuery } from "../services/db/batch";
+import {
+	conditionalRefreshTokenDeletionQuery,
+	conditionalUserRevisionQuery,
+	executeBatch,
+	revisionQuery,
+} from "../services/db/batch";
 import {
 	loadYubicoCredentials,
 	saveYubicoCredentials,
@@ -131,18 +136,32 @@ export const disableYubikeys = factory.createHandlers(
 			return errorResponse("Master password verification failed", 400);
 		const user = c.get("user");
 		const db = c.get("db");
+		const disabledResponse = () =>
+			c.json({
+				enabled: false,
+				keys: [],
+				nfc: false,
+				object: "twoFactorYubiKey" as const,
+			});
+		if (parseYubikeyConfig(user.yubikey_config).keys.length === 0)
+			return disabledResponse();
 		const ts = now();
-		await executeBatch(c.get("dbDialect"), [
+		const securityStamp = crypto.randomUUID();
+		const [updated] = await c.get("dbDialect").batch([
 			db
 				.updateTable("users")
 				.set({
 					yubikey_config: serializeYubikeyConfig({ keys: [], nfc: false }),
+					security_stamp: securityStamp,
 					updated_at: ts,
 				})
 				.where("id", "=", user.id)
+				.where("yubikey_config", "=", user.yubikey_config)
 				.compile(),
-			revisionQuery(db, user.id, ts),
+			conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+			conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
 		]);
+		if (updated.numAffectedRows !== 1n) return disabledResponse();
 		invalidateUserCache(user.id);
 		await safeWriteAuditEvent(db, {
 			actorUserId: user.id,
@@ -152,12 +171,7 @@ export const disableYubikeys = factory.createHandlers(
 			targetId: user.id,
 			metadata: auditRequestMetadata(c.req.raw),
 		});
-		return c.json({
-			enabled: false,
-			keys: [],
-			nfc: false,
-			object: "twoFactorYubiKey",
-		});
+		return disabledResponse();
 	},
 );
 

@@ -15,7 +15,13 @@ import {
 	decryptCredential,
 	encryptCredential,
 } from "../services/credential-protection";
-import { executeBatch, revisionQuery } from "../services/db/batch";
+import {
+	conditionalRefreshTokenDeletionQuery,
+	conditionalTwoFactorCredentialDeletionQuery,
+	conditionalUserRevisionQuery,
+	executeBatch,
+	revisionQuery,
+} from "../services/db/batch";
 import * as usersDb from "../services/db/users";
 import * as webauthnDb from "../services/db/webauthn";
 import { errorResponse } from "../utils/response";
@@ -137,28 +143,31 @@ function disableAuthenticatorHandler(providerResponse: boolean) {
 				return errorResponse("Password is incorrect.", 400);
 			}
 			const db = c.get("db");
+			const response = () =>
+				providerResponse
+					? c.json({ enabled: false, type: 0, object: "twoFactorProvider" })
+					: c.json({ enabled: false, object: "twoFactorAuthenticator" });
+			if (!user.totp_secret) return response();
 			const ts = now();
-			await executeBatch(c.get("dbDialect"), [
+			const securityStamp = crypto.randomUUID();
+			const [updated] = await c.get("dbDialect").batch([
 				db
 					.updateTable("users")
 					.set({
 						totp_secret: null,
 						totp_recovery_code: null,
-						security_stamp: crypto.randomUUID(),
+						security_stamp: securityStamp,
 						updated_at: ts,
 					})
 					.where("id", "=", user.id)
+					.where("totp_secret", "=", user.totp_secret)
 					.compile(),
-				db
-					.deleteFrom("refresh_tokens")
-					.where("user_id", "=", user.id)
-					.compile(),
-				revisionQuery(db, user.id, ts),
+				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+				conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
 			]);
+			if (updated.numAffectedRows !== 1n) return response();
 			invalidateUserCache(user.id);
-			return providerResponse
-				? c.json({ enabled: false, type: 0, object: "twoFactorProvider" })
-				: c.json({ enabled: false, object: "twoFactorAuthenticator" });
+			return response();
 		},
 	);
 }
@@ -241,26 +250,26 @@ export const recoverTwoFactor = factory.createHandlers(
 			return errorResponse("Invalid credentials or recovery code.", 400);
 		}
 		const ts = now();
-		await executeBatch(c.get("dbDialect"), [
+		const securityStamp = crypto.randomUUID();
+		const [updated] = await c.get("dbDialect").batch([
 			db
 				.updateTable("users")
 				.set({
 					totp_secret: null,
 					totp_recovery_code: null,
 					yubikey_config: serializeYubikeyConfig({ keys: [], nfc: false }),
-					security_stamp: crypto.randomUUID(),
+					security_stamp: securityStamp,
 					updated_at: ts,
 				})
 				.where("id", "=", user.id)
+				.where("totp_recovery_code", "=", user.totp_recovery_code)
 				.compile(),
-			db.deleteFrom("refresh_tokens").where("user_id", "=", user.id).compile(),
-			db
-				.deleteFrom("webauthn_credentials")
-				.where("user_id", "=", user.id)
-				.where("purpose", "=", "twoFactor")
-				.compile(),
-			revisionQuery(db, user.id, ts),
+			conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+			conditionalTwoFactorCredentialDeletionQuery(db, user.id, securityStamp),
+			conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
 		]);
+		if (updated.numAffectedRows !== 1n)
+			return errorResponse("Invalid credentials or recovery code.", 400);
 		invalidateUserCache(user.id);
 		await safeWriteAuditEvent(db, {
 			actorUserId: user.id,
