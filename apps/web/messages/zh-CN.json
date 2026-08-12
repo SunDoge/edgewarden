@@ -1,0 +1,14 @@
+{
+	"$schema": "https://inlang.com/schema/inlang-message-format",
+	"app_name": "Edgewarden",
+	"network_online": "在线",
+	"network_offline": "离线",
+	"network_checking": "检查连接",
+	"vault_open_navigation": "打开保险库导航",
+	"vault_offline_cache": "离线缓存",
+	"vault_zero_knowledge_protected": "零知识加密保护中",
+	"vault_cached_at": "缓存于 {time}",
+	"vault_synced_at": "同步于 {time}",
+	"vault_sync": "同步保险库",
+	"vault_lock_and_logout": "锁定并退出"
+}

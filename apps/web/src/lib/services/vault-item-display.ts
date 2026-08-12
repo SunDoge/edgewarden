@@ -65,11 +65,3 @@ export function cipherExtraData(
 		.with(CipherType.Passport, () => item.passport ?? null)
 		.otherwise(() => null) as Record<string, unknown> | null;
 }
-
-export function formatVaultSyncTime(timestamp: number | null): string {
-	if (!timestamp) return "";
-	return new Date(timestamp).toLocaleTimeString("zh-CN", {
-		hour: "2-digit",
-		minute: "2-digit",
-	});
-}
