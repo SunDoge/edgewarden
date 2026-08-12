@@ -6,22 +6,16 @@ import {
 	checkIpRateLimit,
 } from "../middleware/rate-limit";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
-import {
-	createRefreshToken,
-	generateAccessToken,
-	verifyPassword,
-} from "../services/auth";
+import { generateAccessToken, verifyPassword } from "../services/auth";
 import {
 	constantTimeCredentialEqual,
 	decryptCredential,
 	hashCredential,
 } from "../services/credential-protection";
 import * as authRequestsDb from "../services/db/auth-requests";
-import { executeBatch } from "../services/db/batch";
-import * as devicesDb from "../services/db/devices";
-import * as refreshTokensDb from "../services/db/refresh-tokens";
 import * as usersDb from "../services/db/users";
 import * as webauthnDb from "../services/db/webauthn";
+import { refreshIdentitySession } from "../services/identity-refresh";
 import { issueIdentitySession } from "../services/identity-session";
 import {
 	clearLoginFailures,
@@ -30,7 +24,6 @@ import {
 } from "../services/login-attempts";
 import { turnstileEnabled, verifyTurnstileToken } from "../services/turnstile";
 import { loadYubicoCredentials } from "../services/yubico-config";
-import { hashRefreshToken } from "../utils/jwt";
 import { identityErrorResponse } from "../utils/response";
 import { now } from "../utils/time";
 import { isTotpEnabled, verifyTotpToken } from "../utils/totp";
@@ -414,81 +407,28 @@ export const connectToken = factory.createHandlers(async (c) => {
 			);
 		}
 
-		const record = await refreshTokensDb.getRefreshTokenRecord(db, rawToken);
-		if (!record) {
-			return identityErrorResponse(
-				"Refresh token is invalid or expired",
-				"invalid_grant",
-				400,
-			);
+		const refreshed = await refreshIdentitySession({
+			db,
+			dialect: c.get("dbDialect"),
+			rawToken,
+			jwtSecret: secret,
+		});
+		if (!refreshed.ok) {
+			const message =
+				refreshed.reason === "invalid_refresh_token"
+					? "Refresh token is invalid or expired"
+					: refreshed.reason === "inactive_account"
+						? "Account not found or inactive"
+						: "Device session is invalid";
+			return identityErrorResponse(message, "invalid_grant", 400);
 		}
 
-		const user = await usersDb.getUserById(db, record.userId);
-		if (!user || user.status !== "active") {
-			await refreshTokensDb.deleteRefreshToken(db, rawToken);
-			return identityErrorResponse(
-				"Account not found or inactive",
-				"invalid_grant",
-				400,
-			);
-		}
-
-		let deviceSession: { identifier: string; sessionStamp: string } | null =
-			null;
-		if (record.deviceIdentifier && record.deviceSessionStamp) {
-			const device = await devicesDb.getDevice(
-				db,
-				user.id,
-				record.deviceIdentifier,
-			);
-			if (!device || device.session_stamp !== record.deviceSessionStamp) {
-				await refreshTokensDb.deleteRefreshToken(db, rawToken);
-				return identityErrorResponse(
-					"Device session is invalid",
-					"invalid_grant",
-					400,
-				);
-			}
-			if (!device.session_stamp) {
-				return identityErrorResponse(
-					"Device session is invalid",
-					"invalid_grant",
-					400,
-				);
-			}
-			deviceSession = {
-				identifier: device.device_identifier,
-				sessionStamp: device.session_stamp,
-			};
-		}
-
-		// Rotate refresh token atomically to prevent a partially persisted session.
-		const newRefreshToken = createRefreshToken();
-		const sessionTime = now();
-		await executeBatch(c.get("dbDialect"), [
-			db
-				.deleteFrom("refresh_tokens")
-				.where("token", "=", await hashRefreshToken(rawToken))
-				.compile(),
-			db
-				.insertInto("refresh_tokens")
-				.values({
-					token: await hashRefreshToken(newRefreshToken),
-					user_id: user.id,
-					expires_at: sessionTime + LIMITS.auth.refreshTokenTtlSeconds,
-					device_identifier: deviceSession?.identifier ?? null,
-					device_session_stamp: deviceSession?.sessionStamp ?? null,
-				})
-				.compile(),
-		]);
-
-		const accessToken = await generateAccessToken(user, deviceSession, secret);
-		if (webClient) setWebRefreshCookie(c, newRefreshToken);
+		if (webClient) setWebRefreshCookie(c, refreshed.refreshToken);
 		return c.json(
 			buildTokenResponse(
-				accessToken,
-				newRefreshToken,
-				user,
+				refreshed.accessToken,
+				refreshed.refreshToken,
+				refreshed.user,
 				undefined,
 				null,
 				!webClient,
