@@ -1,5 +1,6 @@
 import { type Selectable, sql } from "kysely";
 import { factory } from "../http/factory";
+import { cipherToResponse } from "../services/ciphers/presentation";
 import * as attachmentsDb from "../services/db/attachments";
 import * as ciphersDb from "../services/db/ciphers";
 import * as domainSettingsDb from "../services/db/domain-settings";
@@ -12,65 +13,11 @@ import {
 	normalizeCustomEquivalentDomains,
 } from "../services/domain-rules";
 import { sendToResponse } from "../services/sends/presentation";
-import type { Attachments, Ciphers, Folders } from "../types/db";
+import type { Folders } from "../types/db";
 import { buildWebAuthnPrfOption } from "../utils/account-passkeys";
 import { toIso } from "../utils/time";
 import { buildUserDecryptionOptions } from "../utils/user-decryption";
 import { userYubicoPublicIds } from "../utils/yubico";
-
-function cipherToResponse(
-	cipher: Selectable<Ciphers>,
-	attachments: Selectable<Attachments>[] = [],
-	collectionIds: string[] = [],
-	permissions = { edit: true, viewPassword: true },
-) {
-	const data = JSON.parse(cipher.data) as Record<string, unknown>;
-	return {
-		id: cipher.id,
-		organizationId: cipher.org_id ?? null,
-		folderId: cipher.folder_id ?? null,
-		type: cipher.type,
-		name: cipher.name,
-		notes: cipher.notes ?? null,
-		fields: cipher.fields ? JSON.parse(cipher.fields) : null,
-		data: null, // unused in modern clients; type-specific fields below
-		login: cipher.type === 1 ? (data.login ?? null) : null,
-		secureNote: cipher.type === 2 ? (data.secureNote ?? null) : null,
-		card: cipher.type === 3 ? (data.card ?? null) : null,
-		identity: cipher.type === 4 ? (data.identity ?? null) : null,
-		sshKey: cipher.type === 5 ? (data.sshKey ?? null) : null,
-		bankAccount: cipher.type === 6 ? (data.bankAccount ?? null) : null,
-		driversLicense: cipher.type === 7 ? (data.driversLicense ?? null) : null,
-		passport: cipher.type === 8 ? (data.passport ?? null) : null,
-		favorite: cipher.favorite === 1,
-		reprompt: cipher.reprompt ?? 0,
-		key: cipher.key ?? null,
-		attachments: attachments.map((attachment) => ({
-			id: attachment.id,
-			fileName: attachment.file_name,
-			size: attachment.size,
-			sizeName: attachment.size_name,
-			key: attachment.key,
-			object: "attachment",
-		})),
-		organizationUseTotp: false,
-		edit: permissions.edit,
-		viewPassword: permissions.viewPassword,
-		permissions: {
-			delete: permissions.edit,
-			restore: permissions.edit,
-		},
-		collectionIds,
-		revisionDate: toIso(cipher.updated_at),
-		creationDate: toIso(cipher.created_at),
-		deletedDate: cipher.deleted_at ? toIso(cipher.deleted_at) : null,
-		archivedDate: cipher.archived_at ? toIso(cipher.archived_at) : null,
-		passwordHistory: cipher.password_history
-			? JSON.parse(cipher.password_history)
-			: null,
-		object: "cipherDetails",
-	};
-}
 
 function folderToResponse(folder: Selectable<Folders>) {
 	return {
