@@ -9,15 +9,11 @@ import {
 	disableTwoFactorApi,
 	enableAuthenticatorApi,
 	changeMasterPasswordApi,
-	deleteTwoFactorPasskeyApi,
 	fetchApiKeyApi,
 	fetchDevicesApi,
 	fetchProfileApi,
 	fetchRecoveryCodeApi,
 	getAuthenticatorApi,
-	getTwoFactorPasskeysApi,
-	getTwoFactorPasskeyChallengeApi,
-	createTwoFactorPasskeyApi,
 	isLoggedIn,
 	renameDeviceApi,
 	rotateApiKeyApi,
@@ -27,7 +23,6 @@ import {
 	deriveMasterKey,
 	deriveMasterPasswordHash,
 } from "$lib/services/crypto";
-import { createTwoFactorPasskeyCredential } from "$lib/services/passkeys";
 import {
 	encryptVaultKeyForAuthRequest,
 	listPendingAuthRequestsApi,
@@ -37,6 +32,7 @@ import {
 import { vault, syncVaultData, logout } from "$lib/stores/vault.svelte";
 import { Button } from "$lib/components/ui/button/index.js";
 import AccountPasskeys from "$lib/components/settings/AccountPasskeys.svelte";
+import TwoFactorPasskeys from "$lib/components/settings/TwoFactorPasskeys.svelte";
 import YubikeySettings from "$lib/components/settings/YubikeySettings.svelte";
 import { Input } from "$lib/components/ui/input/index.js";
 import * as Field from "$lib/components/ui/field/index.js";
@@ -55,7 +51,6 @@ import {
 import {
 	ArrowLeft,
 	Copy,
-	Fingerprint,
 	KeyRound,
 	LoaderCircle,
 	Pencil,
@@ -101,10 +96,6 @@ let confirmPassword = $state("");
 let theme = $state<ThemePreference>("system");
 let lockTimeoutMinutes = $state<"0" | "1" | "5" | "15" | "30">("15");
 let sessionTimeoutAction = $state<SessionTimeoutAction>("lock");
-let twoFactorPasskeys = $state<any[]>([]);
-let twoFactorPasskeyOpen = $state(false);
-let twoFactorPasskeyPassword = $state("");
-let twoFactorPasskeyName = $state("");
 
 function fail(value: unknown) {
 	error = value instanceof Error ? value.message : "操作失败";
@@ -392,62 +383,6 @@ async function changeMasterPassword() {
 	}
 }
 
-async function manageTwoFactorPasskeys() {
-	if (!twoFactorPasskeyPassword) return;
-	busy = "2fa-passkey-load";
-	try {
-		const result = await getTwoFactorPasskeysApi(
-			await passwordHash(twoFactorPasskeyPassword),
-		);
-		twoFactorPasskeys = result.keys ?? result.Keys ?? [];
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
-}
-
-async function addTwoFactorPasskey() {
-	if (!twoFactorPasskeyPassword) return;
-	busy = "2fa-passkey-create";
-	try {
-		const masterPasswordHash = await passwordHash(twoFactorPasskeyPassword);
-		const credential = await createTwoFactorPasskeyCredential(
-			await getTwoFactorPasskeyChallengeApi(masterPasswordHash),
-		);
-		const result = await createTwoFactorPasskeyApi({
-			masterPasswordHash,
-			name: twoFactorPasskeyName.trim() || "安全密钥",
-			...credential,
-		});
-		twoFactorPasskeys = result.keys ?? result.Keys ?? [];
-		twoFactorPasskeyName = "";
-		message = "两步验证安全密钥已添加";
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
-}
-
-async function removeTwoFactorPasskey(id: string) {
-	if (!twoFactorPasskeyPassword || !confirm("删除这把两步验证安全密钥？"))
-		return;
-	busy = `2fa-passkey-${id}`;
-	try {
-		const result = await deleteTwoFactorPasskeyApi({
-			id,
-			masterPasswordHash: await passwordHash(twoFactorPasskeyPassword),
-		});
-		twoFactorPasskeys = result.keys ?? result.Keys ?? [];
-		message = "两步验证安全密钥已删除";
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
-}
-
 function deviceTypeLabel(type: number): string {
 	return match(type)
 		.with(0, () => "浏览器")
@@ -555,10 +490,12 @@ async function respondToAuthRequest(request: AuthRequest, approved: boolean) {
 			</Card.Content>
 		</Card.Root>
 
-		<Card.Root>
-			<Card.Header><Card.Title>两步验证安全密钥</Card.Title><Card.Description>这些凭据只作为第二因素，不能单独登录或解锁保险库。</Card.Description></Card.Header>
-			<Card.Content><Button variant="outline" onclick={() => twoFactorPasskeyOpen = true}><Fingerprint />管理安全密钥</Button></Card.Content>
-		</Card.Root>
+		<TwoFactorPasskeys
+			email={profile.email}
+			kdfIterations={profile.kdfIterations}
+			onMessage={(value) => { message = value; error = ""; }}
+			onError={fail}
+		/>
 
 		<YubikeySettings
 			email={profile.email}
@@ -614,7 +551,3 @@ async function respondToAuthRequest(request: AuthRequest, approved: boolean) {
 <Dialog.Root bind:open={disableOpen}><Dialog.Content><Dialog.Header><Dialog.Title>关闭两步验证</Dialog.Title><Dialog.Description>请输入主密码确认。此操作会撤销现有刷新令牌。</Dialog.Description></Dialog.Header><Field.Field><Field.Label for="master-password">主密码</Field.Label><Input id="master-password" type="password" bind:value={masterPassword} autocomplete="current-password" /></Field.Field><Dialog.Footer><Button variant="outline" onclick={() => disableOpen = false}>取消</Button><Button variant="destructive" onclick={disableTotp} disabled={!masterPassword || busy === "totp-disable"}>确认关闭</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
 
 <Dialog.Root bind:open={passwordOpen}><Dialog.Content><Dialog.Header><Dialog.Title>更改主密码</Dialog.Title><Dialog.Description>保险库密钥会使用新密码重新加密。完成后需要重新登录所有设备。</Dialog.Description></Dialog.Header><Field.Group><Field.Field><Field.Label for="current-password">当前主密码</Field.Label><Input id="current-password" type="password" bind:value={currentPassword} autocomplete="current-password" /></Field.Field><Field.Field><Field.Label for="new-password">新主密码</Field.Label><Input id="new-password" type="password" bind:value={newPassword} autocomplete="new-password" /><Field.Description>至少 12 个字符。</Field.Description></Field.Field><Field.Field><Field.Label for="confirm-password">确认新主密码</Field.Label><Input id="confirm-password" type="password" bind:value={confirmPassword} autocomplete="new-password" /></Field.Field></Field.Group><Dialog.Footer><Button variant="outline" onclick={() => passwordOpen = false}>取消</Button><Button variant="destructive" onclick={changeMasterPassword} disabled={!currentPassword || newPassword.length < 12 || !confirmPassword || busy === "password"}>更改并退出</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
-
-
-
-<Dialog.Root bind:open={twoFactorPasskeyOpen}><Dialog.Content><Dialog.Header><Dialog.Title>两步验证安全密钥</Dialog.Title><Dialog.Description>先用主密码验证身份，再添加或删除安全密钥。</Dialog.Description></Dialog.Header><Field.Group><Field.Field><Field.Label for="two-factor-passkey-password">当前主密码</Field.Label><Input id="two-factor-passkey-password" type="password" bind:value={twoFactorPasskeyPassword} autocomplete="current-password" /></Field.Field><Field.Field orientation="horizontal"><Button variant="outline" onclick={manageTwoFactorPasskeys} disabled={!twoFactorPasskeyPassword || busy === "2fa-passkey-load"}>读取设置</Button></Field.Field>{#if twoFactorPasskeys.length}<div class="space-y-2">{#each twoFactorPasskeys as credential (credential.id)}<div class="flex items-center justify-between rounded-md border p-3"><span>{credential.name || "安全密钥"}</span><Button variant="ghost" size="icon-sm" onclick={() => removeTwoFactorPasskey(String(credential.id))} disabled={busy === `2fa-passkey-${credential.id}`} aria-label="删除安全密钥"><Trash2 /></Button></div>{/each}</div>{/if}<Field.Field><Field.Label for="two-factor-passkey-name">新安全密钥名称</Field.Label><Input id="two-factor-passkey-name" bind:value={twoFactorPasskeyName} placeholder="例如：USB 安全密钥" /></Field.Field></Field.Group><Dialog.Footer><Button variant="outline" onclick={() => twoFactorPasskeyOpen = false}>关闭</Button><Button onclick={addTwoFactorPasskey} disabled={!twoFactorPasskeyPassword || busy === "2fa-passkey-create"}><Fingerprint />添加安全密钥</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
