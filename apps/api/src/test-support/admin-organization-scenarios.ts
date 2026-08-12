@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { unzipSync } from "fflate";
 import { test } from "vitest";
+import { createDatabase } from "../middleware/db";
 import { hashCredential } from "../services/credential-protection";
+import { runMaintenance } from "../services/maintenance";
 
 export interface AdminOrganizationScenarioContext {
 	readonly database: D1Database;
+	readonly bindings: CloudflareBindings;
 	readonly accessToken: string;
 	memberAccessToken: string;
 	readonly cipherId: string;
@@ -318,6 +321,81 @@ export function registerAdminOrganizationScenarios(
 			headers: { authorization: `Bearer ${context.memberAccessToken}` },
 		});
 		assert.equal(response.status, 404);
+	});
+
+	test("tombstones organizations before scheduled cascade deletion", async () => {
+		const owner = await context.database
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(EMAIL)
+			.first<{ id: string }>();
+		assert.ok(owner);
+		const orgId = crypto.randomUUID();
+		const memberId = crypto.randomUUID();
+		const timestamp = Math.floor(Date.now() / 1000);
+		await context.database.batch([
+			context.database
+				.prepare(
+					"INSERT INTO organizations (id,name,owner_id,created_at,updated_at) VALUES (?,?,?,?,?)",
+				)
+				.bind(orgId, "encrypted-delete-org", owner.id, timestamp, timestamp),
+			context.database
+				.prepare(
+					"INSERT INTO org_members (id,org_id,user_id,email,key,role,status,access_all,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+				)
+				.bind(
+					memberId,
+					orgId,
+					owner.id,
+					EMAIL,
+					"encrypted-org-key",
+					"owner",
+					"confirmed",
+					1,
+					timestamp,
+					timestamp,
+				),
+		]);
+
+		const deleted = await request(`/api/organizations/${orgId}`, {
+			method: "DELETE",
+			headers: {
+				authorization: `Bearer ${context.accessToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
+		});
+		assert.equal(deleted.status, 204, await deleted.clone().text());
+		assert.ok(
+			await context.database
+				.prepare(
+					"SELECT 1 FROM organizations WHERE id = ? AND deletion_requested_at IS NOT NULL",
+				)
+				.bind(orgId)
+				.first(),
+		);
+		assert.equal(
+			(
+				await request(`/api/organizations/${orgId}`, {
+					headers: { authorization: `Bearer ${context.accessToken}` },
+				})
+			).status,
+			404,
+		);
+
+		const { db } = await createDatabase(context.database);
+		try {
+			const result = await runMaintenance(db, context.bindings, timestamp + 1);
+			assert.ok(result.purgedOrganizations >= 1);
+		} finally {
+			await db.destroy();
+		}
+		assert.equal(
+			await context.database
+				.prepare("SELECT 1 FROM organizations WHERE id = ?")
+				.bind(orgId)
+				.first(),
+			null,
+		);
 	});
 
 	test("enforces organization collection visibility and read-only writes", async () => {

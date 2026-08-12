@@ -63,6 +63,7 @@ export const listOrganizations = factory.createHandlers(async (c) => {
 		])
 		.where("member.user_id", "=", c.get("user").id)
 		.where("member.status", "=", "confirmed")
+		.where("org.deletion_requested_at", "is", null)
 		.execute();
 	return c.json({
 		data: rows.map((row) => organizationResponse(row, row)),
@@ -194,11 +195,31 @@ export const deleteOrganization = factory.createHandlers(
 			return errorResponse("Master password verification failed", 400);
 		}
 		const orgId = c.get("orgMember").org_id;
-		await c
-			.get("db")
-			.deleteFrom("organizations")
-			.where("id", "=", orgId)
-			.execute();
+		const db = c.get("db");
+		const timestamp = now();
+		await executeBatch(c.get("dbDialect"), [
+			db
+				.updateTable("organizations")
+				.set({ deletion_requested_at: timestamp, updated_at: timestamp })
+				.where("id", "=", orgId)
+				.where("deletion_requested_at", "is", null)
+				.compile(),
+			db
+				.updateTable("ciphers")
+				.set({
+					deleted_at: timestamp,
+					purge_after: timestamp,
+					updated_at: timestamp,
+				})
+				.where("org_id", "=", orgId)
+				.compile(),
+			db
+				.updateTable("sends")
+				.set({ deletion_date: timestamp, updated_at: timestamp })
+				.where("org_id", "=", orgId)
+				.compile(),
+			...(await memberRevisionQueries(db, orgId, timestamp)),
+		]);
 		await safeWriteAuditEvent(c.get("db"), {
 			actorUserId: c.get("user").id,
 			action: "organization.delete",

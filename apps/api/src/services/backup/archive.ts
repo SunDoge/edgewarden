@@ -274,41 +274,80 @@ export async function buildBackupArchive(
 	const userRows = await db
 		.selectFrom("users")
 		.selectAll()
+		.where("deletion_requested_at", "is", null)
 		.orderBy("created_at asc")
 		.execute();
 	const domainSettingsRows = await db
 		.selectFrom("domain_settings")
 		.selectAll()
+		.where(
+			sql<boolean>`user_id in (select id from users where deletion_requested_at is null)`,
+		)
 		.orderBy("user_id asc")
 		.execute();
 	const revisionRows = await db
 		.selectFrom("user_revisions")
 		.selectAll()
+		.where(
+			sql<boolean>`user_id in (select id from users where deletion_requested_at is null)`,
+		)
 		.orderBy("user_id asc")
 		.execute();
 	const organizationRows = await db
 		.selectFrom("organizations")
 		.selectAll()
+		.where("deletion_requested_at", "is", null)
+		.where(
+			sql<boolean>`owner_id in (select id from users where deletion_requested_at is null)`,
+		)
 		.orderBy("created_at asc")
 		.execute();
 	const orgMemberRows = await db
 		.selectFrom("org_members")
 		.selectAll()
+		.where(
+			sql<boolean>`org_id in (
+				select id from organizations where deletion_requested_at is null
+			)`,
+		)
+		.where(
+			sql<boolean>`user_id is null or user_id in (
+				select id from users where deletion_requested_at is null
+			)`,
+		)
 		.orderBy("created_at asc")
 		.execute();
 	const collectionRows = await db
 		.selectFrom("collections")
 		.selectAll()
+		.where(
+			sql<boolean>`org_id in (
+				select id from organizations where deletion_requested_at is null
+			)`,
+		)
 		.orderBy("created_at asc")
 		.execute();
 	const collectionMemberRows = await db
 		.selectFrom("collection_members")
 		.selectAll()
+		.where(
+			sql<boolean>`org_member_id in (
+				select member.id from org_members member
+				inner join organizations org on org.id = member.org_id
+				where org.deletion_requested_at is null
+					and (member.user_id is null or member.user_id in (
+						select id from users where deletion_requested_at is null
+					))
+			)`,
+		)
 		.orderBy("collection_id asc")
 		.execute();
 	const folderRows = await db
 		.selectFrom("folders")
 		.selectAll()
+		.where(
+			sql<boolean>`user_id in (select id from users where deletion_requested_at is null)`,
+		)
 		.orderBy("created_at asc")
 		.execute();
 	const cipherRows = await db
@@ -320,6 +359,12 @@ export async function buildBackupArchive(
 				expression("purge_after", ">", snapshotTimestamp),
 			]),
 		)
+		.where(
+			sql<boolean>`(
+			user_id in (select id from users where deletion_requested_at is null)
+			or org_id in (select id from organizations where deletion_requested_at is null)
+		)`,
+		)
 		.orderBy("created_at asc")
 		.execute();
 	const cipherCollectionRows = await db
@@ -328,7 +373,11 @@ export async function buildBackupArchive(
 		.where(
 			sql<boolean>`cipher_id in (
 				select id from ciphers
-				where purge_after is null or purge_after > ${snapshotTimestamp}
+				where (purge_after is null or purge_after > ${snapshotTimestamp})
+				and (
+					user_id in (select id from users where deletion_requested_at is null)
+					or org_id in (select id from organizations where deletion_requested_at is null)
+				)
 			)`,
 		)
 		.orderBy("cipher_id asc")
@@ -340,7 +389,11 @@ export async function buildBackupArchive(
 		.where(
 			sql<boolean>`cipher_id in (
 				select id from ciphers
-				where purge_after is null or purge_after > ${snapshotTimestamp}
+				where (purge_after is null or purge_after > ${snapshotTimestamp})
+				and (
+					user_id in (select id from users where deletion_requested_at is null)
+					or org_id in (select id from organizations where deletion_requested_at is null)
+				)
 			)`,
 		)
 		.orderBy("id asc")
@@ -348,17 +401,29 @@ export async function buildBackupArchive(
 	const webauthnRows = await db
 		.selectFrom("webauthn_credentials")
 		.selectAll()
+		.where(
+			sql<boolean>`user_id in (select id from users where deletion_requested_at is null)`,
+		)
 		.orderBy("created_at asc")
 		.execute();
 	const deviceTrustRows = await db
 		.selectFrom("device_trust_tokens")
 		.selectAll()
+		.where(
+			sql<boolean>`user_id in (select id from users where deletion_requested_at is null)`,
+		)
 		.orderBy("user_id asc")
 		.execute();
 	const sendsRows = await db
 		.selectFrom("sends")
 		.selectAll()
 		.where("deletion_date", ">", snapshotTimestamp)
+		.where(
+			sql<boolean>`(
+			user_id in (select id from users where deletion_requested_at is null)
+			or org_id in (select id from organizations where deletion_requested_at is null)
+		)`,
+		)
 		.orderBy("created_at asc")
 		.execute();
 

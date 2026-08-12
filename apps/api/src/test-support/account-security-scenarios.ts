@@ -3,6 +3,7 @@ import { test } from "vitest";
 import { createDatabase } from "../middleware/db";
 import { invalidateUserCache } from "../services/auth";
 import { encryptCredential } from "../services/credential-protection";
+import { runMaintenance } from "../services/maintenance";
 import { loadYubicoCredentials } from "../services/yubico-config";
 
 export interface AccountSecurityScenarioContext {
@@ -361,6 +362,47 @@ export function registerAccountSecurityScenarios(
 			}),
 		});
 		const token = (await login.json<{ access_token: string }>()).access_token;
+		const deletingUser = await context.database
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(email)
+			.first<{ id: string }>();
+		assert.ok(deletingUser);
+		const deletingCipherId = crypto.randomUUID();
+		const deletingAttachmentId = crypto.randomUUID();
+		const deletingAttachmentKey = `attachments/${deletingCipherId}/${deletingAttachmentId}.bin`;
+		const timestamp = Math.floor(Date.now() / 1000);
+		await context.database.batch([
+			context.database
+				.prepare(
+					"INSERT INTO ciphers (id,user_id,type,name,favorite,data,reprompt,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+				)
+				.bind(
+					deletingCipherId,
+					deletingUser.id,
+					1,
+					"encrypted-delete-cipher",
+					0,
+					"{}",
+					0,
+					timestamp,
+					timestamp,
+				),
+			context.database
+				.prepare(
+					"INSERT INTO attachments (id,cipher_id,file_name,size,size_name,storage_key,created_at) VALUES (?,?,?,?,?,?,?)",
+				)
+				.bind(
+					deletingAttachmentId,
+					deletingCipherId,
+					"encrypted-delete-file",
+					1,
+					"1 Byte",
+					deletingAttachmentKey,
+					timestamp,
+				),
+		]);
+		const r2 = context.bindings.ATTACHMENTS_R2 as R2Bucket;
+		await r2.put(deletingAttachmentKey, new Uint8Array([1]));
 		const wrongPassword = await request("/api/accounts/delete", {
 			method: "POST",
 			headers: {
@@ -379,14 +421,14 @@ export function registerAccountSecurityScenarios(
 			body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
 		});
 		assert.equal(deleted.status, 204, await deleted.clone().text());
-		assert.equal(
-			await context.database
-				.prepare("SELECT COUNT(*) AS count FROM users WHERE email = ?")
-				.bind(email)
-				.first<{ count: number }>()
-				.then((row) => Number(row?.count)),
-			0,
-		);
+		const tombstone = await context.database
+			.prepare(
+				"SELECT status, deletion_requested_at FROM users WHERE email = ?",
+			)
+			.bind(email)
+			.first<{ status: string; deletion_requested_at: number | null }>();
+		assert.equal(tombstone?.status, "banned");
+		assert.ok(tombstone?.deletion_requested_at);
 		assert.equal(
 			(
 				await request("/api/accounts/profile", {
@@ -394,6 +436,47 @@ export function registerAccountSecurityScenarios(
 				})
 			).status,
 			401,
+		);
+		const originalDelete = r2.delete.bind(r2);
+		r2.delete = async (key: string | string[]) => {
+			const keys = Array.isArray(key) ? key : [key];
+			if (keys.includes(deletingAttachmentKey)) {
+				throw new Error("simulated account-deletion R2 outage");
+			}
+			await originalDelete(key);
+		};
+		const { db } = await createDatabase(context.database);
+		try {
+			const deferred = await runMaintenance(
+				db,
+				context.bindings,
+				Math.floor(Date.now() / 1000) + 1,
+			);
+			assert.equal(deferred.purgedUsers, 0);
+			assert.ok(
+				await context.database
+					.prepare("SELECT 1 FROM users WHERE id = ?")
+					.bind(deletingUser.id)
+					.first(),
+			);
+			r2.delete = originalDelete;
+			const recovered = await runMaintenance(
+				db,
+				context.bindings,
+				Math.floor(Date.now() / 1000) + 2,
+			);
+			assert.ok(recovered.purgedUsers >= 1);
+		} finally {
+			r2.delete = originalDelete;
+			await db.destroy();
+		}
+		assert.equal(
+			await context.database
+				.prepare("SELECT COUNT(*) AS count FROM users WHERE email = ?")
+				.bind(email)
+				.first<{ count: number }>()
+				.then((row) => Number(row?.count)),
+			0,
 		);
 	});
 

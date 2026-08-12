@@ -9,18 +9,14 @@ import {
 	SetUserStatusSchema,
 } from "../schemas/admin";
 import { verifyAdminPassword } from "../services/admin-auth";
+import { deleteAccountData } from "../services/account-deletion";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
-import {
-	deleteBlobObject,
-	getStoredAttachmentObjectKey,
-	getSendFileObjectKey,
-} from "../services/blob-store";
+import { invalidateUserCache } from "../services/auth";
 import {
 	decryptCredential,
 	encryptCredential,
 	hashCredential,
 } from "../services/credential-protection";
-import * as attachmentsDb from "../services/db/attachments";
 import {
 	loadRegistrationPolicy,
 	saveRegistrationPolicy,
@@ -295,6 +291,7 @@ export const setAdminUserStatus = factory.createHandlers(
 					: {}),
 			})
 			.where("id", "=", targetId)
+			.where("deletion_requested_at", "is", null)
 			.executeTakeFirst();
 		if (!Number(result.numUpdatedRows))
 			return errorResponse("User not found", 404);
@@ -333,33 +330,21 @@ export const deleteAdminUser = factory.createHandlers(
 		const target = await c
 			.get("db")
 			.selectFrom("users")
-			.select(["id", "email"])
+			.select("id")
 			.where("id", "=", targetId)
 			.executeTakeFirst();
 		if (!target) return errorResponse("User not found", 404);
-		const attachments = await attachmentsDb.listByUserId(c.get("db"), targetId);
-		const sends = await c
-			.get("db")
-			.selectFrom("sends")
-			.select(["id", "type", "data"])
-			.where("user_id", "=", targetId)
-			.execute();
-		await Promise.allSettled([
-			...attachments.map((attachment) =>
-				deleteBlobObject(c.env, getStoredAttachmentObjectKey(attachment)),
-			),
-			...sends
-				.filter((send) => send.type === 1)
-				.map(async (send) => {
-					const fileId = (JSON.parse(send.data) as { id?: string }).id;
-					if (fileId)
-						await deleteBlobObject(
-							c.env,
-							getSendFileObjectKey(send.id, fileId),
-						);
-				}),
-		]);
-		await c.get("db").deleteFrom("users").where("id", "=", targetId).execute();
+		const result = await deleteAccountData(
+			c.get("db"),
+			c.get("dbDialect"),
+			targetId,
+		);
+		if (!result)
+			return errorResponse(
+				"Delete or transfer organizations owned by this account first",
+				409,
+			);
+		invalidateUserCache(targetId);
 		await safeWriteAuditEvent(c.get("db"), {
 			actorUserId: c.get("user").id,
 			action: "admin.user.delete",
@@ -369,7 +354,7 @@ export const deleteAdminUser = factory.createHandlers(
 			targetId,
 			metadata: {
 				...auditRequestMetadata(c.req.raw),
-				targetEmail: target.email,
+				size: result.ciphers + result.sends,
 			},
 		});
 		return new Response(null, { status: 204 });

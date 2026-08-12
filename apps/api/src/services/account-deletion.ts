@@ -1,24 +1,17 @@
 import type { D1Dialect } from "@sundoge/kysely-d1";
 import type { Kysely } from "kysely";
 import type { DB } from "../types/db";
-import type { HonoEnv } from "../env";
 import { executeBatch } from "./db/batch";
-import * as attachmentsDb from "./db/attachments";
-import {
-	deleteBlobObject,
-	getStoredAttachmentObjectKey,
-	getSendFileObjectKey,
-} from "./blob-store";
+import { now } from "../utils/time";
 
 export interface AccountDeletionResult {
-	attachments: number;
+	ciphers: number;
 	sends: number;
 }
 
 export async function deleteAccountData(
 	db: Kysely<DB>,
 	dialect: D1Dialect,
-	env: HonoEnv["Bindings"],
 	userId: string,
 ): Promise<AccountDeletionResult | null> {
 	const ownedOrganization = await db
@@ -27,40 +20,48 @@ export async function deleteAccountData(
 		.where("owner_id", "=", userId)
 		.executeTakeFirst();
 	if (ownedOrganization) return null;
-	const ciphers = await db
+	const cipherCount = await db
 		.selectFrom("ciphers")
-		.select("id")
+		.select((expression) => expression.fn.countAll<number>().as("count"))
 		.where("user_id", "=", userId)
-		.execute();
-	const attachments = await attachmentsDb.listByCipherIdsIncludingDeleted(
-		db,
-		ciphers.map((cipher) => cipher.id),
-	);
-	const fileSends = await db
+		.executeTakeFirst();
+	const sendCount = await db
 		.selectFrom("sends")
-		.select(["id", "data"])
+		.select((expression) => expression.fn.countAll<number>().as("count"))
 		.where("user_id", "=", userId)
-		.where("type", "=", 1)
-		.execute();
-	const sendObjects = fileSends.flatMap((send) => {
-		try {
-			const fileId = (JSON.parse(send.data) as { id?: unknown }).id;
-			return typeof fileId === "string" && fileId
-				? [getSendFileObjectKey(send.id, fileId)]
-				: [];
-		} catch {
-			return [];
-		}
-	});
+		.executeTakeFirst();
+	const timestamp = now();
 	await executeBatch(dialect, [
+		db
+			.updateTable("users")
+			.set({
+				status: "banned",
+				deletion_requested_at: timestamp,
+				security_stamp: crypto.randomUUID(),
+				updated_at: timestamp,
+			})
+			.where("id", "=", userId)
+			.where("deletion_requested_at", "is", null)
+			.compile(),
+		db
+			.updateTable("ciphers")
+			.set({
+				deleted_at: timestamp,
+				purge_after: timestamp,
+				updated_at: timestamp,
+			})
+			.where("user_id", "=", userId)
+			.compile(),
+		db
+			.updateTable("sends")
+			.set({ deletion_date: timestamp, updated_at: timestamp })
+			.where("user_id", "=", userId)
+			.compile(),
+		db.deleteFrom("refresh_tokens").where("user_id", "=", userId).compile(),
 		db.deleteFrom("org_members").where("user_id", "=", userId).compile(),
-		db.deleteFrom("users").where("id", "=", userId).compile(),
 	]);
-	await Promise.allSettled([
-		...attachments.map((attachment) =>
-			deleteBlobObject(env, getStoredAttachmentObjectKey(attachment)),
-		),
-		...sendObjects.map((key) => deleteBlobObject(env, key)),
-	]);
-	return { attachments: attachments.length, sends: sendObjects.length };
+	return {
+		ciphers: Number(cipherCount?.count ?? 0),
+		sends: Number(sendCount?.count ?? 0),
+	};
 }

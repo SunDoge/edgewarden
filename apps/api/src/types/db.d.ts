@@ -168,6 +168,7 @@ export interface LoginAttempts {
 
 export interface Organizations {
 	created_at: number;
+	deletion_requested_at: number | null;
 	id: string;
 	name: string;
 	owner_id: string;
@@ -231,6 +232,7 @@ export interface Users {
 	api_key_encrypted: string | null;
 	api_key_hash: string | null;
 	created_at: number;
+	deletion_requested_at: number | null;
 	email: string;
 	id: string;
 	kdf_iterations: number;
