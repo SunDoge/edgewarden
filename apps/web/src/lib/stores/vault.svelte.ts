@@ -6,20 +6,13 @@ import type {
 	SyncResponse,
 } from "@edgewarden/shared";
 import { logout as apiLogout, syncVault } from "$lib/services/api";
-import { decryptCipher } from "$lib/services/cipher-crypto";
 import {
 	base64ToBytes,
 	bytesToBase64,
 	decryptBw,
-	decryptStr,
 	deriveMasterKey,
 	hkdfExpand,
 } from "$lib/services/crypto";
-import {
-	importAccountPrivateKey,
-	unwrapOrganizationKey,
-} from "$lib/services/organization-crypto";
-import { decryptOwnedSend } from "$lib/services/send-crypto";
 import {
 	clearVaultSnapshot,
 	loadVaultSnapshot,
@@ -31,6 +24,10 @@ import {
 	subscribeToVaultEvents,
 	type VaultEvent,
 } from "$lib/services/vault-events";
+import {
+	applyOrganizationAccess,
+	hydrateEncryptedVaultSnapshot,
+} from "$lib/services/vault-hydration";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -172,6 +169,8 @@ export function getOrganizationKey(
 		: null;
 }
 
+export { applyOrganizationAccess };
+
 // ── Private Key Setup & Decryption ──────────────────────────────────────────
 
 async function setupUserKeys(profileKey: string): Promise<void> {
@@ -187,186 +186,26 @@ async function setupUserKeys(profileKey: string): Promise<void> {
 	persistDevKeys();
 }
 
-async function decryptAllCiphers(
-	ciphers: CipherResponse[],
-): Promise<CipherResponse[]> {
-	if (!_symEncKey || !_symMacKey) return ciphers;
-
-	const decrypted: CipherResponse[] = [];
-	let failures = 0;
-	for (const cipher of ciphers) {
-		try {
-			const key = cipher.organizationId
-				? _organizationKeys.get(cipher.organizationId)
-				: { encKey: _symEncKey, macKey: _symMacKey };
-			if (!key) throw new Error("Organization key unavailable");
-			const dec = await decryptCipher(cipher, key.encKey, key.macKey);
-			decrypted.push(dec);
-		} catch (e) {
-			console.error("Failed to decrypt cipher:", cipher.id, e);
-			failures++;
-		}
-	}
-	if (failures)
-		_vault.warning = `${failures} 个保险库条目未通过完整性校验，已从当前会话隔离。`;
-	return decrypted;
-}
-
-async function setupOrganizationKeys(
-	profile: SyncResponse["profile"],
-): Promise<void> {
-	_organizationKeys.clear();
-	const organizations = profile.organizations ?? [];
-	if (!organizations.length) return;
-	if (!_symEncKey || !_symMacKey || !profile.privateKey)
-		throw new Error("Account private key unavailable");
-	const privateKey = await importAccountPrivateKey(
-		profile.privateKey,
-		_symEncKey,
-		_symMacKey,
-	);
-	let failures = 0;
-	for (const organization of organizations) {
-		try {
-			if (!organization.id || !organization.key)
-				throw new Error("Missing member key");
-			_organizationKeys.set(
-				String(organization.id),
-				await unwrapOrganizationKey(String(organization.key), privateKey),
-			);
-		} catch (error) {
-			console.error(
-				"Failed to unwrap organization key",
-				organization.id,
-				error,
-			);
-			failures++;
-		}
-	}
-	if (failures)
-		_vault.warning = `${failures} 个组织密钥无法解封，相关条目已隔离。`;
-}
-
-async function decryptCollections(
-	collections: CollectionResponse[],
-): Promise<CollectionResponse[]> {
-	const output: CollectionResponse[] = [];
-	let failures = 0;
-	for (const collection of collections) {
-		try {
-			const key = _organizationKeys.get(
-				String(collection.organizationId ?? ""),
-			);
-			if (!key) throw new Error("Organization key unavailable");
-			output.push({
-				...collection,
-				name: await decryptStr(
-					String(collection.name ?? ""),
-					key.encKey,
-					key.macKey,
-				),
-			});
-		} catch (error) {
-			console.error("Failed to decrypt collection", collection.id, error);
-			failures++;
-		}
-	}
-	if (failures)
-		_vault.warning = `${_vault.warning ? `${_vault.warning} ` : ""}${failures} 个集合未通过完整性校验，已隔离。`;
-	return output;
-}
-
-export function applyOrganizationAccess(
-	ciphers: CipherResponse[],
-	collections: Array<{
-		id: string;
-		organizationId?: string;
-		readOnly?: boolean;
-		hidePasswords?: boolean;
-	}>,
-): CipherResponse[] {
-	const visible = new Map(
-		collections.map((collection) => [String(collection.id), collection]),
-	);
-	return ciphers.map((cipher) => {
-		if (!cipher.organizationId) return cipher;
-		const ids = cipher.collectionIds ?? [];
-		const access = ids
-			.map((id) => visible.get(id))
-			.filter((collection) => collection !== undefined);
-		const readOnly =
-			!ids.length ||
-			access.length !== ids.length ||
-			access.some((collection) => Boolean(collection.readOnly));
-		const hidePasswords =
-			access.length > 0 &&
-			access.every((collection) => Boolean(collection.hidePasswords));
-		return { ...cipher, readOnly, hidePasswords } as CipherResponse;
-	});
-}
-
-async function decryptAllFolders(
-	folders: FolderResponse[],
-): Promise<FolderResponse[]> {
-	if (!_symEncKey || !_symMacKey) return folders;
-
-	const decrypted: FolderResponse[] = [];
-	let failures = 0;
-	for (const folder of folders) {
-		try {
-			const name = await decryptStr(folder.name, _symEncKey, _symMacKey);
-			decrypted.push({ ...folder, name });
-		} catch (e) {
-			console.error("Failed to decrypt folder:", folder.id, e);
-			failures++;
-		}
-	}
-	if (failures)
-		_vault.warning = `${_vault.warning ? `${_vault.warning} ` : ""}${failures} 个文件夹未通过完整性校验，已从当前会话隔离。`;
-	return decrypted;
-}
-
-async function decryptAllSends(
-	sends: unknown[],
-): Promise<Record<string, any>[]> {
-	if (!_symEncKey || !_symMacKey) return [];
-	const decrypted: Record<string, any>[] = [];
-	let failures = 0;
-	for (const send of sends) {
-		try {
-			decrypted.push(
-				await decryptOwnedSend(
-					send as Record<string, any>,
-					_symEncKey,
-					_symMacKey,
-				),
-			);
-		} catch (error) {
-			console.error("Failed to decrypt Send:", error);
-			failures++;
-		}
-	}
-	if (failures)
-		_vault.warning = `${_vault.warning ? `${_vault.warning} ` : ""}${failures} 个 Send 未通过完整性校验，已隔离。`;
-	return decrypted;
-}
-
 async function hydrateVaultSnapshot(
 	snapshot: Omit<VaultSnapshot, "accountId">,
 	status: SyncStatus,
 ): Promise<void> {
-	await setupOrganizationKeys(snapshot.profile);
-	const decryptedCiphers = await decryptAllCiphers(snapshot.ciphers);
-	const folders = await decryptAllFolders(snapshot.folders);
-	const collections = await decryptCollections(snapshot.collections ?? []);
-	const sends = await decryptAllSends(snapshot.sends ?? []);
-	_vault.folders = folders;
-	_vault.collections = collections;
-	_vault.ciphers = applyOrganizationAccess(decryptedCiphers, collections);
-	_vault.organizations = snapshot.profile.organizations ?? [];
-	_vault.sends = sends;
-	_vault.profile = snapshot.profile;
-	_vault.syncedAt = snapshot.syncedAt;
+	if (!_symEncKey || !_symMacKey) throw new Error("Vault is locked");
+	const hydrated = await hydrateEncryptedVaultSnapshot(snapshot, {
+		encKey: _symEncKey,
+		macKey: _symMacKey,
+	});
+	_organizationKeys.clear();
+	for (const [id, keys] of hydrated.organizationKeys)
+		_organizationKeys.set(id, keys);
+	_vault.folders = hydrated.folders;
+	_vault.collections = hydrated.collections;
+	_vault.ciphers = hydrated.ciphers;
+	_vault.organizations = hydrated.organizations;
+	_vault.sends = hydrated.sends;
+	_vault.profile = hydrated.profile;
+	_vault.syncedAt = hydrated.syncedAt;
+	_vault.warning = hydrated.warning;
 	_vault.status = status;
 }
 
