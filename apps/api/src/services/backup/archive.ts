@@ -7,6 +7,7 @@ import {
 	type BlobStore,
 } from "../blob-store";
 import { BACKUP_SETTINGS_CONFIG_KEY } from "./config";
+import { DATA_OPERATION_LEASE_CONFIG_KEY } from "./operation-lease";
 import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 import { exportPortableBackupSettingsEnvelope } from "./settings-crypto";
 import {
@@ -25,7 +26,6 @@ export type { BackupFileIntegrityCheckResult } from "./archive-integrity";
 type SqlRow = Record<string, string | number | null>;
 
 const BACKUP_FORMAT_VERSION = 3;
-const BACKUP_RUNNER_LOCK_CONFIG_KEY = "backup.runner.lock.v1";
 const BACKUP_TEXT_COMPRESSION_LEVEL = 0;
 const BACKUP_JSON_INDENT = 2;
 const MAX_BACKUP_ARCHIVE_BYTES = 64 * 1024 * 1024;
@@ -184,7 +184,7 @@ function sanitizeConfigRowsForExport(rows: SqlRow[]): SqlRow[] {
 	const sanitized: SqlRow[] = [];
 	for (const row of rows) {
 		const key = String(row.key || "").trim();
-		if (!key || key === BACKUP_RUNNER_LOCK_CONFIG_KEY) continue;
+		if (!key || key === DATA_OPERATION_LEASE_CONFIG_KEY) continue;
 
 		if (key === BACKUP_SETTINGS_CONFIG_KEY) {
 			const portableOnly = exportPortableBackupSettingsEnvelope(

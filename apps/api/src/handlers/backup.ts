@@ -22,6 +22,11 @@ import {
 } from "../services/backup/config";
 import { importBackupArchiveBytes } from "../services/backup/import";
 import {
+	acquireDataOperationLease,
+	releaseDataOperationLease,
+	withDataOperationLease,
+} from "../services/backup/operation-lease";
+import {
 	createRemoteBackupTransferSession,
 	pruneRemoteBackupArchives,
 } from "../services/backup/uploader";
@@ -48,28 +53,38 @@ export const exportBackup = factory.createHandlers(
 	vValidator("json", BackupExportSchema),
 	async (c) => {
 		try {
-			const archive = await buildBackupArchive(c.get("db"), new Date(), {
-				includeAttachments: !!c.req.valid("json")?.includeAttachments,
-				blobStore: createBlobStore(c.env),
-			});
-			await safeWriteAuditEvent(c.get("db"), {
-				actorUserId: c.get("user").id,
-				action: "backup.exported",
-				category: "system",
-				targetType: "backup",
-				targetId: archive.fileName,
-				metadata: { fileName: archive.fileName, status: "success" },
-			});
-			return new Response(archive.bytes, {
-				status: 200,
-				headers: {
-					"Content-Type": "application/zip",
-					"Content-Disposition": `attachment; filename="${archive.fileName}"`,
-					"Cache-Control": "no-store",
+			return await withDataOperationLease(
+				c.env.DB,
+				"backup.export",
+				async () => {
+					const archive = await buildBackupArchive(c.get("db"), new Date(), {
+						includeAttachments: !!c.req.valid("json")?.includeAttachments,
+						blobStore: createBlobStore(c.env),
+					});
+					await safeWriteAuditEvent(c.get("db"), {
+						actorUserId: c.get("user").id,
+						action: "backup.exported",
+						category: "system",
+						targetType: "backup",
+						targetId: archive.fileName,
+						metadata: { fileName: archive.fileName, status: "success" },
+					});
+					return new Response(archive.bytes, {
+						status: 200,
+						headers: {
+							"Content-Type": "application/zip",
+							"Content-Disposition": `attachment; filename="${archive.fileName}"`,
+							"Cache-Control": "no-store",
+						},
+					});
 				},
-			});
+			);
 		} catch (error: any) {
-			return errorResponse(error.message || "Backup export failed", 500);
+			const message = error.message || "Backup export failed";
+			return errorResponse(
+				message,
+				message.includes("operation is running") ? 409 : 500,
+			);
 		}
 	},
 );
@@ -151,6 +166,13 @@ export const runBackup = factory.createHandlers(
 		const db = c.get("db");
 		const secret = c.env.DATA_ENCRYPTION_SECRET;
 		const destinationId = c.req.valid("json").destinationId;
+		const lease = await acquireDataOperationLease(c.env.DB, "backup.manual");
+		if (!lease) {
+			return errorResponse(
+				"Another backup, restore, or maintenance operation is running",
+				409,
+			);
+		}
 		try {
 			const blobStore = createBlobStore(c.env);
 			const settings = await loadBackupSettings(db, secret, "UTC");
@@ -231,6 +253,8 @@ export const runBackup = factory.createHandlers(
 				await saveBackupSettings(db, secret, settings).catch(() => null);
 			}
 			return errorResponse(error.message || "Backup run failed", 500);
+		} finally {
+			await releaseDataOperationLease(c.env.DB, lease).catch(() => undefined);
 		}
 	},
 );
@@ -245,6 +269,13 @@ export const importBackup = factory.createHandlers(
 			archiveBytes = new Uint8Array(await file.arrayBuffer());
 		} catch {
 			return errorResponse("Unable to read backup file", 400);
+		}
+		const lease = await acquireDataOperationLease(c.env.DB, "backup.restore");
+		if (!lease) {
+			return errorResponse(
+				"Another backup, restore, or maintenance operation is running",
+				409,
+			);
 		}
 
 		try {
@@ -285,6 +316,8 @@ export const importBackup = factory.createHandlers(
 				message,
 				message.includes("requires a fresh instance") ? 409 : 500,
 			);
+		} finally {
+			await releaseDataOperationLease(c.env.DB, lease).catch(() => undefined);
 		}
 	},
 );
