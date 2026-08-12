@@ -1,7 +1,6 @@
 import type { D1Dialect } from "@sundoge/kysely-d1";
 import type { Kysely } from "kysely";
 import type { DB } from "../types/db";
-import { executeBatch } from "./db/batch";
 import { now } from "../utils/time";
 
 export interface AccountDeletionResult {
@@ -14,34 +13,34 @@ export async function deleteAccountData(
 	dialect: D1Dialect,
 	userId: string,
 ): Promise<AccountDeletionResult | null> {
-	const ownedOrganization = await db
-		.selectFrom("organizations")
-		.select("id")
-		.where("owner_id", "=", userId)
-		.executeTakeFirst();
-	if (ownedOrganization) return null;
-	const cipherCount = await db
-		.selectFrom("ciphers")
-		.select((expression) => expression.fn.countAll<number>().as("count"))
-		.where("user_id", "=", userId)
-		.executeTakeFirst();
-	const sendCount = await db
-		.selectFrom("sends")
-		.select((expression) => expression.fn.countAll<number>().as("count"))
-		.where("user_id", "=", userId)
-		.executeTakeFirst();
 	const timestamp = now();
-	await executeBatch(dialect, [
+	const deletionToken = crypto.randomUUID();
+	const ownsDeletion = db
+		.selectFrom("users")
+		.select("id")
+		.where("id", "=", userId)
+		.where("security_stamp", "=", deletionToken)
+		.where("deletion_requested_at", "=", timestamp);
+	const [deletedUser, deletedCiphers, deletedSends] = await dialect.batch([
 		db
 			.updateTable("users")
 			.set({
 				status: "banned",
 				deletion_requested_at: timestamp,
-				security_stamp: crypto.randomUUID(),
+				security_stamp: deletionToken,
 				updated_at: timestamp,
 			})
 			.where("id", "=", userId)
 			.where("deletion_requested_at", "is", null)
+			.where(({ not, exists, selectFrom }) =>
+				not(
+					exists(
+						selectFrom("organizations")
+							.select("id")
+							.where("owner_id", "=", userId),
+					),
+				),
+			)
 			.compile(),
 		db
 			.updateTable("ciphers")
@@ -51,17 +50,28 @@ export async function deleteAccountData(
 				updated_at: timestamp,
 			})
 			.where("user_id", "=", userId)
+			.where(({ exists }) => exists(ownsDeletion))
 			.compile(),
 		db
 			.updateTable("sends")
 			.set({ deletion_date: timestamp, updated_at: timestamp })
 			.where("user_id", "=", userId)
+			.where(({ exists }) => exists(ownsDeletion))
 			.compile(),
-		db.deleteFrom("refresh_tokens").where("user_id", "=", userId).compile(),
-		db.deleteFrom("org_members").where("user_id", "=", userId).compile(),
+		db
+			.deleteFrom("refresh_tokens")
+			.where("user_id", "=", userId)
+			.where(({ exists }) => exists(ownsDeletion))
+			.compile(),
+		db
+			.deleteFrom("org_members")
+			.where("user_id", "=", userId)
+			.where(({ exists }) => exists(ownsDeletion))
+			.compile(),
 	]);
+	if (deletedUser.numAffectedRows !== 1n) return null;
 	return {
-		ciphers: Number(cipherCount?.count ?? 0),
-		sends: Number(sendCount?.count ?? 0),
+		ciphers: Number(deletedCiphers.numAffectedRows ?? 0n),
+		sends: Number(deletedSends.numAffectedRows ?? 0n),
 	};
 }
