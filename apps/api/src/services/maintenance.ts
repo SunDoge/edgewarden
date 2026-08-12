@@ -4,7 +4,7 @@ import type { DB } from "../types/db";
 import { now } from "../utils/time";
 import {
 	deleteBlobObject,
-	getAttachmentObjectKey,
+	getStoredAttachmentObjectKey,
 	getSendFileObjectKey,
 } from "./blob-store";
 import * as attachmentsDb from "./db/attachments";
@@ -60,10 +60,7 @@ async function purgeCiphers(
 		attachments
 			.filter((attachment) => deletedIds.has(attachment.cipher_id))
 			.map((attachment) =>
-				deleteBlobObject(
-					env,
-					getAttachmentObjectKey(attachment.cipher_id, attachment.id),
-				),
+				deleteBlobObject(env, getStoredAttachmentObjectKey(attachment)),
 			),
 	);
 	return deleted.length;
@@ -145,8 +142,7 @@ export async function runMaintenance(
 			.where("used_at", "is not", null)
 			.executeTakeFirst(),
 	);
-	const webauthnChallenges =
-		expiredWebauthnChallenges + usedWebauthnChallenges;
+	const webauthnChallenges = expiredWebauthnChallenges + usedWebauthnChallenges;
 	const attachmentDownloadTokens = affectedRows(
 		await db
 			.deleteFrom("attachment_download_tokens")

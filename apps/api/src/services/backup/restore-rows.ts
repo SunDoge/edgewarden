@@ -270,6 +270,7 @@ export async function importBackupRows(
 				"size_name",
 				"key",
 				"created_at",
+				"storage_key",
 			],
 			payload.attachments || [],
 		),

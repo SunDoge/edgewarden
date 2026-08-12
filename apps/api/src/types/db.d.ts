@@ -23,6 +23,7 @@ export interface Attachments {
 	key: string | null;
 	size: number;
 	size_name: string;
+	storage_key: string | null;
 }
 
 export interface AuditLogs {

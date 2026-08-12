@@ -1,7 +1,7 @@
 import { unzipSync, zipSync } from "fflate";
 import type { Kysely } from "kysely";
 import type { DB } from "../../types/db";
-import type { BlobStore } from "../blob-store";
+import { getStoredAttachmentObjectKey, type BlobStore } from "../blob-store";
 import { BACKUP_SETTINGS_CONFIG_KEY } from "./config";
 import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 import { exportPortableBackupSettingsEnvelope } from "./settings-crypto";
@@ -347,20 +347,23 @@ export async function buildBackupArchive(
 	const exportedUserRows = sanitizeUserRowsForExport(
 		userRows as unknown as SqlRow[],
 	);
-	const exportedAttachmentRows = includeAttachments
-		? (attachmentRows as unknown as SqlRow[])
-		: [];
-	const attachmentBlobs: BackupManifestAttachmentBlob[] =
-		exportedAttachmentRows.map((row) => {
-			const cipherId = String(row.cipher_id || "").trim();
-			const attachmentId = String(row.id || "").trim();
-			return {
-				cipherId,
-				attachmentId,
-				blobName: `attachments/${cipherId}/${attachmentId}.bin`,
-				sizeBytes: Number(row.size || 0) || 0,
-			};
-		});
+	const sourceAttachmentRows = includeAttachments ? attachmentRows : [];
+	const exportedAttachmentRows = sourceAttachmentRows.map(
+		({ storage_key: _storageKey, ...row }) => row as SqlRow,
+	);
+	const attachmentBlobs = sourceAttachmentRows.map((row) => {
+		const cipherId = String(row.cipher_id || "").trim();
+		const attachmentId = String(row.id || "").trim();
+		return {
+			cipherId,
+			attachmentId,
+			blobName: `attachments/${cipherId}/${attachmentId}.bin`,
+			storageKey: getStoredAttachmentObjectKey(row),
+			sizeBytes: Number(row.size || 0) || 0,
+		};
+	});
+	const manifestAttachmentBlobs: BackupManifestAttachmentBlob[] =
+		attachmentBlobs.map(({ storageKey: _storageKey, ...blob }) => blob);
 
 	const manifestBase = {
 		formatVersion: BACKUP_FORMAT_VERSION,
@@ -398,7 +401,7 @@ export async function buildBackupArchive(
 				0,
 			),
 		},
-		attachmentBlobs: includeAttachments ? attachmentBlobs : [],
+		attachmentBlobs: includeAttachments ? manifestAttachmentBlobs : [],
 	} satisfies BackupManifest;
 
 	const files: Record<string, Uint8Array> = {
@@ -432,7 +435,7 @@ export async function buildBackupArchive(
 
 	if (includeAttachments && options.blobStore) {
 		for (const blob of attachmentBlobs) {
-			const object = await options.blobStore.get(blob.blobName);
+			const object = await options.blobStore.get(blob.storageKey);
 			if (!object?.body) {
 				throw new Error(`Backup attachment blob not found: ${blob.blobName}`);
 			}

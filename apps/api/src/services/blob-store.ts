@@ -90,6 +90,24 @@ export function getAttachmentObjectKey(
 	return `attachments/${cipherId}/${attachmentId}.bin`;
 }
 
+export function getStoredAttachmentObjectKey(attachment: {
+	id: string;
+	cipher_id: string;
+	storage_key?: string | null;
+}): string {
+	return (
+		attachment.storage_key ||
+		getAttachmentObjectKey(attachment.cipher_id, attachment.id)
+	);
+}
+
+export function createRestoredAttachmentObjectKey(
+	cipherId: string,
+	attachmentId: string,
+): string {
+	return `attachments/${cipherId}/${attachmentId}.${crypto.randomUUID()}.bin`;
+}
+
 export async function putBlobObject(
 	env: CloudflareBindings,
 	key: string,

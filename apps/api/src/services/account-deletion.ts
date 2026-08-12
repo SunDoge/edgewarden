@@ -6,7 +6,7 @@ import { executeBatch } from "./db/batch";
 import * as attachmentsDb from "./db/attachments";
 import {
 	deleteBlobObject,
-	getAttachmentObjectKey,
+	getStoredAttachmentObjectKey,
 	getSendFileObjectKey,
 } from "./blob-store";
 
@@ -50,10 +50,7 @@ export async function deleteAccountData(
 	]);
 	await Promise.allSettled([
 		...attachments.map((attachment) =>
-			deleteBlobObject(
-				env,
-				getAttachmentObjectKey(attachment.cipher_id, attachment.id),
-			),
+			deleteBlobObject(env, getStoredAttachmentObjectKey(attachment)),
 		),
 		...sendObjects.map((key) => deleteBlobObject(env, key)),
 	]);
