@@ -59,6 +59,7 @@ export function cipherToResponse(
 	attachments: Selectable<Attachments>[] = [],
 	collectionIds: string[] = [],
 	permissions: CipherPermissions = { edit: true, viewPassword: true },
+	object: "cipher" | "cipherDetails" = "cipherDetails",
 ) {
 	const data = JSON.parse(cipher.data) as Record<string, unknown>;
 	return {
@@ -70,6 +71,7 @@ export function cipherToResponse(
 		name: cipher.name,
 		notes: cipher.notes ?? null,
 		fields: cipher.fields ? JSON.parse(cipher.fields) : (data.fields ?? null),
+		data: null,
 		login: cipher.type === 1 ? (data.login ?? null) : null,
 		secureNote: cipher.type === 2 ? (data.secureNote ?? null) : null,
 		card: cipher.type === 3 ? (data.card ?? null) : null,
@@ -101,6 +103,6 @@ export function cipherToResponse(
 		passwordHistory: cipher.password_history
 			? JSON.parse(cipher.password_history)
 			: (data.passwordHistory ?? null),
-		object: "cipherDetails",
+		object,
 	};
 }
