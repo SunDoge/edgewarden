@@ -15,6 +15,7 @@ import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
 import { verifyPassword } from "../services/auth";
+import { textColumnInJson } from "../services/db/json-array";
 
 function organizationResponse(org: any, member: any) {
 	return {
@@ -98,9 +99,10 @@ async function validateCollectionAccess(
 		.select("id")
 		.where("org_id", "=", orgId)
 		.where(
-			"id",
-			"in",
-			unique.map((item) => item.id),
+			textColumnInJson(
+				"id",
+				unique.map((item) => item.id),
+			),
 		)
 		.execute();
 	if (rows.length !== unique.length)
@@ -310,9 +312,10 @@ export const listOrganizationMembers = factory.createHandlers(async (c) => {
 				.selectFrom("collection_members")
 				.selectAll()
 				.where(
-					"org_member_id",
-					"in",
-					rows.map((member) => member.id),
+					textColumnInJson(
+						"org_member_id",
+						rows.map((member) => member.id),
+					),
 				)
 				.execute()
 		: [];
@@ -687,9 +690,10 @@ export const deleteCollection = factory.createHandlers(async (c) => {
 			.selectFrom("cipher_collections")
 			.select("cipher_id")
 			.where(
-				"cipher_id",
-				"in",
-				linked.map((item: any) => item.cipher_id),
+				textColumnInJson(
+					"cipher_id",
+					linked.map((item: any) => item.cipher_id),
+				),
 			)
 			.execute();
 		const linkCounts = Map.groupBy(allLinks, (item: any) => item.cipher_id);

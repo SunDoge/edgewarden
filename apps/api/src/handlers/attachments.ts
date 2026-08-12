@@ -11,6 +11,7 @@ import {
 } from "../services/blob-store";
 import { executeBatch, revisionQuery } from "../services/db/batch";
 import * as attachmentsDb from "../services/db/attachments";
+import { textColumnInJson } from "../services/db/json-array";
 import * as ciphersDb from "../services/db/ciphers";
 import {
 	buildDirectUploadUrl,
@@ -70,9 +71,10 @@ async function canUploadAttachment(
 		.select("collection_id")
 		.where("org_member_id", "=", member.id)
 		.where(
-			"collection_id",
-			"in",
-			links.map((link: any) => link.collection_id),
+			textColumnInJson(
+				"collection_id",
+				links.map((link: any) => link.collection_id),
+			),
 		)
 		.where("read_only", "=", 0)
 		.execute();

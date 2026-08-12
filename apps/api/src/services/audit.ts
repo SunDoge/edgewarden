@@ -1,5 +1,6 @@
 import type { Kysely } from "kysely";
 import type { DB } from "../types/db";
+import { textColumnInJson } from "./db/json-array";
 import { now } from "../utils/time";
 
 export type AuditLogCategory = "auth" | "vault" | "admin" | "system" | "org";
@@ -100,9 +101,10 @@ export async function applyAuditLogRetention(
 			await db
 				.deleteFrom("audit_logs")
 				.where(
-					"id",
-					"in",
-					excess.map((row) => row.id),
+					textColumnInJson(
+						"id",
+						excess.map((row) => row.id),
+					),
 				)
 				.execute();
 	}

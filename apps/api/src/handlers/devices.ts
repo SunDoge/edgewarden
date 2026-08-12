@@ -7,6 +7,7 @@ import { BulkIdsSchema } from "../schemas/ciphers";
 import { invalidateUserCache, verifyPassword } from "../services/auth";
 import { executeBatch } from "../services/db/batch";
 import * as devicesDb from "../services/db/devices";
+import { textColumnInJson } from "../services/db/json-array";
 import type { Devices } from "../types/db";
 import { toIso } from "../utils/time";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
@@ -93,7 +94,7 @@ export const deleteDevices = factory.createHandlers(
 				.selectFrom("devices")
 				.select("device_identifier")
 				.where("user_id", "=", userId)
-				.where("device_identifier", "in", ids)
+				.where(textColumnInJson("device_identifier", ids))
 				.execute()
 		).map((device) => device.device_identifier);
 		if (ownedIds.length) {
@@ -101,12 +102,12 @@ export const deleteDevices = factory.createHandlers(
 				db
 					.deleteFrom("refresh_tokens")
 					.where("user_id", "=", userId)
-					.where("device_identifier", "in", ownedIds)
+					.where(textColumnInJson("device_identifier", ownedIds))
 					.compile(),
 				db
 					.deleteFrom("devices")
 					.where("user_id", "=", userId)
-					.where("device_identifier", "in", ownedIds)
+					.where(textColumnInJson("device_identifier", ownedIds))
 					.compile(),
 			]);
 			invalidateUserCache(userId);
