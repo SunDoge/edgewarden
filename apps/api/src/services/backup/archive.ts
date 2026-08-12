@@ -466,6 +466,9 @@ export async function buildBackupArchive(
 	const exportedCipherRows = cipherRows.map(
 		({ mutation_token: _mutationToken, ...row }) => row as SqlRow,
 	);
+	const exportedOrganizationRows = organizationRows.map(
+		({ deletion_token: _deletionToken, ...row }) => row as SqlRow,
+	);
 	const manifestSendBlobs: BackupManifestSendBlob[] = sendBlobs.map(
 		({ storageKey: _storageKey, ...blob }) => blob,
 	);
@@ -481,7 +484,7 @@ export async function buildBackupArchive(
 			users: exportedUserRows.length,
 			domain_settings: domainSettingsRows.length,
 			user_revisions: revisionRows.length,
-			organizations: organizationRows.length,
+			organizations: exportedOrganizationRows.length,
 			org_members: orgMemberRows.length,
 			collections: collectionRows.length,
 			collection_members: collectionMemberRows.length,
@@ -522,7 +525,7 @@ export async function buildBackupArchive(
 					users: exportedUserRows,
 					domain_settings: domainSettingsRows,
 					user_revisions: revisionRows,
-					organizations: organizationRows,
+					organizations: exportedOrganizationRows,
 					org_members: orgMemberRows,
 					collections: collectionRows,
 					collection_members: collectionMemberRows,

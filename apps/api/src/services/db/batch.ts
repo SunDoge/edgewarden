@@ -38,6 +38,28 @@ export function organizationRevisionQuery(
 	`.compile(db);
 }
 
+export function conditionalOrganizationRevisionQuery(
+	db: Kysely<DB>,
+	organizationId: string,
+	deletionToken: string,
+	timestamp = now(),
+) {
+	return sql`
+		INSERT INTO user_revisions (user_id, revision_date)
+		SELECT DISTINCT member.user_id, ${timestamp}
+		FROM org_members member
+		INNER JOIN organizations org ON org.id = member.org_id
+		WHERE org.id = ${organizationId}
+		  AND org.deletion_token = ${deletionToken}
+		  AND member.status = 'confirmed'
+		  AND member.user_id IS NOT NULL
+		ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
+			user_revisions.revision_date + 1,
+			excluded.revision_date
+		)
+	`.compile(db);
+}
+
 export function folderRevisionQuery(
 	db: Kysely<DB>,
 	userId: string,

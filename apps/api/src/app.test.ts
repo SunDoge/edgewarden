@@ -342,6 +342,11 @@ describe("Edgewarden API", () => {
 				(row) => !("mutation_token" in row),
 			),
 		);
+		assert.ok(
+			(parsedArchive.payload.db.organizations || []).every(
+				(row) => !("deletion_token" in row),
+			),
+		);
 		assert.ok((parsedArchive.payload.manifest.blobSummary.sendFiles || 0) >= 1);
 		assert.ok(
 			(parsedArchive.payload.db.audit_logs || []).some(

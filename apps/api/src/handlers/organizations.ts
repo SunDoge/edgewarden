@@ -8,6 +8,7 @@ import {
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import { verifyPassword } from "../services/auth";
 import {
+	conditionalOrganizationRevisionQuery,
 	executeBatch,
 	organizationRevisionQuery,
 	revisionQuery,
@@ -184,10 +185,20 @@ export const deleteOrganization = factory.createHandlers(
 		const orgId = c.get("orgMember").org_id;
 		const db = c.get("db");
 		const timestamp = now();
-		await executeBatch(c.get("dbDialect"), [
+		const deletionToken = crypto.randomUUID();
+		const ownsDeletion = db
+			.selectFrom("organizations")
+			.select("id")
+			.where("id", "=", orgId)
+			.where("deletion_token", "=", deletionToken);
+		const [deleted] = await c.get("dbDialect").batch([
 			db
 				.updateTable("organizations")
-				.set({ deletion_requested_at: timestamp, updated_at: timestamp })
+				.set({
+					deletion_requested_at: timestamp,
+					deletion_token: deletionToken,
+					updated_at: timestamp,
+				})
 				.where("id", "=", orgId)
 				.where("deletion_requested_at", "is", null)
 				.compile(),
@@ -199,23 +210,26 @@ export const deleteOrganization = factory.createHandlers(
 					updated_at: timestamp,
 				})
 				.where("org_id", "=", orgId)
+				.where(({ exists }) => exists(ownsDeletion))
 				.compile(),
 			db
 				.updateTable("sends")
 				.set({ deletion_date: timestamp, updated_at: timestamp })
 				.where("org_id", "=", orgId)
+				.where(({ exists }) => exists(ownsDeletion))
 				.compile(),
-			organizationRevisionQuery(db, orgId, timestamp),
+			conditionalOrganizationRevisionQuery(db, orgId, deletionToken, timestamp),
 		]);
-		await safeWriteAuditEvent(c.get("db"), {
-			actorUserId: c.get("user").id,
-			action: "organization.delete",
-			category: "org",
-			level: "warning",
-			targetType: "organization",
-			targetId: orgId,
-			metadata: auditRequestMetadata(c.req.raw),
-		});
+		if (deleted.numAffectedRows === 1n)
+			await safeWriteAuditEvent(c.get("db"), {
+				actorUserId: c.get("user").id,
+				action: "organization.delete",
+				category: "org",
+				level: "warning",
+				targetType: "organization",
+				targetId: orgId,
+				metadata: auditRequestMetadata(c.req.raw),
+			});
 		return new Response(null, { status: 204 });
 	},
 );
