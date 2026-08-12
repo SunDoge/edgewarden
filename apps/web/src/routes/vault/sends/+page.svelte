@@ -21,6 +21,7 @@ import {
 } from "$lib/services/send-crypto";
 import { Button } from "$lib/components/ui/button/index.js";
 import SendEditorForm from "$lib/components/sends/SendEditorForm.svelte";
+import SendDetail from "$lib/components/sends/SendDetail.svelte";
 import { Input } from "$lib/components/ui/input/index.js";
 import {
 	Search,
@@ -36,9 +37,6 @@ import {
 	File as FileIcon,
 	Copy,
 	Check,
-	Lock,
-	Unlock,
-	ExternalLink,
 } from "@lucide/svelte";
 
 // State
@@ -481,99 +479,16 @@ function copyShareLink(send: any) {
 					bind:disabled
 					hasExistingPassword={Boolean(selectedSend?.password)}
 					onSave={handleSaveSend}
-					onCancel={cancelEdit}
+						onCancel={cancelEdit}
 				/>
 			{:else if selectedSend}
-				<div class="space-y-6">
-					<div class="flex items-center gap-3">
-						<div class="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-							{#if selectedSend.type === 0}
-								<FileText class="size-6" />
-							{:else}
-								<FileIcon class="size-6" />
-							{/if}
-						</div>
-						<div class="min-w-0 flex-1">
-							<h3 class="font-bold text-lg text-slate-900 dark:text-slate-100 truncate">{selectedSend.name}</h3>
-							<p class="text-xs text-slate-400">{selectedSend.type === 0 ? "安全文本" : "安全文件"}</p>
-						</div>
-					</div>
-
-					<hr class="border-slate-200 dark:border-slate-800" />
-
-					<div class="space-y-4">
-						<div class="space-y-1">
-							<span class="text-xs font-semibold text-slate-400">传输链接 (分享给其他人)</span>
-							<div class="flex items-center gap-2">
-								<input
-									type="text"
-									readonly
-									value={`${window.location.origin}/sends/${selectedSend.accessId}#${selectedSend.shareKey}`}
-									class="w-full p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-600 focus:outline-none"
-								/>
-								<Button variant="outline" size="icon" onclick={() => copyShareLink(selectedSend)} class="shrink-0 size-9">
-									{#if copiedId === selectedSend.id}
-										<Check class="size-4 text-green-500" />
-									{:else}
-										<Copy class="size-4 text-slate-400" />
-									{/if}
-								</Button>
-							</div>
-						</div>
-
-						<div class="grid grid-cols-2 gap-4">
-							<div class="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
-								<span class="text-xs text-slate-400 block mb-0.5">访问统计</span>
-								<span class="font-bold text-lg text-slate-800 dark:text-slate-100">
-									{selectedSend.accessCount} {#if selectedSend.maxAccessCount} / {selectedSend.maxAccessCount}{/if} 次
-								</span>
-							</div>
-
-							<div class="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
-								<span class="text-xs text-slate-400 block mb-0.5">到期物理销毁</span>
-								<span class="font-semibold text-xs text-slate-600 dark:text-slate-350 block mt-1">
-									{new Date(selectedSend.deletionDate).toLocaleDateString()}
-								</span>
-							</div>
-						</div>
-
-						<div class="space-y-3 bg-slate-100 dark:bg-slate-850 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-							<span class="text-xs font-bold text-slate-500 uppercase tracking-wider block">安全属性</span>
-							<div class="flex justify-between items-center text-sm">
-								<span class="text-slate-500">密码保护</span>
-								<span class="font-medium text-slate-700 dark:text-slate-300">
-									{selectedSend.password ? "启用" : "未启用"}
-								</span>
-							</div>
-							<div class="flex justify-between items-center text-sm border-t border-slate-200 dark:border-slate-800 pt-2">
-								<span class="text-slate-500">链接状态</span>
-								<span class="font-medium text-slate-700 dark:text-slate-300">
-									{selectedSend.disabled ? "已禁用" : "正常"}
-								</span>
-							</div>
-							<div class="flex justify-between items-center text-sm border-t border-slate-200 dark:border-slate-800 pt-2">
-								<span class="text-slate-500">发送者标识</span>
-								<span class="font-medium text-slate-700 dark:text-slate-300">
-									{selectedSend.hideEmail ? "已隐藏" : "公开"}
-								</span>
-							</div>
-						</div>
-						{#if selectedSend.type === 0 && selectedSend.text?.text}<div class="rounded-xl border bg-white p-4 dark:bg-slate-800"><div class="mb-2 text-xs font-bold uppercase text-slate-400">文本内容</div><pre class="whitespace-pre-wrap break-words text-sm">{selectedSend.text.text}</pre></div>{/if}
-						{#if selectedSend.type === 1 && selectedSend.file}<div class="rounded-xl border bg-white p-4 text-sm dark:bg-slate-800"><div class="mb-2 text-xs font-bold uppercase text-slate-400">文件</div><div>{selectedSend.file.fileName || "加密文件"}</div><div class="text-xs text-slate-400">{selectedSend.file.sizeName || ""}</div></div>{/if}
-						{#if selectedSend.notes}<div class="rounded-xl border bg-white p-4 dark:bg-slate-800"><div class="mb-2 text-xs font-bold uppercase text-slate-400">备注</div><p class="whitespace-pre-wrap text-sm">{selectedSend.notes}</p></div>{/if}
-						<div class="flex justify-between text-sm"><span class="text-slate-500">过期时间</span><span>{selectedSend.expirationDate ? new Date(selectedSend.expirationDate).toLocaleString() : "永不过期"}</span></div>
-					</div>
-
-					<div class="flex gap-2 pt-4">
-						<Button variant="outline" size="icon" onclick={() => window.open(`${window.location.origin}/sends/${selectedSend.accessId}#${selectedSend.shareKey}`, "_blank", "noopener,noreferrer")} aria-label="打开分享链接"><ExternalLink /></Button>
-						<Button variant="outline" class="flex-1 font-semibold" onclick={() => startEdit(selectedSend)}>
-							修改设置
-						</Button>
-						<Button variant="ghost" class="text-red-500 hover:text-red-650 hover:bg-red-50 dark:hover:bg-red-950/20 border border-red-200 dark:border-red-950/50 shrink-0" onclick={() => handleDeleteSend(selectedSend.id)}>
-							<Trash2 class="size-4" />
-						</Button>
-					</div>
-				</div>
+				<SendDetail
+					send={selectedSend}
+					copied={copiedId === selectedSend.id}
+					onCopy={() => copyShareLink(selectedSend)}
+					onEdit={() => startEdit(selectedSend)}
+					onDelete={() => handleDeleteSend(selectedSend.id)}
+				/>
 			{:else}
 				<div class="h-full flex flex-col items-center justify-center text-center text-slate-400 p-8">
 					<Share2 class="size-10 text-slate-300 dark:text-slate-700 mb-3" />
