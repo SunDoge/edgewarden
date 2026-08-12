@@ -107,13 +107,19 @@ export const updateAuthRequest = factory.createHandlers(
 			return errorResponse("Auth request has expired", 400);
 		}
 		const body = c.req.valid("json");
-		await authRequestsDb.approveAuthRequest(
+		const decided = await authRequestsDb.approveAuthRequest(
 			db,
 			authRequest.id,
+			body.approved,
 			c.get("payload").did ?? "",
 			body.approved ? body.key : null,
 			body.approved ? body.masterPasswordHash : null,
 		);
+		if (!decided)
+			return errorResponse(
+				"Auth request was already decided, consumed, or expired",
+				409,
+			);
 		const updated = await authRequestsDb.getAuthRequestById(db, authRequest.id);
 		if (!updated) return errorResponse("Failed to update auth request", 500);
 		return c.json(

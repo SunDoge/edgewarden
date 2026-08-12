@@ -34,6 +34,7 @@ import * as devicesDb from "../services/db/devices";
 import { runMaintenance } from "../services/maintenance";
 import { issueIdentitySession } from "../services/identity-session";
 import { publishSendFileObject } from "../services/sends/file-storage";
+import * as authRequestsDb from "../services/db/auth-requests";
 
 export interface DatabaseMaintenanceScenarioContext {
 	readonly database: D1Database;
@@ -646,6 +647,69 @@ export function registerDatabaseMaintenanceScenarios(
 						.where("token", "=", await hashRefreshToken(result.refreshToken))
 						.execute();
 			}
+			await db
+				.deleteFrom("auth_requests")
+				.where("id", "=", requestId)
+				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("decides a pending auth request only once", async () => {
+		const { db } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const requestId = crypto.randomUUID();
+		try {
+			await authRequestsDb.createAuthRequest(db, {
+				id: requestId,
+				userId: user.id,
+				type: 0,
+				requestDeviceIdentifier: "decision-race",
+				requestDeviceType: 0,
+				requestIpAddress: null,
+				accessCodeHash: "hash",
+				accessCodeEncrypted: JSON.stringify({
+					v: 1,
+					iv: "test",
+					data: "test",
+				}),
+				publicKey: "public-key",
+			});
+			const outcomes = await Promise.all([
+				authRequestsDb.approveAuthRequest(
+					db,
+					requestId,
+					true,
+					"approver-a",
+					"encrypted-key",
+					null,
+				),
+				authRequestsDb.approveAuthRequest(
+					db,
+					requestId,
+					false,
+					"approver-b",
+					null,
+					null,
+				),
+			]);
+			assert.deepEqual(outcomes.sort(), [false, true]);
+			const stored = await authRequestsDb.getAuthRequestById(db, requestId);
+			assert.ok(stored);
+			assert.equal(
+				stored.approved,
+				stored.response_device_identifier === "approver-a" ? 1 : 0,
+			);
+			assert.ok(
+				["approver-a", "approver-b"].includes(
+					stored.response_device_identifier ?? "",
+				),
+			);
+		} finally {
 			await db
 				.deleteFrom("auth_requests")
 				.where("id", "=", requestId)
