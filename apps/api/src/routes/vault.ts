@@ -10,11 +10,6 @@ import {
 } from "../handlers/account-passkeys";
 import { deleteAccount } from "../handlers/account-deletion";
 import {
-	createAttachment,
-	deleteAttachment,
-	downloadAttachment,
-} from "../handlers/attachments";
-import {
 	clearAuditLogs,
 	createAdminInvite,
 	deleteAdminInvite,
@@ -59,25 +54,6 @@ import {
 	runBackup,
 	updateBackupSettings,
 } from "../handlers/backup";
-import {
-	createCipher,
-	deleteCipher,
-	deleteCiphers,
-	getCipher,
-	hardDeleteCipher,
-	hardDeleteCiphers,
-	importCiphers,
-	listCiphers,
-	moveCiphers,
-	putDeleteCipher,
-	restoreCipher,
-	restoreCiphers,
-	updateCipher,
-	archiveCipher,
-	unarchiveCipher,
-	archiveCiphers,
-	unarchiveCiphers,
-} from "../handlers/ciphers";
 import { getEmptyCompatibilityList } from "../handlers/compatibility";
 import {
 	deleteAllDevices,
@@ -155,8 +131,6 @@ import { createRealtimeConnectionTicket } from "../handlers/realtime";
 import {
 	requireAccountPasskey,
 	requireAuthRequest,
-	requireCipher,
-	requireCipherWrite,
 	requireDevice,
 	requireFolder,
 	requireSend,
@@ -166,6 +140,11 @@ import {
 	requireOrgOwner,
 	requireCollection,
 } from "../middleware/resources";
+import {
+	attachmentRoutes,
+	cipherArchiveRoutes,
+	cipherRoutes,
+} from "./vault/ciphers";
 
 const accountRoutes = new Hono<HonoEnv>()
 	.get("/api/accounts/profile", ...getProfile)
@@ -211,108 +190,6 @@ const yubikeyCompatibilityRoutes = new Hono<HonoEnv>()
 	.post("/api/two-factor/yubikey", ...saveYubikeys)
 	.delete("/api/two-factor/yubikey", ...disableYubikeys)
 	.put("/api/two-factor/yubikey/config", requireAdmin, ...saveYubicoConfig);
-
-const cipherRoutes = new Hono<HonoEnv>()
-	.get("/api/ciphers", ...listCiphers)
-	.post("/api/ciphers", ...createCipher)
-	.post("/api/ciphers/create", ...createCipher)
-	.post("/api/ciphers/import", ...importCiphers)
-	.post("/api/ciphers/delete", ...hardDeleteCiphers)
-	.put("/api/ciphers/delete", ...deleteCiphers)
-	.delete("/api/ciphers", ...hardDeleteCiphers)
-	.post("/api/ciphers/delete-permanent", ...hardDeleteCiphers)
-	.post("/api/ciphers/restore", ...restoreCiphers)
-	.put("/api/ciphers/restore", ...restoreCiphers)
-	.put("/api/ciphers/move", ...moveCiphers)
-	.post("/api/ciphers/move", ...moveCiphers)
-	.put("/api/ciphers/archive", ...archiveCiphers)
-	.post("/api/ciphers/archive", ...archiveCiphers)
-	.put("/api/ciphers/unarchive", ...unarchiveCiphers)
-	.post("/api/ciphers/unarchive", ...unarchiveCiphers)
-	.get("/api/ciphers/:id", requireCipher, ...getCipher)
-	.put("/api/ciphers/:id", requireCipher, requireCipherWrite, ...updateCipher)
-	.post("/api/ciphers/:id", requireCipher, requireCipherWrite, ...updateCipher)
-	.delete(
-		"/api/ciphers/:id",
-		requireCipher,
-		requireCipherWrite,
-		...hardDeleteCipher,
-	)
-	.put(
-		"/api/ciphers/:id/delete",
-		requireCipher,
-		requireCipherWrite,
-		...putDeleteCipher,
-	)
-	.post(
-		"/api/ciphers/:id/delete",
-		requireCipher,
-		requireCipherWrite,
-		...hardDeleteCipher,
-	)
-	.delete(
-		"/api/ciphers/:id/delete",
-		requireCipher,
-		requireCipherWrite,
-		...hardDeleteCipher,
-	)
-	.put(
-		"/api/ciphers/:id/restore",
-		requireCipher,
-		requireCipherWrite,
-		...restoreCipher,
-	);
-
-const cipherArchiveRoutes = new Hono<HonoEnv>()
-	.put(
-		"/api/ciphers/:id/archive",
-		requireCipher,
-		requireCipherWrite,
-		...archiveCipher,
-	)
-	.post(
-		"/api/ciphers/:id/archive",
-		requireCipher,
-		requireCipherWrite,
-		...archiveCipher,
-	)
-	.put(
-		"/api/ciphers/:id/unarchive",
-		requireCipher,
-		requireCipherWrite,
-		...unarchiveCipher,
-	)
-	.post(
-		"/api/ciphers/:id/unarchive",
-		requireCipher,
-		requireCipherWrite,
-		...unarchiveCipher,
-	);
-
-const attachmentRoutes = new Hono<HonoEnv>()
-	.post(
-		"/api/ciphers/:id/attachment/v2",
-		requireCipher,
-		requireCipherWrite,
-		...createAttachment,
-	)
-	.get(
-		"/api/ciphers/:id/attachment/:attachmentId",
-		requireCipher,
-		...downloadAttachment,
-	)
-	.post(
-		"/api/ciphers/:id/attachment/:attachmentId/delete",
-		requireCipher,
-		requireCipherWrite,
-		...deleteAttachment,
-	)
-	.delete(
-		"/api/ciphers/:id/attachment/:attachmentId",
-		requireCipher,
-		requireCipherWrite,
-		...deleteAttachment,
-	);
 
 const folderAndDeviceRoutes = new Hono<HonoEnv>()
 	.get("/api/folders", ...listFolders)
