@@ -5,19 +5,25 @@ export async function listByCipherIds(
 	db: Kysely<DB>,
 	cipherIds: string[],
 ): Promise<Selectable<Attachments>[]> {
+	return listByCipherIdsIncludingDeleted(db, cipherIds, false);
+}
+
+export async function listByCipherIdsIncludingDeleted(
+	db: Kysely<DB>,
+	cipherIds: string[],
+	includeDeleted = true,
+): Promise<Selectable<Attachments>[]> {
 	if (!cipherIds.length) return [];
-	return (
-		db
-			.selectFrom("attachments")
-			.selectAll()
-			// Explicit bulk operations may still contain many IDs. Passing the set as
-			// JSON keeps those operations to one bound parameter.
-			.where(
-				sql<boolean>`cipher_id in (select value from json_each(${JSON.stringify(cipherIds)}))`,
-			)
-			.orderBy("created_at", "asc")
-			.execute()
-	);
+	let query = db
+		.selectFrom("attachments")
+		.selectAll()
+		// Explicit bulk operations may still contain many IDs. Passing the set as
+		// JSON keeps those operations to one bound parameter.
+		.where(
+			sql<boolean>`cipher_id in (select value from json_each(${JSON.stringify(cipherIds)}))`,
+		);
+	if (!includeDeleted) query = query.where("deleted_at", "is", null);
+	return query.orderBy("created_at", "asc").execute();
 }
 
 /** Load attachments for ciphers visible in a full user sync without binding
@@ -31,6 +37,7 @@ export async function listVisibleForSync(
 	return db
 		.selectFrom("attachments")
 		.selectAll()
+		.where("deleted_at", "is", null)
 		.where(
 			sql<boolean>`
 				cipher_id in (
@@ -59,11 +66,26 @@ export async function listByUserId(
 		.innerJoin("ciphers as cipher", "cipher.id", "attachment.cipher_id")
 		.selectAll("attachment")
 		.where("cipher.user_id", "=", userId)
+		.where("attachment.deleted_at", "is", null)
 		.orderBy("attachment.created_at", "asc")
 		.execute();
 }
 
 export async function getById(
+	db: Kysely<DB>,
+	id: string,
+): Promise<Selectable<Attachments> | null> {
+	return (
+		(await db
+			.selectFrom("attachments")
+			.selectAll()
+			.where("id", "=", id)
+			.where("deleted_at", "is", null)
+			.executeTakeFirst()) ?? null
+	);
+}
+
+export async function getByIdIncludingDeleted(
 	db: Kysely<DB>,
 	id: string,
 ): Promise<Selectable<Attachments> | null> {

@@ -10,6 +10,7 @@ export async function getSendsByUserId(
 		.selectFrom("sends")
 		.selectAll()
 		.where("user_id", "=", userId)
+		.where("deletion_date", ">", now())
 		.execute();
 }
 
@@ -22,6 +23,7 @@ export async function getSendById(
 			.selectFrom("sends")
 			.selectAll()
 			.where("id", "=", id)
+			.where("deletion_date", ">", now())
 			.executeTakeFirst()) ?? null
 	);
 }

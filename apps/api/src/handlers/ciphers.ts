@@ -1,12 +1,9 @@
 import { vValidator } from "@hono/valibot-validator";
-import { type CompiledQuery, type Selectable, sql } from "kysely";
+import { type CompiledQuery, sql } from "kysely";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { CipherSchema } from "../schemas/ciphers";
-import {
-	deleteBlobObject,
-	getStoredAttachmentObjectKey,
-} from "../services/blob-store";
+import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import {
 	getCipherCollectionIds,
 	getCipherPermissions,
@@ -22,20 +19,8 @@ import * as attachmentsDb from "../services/db/attachments";
 import { executeBatch } from "../services/db/batch";
 import * as ciphersDb from "../services/db/ciphers";
 import * as foldersDb from "../services/db/folders";
-import type { Attachments } from "../types/db";
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
-
-async function deleteAttachmentObjects(
-	env: CloudflareBindings,
-	attachments: Selectable<Attachments>[],
-) {
-	await Promise.allSettled(
-		attachments.map((attachment) =>
-			deleteBlobObject(env, getStoredAttachmentObjectKey(attachment)),
-		),
-	);
-}
 
 // GET /api/ciphers
 export const listCiphers = factory.createHandlers(async (c) => {
@@ -302,6 +287,14 @@ export const deleteCipher = factory.createHandlers(async (c) => {
 			.compile(),
 		...(await revisionQueriesForCipher(db, cipher, ts)),
 	]);
+	await safeWriteAuditEvent(db, {
+		actorUserId: c.get("user").id,
+		action: "cipher.delete",
+		category: "vault",
+		targetType: "cipher",
+		targetId: cipher.id,
+		metadata: auditRequestMetadata(c.req.raw),
+	});
 	return new Response(null, { status: 200 });
 });
 
@@ -313,12 +306,24 @@ export const hardDeleteCipher = factory.createHandlers(async (c) => {
 	const db = c.get("db");
 	const cipher = c.get("cipher");
 	const cipherId = cipher.id;
-	const attachments = await attachmentsDb.listByCipherIds(db, [cipherId]);
+	const ts = now();
 	await executeBatch(c.get("dbDialect"), [
-		db.deleteFrom("ciphers").where("id", "=", cipherId).compile(),
-		...(await revisionQueriesForCipher(db, cipher)),
+		db
+			.updateTable("ciphers")
+			.set({ deleted_at: ts, purge_after: ts, updated_at: ts })
+			.where("id", "=", cipherId)
+			.compile(),
+		...(await revisionQueriesForCipher(db, cipher, ts)),
 	]);
-	await deleteAttachmentObjects(c.env, attachments);
+	await safeWriteAuditEvent(db, {
+		actorUserId: c.get("user").id,
+		action: "cipher.delete.permanent",
+		category: "vault",
+		level: "warning",
+		targetType: "cipher",
+		targetId: cipherId,
+		metadata: auditRequestMetadata(c.req.raw),
+	});
 	return new Response(null, { status: 200 });
 });
 

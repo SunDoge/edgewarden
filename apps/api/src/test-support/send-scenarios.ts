@@ -169,14 +169,16 @@ export function registerSendScenarios(context: SendScenarioContext): void {
 			body: JSON.stringify({ ids: [ownedId, otherUserId] }),
 		});
 		assert.equal(deleted.status, 200, await deleted.clone().text());
-		assert.equal(
-			await context.database
-				.prepare("SELECT COUNT(*) AS count FROM sends WHERE id = ?")
-				.bind(ownedId)
-				.first<{ count: number }>()
-				.then((row) => Number(row?.count)),
-			0,
-		);
+		const ownedTombstone = await context.database
+			.prepare("SELECT deletion_date FROM sends WHERE id = ?")
+			.bind(ownedId)
+			.first<{ deletion_date: number }>();
+		assert.ok(ownedTombstone);
+		assert.ok(ownedTombstone.deletion_date <= Math.floor(Date.now() / 1000));
+		const hidden = await request(`/api/sends/${ownedId}`, {
+			headers: { authorization: `Bearer ${context.accessToken}` },
+		});
+		assert.equal(hidden.status, 404);
 		assert.equal(
 			await context.database
 				.prepare("SELECT COUNT(*) AS count FROM sends WHERE id = ?")

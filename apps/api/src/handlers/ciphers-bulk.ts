@@ -2,27 +2,12 @@ import { vValidator } from "@hono/valibot-validator";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { BulkIdsSchema, MoveCiphersSchema } from "../schemas/ciphers";
-import {
-	deleteBlobObject,
-	getStoredAttachmentObjectKey,
-} from "../services/blob-store";
-import * as attachmentsDb from "../services/db/attachments";
+import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import { executeBatch, revisionQuery } from "../services/db/batch";
 import * as foldersDb from "../services/db/folders";
 import { textColumnInJson } from "../services/db/json-array";
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
-
-async function deleteAttachmentObjects(
-	env: CloudflareBindings,
-	attachments: Array<{ cipher_id: string; id: string }>,
-) {
-	await Promise.allSettled(
-		attachments.map((attachment) =>
-			deleteBlobObject(env, getStoredAttachmentObjectKey(attachment)),
-		),
-	);
-}
 
 export const deleteCiphers = factory.createHandlers(
 	vValidator("json", BulkIdsSchema),
@@ -44,6 +29,13 @@ export const deleteCiphers = factory.createHandlers(
 				.compile(),
 			revisionQuery(db, user.id, ts),
 		]);
+		await safeWriteAuditEvent(db, {
+			actorUserId: user.id,
+			action: "cipher.delete.bulk",
+			category: "vault",
+			targetType: "cipher",
+			metadata: { ...auditRequestMetadata(c.req.raw), size: ids.length },
+		});
 		return new Response(null, { status: 200 });
 	},
 );
@@ -85,16 +77,27 @@ export const hardDeleteCiphers = factory.createHandlers(
 				.where("user_id", "=", user.id)
 				.execute()
 		).map((cipher) => cipher.id);
-		const attachments = await attachmentsDb.listByCipherIds(db, ownedIds);
+		const ts = now();
 		await executeBatch(c.get("dbDialect"), [
 			db
-				.deleteFrom("ciphers")
+				.updateTable("ciphers")
+				.set({ deleted_at: ts, purge_after: ts, updated_at: ts })
 				.where(textColumnInJson("id", ids))
 				.where("user_id", "=", user.id)
 				.compile(),
-			revisionQuery(db, user.id),
+			revisionQuery(db, user.id, ts),
 		]);
-		await deleteAttachmentObjects(c.env, attachments);
+		await safeWriteAuditEvent(db, {
+			actorUserId: user.id,
+			action: "cipher.delete.permanent.bulk",
+			category: "vault",
+			level: "warning",
+			targetType: "cipher",
+			metadata: {
+				...auditRequestMetadata(c.req.raw),
+				size: ownedIds.length,
+			},
+		});
 		return new Response(null, { status: 200 });
 	},
 );

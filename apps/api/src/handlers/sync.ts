@@ -15,7 +15,7 @@ import {
 import { sendToResponse } from "../services/sends/presentation";
 import type { Folders } from "../types/db";
 import { buildWebAuthnPrfOption } from "../utils/account-passkeys";
-import { toIso } from "../utils/time";
+import { now, toIso } from "../utils/time";
 import { buildUserDecryptionOptions } from "../utils/user-decryption";
 import { userYubicoPublicIds } from "../utils/yubico";
 
@@ -118,6 +118,12 @@ export const sync = factory.createHandlers(async (c) => {
 								select value from json_each(${JSON.stringify(allowedRestrictedCollectionIds)})
 							)
 						)`,
+					]),
+				)
+				.where((expression) =>
+					expression.or([
+						expression("purge_after", "is", null),
+						expression("purge_after", ">", now()),
 					]),
 				)
 				.execute()
