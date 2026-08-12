@@ -1,7 +1,8 @@
 import type { D1Dialect } from "@sundoge/kysely-d1";
-import type { Kysely } from "kysely";
+import { type Kysely, sql } from "kysely";
 import type { DB } from "../types/db";
 import { now } from "../utils/time";
+import { type AuditEventInput, auditEventInsertQuery } from "./audit";
 
 export interface AccountDeletionResult {
 	ciphers: number;
@@ -12,6 +13,7 @@ export async function deleteAccountData(
 	db: Kysely<DB>,
 	dialect: D1Dialect,
 	userId: string,
+	auditEvent?: AuditEventInput,
 ): Promise<AccountDeletionResult | null> {
 	const timestamp = now();
 	const deletionToken = crypto.randomUUID();
@@ -21,7 +23,7 @@ export async function deleteAccountData(
 		.where("id", "=", userId)
 		.where("security_stamp", "=", deletionToken)
 		.where("deletion_requested_at", "=", timestamp);
-	const [deletedUser, deletedCiphers, deletedSends] = await dialect.batch([
+	const statements = [
 		db
 			.updateTable("users")
 			.set({
@@ -68,7 +70,23 @@ export async function deleteAccountData(
 			.where("user_id", "=", userId)
 			.where(({ exists }) => exists(ownsDeletion))
 			.compile(),
-	]);
+	];
+	if (auditEvent)
+		statements.push(
+			auditEventInsertQuery(
+				db,
+				auditEvent,
+				sql<boolean>`EXISTS (
+					SELECT 1 FROM users
+					WHERE id = ${userId}
+					  AND security_stamp = ${deletionToken}
+					  AND deletion_requested_at = ${timestamp}
+				)`,
+				timestamp,
+			),
+		);
+	const [deletedUser, deletedCiphers, deletedSends] =
+		await dialect.batch(statements);
 	if (deletedUser.numAffectedRows !== 1n) return null;
 	return {
 		ciphers: Number(deletedCiphers.numAffectedRows ?? 0n),

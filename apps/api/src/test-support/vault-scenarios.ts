@@ -293,6 +293,78 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		);
 	});
 
+	test("rolls back Cipher deletion when its audit tombstone cannot be written", async () => {
+		const auth = {
+			authorization: `Bearer ${context.accessToken}`,
+			"content-type": "application/json",
+		};
+		const created = await request("/api/ciphers", {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({
+				type: 1,
+				name: "atomic-delete-audit",
+				login: {
+					username: "encrypted-user",
+					password: "encrypted-password",
+				},
+			}),
+		});
+		assert.equal(created.status, 200, await created.clone().text());
+		const cipherId = (await created.json<{ id: string }>()).id;
+
+		await context.database
+			.prepare(`
+				CREATE TRIGGER test_fail_atomic_delete_audit
+				BEFORE INSERT ON audit_logs
+				WHEN NEW.action = 'cipher.delete'
+				BEGIN
+					SELECT RAISE(ABORT, 'simulated audit outage');
+				END
+			`)
+			.run();
+		try {
+			const failed = await request(`/api/ciphers/${cipherId}/delete`, {
+				method: "PUT",
+				headers: auth,
+			});
+			assert.equal(failed.status, 500);
+			const cipher = await context.database
+				.prepare("SELECT deleted_at FROM ciphers WHERE id = ?")
+				.bind(cipherId)
+				.first<{ deleted_at: number | null }>();
+			assert.equal(cipher?.deleted_at, null);
+			assert.equal(
+				await context.database
+					.prepare(
+						"SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'cipher.delete' AND target_id = ?",
+					)
+					.bind(cipherId)
+					.first<{ count: number }>()
+					.then((row) => Number(row?.count)),
+				0,
+			);
+		} finally {
+			await context.database
+				.prepare("DROP TRIGGER IF EXISTS test_fail_atomic_delete_audit")
+				.run();
+		}
+
+		const deleted = await request(`/api/ciphers/${cipherId}/delete`, {
+			method: "PUT",
+			headers: auth,
+		});
+		assert.equal(deleted.status, 200, await deleted.clone().text());
+		assert.ok(
+			await context.database
+				.prepare(
+					"SELECT 1 FROM audit_logs WHERE action = 'cipher.delete' AND target_id = ? AND is_tombstone = 1",
+				)
+				.bind(cipherId)
+				.first(),
+		);
+	});
+
 	test("makes bulk Cipher lifecycle transitions idempotent", async () => {
 		const auth = {
 			authorization: `Bearer ${context.accessToken}`,

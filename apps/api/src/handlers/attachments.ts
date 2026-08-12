@@ -1,8 +1,9 @@
 import { vValidator } from "@hono/valibot-validator";
+import { sql } from "kysely";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { CreateAttachmentSchema } from "../schemas/attachments";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import { discardUnpublishedBlob } from "../services/blob-gc";
 import {
 	createAttachmentUploadObjectKey,
@@ -257,16 +258,27 @@ export const deleteAttachment = factory.createHandlers(async (c) => {
 				ts,
 			),
 			deletedAttachmentRevisionQuery(c.get("db"), id, deletionToken, ts),
+			auditEventInsertQuery(
+				c.get("db"),
+				{
+					actorUserId: c.get("user").id,
+					action: "attachment.delete",
+					category: "vault",
+					targetType: "attachment",
+					targetId: id,
+					metadata: {
+						...auditRequestMetadata(c.req.raw),
+						cipherId: cipher.id,
+					},
+				},
+				sql<boolean>`EXISTS (
+					SELECT 1 FROM attachments
+					WHERE id = ${id} AND deletion_token = ${deletionToken}
+				)`,
+				ts,
+			),
 		]);
 	if (deleted.numAffectedRows !== 1n)
 		return errorResponse("Attachment not found", 404);
-	await safeWriteAuditEvent(c.get("db"), {
-		actorUserId: c.get("user").id,
-		action: "attachment.delete",
-		category: "vault",
-		targetType: "attachment",
-		targetId: id,
-		metadata: { ...auditRequestMetadata(c.req.raw), cipherId: cipher.id },
-	});
 	return new Response(null, { status: 204 });
 });

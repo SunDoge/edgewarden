@@ -1,4 +1,4 @@
-import type { Kysely } from "kysely";
+import { type CompiledQuery, type Kysely, type RawBuilder, sql } from "kysely";
 import type { DB } from "../types/db";
 import { now } from "../utils/time";
 import { textColumnInJson } from "./db/json-array";
@@ -168,29 +168,39 @@ function sanitizeMetadata(
 	return clean;
 }
 
+/**
+ * Builds an audit insert that can participate in the same D1 batch as the
+ * mutation it describes. The optional condition must identify the state
+ * written by that exact mutation (normally with a fresh mutation token), so a
+ * racing or idempotent request cannot create a false audit tombstone.
+ */
+export function auditEventInsertQuery(
+	db: Kysely<DB>,
+	event: AuditEventInput,
+	condition: RawBuilder<boolean> = sql<boolean>`TRUE`,
+	createdAt = now(),
+): CompiledQuery {
+	const metadata = sanitizeMetadata(event.metadata || {});
+	return sql`
+		INSERT INTO audit_logs (
+			id, actor_user_id, action, category, level,
+			target_type, target_id, metadata, is_tombstone, created_at
+		)
+		SELECT
+			${crypto.randomUUID()}, ${event.actorUserId ?? null}, ${event.action},
+			${event.category}, ${event.level || "info"}, ${event.targetType ?? null},
+			${event.targetId ?? null}, ${JSON.stringify(metadata)},
+			${isAuditTombstoneAction(event.action) ? 1 : 0}, ${createdAt}
+		WHERE ${condition}
+	`.compile(db);
+}
+
 export async function safeWriteAuditEvent(
 	db: Kysely<DB>,
 	event: AuditEventInput,
 ): Promise<void> {
 	try {
-		const metadata = sanitizeMetadata(event.metadata || {});
-		const metadataJson = JSON.stringify(metadata);
-
-		await db
-			.insertInto("audit_logs")
-			.values({
-				id: crypto.randomUUID(),
-				actor_user_id: event.actorUserId ?? null,
-				action: event.action,
-				category: event.category,
-				level: event.level || "info",
-				target_type: event.targetType ?? null,
-				target_id: event.targetId ?? null,
-				metadata: metadataJson,
-				is_tombstone: isAuditTombstoneAction(event.action) ? 1 : 0,
-				created_at: now(),
-			})
-			.execute();
+		await db.executeQuery(auditEventInsertQuery(db, event));
 		await applyAuditLogRetention(db, await getAuditLogSettings(db));
 	} catch (error) {
 		console.error("Failed to write audit log:", error);

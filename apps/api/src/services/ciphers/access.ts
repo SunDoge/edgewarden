@@ -129,6 +129,7 @@ export async function executeFencedPersonalCipherBulkMutation(
 		mutationToken: string,
 		expectedState: RawBuilder<boolean>,
 	) => CompiledQuery,
+	buildFollowups: (mutationToken: string) => CompiledQuery[] = () => [],
 ): Promise<number> {
 	if (!candidates.length) return 0;
 	const mutationToken = crypto.randomUUID();
@@ -146,6 +147,7 @@ export async function executeFencedPersonalCipherBulkMutation(
 			mutationToken,
 			timestamp,
 		),
+		...buildFollowups(mutationToken),
 	]);
 	return Number(mutated.numAffectedRows);
 }
