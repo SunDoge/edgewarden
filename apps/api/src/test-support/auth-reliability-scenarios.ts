@@ -15,6 +15,7 @@ import {
 } from "../services/db/batch";
 import * as webauthnDb from "../services/db/webauthn";
 import { refreshTokenRotationInsertQuery } from "../services/identity-refresh";
+import { issueIdentitySession } from "../services/identity-session";
 
 export interface AuthReliabilityScenarioContext {
 	readonly database: D1Database;
@@ -688,6 +689,86 @@ export function registerAuthReliabilityScenarios(
 				.deleteFrom("refresh_tokens")
 				.where("token", "in", [oldTokenHash, ...insertedHashes])
 				.execute();
+			await db.deleteFrom("users").where("id", "=", userId).execute();
+			await db.destroy();
+		}
+	});
+
+	test("does not issue a session from a stale user snapshot", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const timestamp = Math.floor(Date.now() / 1000);
+		const userId = crypto.randomUUID();
+		const securityStamp = crypto.randomUUID();
+		let issued: Awaited<ReturnType<typeof issueIdentitySession>> = null;
+		try {
+			await db
+				.insertInto("users")
+				.values({
+					id: userId,
+					email: `stale-session-${crypto.randomUUID()}@example.com`,
+					master_password_hash: "isolated-session-hash",
+					key: "isolated-session-key",
+					kdf_type: 0,
+					kdf_iterations: 600_000,
+					kdf_memory: null,
+					kdf_parallelism: null,
+					security_stamp: securityStamp,
+					created_at: timestamp,
+					updated_at: timestamp,
+				})
+				.execute();
+			const snapshot = await db
+				.selectFrom("users")
+				.selectAll()
+				.where("id", "=", userId)
+				.executeTakeFirstOrThrow();
+			await db
+				.updateTable("users")
+				.set({ security_stamp: crypto.randomUUID() })
+				.where("id", "=", userId)
+				.execute();
+			assert.equal(
+				await issueIdentitySession({
+					db,
+					dialect,
+					user: snapshot,
+					device: { identifier: "", name: "", type: 0 },
+					jwtSecret: "stale-session-test-secret-at-least-32-chars",
+				}),
+				null,
+			);
+			assert.equal(
+				await db
+					.selectFrom("refresh_tokens")
+					.select(({ fn }) => fn.countAll<number>().as("count"))
+					.where("user_id", "=", userId)
+					.executeTakeFirstOrThrow()
+					.then((row) => Number(row.count)),
+				0,
+			);
+			assert.equal(
+				await db
+					.selectFrom("user_revisions")
+					.select("user_id")
+					.where("user_id", "=", userId)
+					.executeTakeFirst(),
+				undefined,
+			);
+
+			await db
+				.updateTable("users")
+				.set({ security_stamp: securityStamp })
+				.where("id", "=", userId)
+				.execute();
+			issued = await issueIdentitySession({
+				db,
+				dialect,
+				user: snapshot,
+				device: { identifier: "", name: "", type: 0 },
+				jwtSecret: "stale-session-test-secret-at-least-32-chars",
+			});
+			assert.ok(issued);
+		} finally {
 			await db.deleteFrom("users").where("id", "=", userId).execute();
 			await db.destroy();
 		}
