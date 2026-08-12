@@ -3,7 +3,7 @@ import { type CompiledQuery, sql } from "kysely";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { CipherSchema } from "../schemas/ciphers";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import {
 	conditionalCipherRevisionQuery,
 	getCipherCollectionIds,
@@ -288,17 +288,25 @@ export const deleteCipher = factory.createHandlers(async (c) => {
 			mutationToken,
 			revisionTimestamp,
 		),
+		auditEventInsertQuery(
+			db,
+			{
+				actorUserId: c.get("user").id,
+				action: "cipher.delete",
+				category: "vault",
+				targetType: "cipher",
+				targetId: cipher.id,
+				metadata: auditRequestMetadata(c.req.raw),
+			},
+			sql<boolean>`EXISTS (
+				SELECT 1 FROM ciphers
+				WHERE id = ${cipher.id} AND mutation_token = ${mutationToken}
+			)`,
+			deletionTimestamp,
+		),
 	]);
 	if (deleted.numAffectedRows !== 1n)
 		return errorResponse("Cipher changed during deletion", 409);
-	await safeWriteAuditEvent(db, {
-		actorUserId: c.get("user").id,
-		action: "cipher.delete",
-		category: "vault",
-		targetType: "cipher",
-		targetId: cipher.id,
-		metadata: auditRequestMetadata(c.req.raw),
-	});
 	return new Response(null, { status: 200 });
 });
 
@@ -331,18 +339,26 @@ export const hardDeleteCipher = factory.createHandlers(async (c) => {
 			mutationToken,
 			revisionTimestamp,
 		),
+		auditEventInsertQuery(
+			db,
+			{
+				actorUserId: c.get("user").id,
+				action: "cipher.delete.permanent",
+				category: "vault",
+				level: "warning",
+				targetType: "cipher",
+				targetId: cipherId,
+				metadata: auditRequestMetadata(c.req.raw),
+			},
+			sql<boolean>`EXISTS (
+				SELECT 1 FROM ciphers
+				WHERE id = ${cipherId} AND mutation_token = ${mutationToken}
+			)`,
+			deletionTimestamp,
+		),
 	]);
 	if (deleted.numAffectedRows !== 1n)
 		return errorResponse("Cipher changed during permanent deletion", 409);
-	await safeWriteAuditEvent(db, {
-		actorUserId: c.get("user").id,
-		action: "cipher.delete.permanent",
-		category: "vault",
-		level: "warning",
-		targetType: "cipher",
-		targetId: cipherId,
-		metadata: auditRequestMetadata(c.req.raw),
-	});
 	return new Response(null, { status: 200 });
 });
 

@@ -3,7 +3,7 @@ import { sql } from "kysely";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { BulkIdsSchema, MoveCiphersSchema } from "../schemas/ciphers";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import { executeFencedPersonalCipherBulkMutation } from "../services/ciphers/access";
 import * as foldersDb from "../services/db/folders";
 import { textColumnInJson } from "../services/db/json-array";
@@ -24,7 +24,7 @@ export const deleteCiphers = factory.createHandlers(
 			.where("user_id", "=", user.id)
 			.where("deleted_at", "is", null)
 			.execute();
-		const deletedCount = await executeFencedPersonalCipherBulkMutation(
+		await executeFencedPersonalCipherBulkMutation(
 			c.get("dbDialect"),
 			db,
 			user.id,
@@ -43,18 +43,25 @@ export const deleteCiphers = factory.createHandlers(
 					.where("deleted_at", "is", null)
 					.where(expectedState)
 					.compile(),
+			(mutationToken) => [
+				auditEventInsertQuery(
+					db,
+					{
+						actorUserId: user.id,
+						action: "cipher.delete.bulk",
+						category: "vault",
+						targetType: "cipher",
+						metadata: auditRequestMetadata(c.req.raw),
+					},
+					sql<boolean>`EXISTS (
+						SELECT 1 FROM ciphers
+						WHERE user_id = ${user.id}
+						  AND mutation_token = ${mutationToken}
+					)`,
+					ts,
+				),
+			],
 		);
-		if (deletedCount > 0)
-			await safeWriteAuditEvent(db, {
-				actorUserId: user.id,
-				action: "cipher.delete.bulk",
-				category: "vault",
-				targetType: "cipher",
-				metadata: {
-					...auditRequestMetadata(c.req.raw),
-					size: deletedCount,
-				},
-			});
 		return new Response(null, { status: 200 });
 	},
 );
@@ -116,7 +123,7 @@ export const hardDeleteCiphers = factory.createHandlers(
 				eb.or([eb("purge_after", "is", null), eb("purge_after", ">", ts)]),
 			)
 			.execute();
-		const deletedCount = await executeFencedPersonalCipherBulkMutation(
+		await executeFencedPersonalCipherBulkMutation(
 			c.get("dbDialect"),
 			db,
 			user.id,
@@ -134,19 +141,26 @@ export const hardDeleteCiphers = factory.createHandlers(
 					.where("user_id", "=", user.id)
 					.where(expectedState)
 					.compile(),
+			(mutationToken) => [
+				auditEventInsertQuery(
+					db,
+					{
+						actorUserId: user.id,
+						action: "cipher.delete.permanent.bulk",
+						category: "vault",
+						level: "warning",
+						targetType: "cipher",
+						metadata: auditRequestMetadata(c.req.raw),
+					},
+					sql<boolean>`EXISTS (
+						SELECT 1 FROM ciphers
+						WHERE user_id = ${user.id}
+						  AND mutation_token = ${mutationToken}
+					)`,
+					ts,
+				),
+			],
 		);
-		if (deletedCount > 0)
-			await safeWriteAuditEvent(db, {
-				actorUserId: user.id,
-				action: "cipher.delete.permanent.bulk",
-				category: "vault",
-				level: "warning",
-				targetType: "cipher",
-				metadata: {
-					...auditRequestMetadata(c.req.raw),
-					size: deletedCount,
-				},
-			});
 		return new Response(null, { status: 200 });
 	},
 );

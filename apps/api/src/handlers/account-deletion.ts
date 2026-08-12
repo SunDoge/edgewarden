@@ -3,7 +3,7 @@ import { factory } from "../http/factory";
 import { VerifyPasswordSchema } from "../schemas/accounts";
 import { verifyPassword, invalidateUserCache } from "../services/auth";
 import { deleteAccountData } from "../services/account-deletion";
-import { safeWriteAuditEvent, auditRequestMetadata } from "../services/audit";
+import { auditRequestMetadata } from "../services/audit";
 import { errorResponse } from "../utils/response";
 
 export const deleteAccount = factory.createHandlers(
@@ -22,6 +22,14 @@ export const deleteAccount = factory.createHandlers(
 			c.get("db"),
 			c.get("dbDialect"),
 			user.id,
+			{
+				action: "account.delete",
+				category: "auth",
+				level: "warning",
+				targetType: "user",
+				targetId: user.id,
+				metadata: auditRequestMetadata(c.req.raw),
+			},
 		);
 		if (!result)
 			return errorResponse(
@@ -29,17 +37,6 @@ export const deleteAccount = factory.createHandlers(
 				409,
 			);
 		invalidateUserCache(user.id);
-		await safeWriteAuditEvent(c.get("db"), {
-			action: "account.delete",
-			category: "auth",
-			level: "warning",
-			targetType: "user",
-			targetId: user.id,
-			metadata: {
-				...auditRequestMetadata(c.req.raw),
-				size: result.ciphers + result.sends,
-			},
-		});
 		return new Response(null, { status: 204 });
 	},
 );
