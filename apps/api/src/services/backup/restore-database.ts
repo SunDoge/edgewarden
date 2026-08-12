@@ -174,11 +174,42 @@ function buildResetImportTargetStatements(
 	].map((sql) => db.prepare(sql));
 }
 
+function preserveAuditTombstonesStatement(db: D1Database): D1PreparedStatement {
+	return db.prepare(`
+		INSERT OR REPLACE INTO ${shadowTableName("audit_logs")} (
+			id, actor_user_id, action, category, level,
+			target_type, target_id, metadata, is_tombstone, created_at
+		)
+		SELECT
+			log.id,
+			CASE
+				WHEN EXISTS (
+					SELECT 1 FROM ${shadowTableName("users")} restored_user
+					WHERE restored_user.id = log.actor_user_id
+				) THEN log.actor_user_id
+				ELSE NULL
+			END,
+			log.action, log.category, log.level,
+			log.target_type, log.target_id, log.metadata,
+			log.is_tombstone, log.created_at
+		FROM audit_logs log
+		WHERE log.is_tombstone = 1
+	`);
+}
+
 export async function swapShadowTablesIntoPlace(
 	db: D1Database,
 	previousBlobKeys: Iterable<string> = [],
 ): Promise<void> {
-	const statements = buildResetImportTargetStatements(db);
+	// A restore may roll business data back, but it must not erase deletion
+	// evidence created after the backup. Merge tombstones into the shadow table
+	// before the atomic swap. If the restored user set no longer contains the
+	// original actor, retain the event with a NULL actor rather than violating
+	// the audit foreign key.
+	const statements = [
+		preserveAuditTombstonesStatement(db),
+		...buildResetImportTargetStatements(db),
+	];
 	const timestamp = Math.floor(Date.now() / 1000);
 	for (const key of new Set(previousBlobKeys)) {
 		if (!key) continue;
