@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { unzipSync } from "fflate";
 import { test } from "vitest";
+import {
+	MAX_AUDIT_METADATA_BYTES,
+	MAX_AUDIT_METADATA_STRING_BYTES,
+} from "../services/audit";
 import { invalidateUserCache } from "../services/auth";
 import { hashCredential } from "../services/credential-protection";
 
@@ -363,6 +367,52 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 				.bind(cipherId)
 				.first(),
 		);
+	});
+
+	test("bounds untrusted request metadata without blocking Cipher deletion", async () => {
+		const auth = {
+			authorization: `Bearer ${context.accessToken}`,
+			"content-type": "application/json",
+		};
+		const created = await request("/api/ciphers", {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({
+				type: 1,
+				name: "bounded-delete-audit",
+				login: {
+					username: "encrypted-user",
+					password: "encrypted-password",
+				},
+			}),
+		});
+		assert.equal(created.status, 200, await created.clone().text());
+		const cipherId = (await created.json<{ id: string }>()).id;
+		const deleted = await request(`/api/ciphers/${cipherId}/delete`, {
+			method: "PUT",
+			headers: {
+				...auth,
+				"user-agent": "oversized-user-agent/".repeat(1000),
+			},
+		});
+		assert.equal(deleted.status, 200, await deleted.clone().text());
+		const audit = await context.database
+			.prepare(
+				"SELECT metadata FROM audit_logs WHERE action = 'cipher.delete' AND target_id = ?",
+			)
+			.bind(cipherId)
+			.first<{ metadata: string }>();
+		assert.ok(audit);
+		assert.ok(
+			new TextEncoder().encode(audit.metadata).byteLength <=
+				MAX_AUDIT_METADATA_BYTES,
+		);
+		const metadata = JSON.parse(audit.metadata) as { userAgent: string };
+		assert.ok(
+			new TextEncoder().encode(metadata.userAgent).byteLength <=
+				MAX_AUDIT_METADATA_STRING_BYTES,
+		);
+		assert.equal(metadata.userAgent.includes("�"), false);
 	});
 
 	test("makes bulk Cipher lifecycle transitions idempotent", async () => {
