@@ -21,7 +21,6 @@ export const deleteAccount = factory.createHandlers(
 		const result = await deleteAccountData(
 			c.get("db"),
 			c.get("dbDialect"),
-			c.env,
 			user.id,
 		);
 		if (!result)
@@ -38,7 +37,7 @@ export const deleteAccount = factory.createHandlers(
 			targetId: user.id,
 			metadata: {
 				...auditRequestMetadata(c.req.raw),
-				size: result.attachments + result.sends,
+				size: result.ciphers + result.sends,
 			},
 		});
 		return new Response(null, { status: 204 });

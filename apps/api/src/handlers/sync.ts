@@ -65,6 +65,7 @@ export const sync = factory.createHandlers(async (c) => {
 		])
 		.where("member.user_id", "=", user.id)
 		.where("member.status", "=", "confirmed")
+		.where("org.deletion_requested_at", "is", null)
 		.execute();
 	const organizationIds = organizationRows.map((row) => row.org_id);
 	const allAccessOrgIds = organizationRows

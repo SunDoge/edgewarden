@@ -146,6 +146,9 @@ describe("Edgewarden API", () => {
 		masterPasswordHash: MASTER_PASSWORD_HASH,
 	});
 	registerAdminOrganizationScenarios({
+		get bindings() {
+			return bindings;
+		},
 		get database() {
 			return testDatabase;
 		},

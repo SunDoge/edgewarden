@@ -174,11 +174,13 @@ export const requireOrgMember = createMiddleware<HonoEnv>(async (c, next) => {
 	if (!orgId) return errorResponse("Organization not found", 404);
 	const member = await c
 		.get("db")
-		.selectFrom("org_members")
-		.selectAll()
-		.where("org_id", "=", orgId)
-		.where("user_id", "=", c.get("user").id)
-		.where("status", "=", "confirmed")
+		.selectFrom("org_members as member")
+		.innerJoin("organizations as org", "org.id", "member.org_id")
+		.selectAll("member")
+		.where("member.org_id", "=", orgId)
+		.where("member.user_id", "=", c.get("user").id)
+		.where("member.status", "=", "confirmed")
+		.where("org.deletion_requested_at", "is", null)
 		.executeTakeFirst();
 	if (!member) return errorResponse("Organization not found", 404);
 	c.set("orgMember", member);

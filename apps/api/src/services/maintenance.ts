@@ -1,4 +1,4 @@
-import type { Kysely } from "kysely";
+import { type Kysely, sql } from "kysely";
 import { createDatabase } from "../middleware/db";
 import type { DB } from "../types/db";
 import { now } from "../utils/time";
@@ -24,6 +24,8 @@ export interface MaintenanceResult {
 	purgedAttachments: number;
 	purgedCiphers: number;
 	purgedSends: number;
+	purgedOrganizations: number;
+	purgedUsers: number;
 }
 
 function affectedRows(result: {
@@ -170,6 +172,52 @@ async function purgeSends(
 	return purged;
 }
 
+async function purgeOrganizations(
+	db: Kysely<DB>,
+	timestamp: number,
+): Promise<number> {
+	const result = await db
+		.deleteFrom("organizations")
+		.where("deletion_requested_at", "is not", null)
+		.where("deletion_requested_at", "<=", timestamp)
+		.where(
+			sql<boolean>`not exists (
+				select 1 from ciphers where ciphers.org_id = organizations.id
+			)`,
+		)
+		.where(
+			sql<boolean>`not exists (
+				select 1 from sends where sends.org_id = organizations.id
+			)`,
+		)
+		.executeTakeFirst();
+	return Number(result.numDeletedRows ?? 0n);
+}
+
+async function purgeUsers(db: Kysely<DB>, timestamp: number): Promise<number> {
+	const result = await db
+		.deleteFrom("users")
+		.where("deletion_requested_at", "is not", null)
+		.where("deletion_requested_at", "<=", timestamp)
+		.where(
+			sql<boolean>`not exists (
+				select 1 from ciphers where ciphers.user_id = users.id
+			)`,
+		)
+		.where(
+			sql<boolean>`not exists (
+				select 1 from sends where sends.user_id = users.id
+			)`,
+		)
+		.where(
+			sql<boolean>`not exists (
+				select 1 from organizations where organizations.owner_id = users.id
+			)`,
+		)
+		.executeTakeFirst();
+	return Number(result.numDeletedRows ?? 0n);
+}
+
 export async function runMaintenance(
 	db: Kysely<DB>,
 	env: CloudflareBindings,
@@ -226,6 +274,11 @@ export async function runMaintenance(
 			.where("expires_at", "<=", timestamp)
 			.executeTakeFirst(),
 	);
+	const purgedAttachments = await purgeAttachments(db, env, timestamp);
+	const purgedCiphers = await purgeCiphers(db, env, timestamp);
+	const purgedSends = await purgeSends(db, env, timestamp);
+	const purgedOrganizations = await purgeOrganizations(db, timestamp);
+	const purgedUsers = await purgeUsers(db, timestamp);
 	return {
 		refreshTokens,
 		deviceTrustTokens,
@@ -234,9 +287,11 @@ export async function runMaintenance(
 		authRequests,
 		loginAttempts,
 		expiredInvites,
-		purgedAttachments: await purgeAttachments(db, env, timestamp),
-		purgedCiphers: await purgeCiphers(db, env, timestamp),
-		purgedSends: await purgeSends(db, env, timestamp),
+		purgedAttachments,
+		purgedCiphers,
+		purgedSends,
+		purgedOrganizations,
+		purgedUsers,
 	};
 }
 
