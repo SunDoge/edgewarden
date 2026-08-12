@@ -928,6 +928,60 @@ export function registerAdminOrganizationScenarios(
 		context.backedUpOrganizationId = orgId;
 		context.backedUpCollectionId = collectionId;
 
+		const beforeMemberRevision = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(restrictedUser.id)
+			.first<{ revision_date: number }>();
+		assert.ok(beforeMemberRevision);
+		const updateMemberPermissions = (index: number) =>
+			request(`/api/organizations/${orgId}/members/${restrictedMemberId}`, {
+				method: "PUT",
+				headers: {
+					authorization: `Bearer ${context.accessToken}`,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					role: "member",
+					accessAll: false,
+					collections: [
+						{
+							id: collectionId,
+							readOnly: true,
+							hidePasswords: index % 2 === 0,
+						},
+					],
+				}),
+			});
+		const memberUpdates = await Promise.all(
+			Array.from({ length: 8 }, (_, index) => updateMemberPermissions(index)),
+		);
+		assert.equal(
+			memberUpdates.filter((response) => response.status === 200).length,
+			1,
+		);
+		assert.equal(
+			memberUpdates.filter((response) => response.status === 409).length,
+			7,
+		);
+		assert.equal(
+			await context.database
+				.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+				.bind(restrictedUser.id)
+				.first<{ revision_date: number }>()
+				.then((row) => row?.revision_date),
+			beforeMemberRevision.revision_date + 1,
+		);
+		assert.equal(
+			await context.database
+				.prepare(
+					"SELECT COUNT(*) AS count FROM collection_members WHERE org_member_id = ?",
+				)
+				.bind(restrictedMemberId)
+				.first<{ count: number }>()
+				.then((row) => Number(row?.count)),
+			1,
+		);
+
 		const removed = await request(
 			`/api/organizations/${orgId}/members/${restrictedMemberId}`,
 			{

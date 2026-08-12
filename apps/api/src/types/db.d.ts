@@ -197,6 +197,7 @@ export interface OrgMembers {
 	email: string;
 	id: string;
 	key: string | null;
+	mutation_token: string | null;
 	org_id: string;
 	role: Generated<string>;
 	status: Generated<string>;

@@ -1,4 +1,5 @@
 import { vValidator } from "@hono/valibot-validator";
+import { sql } from "kysely";
 import { factory } from "../http/factory";
 import {
 	InviteOrganizationMemberSchema,
@@ -7,9 +8,9 @@ import {
 } from "../schemas/organizations";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import {
+	conditionalOrganizationMemberRevisionQuery,
 	executeBatch,
 	organizationMemberCollectionAccessQuery,
-	organizationMemberRevisionQuery,
 	revisionQuery,
 } from "../services/db/batch";
 import { textColumnInJson } from "../services/db/json-array";
@@ -270,6 +271,10 @@ export const updateOrganizationMember = factory.createHandlers(
 			);
 		}
 		const ts = now();
+		const mutationToken = crypto.randomUUID();
+		const collectionIds = JSON.stringify(
+			access.collections.map((item) => item.id),
+		);
 		const [updated] = await c.get("dbDialect").batch([
 			db
 				.updateTable("org_members")
@@ -277,13 +282,48 @@ export const updateOrganizationMember = factory.createHandlers(
 					role: body.role,
 					access_all: body.accessAll ? 1 : 0,
 					updated_at: ts,
+					mutation_token: mutationToken,
 				})
 				.where("id", "=", target.id)
 				.where("org_id", "=", actor.org_id)
+				.where(sql<boolean>`mutation_token IS ${target.mutation_token}`)
+				.where((eb) =>
+					eb.exists(
+						db
+							.selectFrom("org_members as current_actor")
+							.select("current_actor.id")
+							.where("current_actor.id", "=", actor.id)
+							.where("current_actor.org_id", "=", actor.org_id)
+							.where("current_actor.role", "=", actor.role)
+							.where("current_actor.status", "=", "confirmed")
+							.where(
+								sql<boolean>`current_actor.mutation_token IS ${actor.mutation_token}`,
+							),
+					),
+				)
+				.$if(!body.accessAll, (query) =>
+					query.where(sql<boolean>`not exists (
+						select 1 from json_each(${collectionIds}) requested
+						where not exists (
+							select 1 from collections collection
+							where collection.id = requested.value
+							  and collection.org_id = ${actor.org_id}
+						)
+					)`),
+				)
 				.compile(),
 			db
 				.deleteFrom("collection_members")
 				.where("org_member_id", "=", target.id)
+				.where((eb) =>
+					eb.exists(
+						db
+							.selectFrom("org_members")
+							.select("id")
+							.where("id", "=", target.id)
+							.where("mutation_token", "=", mutationToken),
+					),
+				)
 				.compile(),
 			...access.collections.map((item) =>
 				organizationMemberCollectionAccessQuery(
@@ -292,12 +332,18 @@ export const updateOrganizationMember = factory.createHandlers(
 					item.id,
 					item.readOnly,
 					item.hidePasswords,
+					mutationToken,
 				),
 			),
-			organizationMemberRevisionQuery(db, target.id, ts),
+			conditionalOrganizationMemberRevisionQuery(
+				db,
+				target.id,
+				mutationToken,
+				ts,
+			),
 		]);
 		if (updated.numAffectedRows !== 1n)
-			return errorResponse("Member not found", 404);
+			return errorResponse("Member permissions changed concurrently", 409);
 		return c.json({
 			id: target.id,
 			email: target.email,
@@ -327,17 +373,45 @@ export const removeOrganizationMember = factory.createHandlers(async (c) => {
 	) {
 		return errorResponse("Member not found", 404);
 	}
-	const [, removed] = await c
-		.get("dbDialect")
-		.batch([
-			organizationMemberRevisionQuery(db, target.id),
-			db
-				.deleteFrom("org_members")
-				.where("id", "=", target.id)
-				.where("org_id", "=", c.get("orgMember").org_id)
-				.compile(),
-		]);
-	if (removed.numAffectedRows !== 1n)
-		return errorResponse("Member not found", 404);
+	const actor = c.get("orgMember");
+	const mutationToken = crypto.randomUUID();
+	const [claimed, , removed] = await c.get("dbDialect").batch([
+		db
+			.updateTable("org_members")
+			.set({ mutation_token: mutationToken })
+			.where("id", "=", target.id)
+			.where("org_id", "=", actor.org_id)
+			.where(sql<boolean>`mutation_token IS ${target.mutation_token}`)
+			.where((eb) =>
+				eb.exists(
+					db
+						.selectFrom("org_members as current_actor")
+						.select("current_actor.id")
+						.where("current_actor.id", "=", actor.id)
+						.where("current_actor.org_id", "=", actor.org_id)
+						.where("current_actor.role", "=", actor.role)
+						.where("current_actor.status", "=", "confirmed")
+						.where(
+							sql<boolean>`current_actor.mutation_token IS ${actor.mutation_token}`,
+						),
+				),
+			)
+			.compile(),
+		conditionalOrganizationMemberRevisionQuery(db, target.id, mutationToken),
+		db
+			.deleteFrom("org_members")
+			.where("id", "=", target.id)
+			.where("org_id", "=", actor.org_id)
+			.where("mutation_token", "=", mutationToken)
+			.compile(),
+	]);
+	// D1 may include cascaded collection_members rows in the DELETE change
+	// count. The claim must affect exactly one member; the final delete only
+	// needs to prove that claimed row was removed.
+	if (
+		claimed.numAffectedRows !== 1n ||
+		Number(removed.numAffectedRows ?? 0n) < 1
+	)
+		return errorResponse("Member changed during removal", 409);
 	return new Response(null, { status: 204 });
 });
