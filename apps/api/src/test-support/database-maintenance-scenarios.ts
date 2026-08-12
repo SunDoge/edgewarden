@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { runScheduledTasks } from "../index";
-import { hashRefreshToken } from "../utils/jwt";
 import { createDatabase } from "../middleware/db";
+import { rotateUserApiKey } from "../services/account-api-key";
 import { deleteAccountData } from "../services/account-deletion";
 import {
 	getDefaultBackupSettings,
@@ -16,6 +16,11 @@ import {
 } from "../services/backup/operation-lease";
 import { drainBlobGcQueue } from "../services/blob-gc";
 import type { BlobStore } from "../services/blob-store";
+import {
+	decryptCredential,
+	hashCredential,
+} from "../services/credential-protection";
+import * as authRequestsDb from "../services/db/auth-requests";
 import {
 	attachmentCipherUpdateQuery,
 	attachmentRevisionQuery,
@@ -36,10 +41,10 @@ import {
 } from "../services/db/config";
 import * as devicesDb from "../services/db/devices";
 import * as sendsDb from "../services/db/sends";
-import { runMaintenance } from "../services/maintenance";
 import { issueIdentitySession } from "../services/identity-session";
+import { runMaintenance } from "../services/maintenance";
 import { publishSendFileObject } from "../services/sends/file-storage";
-import * as authRequestsDb from "../services/db/auth-requests";
+import { hashRefreshToken } from "../utils/jwt";
 
 export interface DatabaseMaintenanceScenarioContext {
 	readonly database: D1Database;
@@ -679,6 +684,53 @@ export function registerDatabaseMaintenanceScenarios(
 					.where("id", "=", user.id)
 					.executeTakeFirstOrThrow(),
 				{ api_key_hash: "first-hash", api_key_encrypted: firstEnvelope },
+			);
+		} finally {
+			await db
+				.updateTable("users")
+				.set({
+					api_key_hash: user.api_key_hash,
+					api_key_encrypted: user.api_key_encrypted,
+				})
+				.where("id", "=", user.id)
+				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("persists exactly one API key from a shared rotation snapshot", async () => {
+		const { db } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select(["id", "api_key_hash", "api_key_encrypted"])
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		try {
+			const keys = await Promise.all(
+				Array.from({ length: 8 }, () =>
+					rotateUserApiKey(
+						db,
+						user.id,
+						user.api_key_encrypted,
+						context.bindings.DATA_ENCRYPTION_SECRET,
+					),
+				),
+			);
+			const winners = keys.filter((key): key is string => key !== null);
+			assert.equal(winners.length, 1);
+			const persisted = await db
+				.selectFrom("users")
+				.select(["api_key_hash", "api_key_encrypted"])
+				.where("id", "=", user.id)
+				.executeTakeFirstOrThrow();
+			assert.equal(persisted.api_key_hash, await hashCredential(winners[0]));
+			assert.equal(
+				await decryptCredential(
+					persisted.api_key_encrypted ?? "",
+					context.bindings.DATA_ENCRYPTION_SECRET,
+					"api-key",
+				),
+				winners[0],
 			);
 		} finally {
 			await db
