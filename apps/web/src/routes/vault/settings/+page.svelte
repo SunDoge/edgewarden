@@ -9,38 +9,25 @@ import {
 	disableTwoFactorApi,
 	enableAuthenticatorApi,
 	changeMasterPasswordApi,
-	createAccountPasskeyApi,
-	deleteAccountPasskeyApi,
 	deleteTwoFactorPasskeyApi,
 	fetchApiKeyApi,
 	fetchDevicesApi,
 	fetchProfileApi,
 	fetchRecoveryCodeApi,
 	getAuthenticatorApi,
-	getAccountPasskeyAttestationOptionsApi,
-	getAccountPasskeyAssertionOptionsApi,
 	getTwoFactorPasskeysApi,
 	getTwoFactorPasskeyChallengeApi,
 	createTwoFactorPasskeyApi,
 	isLoggedIn,
-	listAccountPasskeysApi,
 	renameDeviceApi,
 	rotateApiKeyApi,
 	updateProfileApi,
-	updateAccountPasskeyEncryptionApi,
 } from "$lib/services/api";
 import {
-	bytesToBase64,
 	deriveMasterKey,
 	deriveMasterPasswordHash,
 } from "$lib/services/crypto";
-import {
-	assertAccountPasskey,
-	buildAccountPasskeyPrfKeySet,
-	buildAccountPasskeyPrfKeySetFromPrfKey,
-	createAccountPasskeyCredential,
-	createTwoFactorPasskeyCredential,
-} from "$lib/services/passkeys";
+import { createTwoFactorPasskeyCredential } from "$lib/services/passkeys";
 import {
 	encryptVaultKeyForAuthRequest,
 	listPendingAuthRequestsApi,
@@ -49,6 +36,7 @@ import {
 } from "$lib/services/auth-requests";
 import { vault, syncVaultData, logout } from "$lib/stores/vault.svelte";
 import { Button } from "$lib/components/ui/button/index.js";
+import AccountPasskeys from "$lib/components/settings/AccountPasskeys.svelte";
 import YubikeySettings from "$lib/components/settings/YubikeySettings.svelte";
 import { Input } from "$lib/components/ui/input/index.js";
 import * as Field from "$lib/components/ui/field/index.js";
@@ -84,7 +72,6 @@ let message = $state("");
 let error = $state("");
 let profile = $state<any>(null);
 let devices = $state<any[]>([]);
-let passkeys = $state<any[]>([]);
 let authRequests = $state<AuthRequest[]>([]);
 let apiKey = $state("");
 let name = $state("");
@@ -111,13 +98,6 @@ let passwordOpen = $state(false);
 let currentPassword = $state("");
 let newPassword = $state("");
 let confirmPassword = $state("");
-let passkeyOpen = $state(false);
-let passkeyName = $state("");
-let passkeyPassword = $state("");
-let deletePasskey = $state<any>(null);
-let deletePasskeyPassword = $state("");
-let enablePasskey = $state<any>(null);
-let enablePasskeyPassword = $state("");
 let theme = $state<ThemePreference>("system");
 let lockTimeoutMinutes = $state<"0" | "1" | "5" | "15" | "30">("15");
 let sessionTimeoutAction = $state<SessionTimeoutAction>("lock");
@@ -135,10 +115,9 @@ async function load() {
 	loading = true;
 	error = "";
 	try {
-		[profile, { data: devices }, { data: passkeys }] = await Promise.all([
+		[profile, { data: devices }] = await Promise.all([
 			fetchProfileApi(),
 			fetchDevicesApi(),
-			listAccountPasskeysApi(),
 		]);
 		name = profile.name ?? "";
 		hint = profile.masterPasswordHint ?? "";
@@ -413,112 +392,6 @@ async function changeMasterPassword() {
 	}
 }
 
-async function createPasskey() {
-	if (!passkeyPassword) return;
-	busy = "passkey-create";
-	try {
-		const hash = await passwordHash(passkeyPassword);
-		const options = await getAccountPasskeyAttestationOptionsApi(hash);
-		const pending = await createAccountPasskeyCredential(options);
-		let keySet: {
-			encryptedUserKey?: string;
-			encryptedPublicKey?: string;
-			encryptedPrivateKey?: string;
-		} = {};
-		if (pending.supportsPrf && vault.symEncKey && vault.symMacKey) {
-			try {
-				keySet = await buildAccountPasskeyPrfKeySet(pending, {
-					symEncKey: bytesToBase64(vault.symEncKey),
-					symMacKey: bytesToBase64(vault.symMacKey),
-				});
-			} catch (e) {
-				if (
-					!confirm(
-						"无法为这把通行密钥启用保险库直接解锁。仍保存为仅登录通行密钥？",
-					)
-				)
-					throw e;
-			}
-		}
-		await createAccountPasskeyApi({
-			token: pending.token,
-			deviceResponse: pending.request,
-			name: passkeyName.trim() || undefined,
-			supportsPrf: pending.supportsPrf && !!keySet.encryptedUserKey,
-			...keySet,
-		});
-		passkeys = (await listAccountPasskeysApi()).data;
-		passkeyOpen = false;
-		passkeyName = "";
-		passkeyPassword = "";
-		message = "通行密钥已添加";
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
-}
-
-async function removePasskey() {
-	if (!deletePasskey || !deletePasskeyPassword) return;
-	busy = "passkey-delete";
-	try {
-		await deleteAccountPasskeyApi(
-			deletePasskey.id,
-			await passwordHash(deletePasskeyPassword),
-		);
-		passkeys = passkeys.filter((item) => item.id !== deletePasskey.id);
-		deletePasskey = null;
-		deletePasskeyPassword = "";
-		message = "通行密钥已删除";
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
-}
-
-async function enablePasskeyDirectUnlock() {
-	if (
-		!enablePasskey ||
-		!enablePasskeyPassword ||
-		!vault.symEncKey ||
-		!vault.symMacKey
-	)
-		return;
-	busy = "passkey-enable";
-	try {
-		const assertion = await assertAccountPasskey(
-			await getAccountPasskeyAssertionOptionsApi(
-				await passwordHash(enablePasskeyPassword),
-				enablePasskey.id,
-			),
-		);
-		if (!assertion.prfKey)
-			throw new Error("这把通行密钥没有返回 PRF 密钥，无法启用直接解锁");
-		const keySet = await buildAccountPasskeyPrfKeySetFromPrfKey(
-			assertion.prfKey,
-			{
-				symEncKey: bytesToBase64(vault.symEncKey),
-				symMacKey: bytesToBase64(vault.symMacKey),
-			},
-		);
-		await updateAccountPasskeyEncryptionApi({
-			token: assertion.token,
-			deviceResponse: assertion.deviceResponse,
-			...keySet,
-		});
-		passkeys = (await listAccountPasskeysApi()).data;
-		enablePasskey = null;
-		enablePasskeyPassword = "";
-		message = "已启用通行密钥直接解锁";
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
-}
-
 async function manageTwoFactorPasskeys() {
 	if (!twoFactorPasskeyPassword) return;
 	busy = "2fa-passkey-load";
@@ -695,14 +568,12 @@ async function respondToAuthRequest(request: AuthRequest, approved: boolean) {
 			onError={fail}
 		/>
 
-		<Card.Root>
-			<Card.Header class="flex-row items-start justify-between"><div><Card.Title>通行密钥</Card.Title><Card.Description>最多添加 5 把 WebAuthn 通行密钥；支持 PRF 的设备可直接解锁保险库。</Card.Description></div><Button size="sm" onclick={() => passkeyOpen = true} disabled={passkeys.length >= 5}>添加</Button></Card.Header>
-			<Card.Content class="flex flex-col gap-2">
-				{#each passkeys as passkey (passkey.id)}
-					<div class="flex items-center justify-between gap-3 rounded-md border p-3"><div><div class="font-medium">{passkey.name || "通行密钥"}</div><div class="text-xs text-muted-foreground">{passkey.creationDate ? new Date(passkey.creationDate).toLocaleString() : ""}</div></div><div class="flex items-center gap-2"><Badge variant={passkey.prfStatus === 0 ? "default" : "secondary"}>{passkey.prfStatus === 0 ? "可直接解锁" : passkey.prfStatus === 1 ? "可启用直接解锁" : "仅登录"}</Badge>{#if passkey.prfStatus === 1}<Button variant="outline" size="sm" onclick={() => enablePasskey = passkey}><ShieldCheck />启用直接解锁</Button>{/if}<Button variant="ghost" size="icon-sm" onclick={() => deletePasskey = passkey} aria-label="删除通行密钥"><Trash2 /></Button></div></div>
-				{:else}<p class="py-4 text-sm text-muted-foreground">尚未添加通行密钥。</p>{/each}
-			</Card.Content>
-		</Card.Root>
+		<AccountPasskeys
+			email={profile.email}
+			kdfIterations={profile.kdfIterations}
+			onMessage={(value) => { message = value; error = ""; }}
+			onError={fail}
+		/>
 
 		<Card.Root>
 			<Card.Header class="flex-row items-start justify-between"><div><Card.Title>待审批设备登录</Card.Title><Card.Description>批准前请在请求设备上核对公钥指纹和设备信息。</Card.Description></div><Button variant="outline" size="sm" onclick={refreshAuthRequests} disabled={busy === "auth-requests"}><RefreshCw class={busy === "auth-requests" ? "animate-spin" : ""} />刷新</Button></Card.Header>
@@ -744,11 +615,6 @@ async function respondToAuthRequest(request: AuthRequest, approved: boolean) {
 
 <Dialog.Root bind:open={passwordOpen}><Dialog.Content><Dialog.Header><Dialog.Title>更改主密码</Dialog.Title><Dialog.Description>保险库密钥会使用新密码重新加密。完成后需要重新登录所有设备。</Dialog.Description></Dialog.Header><Field.Group><Field.Field><Field.Label for="current-password">当前主密码</Field.Label><Input id="current-password" type="password" bind:value={currentPassword} autocomplete="current-password" /></Field.Field><Field.Field><Field.Label for="new-password">新主密码</Field.Label><Input id="new-password" type="password" bind:value={newPassword} autocomplete="new-password" /><Field.Description>至少 12 个字符。</Field.Description></Field.Field><Field.Field><Field.Label for="confirm-password">确认新主密码</Field.Label><Input id="confirm-password" type="password" bind:value={confirmPassword} autocomplete="new-password" /></Field.Field></Field.Group><Dialog.Footer><Button variant="outline" onclick={() => passwordOpen = false}>取消</Button><Button variant="destructive" onclick={changeMasterPassword} disabled={!currentPassword || newPassword.length < 12 || !confirmPassword || busy === "password"}>更改并退出</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
 
-<Dialog.Root bind:open={passkeyOpen}><Dialog.Content><Dialog.Header><Dialog.Title>添加通行密钥</Dialog.Title><Dialog.Description>需要当前主密码验证身份，随后浏览器会打开 WebAuthn 提示。</Dialog.Description></Dialog.Header><Field.Group><Field.Field><Field.Label for="passkey-name">名称</Field.Label><Input id="passkey-name" bind:value={passkeyName} placeholder="例如：MacBook Touch ID" /></Field.Field><Field.Field><Field.Label for="passkey-password">当前主密码</Field.Label><Input id="passkey-password" type="password" bind:value={passkeyPassword} autocomplete="current-password" /></Field.Field></Field.Group><Dialog.Footer><Button variant="outline" onclick={() => passkeyOpen = false}>取消</Button><Button onclick={createPasskey} disabled={!passkeyPassword || busy === "passkey-create"}>创建通行密钥</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
 
-<Dialog.Root open={!!enablePasskey} onOpenChange={(open) => { if (!open) enablePasskey = null; }}><Dialog.Content><Dialog.Header><Dialog.Title>启用直接解锁</Dialog.Title><Dialog.Description>验证主密码和这把通行密钥后，浏览器会使用 PRF 输出保护保险库密钥。</Dialog.Description></Dialog.Header><Field.Field><Field.Label for="enable-passkey-password">当前主密码</Field.Label><Input id="enable-passkey-password" type="password" bind:value={enablePasskeyPassword} autocomplete="current-password" /></Field.Field><Dialog.Footer><Button variant="outline" onclick={() => enablePasskey = null}>取消</Button><Button onclick={enablePasskeyDirectUnlock} disabled={!enablePasskeyPassword || busy === "passkey-enable"}>启用</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
 
 <Dialog.Root bind:open={twoFactorPasskeyOpen}><Dialog.Content><Dialog.Header><Dialog.Title>两步验证安全密钥</Dialog.Title><Dialog.Description>先用主密码验证身份，再添加或删除安全密钥。</Dialog.Description></Dialog.Header><Field.Group><Field.Field><Field.Label for="two-factor-passkey-password">当前主密码</Field.Label><Input id="two-factor-passkey-password" type="password" bind:value={twoFactorPasskeyPassword} autocomplete="current-password" /></Field.Field><Field.Field orientation="horizontal"><Button variant="outline" onclick={manageTwoFactorPasskeys} disabled={!twoFactorPasskeyPassword || busy === "2fa-passkey-load"}>读取设置</Button></Field.Field>{#if twoFactorPasskeys.length}<div class="space-y-2">{#each twoFactorPasskeys as credential (credential.id)}<div class="flex items-center justify-between rounded-md border p-3"><span>{credential.name || "安全密钥"}</span><Button variant="ghost" size="icon-sm" onclick={() => removeTwoFactorPasskey(String(credential.id))} disabled={busy === `2fa-passkey-${credential.id}`} aria-label="删除安全密钥"><Trash2 /></Button></div>{/each}</div>{/if}<Field.Field><Field.Label for="two-factor-passkey-name">新安全密钥名称</Field.Label><Input id="two-factor-passkey-name" bind:value={twoFactorPasskeyName} placeholder="例如：USB 安全密钥" /></Field.Field></Field.Group><Dialog.Footer><Button variant="outline" onclick={() => twoFactorPasskeyOpen = false}>关闭</Button><Button onclick={addTwoFactorPasskey} disabled={!twoFactorPasskeyPassword || busy === "2fa-passkey-create"}><Fingerprint />添加安全密钥</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
-
-
-<Dialog.Root open={!!deletePasskey} onOpenChange={(open) => { if (!open) deletePasskey = null; }}><Dialog.Content><Dialog.Header><Dialog.Title>删除通行密钥</Dialog.Title><Dialog.Description>请输入当前主密码确认删除“{deletePasskey?.name || "通行密钥"}”。</Dialog.Description></Dialog.Header><Field.Field><Field.Label for="delete-passkey-password">当前主密码</Field.Label><Input id="delete-passkey-password" type="password" bind:value={deletePasskeyPassword} autocomplete="current-password" /></Field.Field><Dialog.Footer><Button variant="outline" onclick={() => deletePasskey = null}>取消</Button><Button variant="destructive" onclick={removePasskey} disabled={!deletePasskeyPassword || busy === "passkey-delete"}>删除</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
