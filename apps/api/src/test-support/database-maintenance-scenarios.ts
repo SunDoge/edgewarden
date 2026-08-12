@@ -6,6 +6,10 @@ import {
 	getDefaultBackupSettings,
 	saveBackupSettings,
 } from "../services/backup/config";
+import {
+	acquireDataOperationLease,
+	releaseDataOperationLease,
+} from "../services/backup/operation-lease";
 import { executeBatch } from "../services/db/batch";
 import {
 	deleteConfigValue,
@@ -25,6 +29,46 @@ export function registerDatabaseMaintenanceScenarios(
 	context: DatabaseMaintenanceScenarioContext,
 ): void {
 	const EMAIL = context.email;
+	test("serializes data operations with an expiring owned lease", async () => {
+		const timestamp = Math.floor(Date.now() / 1000);
+		const first = await acquireDataOperationLease(
+			context.database,
+			"backup.first",
+			timestamp,
+			60,
+		);
+		assert.ok(first);
+		assert.equal(
+			await acquireDataOperationLease(
+				context.database,
+				"backup.concurrent",
+				timestamp + 1,
+				60,
+			),
+			null,
+		);
+		await releaseDataOperationLease(context.database, {
+			...first,
+			token: crypto.randomUUID(),
+		});
+		assert.equal(
+			await acquireDataOperationLease(
+				context.database,
+				"backup.still_locked",
+				timestamp + 2,
+				60,
+			),
+			null,
+		);
+		const recovered = await acquireDataOperationLease(
+			context.database,
+			"backup.after_expiry",
+			timestamp + 61,
+			60,
+		);
+		assert.ok(recovered);
+		await releaseDataOperationLease(context.database, recovered);
+	});
 	test("database enforces cipher ownership and type invariants", async () => {
 		const { db } = await createDatabase(context.database);
 		try {

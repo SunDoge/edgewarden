@@ -176,6 +176,16 @@ export async function runScheduledTasks(
 			}),
 		);
 	}
+	if (backupResult?.busy) {
+		console.log(
+			JSON.stringify({
+				event: "scheduled.skipped_busy",
+				durationMs: Date.now() - startedAt,
+				backup: backupResult,
+			}),
+		);
+		return;
+	}
 	try {
 		maintenanceResult = await runScheduledMaintenance(env);
 	} catch (error) {

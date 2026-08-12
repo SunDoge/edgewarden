@@ -10,6 +10,7 @@ import {
 	getStoredSendFileObjectKey,
 } from "./blob-store";
 import * as attachmentsDb from "./db/attachments";
+import { withDataOperationLease } from "./backup/operation-lease";
 
 const BATCH_LIMIT = 100;
 const AUTH_REQUEST_RETENTION_SECONDS = 24 * 60 * 60;
@@ -472,10 +473,12 @@ export async function runMaintenance(
 export async function runScheduledMaintenance(
 	env: CloudflareBindings,
 ): Promise<MaintenanceResult> {
-	const { db } = await createDatabase(env.DB);
-	try {
-		return await runMaintenance(db, env);
-	} finally {
-		await db.destroy();
-	}
+	return withDataOperationLease(env.DB, "maintenance.scheduled", async () => {
+		const { db } = await createDatabase(env.DB);
+		try {
+			return await runMaintenance(db, env);
+		} finally {
+			await db.destroy();
+		}
+	});
 }

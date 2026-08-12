@@ -13,6 +13,10 @@ import {
 } from "../services/backup/archive";
 import { importRemoteBackupArchiveBytes } from "../services/backup/import";
 import { loadRemoteBackupSession } from "../services/backup/remote-session";
+import {
+	acquireDataOperationLease,
+	releaseDataOperationLease,
+} from "../services/backup/operation-lease";
 import { createBlobStore } from "../services/blob-store";
 import { errorResponse } from "../utils/response";
 
@@ -140,6 +144,16 @@ export const restoreRemoteBackup = factory.createHandlers(
 		const body = c.req.valid("json");
 		const { destinationId, path, replaceExisting, allowChecksumMismatch } =
 			body;
+		const lease = await acquireDataOperationLease(
+			c.env.DB,
+			"backup.restore_remote",
+		);
+		if (!lease) {
+			return errorResponse(
+				"Another backup, restore, or maintenance operation is running",
+				409,
+			);
+		}
 		try {
 			const { session } = await loadRemoteBackupSession(
 				c.get("db"),
@@ -184,6 +198,8 @@ export const restoreRemoteBackup = factory.createHandlers(
 				error.message || "Failed to restore remote backup",
 				500,
 			);
+		} finally {
+			await releaseDataOperationLease(c.env.DB, lease).catch(() => undefined);
 		}
 	},
 );

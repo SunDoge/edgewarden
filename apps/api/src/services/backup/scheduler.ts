@@ -11,6 +11,10 @@ import {
 	saveBackupSettings,
 } from "./config";
 import {
+	acquireDataOperationLease,
+	releaseDataOperationLease,
+} from "./operation-lease";
+import {
 	createRemoteBackupTransferSession,
 	pruneRemoteBackupArchives,
 } from "./uploader";
@@ -29,6 +33,7 @@ export interface ScheduledBackupResult {
 	due: number;
 	succeeded: number;
 	failed: number;
+	busy: boolean;
 }
 
 export async function runScheduledBackupIfDue(
@@ -37,7 +42,17 @@ export async function runScheduledBackupIfDue(
 	const db = await createBackupDatabase(env.DB);
 	const dataEncryptionSecret = env.DATA_ENCRYPTION_SECRET;
 	const blobStore = createBlobStore(env);
-	const result: ScheduledBackupResult = { due: 0, succeeded: 0, failed: 0 };
+	const result: ScheduledBackupResult = {
+		due: 0,
+		succeeded: 0,
+		failed: 0,
+		busy: false,
+	};
+	const lease = await acquireDataOperationLease(env.DB, "backup.scheduled");
+	if (!lease) {
+		await db.destroy();
+		return { ...result, busy: true };
+	}
 	try {
 		const settings = await loadBackupSettings(db, dataEncryptionSecret, "UTC");
 
@@ -139,6 +154,7 @@ export async function runScheduledBackupIfDue(
 		}
 		return result;
 	} finally {
+		await releaseDataOperationLease(env.DB, lease).catch(() => undefined);
 		await db.destroy();
 	}
 }
