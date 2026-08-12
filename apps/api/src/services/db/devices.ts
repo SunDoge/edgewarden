@@ -1,4 +1,4 @@
-import type { Kysely, Selectable } from "kysely";
+import { type Kysely, type Selectable, sql } from "kysely";
 import type { DB, Devices } from "../../types/db";
 import { now } from "../../utils/time";
 
@@ -67,17 +67,23 @@ export async function updateDeviceKeys(
 	encryptedUserKey: string,
 	encryptedPublicKey: string,
 	encryptedPrivateKey: string,
+	expectedSessionStamp: string | null,
+	expectedMutationToken: string | null,
 ): Promise<boolean> {
+	const timestamp = now();
 	const result = await db
 		.updateTable("devices")
 		.set({
 			encrypted_user_key: encryptedUserKey,
 			encrypted_public_key: encryptedPublicKey,
 			encrypted_private_key: encryptedPrivateKey,
-			updated_at: now(),
+			updated_at: sql<number>`MAX(updated_at + 1, ${timestamp})`,
+			mutation_token: crypto.randomUUID(),
 		})
 		.where("user_id", "=", userId)
 		.where("device_identifier", "=", deviceIdentifier)
+		.where(sql<boolean>`session_stamp IS ${expectedSessionStamp}`)
+		.where(sql<boolean>`mutation_token IS ${expectedMutationToken}`)
 		.executeTakeFirst();
 	return result.numUpdatedRows === 1n;
 }
@@ -87,12 +93,21 @@ export async function updateDeviceName(
 	userId: string,
 	deviceIdentifier: string,
 	name: string,
+	expectedSessionStamp: string | null,
+	expectedMutationToken: string | null,
 ): Promise<boolean> {
+	const timestamp = now();
 	const result = await db
 		.updateTable("devices")
-		.set({ name, updated_at: now() })
+		.set({
+			name,
+			updated_at: sql<number>`MAX(updated_at + 1, ${timestamp})`,
+			mutation_token: crypto.randomUUID(),
+		})
 		.where("user_id", "=", userId)
 		.where("device_identifier", "=", deviceIdentifier)
+		.where(sql<boolean>`session_stamp IS ${expectedSessionStamp}`)
+		.where(sql<boolean>`mutation_token IS ${expectedMutationToken}`)
 		.executeTakeFirst();
 	return result.numUpdatedRows === 1n;
 }
