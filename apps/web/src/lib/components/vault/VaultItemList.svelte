@@ -38,6 +38,7 @@ let {
 	onBulkAction,
 	onClearSelection,
 	onMove,
+	onSelectItem,
 }: {
 	items: any[];
 	isSyncing: boolean;
@@ -55,6 +56,7 @@ let {
 	) => void;
 	onClearSelection: () => void;
 	onMove: () => void;
+	onSelectItem?: (item: any) => void;
 } = $props();
 
 const rowHeight = 72;
@@ -83,15 +85,15 @@ $effect(() => {
 	currentBucket = 0;
 });
 
-	function revealIcon(event: Event) {
-		(event.currentTarget as HTMLImageElement).style.opacity = "1";
-	}
+function revealIcon(event: Event) {
+	(event.currentTarget as HTMLImageElement).style.opacity = "1";
+}
 
-	function hideBrokenIcon(event: Event) {
-		const image = event.currentTarget as HTMLImageElement;
-		image.style.display = "none";
-		image.nextElementSibling?.classList.remove("hidden");
-	}
+function hideBrokenIcon(event: Event) {
+	const image = event.currentTarget as HTMLImageElement;
+	image.style.display = "none";
+	image.nextElementSibling?.classList.remove("hidden");
+}
 </script>
 
 <section class="flex flex-1 flex-col overflow-hidden border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -127,7 +129,7 @@ $effect(() => {
 			<div style="padding-top: {padTop}px; padding-bottom: {padBottom}px;" class="divide-y divide-slate-100 dark:divide-slate-800/50">
 				{#each visibleItems as item (item.id)}
 					{@const Icon = cipherTypeIcon(item.type)}
-					<div class="flex items-center"><input type="checkbox" checked={!!selectedIds[item.id]} onchange={() => onToggleSelection(item.id)} aria-label={`选择 ${item.name}`} class="ml-3 size-4 rounded border-input" /><button class="flex w-full items-center gap-3.5 border-l-2 p-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/30 {selectedItem?.id === item.id ? 'border-primary bg-primary/5 dark:bg-primary/10' : 'border-transparent'}" onclick={() => selectedItem = item}>
+					<div class="flex items-center"><input type="checkbox" checked={!!selectedIds[item.id]} onchange={() => onToggleSelection(item.id)} aria-label={`选择 ${item.name}`} class="ml-3 size-4 rounded border-input" /><button class="flex w-full items-center gap-3.5 border-l-2 p-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/30 {selectedItem?.id === item.id ? 'border-primary bg-primary/5 dark:bg-primary/10' : 'border-transparent'}" onclick={() => { selectedItem = item; onSelectItem?.(item); }}>
 						<div class="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/50 bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">{#if cipherDomain(item)}<img src="/icons/{encodeURIComponent(cipherDomain(item) ?? '')}/icon.png" alt="" class="size-5.5 rounded-md object-contain" onload={revealIcon} onerror={hideBrokenIcon} style="opacity: 0; transition: opacity 0.2s;" /><div class="absolute inset-0 hidden items-center justify-center"><Icon class="size-5" /></div>{:else}<Icon class="size-5" />{/if}</div>
 						<div class="min-w-0 flex-1"><div class="flex items-center gap-1.5"><h4 class="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{item.name}</h4>{#if item.favorite}<Star class="size-3 shrink-0 fill-current text-amber-400" />{/if}</div><p class="mt-0.5 truncate text-xs text-slate-500">{item.login?.username || cipherTypeName(item.type)}</p></div>
 					</button></div>
