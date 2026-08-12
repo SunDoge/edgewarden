@@ -14,6 +14,7 @@ import {
 	conditionalWebauthnEncryptionUpdateQuery,
 } from "../services/db/batch";
 import * as webauthnDb from "../services/db/webauthn";
+import { refreshTokenRotationInsertQuery } from "../services/identity-refresh";
 
 export interface AuthReliabilityScenarioContext {
 	readonly database: D1Database;
@@ -567,6 +568,127 @@ export function registerAuthReliabilityScenarios(
 				.deleteFrom("webauthn_challenges")
 				.where("challenge_hash", "in", hashes)
 				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("revalidates account and device state during refresh rotation", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const timestamp = Math.floor(Date.now() / 1000);
+		const userId = crypto.randomUUID();
+		const originalStamp = crypto.randomUUID();
+		const deviceId = `refresh-device-${crypto.randomUUID()}`;
+		const originalDeviceStamp = crypto.randomUUID();
+		const oldTokenHash = `old-refresh-${crypto.randomUUID()}`;
+		const insertedHashes: string[] = [];
+		const insertOldToken = () =>
+			db
+				.insertInto("refresh_tokens")
+				.values({
+					token: oldTokenHash,
+					user_id: userId,
+					expires_at: timestamp + 3600,
+					device_identifier: deviceId,
+					device_session_stamp: originalDeviceStamp,
+				})
+				.execute();
+		const rotate = async (newTokenHash: string) => {
+			insertedHashes.push(newTokenHash);
+			const [inserted] = await dialect.batch([
+				refreshTokenRotationInsertQuery(db, {
+					oldTokenHash,
+					newTokenHash,
+					userId,
+					expectedSecurityStamp: originalStamp,
+					sessionTime: timestamp,
+				}),
+				db
+					.deleteFrom("refresh_tokens")
+					.where("token", "=", oldTokenHash)
+					.compile(),
+			]);
+			return inserted.numAffectedRows ?? 0n;
+		};
+		try {
+			await db
+				.insertInto("users")
+				.values({
+					id: userId,
+					email: `refresh-${crypto.randomUUID()}@example.com`,
+					master_password_hash: "isolated-refresh-hash",
+					key: "isolated-refresh-key",
+					kdf_type: 0,
+					kdf_iterations: 600_000,
+					kdf_memory: null,
+					kdf_parallelism: null,
+					security_stamp: originalStamp,
+					created_at: timestamp,
+					updated_at: timestamp,
+				})
+				.execute();
+			await db
+				.insertInto("devices")
+				.values({
+					user_id: userId,
+					device_identifier: deviceId,
+					name: "Refresh reliability device",
+					type: 14,
+					session_stamp: originalDeviceStamp,
+					mutation_token: crypto.randomUUID(),
+					created_at: timestamp,
+					updated_at: timestamp,
+				})
+				.execute();
+
+			await insertOldToken();
+			await db
+				.updateTable("users")
+				.set({ security_stamp: crypto.randomUUID() })
+				.where("id", "=", userId)
+				.execute();
+			assert.equal(await rotate(`new-user-${crypto.randomUUID()}`), 0n);
+
+			await db
+				.updateTable("users")
+				.set({ security_stamp: originalStamp })
+				.where("id", "=", userId)
+				.execute();
+			await insertOldToken();
+			await db
+				.updateTable("devices")
+				.set({ session_stamp: crypto.randomUUID() })
+				.where("user_id", "=", userId)
+				.where("device_identifier", "=", deviceId)
+				.execute();
+			assert.equal(await rotate(`new-device-${crypto.randomUUID()}`), 0n);
+
+			await db
+				.updateTable("devices")
+				.set({ session_stamp: originalDeviceStamp })
+				.where("user_id", "=", userId)
+				.where("device_identifier", "=", deviceId)
+				.execute();
+			await insertOldToken();
+			const validHash = `new-valid-${crypto.randomUUID()}`;
+			assert.equal(await rotate(validHash), 1n);
+			assert.deepEqual(
+				await db
+					.selectFrom("refresh_tokens")
+					.select(["user_id", "device_identifier", "device_session_stamp"])
+					.where("token", "=", validHash)
+					.executeTakeFirstOrThrow(),
+				{
+					user_id: userId,
+					device_identifier: deviceId,
+					device_session_stamp: originalDeviceStamp,
+				},
+			);
+		} finally {
+			await db
+				.deleteFrom("refresh_tokens")
+				.where("token", "in", [oldTokenHash, ...insertedHashes])
+				.execute();
+			await db.deleteFrom("users").where("id", "=", userId).execute();
 			await db.destroy();
 		}
 	});
