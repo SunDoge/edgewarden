@@ -182,6 +182,57 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		}
 	});
 
+	test("rolls back a cipher update when its revision write fails", async () => {
+		const auth = { authorization: `Bearer ${context.accessToken}` };
+		const beforeResponse = await request(`/api/ciphers/${context.cipherId}`, {
+			headers: auth,
+		});
+		assert.equal(beforeResponse.status, 200);
+		const before = await beforeResponse.json<{
+			name: string;
+			revisionDate: string;
+		}>();
+		await context.database
+			.prepare(`
+				CREATE TRIGGER test_fail_cipher_revision
+				BEFORE UPDATE ON user_revisions
+				BEGIN
+					SELECT RAISE(ABORT, 'forced revision failure');
+				END
+			`)
+			.run();
+		try {
+			const response = await request(`/api/ciphers/${context.cipherId}`, {
+				method: "PUT",
+				headers: { ...auth, "content-type": "application/json" },
+				body: JSON.stringify({
+					type: 1,
+					name: "must-not-be-committed",
+					login: {
+						username: "encrypted-user",
+						password: "encrypted-new-password",
+					},
+					lastKnownRevisionDate: before.revisionDate,
+				}),
+			});
+			assert.equal(response.status, 500, await response.clone().text());
+		} finally {
+			await context.database
+				.prepare("DROP TRIGGER IF EXISTS test_fail_cipher_revision")
+				.run();
+		}
+
+		const afterResponse = await request(`/api/ciphers/${context.cipherId}`, {
+			headers: auth,
+		});
+		assert.equal(afterResponse.status, 200);
+		const after = await afterResponse.json<{
+			name: string;
+			revisionDate: string;
+		}>();
+		assert.deepEqual(after, before);
+	});
+
 	test("stores auth request access codes as protected credentials", async () => {
 		const accessCode = "auth-request-client-secret";
 		const response = await request("/api/auth-requests", {

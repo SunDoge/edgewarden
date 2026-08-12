@@ -1,5 +1,5 @@
 import { vValidator } from "@hono/valibot-validator";
-import type { Selectable } from "kysely";
+import { type CompiledQuery, type Selectable, sql } from "kysely";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { CipherSchema } from "../schemas/ciphers";
@@ -11,6 +11,7 @@ import {
 	getCipherCollectionIds,
 	getCipherPermissions,
 	revisionQueriesForCipher,
+	revisionUserIdsForCipher,
 	validateOrganizationCollections,
 } from "../services/ciphers/access";
 import {
@@ -229,28 +230,53 @@ export const updateCipher = factory.createHandlers(
 				query.where("updated_at", "=", cipher.updated_at),
 			)
 			.compile();
-		const [updateResult] = await c.get("dbDialect").batch([updateQuery]);
+		const committedCipher = db
+			.selectFrom("ciphers")
+			.select("id")
+			.where("id", "=", cipher.id)
+			.where("updated_at", "=", ts);
+		const followupQueries: CompiledQuery[] = [
+			db
+				.deleteFrom("cipher_collections")
+				.where("cipher_id", "=", cipher.id)
+				.where(({ exists }) => exists(committedCipher))
+				.compile(),
+			...collectionIds.map((collectionId) =>
+				db
+					.insertInto("cipher_collections")
+					.columns(["cipher_id", "collection_id"])
+					.expression(
+						db
+							.selectNoFrom([
+								sql<string>`${cipher.id}`.as("cipher_id"),
+								sql<string>`${collectionId}`.as("collection_id"),
+							])
+							.where(({ exists }) => exists(committedCipher)),
+					)
+					.compile(),
+			),
+			...(await revisionUserIdsForCipher(db, cipher)).map((userId) =>
+				sql`
+					INSERT INTO user_revisions (user_id, revision_date)
+					SELECT ${userId}, ${ts}
+					WHERE EXISTS (
+						SELECT 1 FROM ciphers
+						WHERE id = ${cipher.id} AND updated_at = ${ts}
+					)
+					ON CONFLICT (user_id) DO UPDATE
+					SET revision_date = excluded.revision_date
+				`.compile(db),
+			),
+		];
+		const [updateResult] = await c
+			.get("dbDialect")
+			.batch([updateQuery, ...followupQueries]);
 		if (updateResult.numAffectedRows === 0n) {
 			return errorResponse(
 				"Cipher has been modified since it was last retrieved",
 				409,
 			);
 		}
-
-		await executeBatch(c.get("dbDialect"), [
-			db
-				.deleteFrom("cipher_collections")
-				.where("cipher_id", "=", cipher.id)
-				.compile(),
-			...collectionIds.map((collectionId) =>
-				db
-					.insertInto("cipher_collections")
-					.values({ cipher_id: cipher.id, collection_id: collectionId })
-					.compile(),
-			),
-			...(await revisionQueriesForCipher(db, cipher, ts)),
-		]);
-
 		const updated = await ciphersDb.getCipherById(db, cipher.id);
 		return c.json(
 			cipherToResponse(
