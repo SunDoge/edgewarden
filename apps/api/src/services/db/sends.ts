@@ -1,4 +1,4 @@
-import type { Kysely, Selectable, Insertable } from "kysely";
+import { type Kysely, type Selectable, type Insertable, sql } from "kysely";
 import type { DB, Sends } from "../../types/db";
 import { now } from "../../utils/time";
 
@@ -60,16 +60,33 @@ export async function deleteSend(
 	return Number(result.numDeletedRows) > 0;
 }
 
-export async function incrementAccessCount(
+export async function consumeAccess(
 	db: Kysely<DB>,
 	id: string,
-): Promise<void> {
-	await db
+	timestamp = now(),
+): Promise<boolean> {
+	const result = await db
 		.updateTable("sends")
 		.set((eb) => ({
 			access_count: eb("access_count", "+", 1),
-			updated_at: now(),
+			updated_at: sql<number>`MAX(updated_at + 1, ${timestamp})`,
 		}))
 		.where("id", "=", id)
-		.execute();
+		.where("disabled", "=", 0)
+		.where("deletion_date", ">", timestamp)
+		.where((eb) =>
+			eb.or([
+				eb("expiration_date", "is", null),
+				eb("expiration_date", ">", timestamp),
+			]),
+		)
+		.where((eb) =>
+			eb.or([
+				eb("max_access_count", "is", null),
+				eb("access_count", "<", eb.ref("max_access_count")),
+			]),
+		)
+		.where("purge_token", "is", null)
+		.executeTakeFirst();
+	return result.numUpdatedRows === 1n;
 }

@@ -36,6 +36,18 @@ import { errorResponse } from "../utils/response";
 
 // ── Public sends router (unauthenticated APIs) ───────────────────────────────
 
+async function sendFileExists(
+	env: CloudflareBindings,
+	objectKey: string,
+	expectedSize: number | null,
+) {
+	if (expectedSize === null || expectedSize < 0) return false;
+	const object = await getBlobObject(env, objectKey);
+	if (!object) return false;
+	await object.body?.cancel().catch(() => undefined);
+	return object.size === expectedSize;
+}
+
 export const accessPublicSend = factory.createHandlers(
 	vValidator("json", SendAccessSchema),
 	async (c) => {
@@ -70,11 +82,22 @@ export const accessPublicSend = factory.createHandlers(
 		}
 
 		if (send.type === 0) {
-			await sendsDb.incrementAccessCount(db, send.id);
+			if (!(await sendsDb.consumeAccess(db, send.id)))
+				return errorResponse(
+					"Send does not exist or is no longer available",
+					404,
+				);
 		}
 
 		const creatorIdentifier = await getCreatorIdentifier(db, send);
-		return c.json(sendToAccessResponse(send, creatorIdentifier));
+		const consumed =
+			send.type === 0 ? await sendsDb.getSendById(db, send.id) : send;
+		if (!consumed)
+			return errorResponse(
+				"Send does not exist or is no longer available",
+				404,
+			);
+		return c.json(sendToAccessResponse(consumed, creatorIdentifier));
 	},
 );
 
@@ -96,11 +119,19 @@ export const accessSendWithToken = factory.createHandlers(async (c) => {
 	}
 
 	if (send.type === 0) {
-		await sendsDb.incrementAccessCount(db, send.id);
+		if (!(await sendsDb.consumeAccess(db, send.id)))
+			return errorResponse(
+				"Send does not exist or is no longer available",
+				404,
+			);
 	}
 
 	const creatorIdentifier = await getCreatorIdentifier(db, send);
-	return c.json(sendToAccessResponse(send, creatorIdentifier));
+	const consumed =
+		send.type === 0 ? await sendsDb.getSendById(db, send.id) : send;
+	if (!consumed)
+		return errorResponse("Send does not exist or is no longer available", 404);
+	return c.json(sendToAccessResponse(consumed, creatorIdentifier));
 });
 
 export const accessSendFileWithToken = factory.createHandlers(async (c) => {
@@ -126,7 +157,16 @@ export const accessSendFileWithToken = factory.createHandlers(async (c) => {
 		return errorResponse("Send file does not match send data.", 400);
 	}
 
-	await sendsDb.incrementAccessCount(db, send.id);
+	if (
+		!(await sendFileExists(
+			c.env,
+			getStoredSendFileObjectKey(send, fileId),
+			parseInteger(fileData.size),
+		))
+	)
+		return errorResponse("Send file not found", 404);
+	if (!(await sendsDb.consumeAccess(db, send.id)))
+		return errorResponse("Send does not exist or is no longer available", 404);
 
 	const downloadToken = await createSendFileDownloadToken(
 		send.id,
@@ -185,7 +225,19 @@ export const accessPublicSendFile = factory.createHandlers(
 			}
 		}
 
-		await sendsDb.incrementAccessCount(db, send.id);
+		if (
+			!(await sendFileExists(
+				c.env,
+				getStoredSendFileObjectKey(send, fileId),
+				parseInteger(fileData.size),
+			))
+		)
+			return errorResponse("Send file not found", 404);
+		if (!(await sendsDb.consumeAccess(db, send.id)))
+			return errorResponse(
+				"Send does not exist or is no longer available",
+				404,
+			);
 
 		const downloadToken = await createSendFileDownloadToken(
 			send.id,

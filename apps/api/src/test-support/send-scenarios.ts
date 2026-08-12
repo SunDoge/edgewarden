@@ -64,6 +64,45 @@ export function registerSendScenarios(context: SendScenarioContext): void {
 		assert.equal(body.text.text, "encrypted-send-text");
 	});
 
+	test("enforces a Send access limit under concurrency", async () => {
+		const created = await request("/api/sends", {
+			method: "POST",
+			headers: {
+				authorization: `Bearer ${context.accessToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({
+				type: 0,
+				name: "limited-encrypted-send",
+				key: "encrypted-send-key",
+				text: { text: "limited-encrypted-text", hidden: false },
+				maxAccessCount: 1,
+				deletionDate: new Date(Date.now() + 86_400_000).toISOString(),
+			}),
+		});
+		assert.equal(created.status, 200, await created.clone().text());
+		const send = await created.json<{ id: string; accessId: string }>();
+		const access = () =>
+			request(`/api/sends/access/${send.accessId}`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({}),
+			});
+		const responses = await Promise.all([access(), access()]);
+		assert.deepEqual(
+			responses.map((response) => response.status).sort(),
+			[200, 404],
+		);
+		assert.equal(
+			await context.database
+				.prepare("SELECT access_count FROM sends WHERE id = ?")
+				.bind(send.id)
+				.first<{ access_count: number }>()
+				.then((row) => row?.access_count),
+			1,
+		);
+	});
+
 	test("updates text Send data without replacing it with an incompatible shape", async () => {
 		const updated = await request(`/api/sends/${context.sendId}`, {
 			method: "PUT",

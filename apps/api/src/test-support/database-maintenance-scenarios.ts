@@ -35,6 +35,7 @@ import {
 	setConfigValue,
 } from "../services/db/config";
 import * as devicesDb from "../services/db/devices";
+import * as sendsDb from "../services/db/sends";
 import { runMaintenance } from "../services/maintenance";
 import { issueIdentitySession } from "../services/identity-session";
 import { publishSendFileObject } from "../services/sends/file-storage";
@@ -1197,6 +1198,63 @@ export function registerDatabaseMaintenanceScenarios(
 					blockedKey,
 				])
 				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("consumes a Send access limit atomically", async () => {
+		const { db } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const sendId = crypto.randomUUID();
+		const timestamp = Math.floor(Date.now() / 1000);
+		try {
+			await db
+				.insertInto("sends")
+				.values({
+					id: sendId,
+					user_id: user.id,
+					org_id: null,
+					type: 0,
+					name: "limited-send",
+					notes: null,
+					data: JSON.stringify({ text: "encrypted" }),
+					key: "encrypted-key",
+					password_hash: null,
+					password_salt: null,
+					password_iterations: null,
+					password_algorithm: null,
+					auth_type: 2,
+					emails: null,
+					max_access_count: 1,
+					access_count: 0,
+					disabled: 0,
+					hide_email: null,
+					created_at: timestamp,
+					updated_at: timestamp,
+					expiration_date: null,
+					deletion_date: timestamp + 3600,
+				})
+				.execute();
+			const outcomes = await Promise.all([
+				sendsDb.consumeAccess(db, sendId, timestamp + 1),
+				sendsDb.consumeAccess(db, sendId, timestamp + 1),
+			]);
+			assert.deepEqual(outcomes.sort(), [false, true]);
+			assert.equal(
+				await db
+					.selectFrom("sends")
+					.select("access_count")
+					.where("id", "=", sendId)
+					.executeTakeFirstOrThrow()
+					.then((row) => row.access_count),
+				1,
+			);
+		} finally {
+			await db.deleteFrom("sends").where("id", "=", sendId).execute();
 			await db.destroy();
 		}
 	});
