@@ -34,6 +34,7 @@ export interface AuditLogs {
 	category: Generated<string>;
 	created_at: number;
 	id: string;
+	is_tombstone: Generated<number>;
 	level: Generated<string>;
 	metadata: string | null;
 	target_id: string | null;
@@ -91,6 +92,7 @@ export interface Ciphers {
 	org_id: string | null;
 	password_history: string | null;
 	purge_after: number | null;
+	purge_token: string | null;
 	reprompt: Generated<number>;
 	type: number;
 	updated_at: number;

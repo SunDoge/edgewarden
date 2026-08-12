@@ -60,9 +60,9 @@ function purgeAuditStatement(
 		.prepare(`
 			INSERT INTO audit_logs (
 				id, actor_user_id, action, category, level,
-				target_type, target_id, metadata, created_at
+				target_type, target_id, metadata, is_tombstone, created_at
 			)
-			SELECT ?, NULL, ?, ?, 'info', ?, ?, '{"status":"purged"}', ?
+			SELECT ?, NULL, ?, ?, 'info', ?, ?, '{"status":"purged"}', 1, ?
 			WHERE EXISTS (${eligibilitySql})
 		`)
 		.bind(
@@ -106,7 +106,7 @@ async function purgeCiphers(
 ): Promise<number> {
 	const ciphers = await db
 		.selectFrom("ciphers")
-		.select("id")
+		.select(["id", "purge_after", "mutation_token", "purge_token"])
 		.where("purge_after", "is not", null)
 		.where("purge_after", "<=", timestamp)
 		.orderBy("purge_after", "asc")
@@ -122,6 +122,17 @@ async function purgeCiphers(
 	);
 	let purged = 0;
 	for (const cipher of ciphers) {
+		const purgeToken = crypto.randomUUID();
+		const claimed = await db
+			.updateTable("ciphers")
+			.set({ purge_token: purgeToken })
+			.where("id", "=", cipher.id)
+			.where("purge_after", "is", cipher.purge_after)
+			.where("purge_after", "<=", timestamp)
+			.where("mutation_token", "is", cipher.mutation_token)
+			.where("purge_token", "is", cipher.purge_token)
+			.executeTakeFirst();
+		if (claimed.numUpdatedRows !== 1n) continue;
 		try {
 			// Keep the D1 tombstone until every external object is gone. Object
 			// deletion is idempotent, so a later D1 failure is safe to retry.
@@ -131,7 +142,7 @@ async function purgeCiphers(
 				),
 			);
 			const cipherAttachments = attachments.get(cipher.id) ?? [];
-			purged += await deleteWithPurgeAudit(
+			const deleted = await deleteWithPurgeAudit(
 				env.DB,
 				[
 					...cipherAttachments.map((attachment) => ({
@@ -148,12 +159,26 @@ async function purgeCiphers(
 					},
 				],
 				timestamp,
-				"SELECT 1 FROM ciphers WHERE id = ? AND purge_after <= ?",
-				[cipher.id, timestamp],
-				"DELETE FROM ciphers WHERE id = ? AND purge_after <= ?",
-				[cipher.id, timestamp],
+				"SELECT 1 FROM ciphers WHERE id = ? AND purge_after <= ? AND purge_token = ?",
+				[cipher.id, timestamp, purgeToken],
+				"DELETE FROM ciphers WHERE id = ? AND purge_after <= ? AND purge_token = ?",
+				[cipher.id, timestamp, purgeToken],
 			);
+			purged += deleted;
+			if (deleted === 0)
+				await db
+					.updateTable("ciphers")
+					.set({ purge_token: cipher.purge_token })
+					.where("id", "=", cipher.id)
+					.where("purge_token", "=", purgeToken)
+					.execute();
 		} catch (error) {
+			await db
+				.updateTable("ciphers")
+				.set({ purge_token: cipher.purge_token })
+				.where("id", "=", cipher.id)
+				.where("purge_token", "=", purgeToken)
+				.execute();
 			console.error(
 				JSON.stringify({
 					event: "maintenance.cipher_purge_deferred",

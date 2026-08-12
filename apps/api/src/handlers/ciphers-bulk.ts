@@ -244,6 +244,7 @@ export const restoreCiphers = factory.createHandlers(
 			.where("user_id", "=", user.id)
 			.where("deleted_at", "is not", null)
 			.where("purge_after", ">", ts)
+			.where("purge_token", "is", null)
 			.execute();
 		await executeFencedPersonalCipherBulkMutation(
 			c.get("dbDialect"),
@@ -263,6 +264,7 @@ export const restoreCiphers = factory.createHandlers(
 					.where("user_id", "=", user.id)
 					.where("deleted_at", "is not", null)
 					.where("purge_after", ">", ts)
+					.where("purge_token", "is", null)
 					.where(expectedState)
 					.compile(),
 		);

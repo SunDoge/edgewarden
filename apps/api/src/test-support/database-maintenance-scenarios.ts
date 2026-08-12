@@ -1054,6 +1054,45 @@ export function registerDatabaseMaintenanceScenarios(
 		}
 	});
 
+	test("allows only one device mutation from the same snapshot", async () => {
+		const { db } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const deviceId = crypto.randomUUID();
+		const sessionStamp = crypto.randomUUID();
+		try {
+			await devicesDb.upsertDevice(
+				db,
+				user.id,
+				deviceId,
+				"snapshot-device",
+				0,
+				sessionStamp,
+			);
+			const snapshot = await devicesDb.getDevice(db, user.id, deviceId);
+			assert.ok(snapshot);
+			const results = await Promise.all(
+				Array.from({ length: 8 }, (_, index) =>
+					devicesDb.updateDeviceName(
+						db,
+						user.id,
+						deviceId,
+						`snapshot-name-${index}`,
+						snapshot.session_stamp,
+						snapshot.mutation_token,
+					),
+				),
+			);
+			assert.equal(results.filter(Boolean).length, 1);
+		} finally {
+			await devicesDb.deleteDevice(db, user.id, deviceId);
+			await db.destroy();
+		}
+	});
+
 	test("preserves a device session stamp across concurrent login upserts", async () => {
 		const { db } = await createDatabase(context.database);
 		const user = await db

@@ -469,7 +469,8 @@ export async function buildBackupArchive(
 			row as SqlRow,
 	);
 	const exportedCipherRows = cipherRows.map(
-		({ mutation_token: _mutationToken, ...row }) => row as SqlRow,
+		({ mutation_token: _mutationToken, purge_token: _purgeToken, ...row }) =>
+			row as SqlRow,
 	);
 	const exportedFolderRows = folderRows.map(
 		({ mutation_token: _mutationToken, ...row }) => row as SqlRow,
