@@ -171,6 +171,7 @@ export const accessSendFileWithToken = factory.createHandlers(async (c) => {
 	const downloadToken = await createSendFileDownloadToken(
 		send.id,
 		fileId,
+		getStoredSendFileObjectKey(send, fileId),
 		secret,
 	);
 	const url = new URL(c.req.url);
@@ -242,6 +243,7 @@ export const accessPublicSendFile = factory.createHandlers(
 		const downloadToken = await createSendFileDownloadToken(
 			send.id,
 			fileId,
+			getStoredSendFileObjectKey(send, fileId),
 			secret,
 		);
 		const url = new URL(c.req.url);
@@ -276,15 +278,17 @@ export const downloadSendFile = factory.createHandlers(async (c) => {
 	if (
 		!send ||
 		send.type !== 1 ||
-		String(parseStoredSendData(send).id || "") !== fileId
+		String(parseStoredSendData(send).id || "") !== fileId ||
+		send.disabled === 1 ||
+		(send.expiration_date !== null &&
+			send.expiration_date <= Math.floor(Date.now() / 1000)) ||
+		send.purge_token !== null ||
+		getStoredSendFileObjectKey(send, fileId) !== claims.storageKey
 	) {
 		return errorResponse("Send file not found", 404);
 	}
 
-	const object = await getBlobObject(
-		c.env,
-		getStoredSendFileObjectKey(send, fileId),
-	);
+	const object = await getBlobObject(c.env, claims.storageKey);
 	if (!object) {
 		return errorResponse("Send file not found", 404);
 	}
