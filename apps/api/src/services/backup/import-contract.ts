@@ -21,6 +21,7 @@ export interface BackupImportResultBody {
 		deviceTrustTokens: number;
 		sends: number;
 		attachmentFiles: number;
+		sendFiles: number;
 	};
 	skipped: BackupImportSkipSummary;
 }
@@ -55,6 +56,7 @@ export function ensureBackupCompatibilityFields(payload: BackupPayload) {
 export function backupTableCounts(
 	db: BackupPayload["db"],
 	attachmentCount = (db.attachments || []).length,
+	sendCount = (db.sends || []).length,
 ): Partial<Record<BackupTableName, number>> {
 	return {
 		config: (db.config || []).length,
@@ -71,7 +73,7 @@ export function backupTableCounts(
 		ciphers: (db.ciphers || []).length,
 		cipher_collections: (db.cipher_collections || []).length,
 		attachments: attachmentCount,
-		sends: (db.sends || []).length,
+		sends: sendCount,
 	};
 }
 
@@ -79,6 +81,8 @@ export function buildImportExecutionResult(
 	db: BackupPayload["db"],
 	actorUserId: string,
 	restoredAttachmentCount: number,
+	restoredSendCount: number,
+	restoredSendFileCount: number,
 	skipped: BackupImportSkipSummary,
 ): BackupImportExecutionResult {
 	return {
@@ -104,8 +108,9 @@ export function buildImportExecutionResult(
 				attachments: restoredAttachmentCount,
 				webauthnCredentials: (db.webauthn_credentials || []).length,
 				deviceTrustTokens: (db.device_trust_tokens || []).length,
-				sends: (db.sends || []).length,
+				sends: restoredSendCount,
 				attachmentFiles: restoredAttachmentCount,
+				sendFiles: restoredSendFileCount,
 			},
 			skipped,
 		},

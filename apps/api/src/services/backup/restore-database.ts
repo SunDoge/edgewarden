@@ -238,5 +238,22 @@ export async function collectCurrentBlobKeys(
 			);
 		}
 	}
+	const sendRows = await queryRows(
+		db,
+		`SELECT id, storage_key, json_extract(data, '$.id') AS file_id
+		 FROM sends
+		 WHERE type = 1
+		   AND json_valid(data)
+		   AND json_type(data, '$.id') = 'text'`,
+	);
+	for (const row of sendRows) {
+		const sendId = String(row.id || "").trim();
+		const fileId = String(row.file_id || "").trim();
+		if (sendId && fileId) {
+			keys.add(
+				String(row.storage_key || "").trim() || `sends/${sendId}/${fileId}`,
+			);
+		}
+	}
 	return keys;
 }

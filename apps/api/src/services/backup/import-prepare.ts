@@ -1,5 +1,6 @@
 import {
 	createRestoredAttachmentObjectKey,
+	createRestoredSendFileObjectKey,
 	type BlobStore,
 } from "../blob-store";
 import type { BackupPayload } from "./archive";
@@ -18,6 +19,26 @@ import { importBackupRows } from "./restore-rows";
 
 function cloneRows(rows: SqlRow[]): SqlRow[] {
 	return rows.map((row) => ({ ...row }));
+}
+
+function getFileSendPath(
+	row: SqlRow,
+): { path: string; sizeBytes: number } | null {
+	if (Number(row.type) !== 1) return null;
+	try {
+		const data = JSON.parse(String(row.data || "")) as {
+			id?: unknown;
+			size?: unknown;
+		};
+		const sendId = String(row.id || "").trim();
+		const fileId = typeof data.id === "string" ? data.id.trim() : "";
+		const sizeBytes = Number(data.size);
+		return sendId && fileId && Number.isSafeInteger(sizeBytes) && sizeBytes >= 0
+			? { path: `sends/${sendId}/${fileId}`, sizeBytes }
+			: null;
+	} catch {
+		return null;
+	}
 }
 
 function upsertConfigRow(rows: SqlRow[], key: string, value: string): SqlRow[] {
@@ -104,7 +125,22 @@ export async function importPreparedBackupRows(
 						: null,
 			};
 		}),
-		sends: cloneRows(payload.sends || []),
+		sends: cloneRows(payload.sends || []).map((row) => {
+			if (Number(row.type) !== 1) return { ...row, storage_key: null };
+			try {
+				const data = JSON.parse(String(row.data || "")) as { id?: unknown };
+				const fileId = typeof data.id === "string" ? data.id.trim() : "";
+				return {
+					...row,
+					storage_key:
+						fileId && row.id
+							? createRestoredSendFileObjectKey(String(row.id), fileId)
+							: null,
+				};
+			} catch {
+				return { ...row, storage_key: null };
+			}
+		}),
 	};
 	await importBackupRows(db, preparedDb, true);
 	return preparedDb;
@@ -116,7 +152,7 @@ export function prepareImportPayloadForTarget(
 	files: Record<string, Uint8Array>,
 ): PreparedBackupImportPayload {
 	if (!blobStore) {
-		const skippedItems = (payload.db.attachments || []).map((row) => {
+		const skippedAttachments = (payload.db.attachments || []).map((row) => {
 			const cipherId = String(row.cipher_id || "").trim();
 			const attachmentId = String(row.id || "").trim();
 			return {
@@ -125,22 +161,45 @@ export function prepareImportPayloadForTarget(
 				sizeBytes: Number(row.size || 0) || 0,
 			};
 		});
+		const skippedSendFiles = (payload.db.sends || [])
+			.filter((row) => Number(row.type) === 1)
+			.map((row) => {
+				const file = getFileSendPath(row);
+				return {
+					kind: "sendFile" as const,
+					path: file?.path || `sends/${String(row.id || "invalid")}/invalid`,
+					sizeBytes: file?.sizeBytes || 0,
+				};
+			});
+		const skippedItems = [...skippedAttachments, ...skippedSendFiles];
 		return {
-			payload: { ...payload, db: { ...payload.db, attachments: [] } },
+			payload: {
+				...payload,
+				db: {
+					...payload.db,
+					attachments: [],
+					sends: (payload.db.sends || []).filter(
+						(row) => Number(row.type) !== 1,
+					),
+				},
+			},
 			skipped: {
 				reason: skippedItems.length
 					? BLOB_STORAGE_UNAVAILABLE_SKIP_REASON
 					: null,
-				attachments: skippedItems.length,
+				attachments: skippedAttachments.length,
+				sendFiles: skippedSendFiles.length,
 				items: skippedItems,
 			},
 		};
 	}
 
 	const oversizedAttachmentPaths = new Set<string>();
+	const oversizedSendPaths = new Set<string>();
 	const skippedItems: BackupImportSkipSummary["items"] = [];
 	for (const entry of Object.keys(files)) {
-		if (!entry.endsWith(".bin")) continue;
+		if (!entry.startsWith("attachments/") && !entry.startsWith("sends/"))
+			continue;
 		const sizeBytes = files[entry].byteLength;
 		if (
 			blobStore.maxObjectBytes === null ||
@@ -151,6 +210,10 @@ export function prepareImportPayloadForTarget(
 			oversizedAttachmentPaths.add(entry);
 			skippedItems.push({ kind: "attachment", path: entry, sizeBytes });
 		}
+		if (entry.startsWith("sends/")) {
+			oversizedSendPaths.add(entry);
+			skippedItems.push({ kind: "sendFile", path: entry, sizeBytes });
+		}
 	}
 	const attachments = (payload.db.attachments || []).filter((row) => {
 		const cipherId = String(row.cipher_id || "").trim();
@@ -160,11 +223,17 @@ export function prepareImportPayloadForTarget(
 			`attachments/${cipherId}/${attachmentId}.bin`,
 		);
 	});
+	const sends = (payload.db.sends || []).filter((row) => {
+		const file = getFileSendPath(row);
+		return !file || !oversizedSendPaths.has(file.path);
+	});
 	return {
-		payload: { ...payload, db: { ...payload.db, attachments } },
+		payload: { ...payload, db: { ...payload.db, attachments, sends } },
 		skipped: {
 			reason: skippedItems.length ? KV_BLOB_SKIP_REASON : null,
-			attachments: skippedItems.length,
+			sendFiles: skippedItems.filter((item) => item.kind === "sendFile").length,
+			attachments: skippedItems.filter((item) => item.kind === "attachment")
+				.length,
 			items: skippedItems,
 		},
 	};

@@ -5,7 +5,7 @@ import { SendAccessSchema } from "../schemas/sends";
 import {
 	getBlobObject,
 	getBlobStorageMaxBytes,
-	getSendFileObjectKey,
+	getStoredSendFileObjectKey,
 	putBlobObject,
 } from "../services/blob-store";
 import * as revisionsDb from "../services/db/revisions";
@@ -218,10 +218,18 @@ export const downloadSendFile = factory.createHandlers(async (c) => {
 	if (claims.sendId !== sendId || claims.fileId !== fileId) {
 		return errorResponse("Token mismatch", 401);
 	}
+	const send = await sendsDb.getSendById(c.get("db"), sendId);
+	if (
+		!send ||
+		send.type !== 1 ||
+		String(parseStoredSendData(send).id || "") !== fileId
+	) {
+		return errorResponse("Send file not found", 404);
+	}
 
 	const object = await getBlobObject(
 		c.env,
-		getSendFileObjectKey(sendId, fileId),
+		getStoredSendFileObjectKey(send, fileId),
 	);
 	if (!object) {
 		return errorResponse("Send file not found", 404);
@@ -275,7 +283,7 @@ export const uploadPublicSendFile = factory.createHandlers(async (c) => {
 
 	await putBlobObject(
 		c.env,
-		getSendFileObjectKey(send.id, fileId),
+		getStoredSendFileObjectKey(send, fileId),
 		upload.body,
 		{
 			size: upload.size,

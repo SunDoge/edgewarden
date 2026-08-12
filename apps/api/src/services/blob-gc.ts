@@ -42,7 +42,10 @@ async function isReferenced(
 			where type = 1
 				and json_valid(data)
 				and json_type(data, '$.id') = 'text'
-				and 'sends/' || id || '/' || json_extract(data, '$.id') = ${objectKey}
+				and coalesce(
+					storage_key,
+					'sends/' || id || '/' || json_extract(data, '$.id')
+				) = ${objectKey}
 		) as referenced
 	`.execute(db);
 	return Number(result.rows[0]?.referenced ?? 0) === 1;

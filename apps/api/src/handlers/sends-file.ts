@@ -5,6 +5,7 @@ import { CreateFileSendSchema } from "../schemas/sends";
 import {
 	getBlobStorageMaxBytes,
 	getSendFileObjectKey,
+	getStoredSendFileObjectKey,
 	putBlobObject,
 } from "../services/blob-store";
 import { executeBatch, revisionQuery } from "../services/db/batch";
@@ -90,8 +91,9 @@ export const createFileSend = factory.createHandlers(
 		const authType = parseInteger(body.authType ?? body.AuthType) ?? 2;
 
 		const ts = now();
+		const sendId = crypto.randomUUID();
 		const send: any = {
-			id: crypto.randomUUID(),
+			id: sendId,
 			user_id: user.id,
 			org_id: null,
 			type: 1,
@@ -113,6 +115,7 @@ export const createFileSend = factory.createHandlers(
 			updated_at: ts,
 			expiration_date: expirationDate,
 			deletion_date: deletionDate,
+			storage_key: getSendFileObjectKey(sendId, fileId),
 		};
 
 		if (typeof password === "string" && password.length > 0) {
@@ -191,7 +194,7 @@ export const uploadSendFile = factory.createHandlers(async (c) => {
 
 	await putBlobObject(
 		c.env,
-		getSendFileObjectKey(send.id, fileId),
+		getStoredSendFileObjectKey(send, fileId),
 		upload.body,
 		{
 			size: upload.size,

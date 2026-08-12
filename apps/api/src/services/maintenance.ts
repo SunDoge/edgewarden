@@ -7,7 +7,7 @@ import {
 	createBlobStore,
 	deleteBlobObject,
 	getStoredAttachmentObjectKey,
-	getSendFileObjectKey,
+	getStoredSendFileObjectKey,
 } from "./blob-store";
 import * as attachmentsDb from "./db/attachments";
 
@@ -131,7 +131,7 @@ async function purgeSends(
 ): Promise<number> {
 	const sends = await db
 		.selectFrom("sends")
-		.select(["id", "type", "data"])
+		.select(["id", "type", "data", "storage_key"])
 		.where("deletion_date", "<=", timestamp)
 		.orderBy("deletion_date", "asc")
 		.limit(BATCH_LIMIT)
@@ -144,7 +144,7 @@ async function purgeSends(
 				const data = JSON.parse(send.data) as { id?: string; Id?: string };
 				const fileId = String(data.id ?? data.Id ?? "").trim();
 				if (fileId) {
-					objectKeys.set(send.id, getSendFileObjectKey(send.id, fileId));
+					objectKeys.set(send.id, getStoredSendFileObjectKey(send, fileId));
 				}
 			} catch {
 				// The row still must expire even if legacy file metadata is malformed.

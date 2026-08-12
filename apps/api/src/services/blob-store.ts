@@ -83,6 +83,20 @@ export function getSendFileObjectKey(sendId: string, fileId: string): string {
 	return `sends/${sendId}/${fileId}`;
 }
 
+export function getStoredSendFileObjectKey(
+	send: { id: string; storage_key?: string | null },
+	fileId: string,
+): string {
+	return send.storage_key || getSendFileObjectKey(send.id, fileId);
+}
+
+export function createRestoredSendFileObjectKey(
+	sendId: string,
+	fileId: string,
+): string {
+	return `sends/${sendId}/${fileId}.${crypto.randomUUID()}.bin`;
+}
+
 export function getAttachmentObjectKey(
 	cipherId: string,
 	attachmentId: string,
