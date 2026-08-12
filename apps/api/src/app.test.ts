@@ -7,6 +7,10 @@ import {
 	parseBackupArchive,
 } from "./services/backup/archive";
 import { importBackupArchiveBytes } from "./services/backup/import";
+import {
+	acquireDataOperationLease,
+	releaseDataOperationLease,
+} from "./services/backup/operation-lease";
 import { createBlobStore } from "./services/blob-store";
 import { runMaintenance } from "./services/maintenance";
 import { registerAccountSecurityScenarios } from "./test-support/account-security-scenarios";
@@ -425,6 +429,11 @@ describe("Edgewarden API", () => {
 			await originalDelete(key);
 		};
 		let restored: Awaited<ReturnType<typeof importBackupArchiveBytes>>;
+		const restoreLease = await acquireDataOperationLease(
+			testDatabase,
+			"backup.restore_test",
+		);
+		assert.ok(restoreLease);
 		try {
 			restored = await importBackupArchiveBytes(
 				archive.bytes,
@@ -437,6 +446,15 @@ describe("Edgewarden API", () => {
 		} finally {
 			r2.delete = originalDelete;
 		}
+		assert.ok(
+			await testDatabase
+				.prepare(
+					"SELECT 1 FROM config WHERE key = 'backup.runner.lock.v1' AND json_extract(value, '$.token') = ?",
+				)
+				.bind(restoreLease.token)
+				.first(),
+		);
+		await releaseDataOperationLease(testDatabase, restoreLease);
 		assert.equal(restored.result.imported.attachments, 1);
 		assert.equal(restored.result.imported.sendFiles, 1);
 		assert.ok(restored.result.imported.auditLogs >= 1);

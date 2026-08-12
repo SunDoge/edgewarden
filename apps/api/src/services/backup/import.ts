@@ -3,6 +3,7 @@ import { invalidateAllAuthCaches } from "../auth";
 import { drainBlobGcQueue, enqueueBlobGcKeys } from "../blob-gc";
 import { createDatabase } from "../../middleware/db";
 import { parseBackupArchive } from "./archive";
+import { readActiveDataOperationLeaseValue } from "./operation-lease";
 import {
 	importPreparedBackupRows,
 	prepareImportPayloadForTarget,
@@ -78,6 +79,8 @@ export async function importBackupArchiveBytes(
 		? await collectCurrentBlobKeys(dbBinding)
 		: new Set<string>();
 	const stagedBlobKeys = new Set<string>();
+	const activeOperationLeaseValue =
+		await readActiveDataOperationLeaseValue(dbBinding);
 	try {
 		await progress?.({
 			source: "local",
@@ -100,6 +103,7 @@ export async function importBackupArchiveBytes(
 			dbBinding,
 			prepared.payload.db,
 			dataEncryptionSecret,
+			activeOperationLeaseValue,
 		);
 		await validateShadowTableCounts(dbBinding, backupTableCounts(db));
 
@@ -239,6 +243,8 @@ export async function importRemoteBackupArchiveBytes(
 		? await collectCurrentBlobKeys(dbBinding)
 		: new Set<string>();
 	const stagedBlobKeys = new Set<string>();
+	const activeOperationLeaseValue =
+		await readActiveDataOperationLeaseValue(dbBinding);
 
 	try {
 		await progress?.({
@@ -262,6 +268,7 @@ export async function importRemoteBackupArchiveBytes(
 			dbBinding,
 			prepared.payload.db,
 			dataEncryptionSecret,
+			activeOperationLeaseValue,
 		);
 		await validateShadowTableCounts(dbBinding, backupTableCounts(db));
 
