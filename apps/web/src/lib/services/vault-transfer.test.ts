@@ -12,12 +12,97 @@ import {
 	buildBitwardenCsv,
 	buildBitwardenJson,
 	buildPlainExportDocument,
+	deduplicateTransferDocument,
 	encryptTransferDocument,
 	parseVaultImport,
 	parseVaultImportFile,
 } from "./vault-transfer";
 
 describe("vault import and export", () => {
+	it("detects duplicate decrypted items despite different IDs and timestamps", () => {
+		const existing = {
+			folders: [{ id: "existing-folder", name: "Work" }],
+			warnings: [],
+			items: [
+				{
+					id: "existing-item",
+					folderId: "existing-folder",
+					revisionDate: "2026-08-12T00:00:00Z",
+					type: CipherType.Login,
+					name: "Example",
+					login: { username: "alice", password: "secret" },
+				},
+			],
+		};
+		const incoming = {
+			folders: [{ id: "import-folder", name: "Work" }],
+			warnings: [],
+			items: [
+				{
+					id: "import-item",
+					folderId: "import-folder",
+					creationDate: "2020-01-01T00:00:00Z",
+					type: CipherType.Login,
+					name: "Example",
+					login: { password: "secret", username: "alice" },
+				},
+			],
+		};
+
+		const result = deduplicateTransferDocument(incoming, existing);
+		expect(result.duplicateItems).toBe(1);
+		expect(result.duplicateFolders).toBe(1);
+		expect(result.document.items).toEqual([]);
+		expect(result.document.folders).toEqual([]);
+	});
+
+	it("keeps changed secrets and folders needed by retained items", () => {
+		const existing = {
+			folders: [{ id: "old-folder", name: "Work" }],
+			warnings: [],
+			items: [
+				{
+					folderId: "old-folder",
+					type: CipherType.Login,
+					name: "Example",
+					login: { username: "alice", password: "old" },
+				},
+			],
+		};
+		const incoming = {
+			folders: [{ id: "new-folder", name: "Work" }],
+			warnings: [],
+			items: [
+				{
+					folderId: "new-folder",
+					type: CipherType.Login,
+					name: "Example",
+					login: { username: "alice", password: "new" },
+				},
+			],
+		};
+
+		const result = deduplicateTransferDocument(incoming, existing);
+		expect(result.duplicateItems).toBe(0);
+		expect(result.document.items).toHaveLength(1);
+		expect(result.document.folders).toEqual(incoming.folders);
+	});
+
+	it("deduplicates repeated items inside a single import", () => {
+		const item = {
+			type: CipherType.SecureNote,
+			name: "Recovery",
+			notes: "codes",
+			secureNote: { type: 0 },
+		};
+		const result = deduplicateTransferDocument(
+			{ folders: [], warnings: [], items: [item, { ...item }] },
+			{ folders: [], warnings: [], items: [] },
+		);
+		expect(result.duplicateItems).toBe(1);
+		expect(result.document.items).toEqual([item]);
+	});
+
 	it("exports all type data without wrapped encryption keys or trashed items", () => {
 		const items = [
 			{
