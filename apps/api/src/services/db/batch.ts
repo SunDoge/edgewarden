@@ -1,6 +1,6 @@
 import type { D1Dialect } from "@sundoge/kysely-d1";
-import { type CompiledQuery, type Kysely, sql } from "kysely";
-import type { DB } from "../../types/db";
+import { type CompiledQuery, type Insertable, type Kysely, sql } from "kysely";
+import type { DB, WebauthnCredentials } from "../../types/db";
 import { now } from "../../utils/time";
 
 export function revisionQuery(
@@ -282,6 +282,62 @@ export function conditionalYubikeyUpdateQuery(
 		WHERE id = ${userId}
 		  AND security_stamp = ${expectedSecurityStamp}
 		  AND yubikey_config = ${expectedConfig}
+	`.compile(db);
+}
+
+export function conditionalTwoFactorPasskeyClaimQuery(
+	db: Kysely<DB>,
+	userId: string,
+	expectedSecurityStamp: string,
+	credentialId: string,
+	encryptedRecoveryCode: string,
+	securityStamp: string,
+	maximumCredentials: number,
+	timestamp = now(),
+) {
+	return sql`
+		UPDATE users
+		SET totp_recovery_code = COALESCE(
+		      totp_recovery_code,
+		      ${encryptedRecoveryCode}
+		    ),
+		    security_stamp = ${securityStamp},
+		    updated_at = ${timestamp}
+		WHERE id = ${userId}
+		  AND security_stamp = ${expectedSecurityStamp}
+		  AND NOT EXISTS (
+		    SELECT 1 FROM webauthn_credentials
+		    WHERE credential_id = ${credentialId}
+		  )
+		  AND (
+		    SELECT COUNT(*) FROM webauthn_credentials
+		    WHERE user_id = ${userId} AND purpose = 'twoFactor'
+		  ) < ${maximumCredentials}
+	`.compile(db);
+}
+
+export function conditionalTwoFactorPasskeyInsertQuery(
+	db: Kysely<DB>,
+	credential: Insertable<WebauthnCredentials>,
+	securityStamp: string,
+) {
+	return sql`
+		INSERT INTO webauthn_credentials (
+		  id, user_id, purpose, name, public_key, credential_id, counter,
+		  type, aa_guid, transports, encrypted_user_key, encrypted_public_key,
+		  encrypted_private_key, supports_prf, created_at, updated_at
+		)
+		SELECT
+		  ${credential.id}, ${credential.user_id}, ${credential.purpose},
+		  ${credential.name}, ${credential.public_key}, ${credential.credential_id},
+		  ${credential.counter}, ${credential.type}, ${credential.aa_guid},
+		  ${credential.transports}, ${credential.encrypted_user_key},
+		  ${credential.encrypted_public_key}, ${credential.encrypted_private_key},
+		  ${credential.supports_prf}, ${credential.created_at},
+		  ${credential.updated_at}
+		FROM users
+		WHERE id = ${credential.user_id}
+		  AND security_stamp = ${securityStamp}
 	`.compile(db);
 }
 
