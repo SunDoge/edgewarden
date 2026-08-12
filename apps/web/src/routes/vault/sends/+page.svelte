@@ -3,22 +3,18 @@ import { onMount } from "svelte";
 import { goto } from "$app/navigation";
 import {
 	fetchSendsApi,
-	createSendApi,
-	createFileSendApi,
-	updateSendApi,
 	deleteSendApi,
 	deleteSendsApi,
-	removeSendPasswordApi,
 } from "$lib/services/api";
 import { vault } from "$lib/stores/vault.svelte";
-import { encryptBw, encryptBwFileData } from "$lib/services/crypto";
 import {
-	createSendKeys,
 	decryptOwnedSend,
-	encryptSendMetadata,
-	wrapSendKey,
-	type SendKeys,
 } from "$lib/services/send-crypto";
+import { saveOwnedSend } from "$lib/services/send-actions";
+import {
+	createSendEditorDraft,
+	sendToEditorDraft,
+} from "$lib/services/send-editor";
 import { Button } from "$lib/components/ui/button/index.js";
 import SendEditorForm from "$lib/components/sends/SendEditorForm.svelte";
 import SendDetail from "$lib/components/sends/SendDetail.svelte";
@@ -51,20 +47,7 @@ let mobileDetailOpen = $state(false);
 // Form editor state
 let isCreating = $state(false);
 let isEditing = $state(false);
-let sendType = $state(0); // 0 = Text, 1 = File
-let sendName = $state("");
-let sendNotes = $state("");
-let textContent = $state("");
-let fileToUpload = $state<File | null>(null);
-
-// Options
-let maxAccessCount = $state<number | null>(null);
-let expirationDate = $state<string>("");
-let deletionDays = $state<number>(7); // Default 7 days
-let sendPassword = $state("");
-let protectWithPassword = $state(false);
-let hideEmail = $state(false);
-let disabled = $state(false);
+let editor = $state(createSendEditorDraft());
 
 let copiedId = $state<string | null>(null);
 
@@ -127,18 +110,7 @@ function startCreate() {
 	isEditing = false;
 	isCreating = true;
 	mobileDetailOpen = true;
-	sendType = 0;
-	sendName = "";
-	sendNotes = "";
-	textContent = "";
-	fileToUpload = null;
-	maxAccessCount = null;
-	expirationDate = "";
-	deletionDays = 7;
-	sendPassword = "";
-	protectWithPassword = false;
-	hideEmail = false;
-	disabled = false;
+	editor = createSendEditorDraft();
 }
 
 function startEdit(send: any) {
@@ -146,27 +118,7 @@ function startEdit(send: any) {
 	isEditing = true;
 	isCreating = false;
 	mobileDetailOpen = true;
-	sendType = send.type;
-	sendName = send.name;
-	sendNotes = send.notes ?? "";
-	textContent = send.text?.text ?? "";
-	maxAccessCount = send.maxAccessCount ?? null;
-	expirationDate = send.expirationDate
-		? new Date(send.expirationDate).toISOString().slice(0, 16)
-		: "";
-	deletionDays = Math.max(
-		1,
-		Math.min(
-			30,
-			Math.ceil(
-				(new Date(send.deletionDate).getTime() - Date.now()) / 86_400_000,
-			),
-		),
-	);
-	sendPassword = "";
-	protectWithPassword = Boolean(send.password);
-	hideEmail = Boolean(send.hideEmail);
-	disabled = Boolean(send.disabled);
+	editor = sendToEditorDraft(send);
 }
 
 function cancelEdit() {
@@ -183,119 +135,15 @@ function selectSend(send: any) {
 }
 
 async function handleSaveSend() {
-	if (!sendName.trim()) {
-		alert("名称不能为空！");
-		return;
-	}
-
-	if (sendType === 0 && !textContent.trim()) {
-		alert("文本内容不能为空！");
-		return;
-	}
-
-	if (sendType === 1 && !fileToUpload && isCreating) {
-		alert("请选择要上传的文件！");
-		return;
-	}
-	if (isCreating && protectWithPassword && !sendPassword) {
-		alert("启用密码保护时必须输入访问密码！");
-		return;
-	}
-
 	loading = true;
 	try {
-		const keys: SendKeys = isEditing
-			? selectedSend._sendKeys
-			: createSendKeys();
-		const encrypted = await encryptSendMetadata(
-			{
-				name: sendName,
-				notes: sendNotes,
-				...(sendType === 0 ? { text: textContent } : {}),
-			},
-			keys,
-		);
-		const encryptedSendKey = isEditing
-			? selectedSend.key
-			: await wrapSendKey(keys, vault.symEncKey!, vault.symMacKey!);
-
-		// Calculate Deletion Date
-		const deletionDate = new Date(
-			Date.now() + deletionDays * 24 * 60 * 60 * 1000,
-		).toISOString();
-
-		let payload: any = {
-			type: sendType,
-			name: encrypted.name,
-			notes: encrypted.notes,
-			key: encryptedSendKey,
-			deletionDate,
-			maxAccessCount: maxAccessCount || null,
-			expirationDate: expirationDate
-				? new Date(expirationDate).toISOString()
-				: null,
-			disabled,
-			hideEmail,
-		};
-
-		if (protectWithPassword && sendPassword) {
-			payload.authType = 1;
-			payload.password = sendPassword;
-		} else if (!protectWithPassword) {
-			payload.authType = 2;
-		}
-
-		if (isCreating) {
-			if (sendType === 0) {
-				// Text Send
-				payload.text = encrypted.text;
-
-				await createSendApi(payload);
-			} else if (sendType === 1 && fileToUpload) {
-				// File Send
-				const fileBytes = new Uint8Array(await fileToUpload.arrayBuffer());
-				const encryptedFileBytes = await encryptBwFileData(
-					fileBytes,
-					keys.enc,
-					keys.mac,
-				);
-
-				const encryptedFileName = await encryptBw(
-					new TextEncoder().encode(fileToUpload.name),
-					keys.enc,
-					keys.mac,
-				);
-				payload.file = {
-					fileName: encryptedFileName,
-					sizeName: `${(fileBytes.length / 1024 / 1024).toFixed(2)} MB`,
-				};
-				payload.fileLength = encryptedFileBytes.length;
-
-				// 1. Create File Send entry on server
-				const res = await createFileSendApi(payload);
-
-				// 2. Upload file payload directly to KV/R2 using the direct upload url
-				const uploadResp = await fetch(res.url, {
-					method: "PUT",
-					body: new Blob([encryptedFileBytes as any]),
-					headers: {
-						"Content-Type": "application/octet-stream",
-					},
-				});
-
-				if (!uploadResp.ok) {
-					throw new Error(`文件 payload 上传失败: ${uploadResp.status}`);
-				}
-			}
-		} else if (isEditing && selectedSend) {
-			// Update text/options
-			if (sendType === 0) {
-				payload.text = encrypted.text;
-			}
-			await updateSendApi(selectedSend.id, payload);
-			if (selectedSend.password && !protectWithPassword)
-				await removeSendPasswordApi(selectedSend.id);
-		}
+		await saveOwnedSend({
+			form: editor,
+			selectedSend,
+			isCreating,
+			isEditing,
+			vaultKeys: { encKey: vault.symEncKey!, macKey: vault.symMacKey! },
+		});
 
 		isCreating = false;
 		isEditing = false;
@@ -473,17 +321,7 @@ function copyShareLink(send: any) {
 				<SendEditorForm
 					{isCreating}
 					{isEditing}
-					bind:sendType
-					bind:name={sendName}
-					bind:textContent
-					bind:file={fileToUpload}
-					bind:maxAccessCount
-					bind:expirationDate
-					bind:deletionDays
-					bind:password={sendPassword}
-					bind:protectWithPassword
-					bind:hideEmail
-					bind:disabled
+					bind:form={editor}
 					hasExistingPassword={Boolean(selectedSend?.password)}
 					onSave={handleSaveSend}
 						onCancel={cancelEdit}
