@@ -10,6 +10,7 @@ import {
 } from "$lib/services/equivalent-domains";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
+import GlobalEquivalentDomains from "$lib/components/domains/GlobalEquivalentDomains.svelte";
 import {
 	ArrowLeft,
 	Save,
@@ -18,7 +19,6 @@ import {
 	Edit,
 	Check,
 	X,
-	Search,
 	Globe,
 	ShieldCheck,
 	RefreshCw,
@@ -44,9 +44,6 @@ let successMsg = $state("");
 let customRules = $state<CustomEquivalentDomain[]>([]);
 let globalRules = $state<GlobalEquivalentDomain[]>([]);
 let excludedTypes = $state<Set<number>>(new Set());
-
-// Searching and filtering
-let searchQuery = $state("");
 
 // Edit/Add states
 let editingRuleId = $state<string | null>(null);
@@ -185,16 +182,6 @@ function handleDeleteCustomRule(index: number) {
 	showTimedSuccess("已删除规则，请记得点击右上角“保存并应用”。");
 }
 
-// Global rule actions
-function handleToggleGlobalRule(type: number) {
-	if (excludedTypes.has(type)) {
-		excludedTypes.delete(type);
-	} else {
-		excludedTypes.add(type);
-	}
-	excludedTypes = new Set(excludedTypes); // trigger reactivity
-}
-
 // Save & Sync
 async function handleSave() {
 	saving = true;
@@ -232,15 +219,6 @@ async function handleSave() {
 		saving = false;
 	}
 }
-
-// Derived globals filtering
-let filteredGlobals = $derived(
-	globalRules.filter((rule) => {
-		if (!searchQuery.trim()) return true;
-		const query = searchQuery.toLowerCase().trim();
-		return rule.domains.some((d) => d.includes(query));
-	}),
-);
 
 // Helpers for notifications
 let notificationTimeout: any;
@@ -467,74 +445,7 @@ function showTimedError(msg: string) {
 					</div>
 				</section>
 
-				<!-- RIGHT: Global Predefined Domains -->
-				<section class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-sm flex flex-col gap-5 min-h-[500px]">
-					<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-850 pb-4 shrink-0">
-						<div>
-							<h3 class="font-bold text-slate-850 dark:text-slate-100 text-sm">全局等效规则</h3>
-							<p class="text-xs text-slate-450 dark:text-slate-500 mt-0.5">Bitwarden 标准全局等效域名表</p>
-						</div>
-
-						<div class="relative w-full md:w-48">
-							<Search class="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
-							<Input
-								type="search"
-								placeholder="搜索全局域名..."
-								bind:value={searchQuery}
-								class="pl-[34px] h-[34px] text-xs"
-							/>
-						</div>
-					</div>
-
-					<div class="flex-1 space-y-3 overflow-y-auto max-h-[480px] pr-1">
-						{#each filteredGlobals as rule}
-							{@const isExcluded = excludedTypes.has(rule.type)}
-							<div class="p-4 rounded-xl border border-slate-150 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between gap-4 transition-all duration-200 hover:border-slate-300 dark:hover:border-slate-700
-								{isExcluded ? 'opacity-50 grayscale-[40%]' : ''}">
-								<div class="flex items-center gap-3 min-w-0 flex-1">
-									<button
-										onclick={() => handleToggleGlobalRule(rule.type)}
-										class="text-slate-400 hover:text-primary transition-colors shrink-0"
-										title={isExcluded ? "已排除该规则 (点击启用)" : "已包含该规则 (点击排除)"}
-									>
-										{#if isExcluded}
-											<Square class="size-4 text-slate-350" />
-										{:else}
-											<CheckSquare class="size-4 text-primary" />
-										{/if}
-									</button>
-
-									<div class="min-w-0 flex-1 flex flex-wrap gap-1.5">
-										{#each rule.domains as domain}
-											<span class="px-2 py-0.5 bg-white dark:bg-slate-800 text-[11px] font-mono border border-slate-200 dark:border-slate-700 rounded-md font-semibold text-slate-750 dark:text-slate-200">
-												{domain}
-											</span>
-										{/each}
-									</div>
-								</div>
-
-								<div class="shrink-0 flex items-center">
-									{#if isExcluded}
-										<span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-200 dark:bg-slate-850 text-slate-500 border border-slate-300 dark:border-slate-750">
-											已排除
-										</span>
-									{:else}
-										<span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-primary/10 text-primary border border-primary/20">
-											已启用
-										</span>
-									{/if}
-								</div>
-							</div>
-						{/each}
-
-						{#if filteredGlobals.length === 0}
-							<div class="flex flex-col items-center justify-center p-12 text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/20 dark:bg-slate-900/10 h-full">
-								<Search class="size-8 text-slate-300 dark:text-slate-800 mb-2" />
-								<span class="text-xs">未找到匹配的全局规则</span>
-							</div>
-						{/if}
-					</div>
-				</section>
+				<GlobalEquivalentDomains rules={globalRules} bind:excludedTypes />
 				
 			</div>
 		{/if}
