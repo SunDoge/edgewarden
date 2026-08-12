@@ -542,20 +542,17 @@ export const deleteSends = factory.createHandlers(
 			return errorResponse("ids array is required", 400);
 		}
 
-		for (const id of ids) {
-			const send = await sendsDb.getSendById(db, id);
-			if (send && send.user_id === user.id) {
-				if (send.type === 1) {
-					const fileData = parseStoredSendData(send);
-					if (fileData.id) {
-						await deleteBlobObject(
-							c.env,
-							getSendFileObjectKey(send.id, String(fileData.id)),
-						);
-					}
-				}
-			}
-		}
+		const fileSends = await db
+			.selectFrom("sends")
+			.select(["id", "data"])
+			.where("user_id", "=", user.id)
+			.where("type", "=", 1)
+			.where(textColumnInJson("id", ids))
+			.execute();
+		const objectKeys = fileSends.flatMap((send) => {
+			const fileId = parseStoredSendData(send).id;
+			return fileId ? [getSendFileObjectKey(send.id, String(fileId))] : [];
+		});
 		await executeBatch(c.get("dbDialect"), [
 			db
 				.deleteFrom("sends")
@@ -564,6 +561,9 @@ export const deleteSends = factory.createHandlers(
 				.compile(),
 			revisionQuery(db, user.id),
 		]);
+		await Promise.allSettled(
+			objectKeys.map((key) => deleteBlobObject(c.env, key)),
+		);
 		return new Response(null, { status: 200 });
 	},
 );

@@ -29,26 +29,36 @@ export async function listVisibleForSync(
 	restrictedCollectionIds: string[],
 ): Promise<Selectable<Attachments>[]> {
 	return db
-		.selectFrom("attachments as attachment")
-		.innerJoin("ciphers as cipher", "cipher.id", "attachment.cipher_id")
-		.leftJoin(
-			"cipher_collections as collection_link",
-			"collection_link.cipher_id",
-			"cipher.id",
-		)
-		.selectAll("attachment")
+		.selectFrom("attachments")
+		.selectAll()
 		.where(
 			sql<boolean>`
-				cipher.user_id = ${userId}
-				or cipher.org_id in (
-					select value from json_each(${JSON.stringify(allAccessOrgIds)})
-				)
-				or collection_link.collection_id in (
-					select value from json_each(${JSON.stringify(restrictedCollectionIds)})
+				cipher_id in (
+					select id from ciphers where user_id = ${userId}
+					union
+					select id from ciphers where org_id in (
+						select value from json_each(${JSON.stringify(allAccessOrgIds)})
+					)
+					union
+					select cipher_id from cipher_collections where collection_id in (
+						select value from json_each(${JSON.stringify(restrictedCollectionIds)})
+					)
 				)
 			`,
 		)
-		.distinct()
+		.orderBy("created_at", "asc")
+		.execute();
+}
+
+export async function listByUserId(
+	db: Kysely<DB>,
+	userId: string,
+): Promise<Selectable<Attachments>[]> {
+	return db
+		.selectFrom("attachments as attachment")
+		.innerJoin("ciphers as cipher", "cipher.id", "attachment.cipher_id")
+		.selectAll("attachment")
+		.where("cipher.user_id", "=", userId)
 		.orderBy("attachment.created_at", "asc")
 		.execute();
 }
