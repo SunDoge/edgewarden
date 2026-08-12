@@ -179,10 +179,11 @@ export async function saveAccountPasskeyChallenge(
 	challenge: Insertable<WebauthnChallenges>,
 ): Promise<void> {
 	const ts = now();
-	// Cleanup expired or used challenges
+	// Keep challenge creation to one indexed cleanup query. Consumed challenges
+	// are harmless until expiry and scheduled maintenance removes them sooner.
 	await db
 		.deleteFrom("webauthn_challenges")
-		.where((eb) => eb("expires_at", "<", ts).or("used_at", "is not", null))
+		.where("expires_at", "<", ts)
 		.execute();
 
 	await db
