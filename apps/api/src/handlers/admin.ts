@@ -10,7 +10,11 @@ import {
 } from "../schemas/admin";
 import { deleteAccountData } from "../services/account-deletion";
 import { verifyAdminPassword } from "../services/admin-auth";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+	safeWriteAuditEvent,
+} from "../services/audit";
 import { invalidateUserCache } from "../services/auth";
 import {
 	decryptCredential,
@@ -230,20 +234,23 @@ export const deleteAdminInvite = factory.createHandlers(
 		const rawCode = c.req.param("code");
 		if (!rawCode) return errorResponse("Invite code required", 400);
 		const code = await hashCredential(rawCode);
-		const result = await c
-			.get("db")
-			.deleteFrom("invites")
-			.where("code", "=", code)
-			.executeTakeFirst();
-		if (!Number(result.numDeletedRows))
+		const db = c.get("db");
+		const [, result] = await c.get("dbDialect").batch([
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: c.get("user").id,
+					action: "admin.invite.delete",
+					category: "admin",
+					targetType: "invite",
+					metadata: auditRequestMetadata(c.req.raw),
+				},
+				sql<boolean>`EXISTS (SELECT 1 FROM invites WHERE code = ${code})`,
+			),
+			db.deleteFrom("invites").where("code", "=", code).compile(),
+		]);
+		if (!Number(result.numAffectedRows))
 			return errorResponse("Invite not found", 404);
-		await safeWriteAuditEvent(c.get("db"), {
-			actorUserId: c.get("user").id,
-			action: "admin.invite.delete",
-			category: "admin",
-			targetType: "invite",
-			metadata: auditRequestMetadata(c.req.raw),
-		});
 		return new Response(null, { status: 204 });
 	},
 );
@@ -257,13 +264,40 @@ export const deleteAdminInvites = factory.createHandlers(
 			c.req.valid("json").masterPasswordHash,
 		);
 		if (passwordError) return passwordError;
-		let query = c.get("db").deleteFrom("invites");
-		if (c.req.valid("query").scope === "invalid")
+		const db = c.get("db");
+		const timestamp = now();
+		const invalidOnly = c.req.valid("query").scope === "invalid";
+		let query = db.deleteFrom("invites");
+		if (invalidOnly)
 			query = query.where((eb) =>
-				eb.or([eb("status", "!=", "active"), eb("expires_at", "<=", now())]),
+				eb.or([
+					eb("status", "!=", "active"),
+					eb("expires_at", "<=", timestamp),
+				]),
 			);
-		const result = await query.executeTakeFirst();
-		return c.json({ deleted: Number(result.numDeletedRows) });
+		const eligible = invalidOnly
+			? sql<boolean>`EXISTS (
+				SELECT 1 FROM invites
+				WHERE status != 'active' OR expires_at <= ${timestamp}
+			)`
+			: sql<boolean>`EXISTS (SELECT 1 FROM invites)`;
+		const [, result] = await c.get("dbDialect").batch([
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: c.get("user").id,
+					action: "admin.invite.delete.bulk",
+					category: "admin",
+					level: "warning",
+					targetType: "invite",
+					metadata: auditRequestMetadata(c.req.raw),
+				},
+				eligible,
+				timestamp,
+			),
+			query.compile(),
+		]);
+		return c.json({ deleted: Number(result.numAffectedRows) });
 	},
 );
 
@@ -352,6 +386,15 @@ export const deleteAdminUser = factory.createHandlers(
 			c.get("db"),
 			c.get("dbDialect"),
 			targetId,
+			{
+				actorUserId: c.get("user").id,
+				action: "admin.user.delete",
+				category: "admin",
+				level: "warning",
+				targetType: "user",
+				targetId,
+				metadata: auditRequestMetadata(c.req.raw),
+			},
 		);
 		if (!result)
 			return errorResponse(
@@ -359,18 +402,6 @@ export const deleteAdminUser = factory.createHandlers(
 				409,
 			);
 		invalidateUserCache(targetId);
-		await safeWriteAuditEvent(c.get("db"), {
-			actorUserId: c.get("user").id,
-			action: "admin.user.delete",
-			category: "admin",
-			level: "warning",
-			targetType: "user",
-			targetId,
-			metadata: {
-				...auditRequestMetadata(c.req.raw),
-				size: result.ciphers + result.sends,
-			},
-		});
 		return new Response(null, { status: 204 });
 	},
 );

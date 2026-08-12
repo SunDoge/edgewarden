@@ -3,7 +3,7 @@ import { type Selectable, sql } from "kysely";
 import { factory } from "../http/factory";
 import { BulkIdsSchema } from "../schemas/ciphers";
 import { FolderSchema } from "../schemas/folders";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import {
 	conditionalFolderRevisionQuery,
 	executeBatch,
@@ -125,6 +125,24 @@ export const deleteFolder = factory.createHandlers(async (c) => {
 				),
 			)
 			.compile(),
+		auditEventInsertQuery(
+			db,
+			{
+				actorUserId: userId,
+				action: "folder.delete",
+				category: "vault",
+				targetType: "folder",
+				targetId: id,
+				metadata: auditRequestMetadata(c.req.raw),
+			},
+			sql<boolean>`EXISTS (
+				SELECT 1 FROM folders
+				WHERE id = ${id}
+				  AND user_id = ${userId}
+				  AND mutation_token = ${mutationToken}
+			)`,
+			ts,
+		),
 		db
 			.deleteFrom("folders")
 			.where("id", "=", id)
@@ -151,7 +169,7 @@ export const deleteFolders = factory.createHandlers(
 		const ts = now();
 		const mutationToken = crypto.randomUUID();
 		const expectedState = JSON.stringify(ownedFolders);
-		const [, , , deleted] = await c.get("dbDialect").batch([
+		await c.get("dbDialect").batch([
 			db
 				.updateTable("folders")
 				.set({ mutation_token: mutationToken })
@@ -182,24 +200,28 @@ export const deleteFolders = factory.createHandlers(
 					),
 				)
 				.compile(),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: userId,
+					action: "folder.delete.bulk",
+					category: "vault",
+					targetType: "folder",
+					metadata: auditRequestMetadata(c.req.raw),
+				},
+				sql<boolean>`EXISTS (
+					SELECT 1 FROM folders
+					WHERE user_id = ${userId}
+					  AND mutation_token = ${mutationToken}
+				)`,
+				ts,
+			),
 			db
 				.deleteFrom("folders")
 				.where("user_id", "=", userId)
 				.where("mutation_token", "=", mutationToken)
 				.compile(),
 		]);
-		const deletedCount = Number(deleted.numAffectedRows);
-		if (deletedCount > 0)
-			await safeWriteAuditEvent(db, {
-				actorUserId: userId,
-				action: "folder.delete.bulk",
-				category: "vault",
-				targetType: "folder",
-				metadata: {
-					...auditRequestMetadata(c.req.raw),
-					size: deletedCount,
-				},
-			});
 		return new Response(null, { status: 204 });
 	},
 );

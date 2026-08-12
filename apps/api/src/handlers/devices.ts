@@ -4,7 +4,7 @@ import { factory } from "../http/factory";
 import { VerifyPasswordSchema } from "../schemas/accounts";
 import { BulkIdsSchema } from "../schemas/ciphers";
 import { DeviceKeysSchema, DeviceNameSchema } from "../schemas/requests";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import { invalidateUserCache, verifyPassword } from "../services/auth";
 import {
 	conditionalAllDevicesDeletionClaimQuery,
@@ -81,7 +81,7 @@ export const deleteDevice = factory.createHandlers(async (c) => {
 		.where("device_identifier", "=", id)
 		.where(sql<boolean>`session_stamp IS ${device.session_stamp}`)
 		.where(sql<boolean>`mutation_token IS ${device.mutation_token}`);
-	const [, , deleted] = await c.get("dbDialect").batch([
+	const [, , , deleted] = await c.get("dbDialect").batch([
 		db
 			.deleteFrom("refresh_tokens")
 			.where("user_id", "=", userId)
@@ -94,6 +94,25 @@ export const deleteDevice = factory.createHandlers(async (c) => {
 			.where("device_identifier", "=", id)
 			.where(({ exists }) => exists(currentDevice))
 			.compile(),
+		auditEventInsertQuery(
+			db,
+			{
+				actorUserId: userId,
+				action: "device.delete",
+				category: "auth",
+				level: "warning",
+				targetType: "device",
+				targetId: id,
+				metadata: auditRequestMetadata(c.req.raw),
+			},
+			sql<boolean>`EXISTS (
+				SELECT 1 FROM devices
+				WHERE user_id = ${userId}
+				  AND device_identifier = ${id}
+				  AND session_stamp IS ${device.session_stamp}
+				  AND mutation_token IS ${device.mutation_token}
+			)`,
+		),
 		db
 			.deleteFrom("devices")
 			.where("user_id", "=", userId)
@@ -140,7 +159,7 @@ export const deleteDevices = factory.createHandlers(
 				where current_device.user_id = ${userId}
 				  and current_device.device_identifier = device_trust_tokens.device_identifier
 			)`;
-			const [, , deleted] = await c.get("dbDialect").batch([
+			const [, , , deleted] = await c.get("dbDialect").batch([
 				db
 					.deleteFrom("refresh_tokens")
 					.where("user_id", "=", userId)
@@ -151,6 +170,25 @@ export const deleteDevices = factory.createHandlers(
 					.where("user_id", "=", userId)
 					.where(matchesTrustedDevice)
 					.compile(),
+				auditEventInsertQuery(
+					db,
+					{
+						actorUserId: userId,
+						action: "device.delete.bulk",
+						category: "auth",
+						level: "warning",
+						targetType: "device",
+						metadata: auditRequestMetadata(c.req.raw),
+					},
+					sql<boolean>`EXISTS (
+						SELECT 1 FROM devices current_device
+						JOIN json_each(${expectedState}) expected
+						  ON json_extract(expected.value, '$.device_identifier') = current_device.device_identifier
+						 AND current_device.session_stamp IS json_extract(expected.value, '$.session_stamp')
+						 AND current_device.mutation_token IS json_extract(expected.value, '$.mutation_token')
+						WHERE current_device.user_id = ${userId}
+					)`,
+				),
 				db
 					.deleteFrom("devices")
 					.where("user_id", "=", userId)
@@ -165,17 +203,6 @@ export const deleteDevices = factory.createHandlers(
 			const deletedCount = Number(deleted.numAffectedRows ?? 0n);
 			if (deletedCount) {
 				invalidateUserCache(userId);
-				await safeWriteAuditEvent(db, {
-					actorUserId: userId,
-					action: "device.delete.bulk",
-					category: "auth",
-					level: "warning",
-					targetType: "device",
-					metadata: {
-						...auditRequestMetadata(c.req.raw),
-						size: deletedCount,
-					},
-				});
 			}
 			return c.json({ deleted: deletedCount });
 		}

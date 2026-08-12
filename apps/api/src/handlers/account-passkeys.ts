@@ -4,7 +4,7 @@ import {
 	generateRegistrationOptions,
 	verifyRegistrationResponse,
 } from "@simplewebauthn/server";
-import type { Selectable } from "kysely";
+import { type Selectable, sql } from "kysely";
 import { factory } from "../http/factory";
 import {
 	PasskeyAssertionOptionsSchema,
@@ -17,7 +17,11 @@ import {
 	handleGetAccountPasskeyAssertionOptions,
 	verifyUserSecret,
 } from "../services/account-passkey-auth";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+	safeWriteAuditEvent,
+} from "../services/audit";
 import { invalidateUserCache } from "../services/auth";
 import {
 	conditionalAccountPasskeyClaimQuery,
@@ -498,42 +502,46 @@ export const deleteAccountPasskey = factory.createHandlers(
 		}
 
 		const securityStamp = crypto.randomUUID();
-		const [claimed, deleted] = await c
-			.get("dbDialect")
-			.batch([
-				conditionalWebauthnCredentialDeletionClaimQuery(
-					db,
-					user.id,
-					id,
-					"login",
-					user.security_stamp,
-					securityStamp,
-				),
-				conditionalWebauthnCredentialDeletionQuery(
-					db,
-					user.id,
-					id,
-					"login",
-					securityStamp,
-				),
-				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
-				conditionalUserRevisionQuery(db, user.id, securityStamp),
-			]);
+		const [claimed, deleted] = await c.get("dbDialect").batch([
+			conditionalWebauthnCredentialDeletionClaimQuery(
+				db,
+				user.id,
+				id,
+				"login",
+				user.security_stamp,
+				securityStamp,
+			),
+			conditionalWebauthnCredentialDeletionQuery(
+				db,
+				user.id,
+				id,
+				"login",
+				securityStamp,
+			),
+			conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+			conditionalUserRevisionQuery(db, user.id, securityStamp),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: user.id,
+					action: "account.passkey.delete",
+					category: "system",
+					level: "info",
+					targetType: "accountPasskey",
+					targetId: id,
+					metadata: auditRequestMetadata(c.req.raw),
+				},
+				sql<boolean>`EXISTS (
+						SELECT 1 FROM users
+						WHERE id = ${user.id} AND security_stamp = ${securityStamp}
+					)`,
+			),
+		]);
 		if (claimed.numAffectedRows !== 1n)
 			return errorResponse("Passkey settings changed by another request", 409);
 		if (deleted.numAffectedRows !== 1n)
 			return errorResponse("Passkey deletion could not be persisted", 500);
 		invalidateUserCache(user.id);
-
-		await safeWriteAuditEvent(db, {
-			actorUserId: user.id,
-			action: "account.passkey.delete",
-			category: "system",
-			level: "info",
-			targetType: "accountPasskey",
-			targetId: id,
-			metadata: auditRequestMetadata(c.req.raw),
-		});
 
 		return jsonResponse({ success: true });
 	},
