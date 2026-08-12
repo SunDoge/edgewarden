@@ -1,4 +1,4 @@
-import type { Kysely } from "kysely";
+import type { CompiledQuery, Kysely } from "kysely";
 import type { DB } from "../../types/db";
 
 export async function getConfigValue(
@@ -18,12 +18,19 @@ export async function setConfigValue(
 	key: string,
 	value: string,
 ): Promise<void> {
-	// Use insert with onConflict update
-	await db
+	await db.executeQuery(setConfigValueQuery(db, key, value));
+}
+
+export function setConfigValueQuery(
+	db: Kysely<DB>,
+	key: string,
+	value: string,
+): CompiledQuery {
+	return db
 		.insertInto("config")
 		.values({ key, value })
 		.onConflict((oc) => oc.column("key").doUpdateSet({ value }))
-		.execute();
+		.compile();
 }
 
 export async function deleteConfigValue(

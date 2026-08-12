@@ -1,9 +1,9 @@
-import type { Kysely } from "kysely";
+import type { CompiledQuery, Kysely } from "kysely";
 import type { DB } from "../types/db";
 import type { WorkerBindings } from "../worker-bindings";
-import { getConfigValue, setConfigValue } from "./db/config";
+import { getConfigValue, setConfigValueQuery } from "./db/config";
 
-const REGISTRATION_CONFIG_KEY = "registration.policy.v1";
+export const REGISTRATION_CONFIG_KEY = "registration.policy.v1";
 export const BOOTSTRAP_LOCK_KEY = "registration.bootstrap.completed";
 
 export interface RegistrationPolicy {
@@ -49,11 +49,15 @@ export async function loadRegistrationPolicy(
 	}
 }
 
-export async function saveRegistrationPolicy(
+export function registrationPolicyQuery(
 	db: Kysely<DB>,
 	policy: RegistrationPolicy,
-): Promise<void> {
-	await setConfigValue(db, REGISTRATION_CONFIG_KEY, JSON.stringify(policy));
+): CompiledQuery {
+	return setConfigValueQuery(
+		db,
+		REGISTRATION_CONFIG_KEY,
+		JSON.stringify(policy),
+	);
 }
 
 export function adminPasswordConfigured(env: WorkerBindings): boolean {

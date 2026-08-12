@@ -6,11 +6,7 @@ import {
 	DeleteOrganizationSchema,
 	UpdateOrganizationSchema,
 } from "../schemas/organizations";
-import {
-	auditEventInsertQuery,
-	auditRequestMetadata,
-	safeWriteAuditEvent,
-} from "../services/audit";
+import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import { verifyPassword } from "../services/auth";
 import {
 	conditionalOrganizationRevisionQuery,
@@ -116,15 +112,20 @@ export const createOrganization = factory.createHandlers(
 				})
 				.compile(),
 			revisionQuery(db, user.id, ts),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: user.id,
+					action: "organization.create",
+					category: "org",
+					targetType: "organization",
+					targetId: orgId,
+					metadata: auditRequestMetadata(c.req.raw),
+				},
+				sql<boolean>`EXISTS (SELECT 1 FROM organizations WHERE id = ${orgId})`,
+				ts,
+			),
 		]);
-		await safeWriteAuditEvent(db, {
-			actorUserId: user.id,
-			action: "organization.create",
-			category: "org",
-			targetType: "organization",
-			targetId: orgId,
-			metadata: auditRequestMetadata(c.req.raw),
-		});
 		const org = await db
 			.selectFrom("organizations")
 			.selectAll()

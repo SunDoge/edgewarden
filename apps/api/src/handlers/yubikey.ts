@@ -6,11 +6,7 @@ import {
 	SaveYubicoKeysSchema,
 	YubicoSettingsSchema,
 } from "../schemas/two-factor";
-import {
-	auditEventInsertQuery,
-	auditRequestMetadata,
-	safeWriteAuditEvent,
-} from "../services/audit";
+import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import { invalidateUserCache, verifyPassword } from "../services/auth";
 import { encryptCredential } from "../services/credential-protection";
 import {
@@ -20,7 +16,8 @@ import {
 } from "../services/db/batch";
 import {
 	loadYubicoCredentials,
-	saveYubicoCredentials,
+	prepareYubicoCredentialsUpdate,
+	YUBICO_CONFIG_KEY,
 } from "../services/yubico-config";
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
@@ -210,19 +207,31 @@ export const saveYubicoConfig = factory.createHandlers(
 		} catch {
 			return errorResponse("Yubico secret key must be valid base64", 400);
 		}
-		await saveYubicoCredentials(c.get("db"), c.env.DATA_ENCRYPTION_SECRET, {
-			clientId: body.clientId,
-			secretKey: body.secretKey,
-		});
-		await safeWriteAuditEvent(c.get("db"), {
-			actorUserId: c.get("user").id,
-			action: "admin.yubico.config",
-			category: "admin",
-			level: "warning",
-			targetType: "config",
-			targetId: "yubico",
-			metadata: auditRequestMetadata(c.req.raw),
-		});
+		const db = c.get("db");
+		const prepared = await prepareYubicoCredentialsUpdate(
+			db,
+			c.env.DATA_ENCRYPTION_SECRET,
+			{ clientId: body.clientId, secretKey: body.secretKey },
+		);
+		await c.get("dbDialect").batch([
+			prepared.query,
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: c.get("user").id,
+					action: "admin.yubico.config",
+					category: "admin",
+					level: "warning",
+					targetType: "config",
+					targetId: YUBICO_CONFIG_KEY,
+					metadata: auditRequestMetadata(c.req.raw),
+				},
+				sql<boolean>`EXISTS (
+					SELECT 1 FROM config
+					WHERE key = ${YUBICO_CONFIG_KEY} AND value = ${prepared.value}
+				)`,
+			),
+		]);
 		return c.json({ configured: true, object: "yubicoConfig" });
 	},
 );

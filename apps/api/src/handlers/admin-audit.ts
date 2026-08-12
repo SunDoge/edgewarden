@@ -1,11 +1,14 @@
 import { vValidator } from "@hono/valibot-validator";
+import { sql } from "kysely";
 import { factory } from "../http/factory";
 import { AuditLogQuerySchema, AuditLogSettingsSchema } from "../schemas/admin";
 import {
+	applyAuditLogRetention,
+	AUDIT_SETTINGS_KEY,
+	auditEventInsertQuery,
+	auditLogSettingsQuery,
 	auditRequestMetadata,
 	getAuditLogSettings,
-	safeWriteAuditEvent,
-	saveAuditLogSettings,
 } from "../services/audit";
 import { toIso } from "../utils/time";
 
@@ -94,16 +97,30 @@ export const updateAuditSettings = factory.createHandlers(
 	vValidator("json", AuditLogSettingsSchema),
 	async (c) => {
 		const body = c.req.valid("json");
-		const settings = await saveAuditLogSettings(c.get("db"), {
+		const settings = {
 			retentionDays: body.retentionDays ?? null,
 			maxEntries: body.maxEntries ?? null,
-		});
-		await safeWriteAuditEvent(c.get("db"), {
-			actorUserId: c.get("user").id,
-			action: "admin.audit.settings",
-			category: "admin",
-			metadata: auditRequestMetadata(c.req.raw),
-		});
+		};
+		const db = c.get("db");
+		const serializedSettings = JSON.stringify(settings);
+		await c.get("dbDialect").batch([
+			auditLogSettingsQuery(db, settings),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: c.get("user").id,
+					action: "admin.audit.settings",
+					category: "admin",
+					metadata: auditRequestMetadata(c.req.raw),
+				},
+				sql<boolean>`EXISTS (
+					SELECT 1 FROM config
+					WHERE key = ${AUDIT_SETTINGS_KEY}
+					  AND value = ${serializedSettings}
+				)`,
+			),
+		]);
+		await applyAuditLogRetention(db, settings);
 		return c.json({ ...settings, object: "auditLogSettings" });
 	},
 );

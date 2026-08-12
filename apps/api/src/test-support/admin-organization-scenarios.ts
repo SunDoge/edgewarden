@@ -83,6 +83,45 @@ export function registerAdminOrganizationScenarios(
 			}),
 		});
 		assert.equal(wrongPolicyPassword.status, 400);
+		const registrationPolicyBefore = await context.database
+			.prepare("SELECT value FROM config WHERE key = 'registration.policy.v1'")
+			.first<{ value: string }>();
+		await context.database
+			.prepare(`
+				CREATE TRIGGER test_fail_atomic_registration_policy_audit
+				BEFORE INSERT ON audit_logs
+				WHEN NEW.action = 'admin.registration.settings'
+				BEGIN
+					SELECT RAISE(ABORT, 'simulated audit outage');
+				END
+			`)
+			.run();
+		try {
+			const failedPolicy = await request("/api/admin/registration", {
+				method: "PUT",
+				headers: { ...adminAuth, "content-type": "application/json" },
+				body: JSON.stringify({
+					masterPasswordHash: MASTER_PASSWORD_HASH,
+					signupsAllowed: true,
+					invitationsAllowed: false,
+				}),
+			});
+			assert.equal(failedPolicy.status, 500);
+			assert.deepEqual(
+				await context.database
+					.prepare(
+						"SELECT value FROM config WHERE key = 'registration.policy.v1'",
+					)
+					.first<{ value: string }>(),
+				registrationPolicyBefore,
+			);
+		} finally {
+			await context.database
+				.prepare(
+					"DROP TRIGGER IF EXISTS test_fail_atomic_registration_policy_audit",
+				)
+				.run();
+		}
 		const savedPolicy = await request("/api/admin/registration", {
 			method: "PUT",
 			headers: { ...adminAuth, "content-type": "application/json" },

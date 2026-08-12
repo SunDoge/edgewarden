@@ -10,11 +10,7 @@ import {
 } from "../schemas/admin";
 import { deleteAccountData } from "../services/account-deletion";
 import { verifyAdminPassword } from "../services/admin-auth";
-import {
-	auditEventInsertQuery,
-	auditRequestMetadata,
-	safeWriteAuditEvent,
-} from "../services/audit";
+import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import { invalidateUserCache } from "../services/auth";
 import {
 	decryptCredential,
@@ -24,7 +20,8 @@ import {
 import { conditionalRefreshTokenDeletionQuery } from "../services/db/batch";
 import {
 	loadRegistrationPolicy,
-	saveRegistrationPolicy,
+	REGISTRATION_CONFIG_KEY,
+	registrationPolicyQuery,
 } from "../services/registration-policy";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
@@ -128,20 +125,32 @@ export const updateAdminRegistrationPolicy = factory.createHandlers(
 			signupsAllowed: body.signupsAllowed,
 			invitationsAllowed: body.invitationsAllowed,
 		};
-		await saveRegistrationPolicy(c.get("db"), policy);
-		await safeWriteAuditEvent(c.get("db"), {
-			actorUserId: c.get("user").id,
-			action: "admin.registration.settings",
-			category: "admin",
-			level: "warning",
-			targetType: "config",
-			targetId: "registration.policy.v1",
-			metadata: {
-				...auditRequestMetadata(c.req.raw),
-				signupsAllowed: policy.signupsAllowed,
-				invitationsAllowed: policy.invitationsAllowed,
-			},
-		});
+		const db = c.get("db");
+		const serializedPolicy = JSON.stringify(policy);
+		await c.get("dbDialect").batch([
+			registrationPolicyQuery(db, policy),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: c.get("user").id,
+					action: "admin.registration.settings",
+					category: "admin",
+					level: "warning",
+					targetType: "config",
+					targetId: REGISTRATION_CONFIG_KEY,
+					metadata: {
+						...auditRequestMetadata(c.req.raw),
+						signupsAllowed: policy.signupsAllowed,
+						invitationsAllowed: policy.invitationsAllowed,
+					},
+				},
+				sql<boolean>`EXISTS (
+					SELECT 1 FROM config
+					WHERE key = ${REGISTRATION_CONFIG_KEY}
+					  AND value = ${serializedPolicy}
+				)`,
+			),
+		]);
 		return c.json({ ...policy, object: "registrationPolicy" });
 	},
 );
