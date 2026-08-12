@@ -11,7 +11,10 @@ import {
 	invalidateUserCache,
 	verifyPassword,
 } from "../services/auth";
-import { executeBatch, revisionQuery } from "../services/db/batch";
+import {
+	conditionalRefreshTokenDeletionQuery,
+	conditionalUserRevisionQuery,
+} from "../services/db/batch";
 import {
 	decryptCredential,
 	encryptCredential,
@@ -135,7 +138,7 @@ export const changePassword = factory.createHandlers(
 		const newStamp = crypto.randomUUID();
 
 		const ts = now();
-		await executeBatch(c.get("dbDialect"), [
+		const [updated] = await c.get("dbDialect").batch([
 			db
 				.updateTable("users")
 				.set({
@@ -147,10 +150,13 @@ export const changePassword = factory.createHandlers(
 					updated_at: ts,
 				})
 				.where("id", "=", user.id)
+				.where("master_password_hash", "=", user.master_password_hash)
 				.compile(),
-			db.deleteFrom("refresh_tokens").where("user_id", "=", user.id).compile(),
-			revisionQuery(db, user.id, ts),
+			conditionalRefreshTokenDeletionQuery(db, user.id, newStamp),
+			conditionalUserRevisionQuery(db, user.id, newStamp, ts),
 		]);
+		if (updated.numAffectedRows !== 1n)
+			return errorResponse("Password was changed by another request.", 409);
 
 		invalidateUserCache(user.id);
 		return new Response(null, { status: 200 });
@@ -206,17 +212,42 @@ export const getApiKey = factory.createHandlers(async (c) => {
 			return errorResponse("Stored API key cannot be decrypted", 500);
 		}
 	} else {
-		key = crypto.randomUUID().replace(/-/g, "");
-		await usersDb.updateUser(db, user.id, {
-			api_key_hash: await hashCredential(key),
-			api_key_encrypted: await encryptCredential(
-				key,
-				c.env.DATA_ENCRYPTION_SECRET,
-				"api-key",
-			),
-			updated_at: now(),
-		});
-		invalidateUserCache(user.id);
+		const candidate = crypto.randomUUID().replace(/-/g, "");
+		const [hash, encrypted] = await Promise.all([
+			hashCredential(candidate),
+			encryptCredential(candidate, c.env.DATA_ENCRYPTION_SECRET, "api-key"),
+		]);
+		const created = await db
+			.updateTable("users")
+			.set({
+				api_key_hash: hash,
+				api_key_encrypted: encrypted,
+				updated_at: now(),
+			})
+			.where("id", "=", user.id)
+			.where("api_key_encrypted", "is", null)
+			.executeTakeFirst();
+		if (created.numUpdatedRows === 1n) {
+			key = candidate;
+			invalidateUserCache(user.id);
+		} else {
+			const winner = await db
+				.selectFrom("users")
+				.select("api_key_encrypted")
+				.where("id", "=", user.id)
+				.executeTakeFirst();
+			if (!winner?.api_key_encrypted)
+				return errorResponse("API key creation conflicted", 409);
+			try {
+				key = await decryptCredential(
+					winner.api_key_encrypted,
+					c.env.DATA_ENCRYPTION_SECRET,
+					"api-key",
+				);
+			} catch {
+				return errorResponse("Stored API key cannot be decrypted", 500);
+			}
+		}
 	}
 	return c.json({ apiKey: key, object: "apiKey" });
 });
@@ -225,15 +256,24 @@ export const rotateApiKey = factory.createHandlers(async (c) => {
 	const user = c.get("user");
 	const db = c.get("db");
 	const key = crypto.randomUUID().replace(/-/g, "");
-	await usersDb.updateUser(db, user.id, {
-		api_key_hash: await hashCredential(key),
-		api_key_encrypted: await encryptCredential(
-			key,
-			c.env.DATA_ENCRYPTION_SECRET,
-			"api-key",
-		),
-		updated_at: now(),
-	});
+	const [hash, encrypted] = await Promise.all([
+		hashCredential(key),
+		encryptCredential(key, c.env.DATA_ENCRYPTION_SECRET, "api-key"),
+	]);
+	let query = db
+		.updateTable("users")
+		.set({
+			api_key_hash: hash,
+			api_key_encrypted: encrypted,
+			updated_at: now(),
+		})
+		.where("id", "=", user.id);
+	query = user.api_key_encrypted
+		? query.where("api_key_encrypted", "=", user.api_key_encrypted)
+		: query.where("api_key_encrypted", "is", null);
+	const rotated = await query.executeTakeFirst();
+	if (rotated.numUpdatedRows !== 1n)
+		return errorResponse("API key was rotated by another request.", 409);
 	invalidateUserCache(user.id);
 	return c.json({ apiKey: key, object: "apiKey" });
 });
