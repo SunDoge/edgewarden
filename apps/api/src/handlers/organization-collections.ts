@@ -5,6 +5,7 @@ import {
 	CreateCollectionSchema,
 	UpdateCollectionSchema,
 } from "../schemas/organizations";
+import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import {
 	collectionRevisionQuery,
 	conditionalCollectionRevisionQuery,
@@ -192,7 +193,7 @@ export const deleteCollection = factory.createHandlers(async (c) => {
 	const collection = c.get("collection");
 	const ts = now();
 	const mutationToken = crypto.randomUUID();
-	const [claimed, , deleted] = await c.get("dbDialect").batch([
+	const [claimed, , , deleted] = await c.get("dbDialect").batch([
 		db
 			.updateTable("collections")
 			.set({ mutation_token: mutationToken })
@@ -211,6 +212,24 @@ export const deleteCollection = factory.createHandlers(async (c) => {
 			)`)
 			.compile(),
 		conditionalCollectionRevisionQuery(db, collection.id, mutationToken, ts),
+		auditEventInsertQuery(
+			db,
+			{
+				actorUserId: c.get("user").id,
+				action: "organization.collection.delete",
+				category: "org",
+				level: "warning",
+				targetType: "collection",
+				targetId: collection.id,
+				metadata: auditRequestMetadata(c.req.raw),
+			},
+			sql<boolean>`EXISTS (
+				SELECT 1 FROM collections
+				WHERE id = ${collection.id}
+				  AND mutation_token = ${mutationToken}
+			)`,
+			ts,
+		),
 		db
 			.deleteFrom("collections")
 			.where("id", "=", collection.id)

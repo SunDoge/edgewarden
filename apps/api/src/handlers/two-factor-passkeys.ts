@@ -5,13 +5,18 @@ import {
 	verifyAuthenticationResponse,
 	verifyRegistrationResponse,
 } from "@simplewebauthn/server";
+import { sql } from "kysely";
 import { factory } from "../http/factory";
 import {
 	PasskeySecretSchema,
 	TwoFactorPasskeyDeleteSchema,
 	TwoFactorPasskeyRegistrationSchema,
 } from "../schemas/passkeys";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+	safeWriteAuditEvent,
+} from "../services/audit";
 import { invalidateUserCache, verifyPassword } from "../services/auth";
 import { encryptCredential } from "../services/credential-protection";
 import {
@@ -325,41 +330,47 @@ export const deleteTwoFactorPasskey = factory.createHandlers(
 		if (!existing) return errorResponse("Two-factor passkey not found", 404);
 		const ts = now();
 		const securityStamp = crypto.randomUUID();
-		const [claimed, deleted] = await c
-			.get("dbDialect")
-			.batch([
-				conditionalWebauthnCredentialDeletionClaimQuery(
-					db,
-					user.id,
-					body.id,
-					"twoFactor",
-					user.security_stamp,
-					securityStamp,
-					ts,
-				),
-				conditionalWebauthnCredentialDeletionQuery(
-					db,
-					user.id,
-					body.id,
-					"twoFactor",
-					securityStamp,
-				),
-				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
-				conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
-			]);
+		const [claimed, deleted] = await c.get("dbDialect").batch([
+			conditionalWebauthnCredentialDeletionClaimQuery(
+				db,
+				user.id,
+				body.id,
+				"twoFactor",
+				user.security_stamp,
+				securityStamp,
+				ts,
+			),
+			conditionalWebauthnCredentialDeletionQuery(
+				db,
+				user.id,
+				body.id,
+				"twoFactor",
+				securityStamp,
+			),
+			conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+			conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: user.id,
+					action: "account.two_factor.passkey.delete",
+					category: "auth",
+					targetType: "twoFactorPasskey",
+					targetId: body.id,
+					metadata: auditRequestMetadata(c.req.raw),
+				},
+				sql<boolean>`EXISTS (
+							SELECT 1 FROM users
+							WHERE id = ${user.id} AND security_stamp = ${securityStamp}
+						)`,
+				ts,
+			),
+		]);
 		if (claimed.numAffectedRows !== 1n)
 			return errorResponse("Passkey settings changed by another request", 409);
 		if (deleted.numAffectedRows !== 1n)
 			return errorResponse("Passkey deletion could not be persisted", 500);
 		invalidateUserCache(user.id);
-		await safeWriteAuditEvent(db, {
-			actorUserId: user.id,
-			action: "account.two_factor.passkey.delete",
-			category: "auth",
-			targetType: "twoFactorPasskey",
-			targetId: body.id,
-			metadata: auditRequestMetadata(c.req.raw),
-		});
 		return jsonResponse(
 			settings(
 				await webauthnDb.listAccountPasskeyCredentialsByUserId(

@@ -313,6 +313,72 @@ export function registerSendScenarios(context: SendScenarioContext): void {
 		);
 	});
 
+	test("rolls back Send deletion when its audit tombstone cannot be written", async () => {
+		const auth = {
+			authorization: `Bearer ${context.accessToken}`,
+			"content-type": "application/json",
+		};
+		const created = await request("/api/sends", {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({
+				type: 0,
+				name: "atomic-delete-audit-send",
+				key: "encrypted-key",
+				text: { text: "encrypted-text", hidden: false },
+				deletionDate: new Date(Date.now() + 86_400_000).toISOString(),
+			}),
+		});
+		assert.equal(created.status, 200, await created.clone().text());
+		const sendId = (await created.json<{ id: string }>()).id;
+		const before = await context.database
+			.prepare("SELECT deletion_date FROM sends WHERE id = ?")
+			.bind(sendId)
+			.first<{ deletion_date: number }>();
+		assert.ok(before);
+
+		await context.database
+			.prepare(`
+				CREATE TRIGGER test_fail_atomic_send_delete_audit
+				BEFORE INSERT ON audit_logs
+				WHEN NEW.action = 'send.delete'
+				BEGIN
+					SELECT RAISE(ABORT, 'simulated audit outage');
+				END
+			`)
+			.run();
+		try {
+			const failed = await request(`/api/sends/${sendId}`, {
+				method: "DELETE",
+				headers: auth,
+			});
+			assert.equal(failed.status, 500);
+			const unchanged = await context.database
+				.prepare("SELECT deletion_date FROM sends WHERE id = ?")
+				.bind(sendId)
+				.first<{ deletion_date: number }>();
+			assert.equal(unchanged?.deletion_date, before.deletion_date);
+		} finally {
+			await context.database
+				.prepare("DROP TRIGGER IF EXISTS test_fail_atomic_send_delete_audit")
+				.run();
+		}
+
+		const deleted = await request(`/api/sends/${sendId}`, {
+			method: "DELETE",
+			headers: auth,
+		});
+		assert.equal(deleted.status, 200, await deleted.clone().text());
+		assert.ok(
+			await context.database
+				.prepare(
+					"SELECT 1 FROM audit_logs WHERE action = 'send.delete' AND target_id = ? AND is_tombstone = 1",
+				)
+				.bind(sendId)
+				.first(),
+		);
+	});
+
 	test("bulk deletes only Sends owned by the authenticated user", async () => {
 		const createSend = async (token: string, name: string) => {
 			const response = await request("/api/sends", {

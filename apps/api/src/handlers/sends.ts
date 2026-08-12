@@ -1,8 +1,9 @@
 import { vValidator } from "@hono/valibot-validator";
+import { sql } from "kysely";
 import { factory } from "../http/factory";
 import { BulkIdsSchema } from "../schemas/ciphers";
 import { CreateTextSendSchema, UpdateSendSchema } from "../schemas/sends";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import {
 	activeSendRevisionQuery,
 	executeBatch,
@@ -133,30 +134,33 @@ export const deleteSends = factory.createHandlers(
 		}
 
 		const ts = now();
-		const [, deleted] = await c
-			.get("dbDialect")
-			.batch([
-				activeSendRevisionQuery(db, user.id, ids, ts),
-				db
-					.updateTable("sends")
-					.set({ deletion_date: ts, updated_at: ts })
-					.where(textColumnInJson("id", ids))
-					.where("user_id", "=", user.id)
-					.where("deletion_date", ">", ts)
-					.compile(),
-			]);
-		const deletedCount = Number(deleted.numAffectedRows ?? 0n);
-		if (deletedCount > 0)
-			await safeWriteAuditEvent(db, {
-				actorUserId: user.id,
-				action: "send.delete.bulk",
-				category: "vault",
-				targetType: "send",
-				metadata: {
-					...auditRequestMetadata(c.req.raw),
-					size: deletedCount,
+		await c.get("dbDialect").batch([
+			activeSendRevisionQuery(db, user.id, ids, ts),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: user.id,
+					action: "send.delete.bulk",
+					category: "vault",
+					targetType: "send",
+					metadata: auditRequestMetadata(c.req.raw),
 				},
-			});
+				sql<boolean>`EXISTS (
+						SELECT 1 FROM sends
+						WHERE ${textColumnInJson("id", ids)}
+						  AND user_id = ${user.id}
+						  AND deletion_date > ${ts}
+					)`,
+				ts,
+			),
+			db
+				.updateTable("sends")
+				.set({ deletion_date: ts, updated_at: ts })
+				.where(textColumnInJson("id", ids))
+				.where("user_id", "=", user.id)
+				.where("deletion_date", ">", ts)
+				.compile(),
+		]);
 		return new Response(null, { status: 200 });
 	},
 );
@@ -258,27 +262,34 @@ export const deleteSend = factory.createHandlers(async (c) => {
 	const sendId = send.id;
 
 	const ts = now();
-	const [, deleted] = await c
-		.get("dbDialect")
-		.batch([
-			activeSendRevisionQuery(db, user.id, [sendId], ts),
-			db
-				.updateTable("sends")
-				.set({ deletion_date: ts, updated_at: ts })
-				.where("id", "=", sendId)
-				.where("user_id", "=", user.id)
-				.where("deletion_date", ">", ts)
-				.compile(),
-		]);
-	if (deleted.numAffectedRows === 1n)
-		await safeWriteAuditEvent(db, {
-			actorUserId: user.id,
-			action: "send.delete",
-			category: "vault",
-			targetType: "send",
-			targetId: sendId,
-			metadata: auditRequestMetadata(c.req.raw),
-		});
+	await c.get("dbDialect").batch([
+		activeSendRevisionQuery(db, user.id, [sendId], ts),
+		auditEventInsertQuery(
+			db,
+			{
+				actorUserId: user.id,
+				action: "send.delete",
+				category: "vault",
+				targetType: "send",
+				targetId: sendId,
+				metadata: auditRequestMetadata(c.req.raw),
+			},
+			sql<boolean>`EXISTS (
+					SELECT 1 FROM sends
+					WHERE id = ${sendId}
+					  AND user_id = ${user.id}
+					  AND deletion_date > ${ts}
+				)`,
+			ts,
+		),
+		db
+			.updateTable("sends")
+			.set({ deletion_date: ts, updated_at: ts })
+			.where("id", "=", sendId)
+			.where("user_id", "=", user.id)
+			.where("deletion_date", ">", ts)
+			.compile(),
+	]);
 	return new Response(null, { status: 200 });
 });
 

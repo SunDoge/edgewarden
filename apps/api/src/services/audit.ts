@@ -170,9 +170,10 @@ function sanitizeMetadata(
 
 /**
  * Builds an audit insert that can participate in the same D1 batch as the
- * mutation it describes. The optional condition must identify the state
- * written by that exact mutation (normally with a fresh mutation token), so a
- * racing or idempotent request cannot create a false audit tombstone.
+ * mutation it describes. The optional condition must identify that batch as
+ * eligible: inspect the old state when this query precedes the mutation, or a
+ * fresh mutation token when it follows it. This prevents racing/idempotent
+ * requests from creating false audit tombstones.
  */
 export function auditEventInsertQuery(
 	db: Kysely<DB>,

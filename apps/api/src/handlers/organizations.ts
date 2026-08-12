@@ -6,7 +6,11 @@ import {
 	DeleteOrganizationSchema,
 	UpdateOrganizationSchema,
 } from "../schemas/organizations";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+	safeWriteAuditEvent,
+} from "../services/audit";
 import { verifyPassword } from "../services/auth";
 import {
 	conditionalOrganizationRevisionQuery,
@@ -230,7 +234,7 @@ export const deleteOrganization = factory.createHandlers(
 			.select("id")
 			.where("id", "=", orgId)
 			.where("deletion_token", "=", deletionToken);
-		const [deleted] = await c.get("dbDialect").batch([
+		await c.get("dbDialect").batch([
 			db
 				.updateTable("organizations")
 				.set({
@@ -277,17 +281,24 @@ export const deleteOrganization = factory.createHandlers(
 				.where(({ exists }) => exists(ownsDeletion))
 				.compile(),
 			conditionalOrganizationRevisionQuery(db, orgId, deletionToken, timestamp),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: c.get("user").id,
+					action: "organization.delete",
+					category: "org",
+					level: "warning",
+					targetType: "organization",
+					targetId: orgId,
+					metadata: auditRequestMetadata(c.req.raw),
+				},
+				sql<boolean>`EXISTS (
+					SELECT 1 FROM organizations
+					WHERE id = ${orgId} AND deletion_token = ${deletionToken}
+				)`,
+				timestamp,
+			),
 		]);
-		if (deleted.numAffectedRows === 1n)
-			await safeWriteAuditEvent(c.get("db"), {
-				actorUserId: c.get("user").id,
-				action: "organization.delete",
-				category: "org",
-				level: "warning",
-				targetType: "organization",
-				targetId: orgId,
-				metadata: auditRequestMetadata(c.req.raw),
-			});
 		return new Response(null, { status: 204 });
 	},
 );

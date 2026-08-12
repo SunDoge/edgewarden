@@ -6,7 +6,11 @@ import {
 	OrganizationInviteeQuerySchema,
 	UpdateOrganizationMemberSchema,
 } from "../schemas/organizations";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+	safeWriteAuditEvent,
+} from "../services/audit";
 import {
 	conditionalOrganizationMemberRevisionQuery,
 	organizationMemberCollectionAccessQuery,
@@ -426,7 +430,7 @@ export const removeOrganizationMember = factory.createHandlers(async (c) => {
 	}
 	const actor = c.get("orgMember");
 	const mutationToken = crypto.randomUUID();
-	const [claimed, , removed] = await c.get("dbDialect").batch([
+	const [claimed, , , removed] = await c.get("dbDialect").batch([
 		db
 			.updateTable("org_members")
 			.set({ mutation_token: mutationToken })
@@ -449,6 +453,24 @@ export const removeOrganizationMember = factory.createHandlers(async (c) => {
 			)
 			.compile(),
 		conditionalOrganizationMemberRevisionQuery(db, target.id, mutationToken),
+		auditEventInsertQuery(
+			db,
+			{
+				actorUserId: c.get("user").id,
+				action: "organization.member.delete",
+				category: "org",
+				level: "warning",
+				targetType: "organizationMember",
+				targetId: target.id,
+				metadata: auditRequestMetadata(c.req.raw),
+			},
+			sql<boolean>`EXISTS (
+				SELECT 1 FROM org_members
+				WHERE id = ${target.id}
+				  AND org_id = ${actor.org_id}
+				  AND mutation_token = ${mutationToken}
+			)`,
+		),
 		db
 			.deleteFrom("org_members")
 			.where("id", "=", target.id)
