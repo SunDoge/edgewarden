@@ -3,18 +3,22 @@ import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { CreateAttachmentSchema } from "../schemas/attachments";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import { discardUnpublishedBlob } from "../services/blob-gc";
 import {
 	createAttachmentUploadObjectKey,
-	getStoredAttachmentObjectKey,
 	getBlobObject,
 	getBlobStorageMaxBytes,
+	getStoredAttachmentObjectKey,
 	putBlobObject,
 } from "../services/blob-store";
-import { discardUnpublishedBlob } from "../services/blob-gc";
-import { executeBatch, revisionQuery } from "../services/db/batch";
 import * as attachmentsDb from "../services/db/attachments";
-import { textColumnInJson } from "../services/db/json-array";
+import {
+	executeBatch,
+	organizationRevisionQuery,
+	revisionQuery,
+} from "../services/db/batch";
 import * as ciphersDb from "../services/db/ciphers";
+import { textColumnInJson } from "../services/db/json-array";
 import {
 	buildDirectUploadUrl,
 	getSafeJwtSecret,
@@ -33,16 +37,9 @@ async function ownerRevisionQueries(
 	timestamp: number,
 ) {
 	if (cipher.user_id) return [revisionQuery(db, cipher.user_id, timestamp)];
-	const members = await db
-		.selectFrom("org_members")
-		.select("user_id")
-		.where("org_id", "=", cipher.org_id!)
-		.where("status", "=", "confirmed")
-		.where("user_id", "is not", null)
-		.execute();
-	return members.map((member: any) =>
-		revisionQuery(db, member.user_id, timestamp),
-	);
+	return cipher.org_id
+		? [organizationRevisionQuery(db, cipher.org_id, timestamp)]
+		: [];
 }
 
 async function canUploadAttachment(

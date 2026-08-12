@@ -5,10 +5,10 @@ import { factory } from "../http/factory";
 import { CipherSchema } from "../schemas/ciphers";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import {
+	conditionalCipherRevisionQuery,
 	getCipherCollectionIds,
 	getCipherPermissions,
 	revisionQueriesForCipher,
-	revisionUserIdsForCipher,
 	validateOrganizationCollections,
 } from "../services/ciphers/access";
 import {
@@ -239,22 +239,7 @@ export const updateCipher = factory.createHandlers(
 					)
 					.compile(),
 			),
-			...(await revisionUserIdsForCipher(db, cipher)).map((userId) =>
-				sql`
-					INSERT INTO user_revisions (user_id, revision_date)
-					SELECT ${userId}, ${ts}
-					WHERE EXISTS (
-						SELECT 1 FROM ciphers
-						WHERE id = ${cipher.id}
-						  AND mutation_token = ${mutationToken}
-					)
-					ON CONFLICT (user_id) DO UPDATE
-					SET revision_date = MAX(
-						user_revisions.revision_date + 1,
-						excluded.revision_date
-					)
-				`.compile(db),
-			),
+			conditionalCipherRevisionQuery(db, cipher.id, mutationToken, ts),
 		];
 		const [updateResult] = await c
 			.get("dbDialect")

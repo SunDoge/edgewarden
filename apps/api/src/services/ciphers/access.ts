@@ -1,7 +1,7 @@
-import type { CompiledQuery, Kysely, Selectable } from "kysely";
+import { type CompiledQuery, type Kysely, type Selectable, sql } from "kysely";
 import type { Ciphers, DB, OrgMembers } from "../../types/db";
 import { now } from "../../utils/time";
-import { revisionQuery } from "../db/batch";
+import { organizationRevisionQuery, revisionQuery } from "../db/batch";
 import { textColumnInJson } from "../db/json-array";
 import type { CipherPermissions } from "./presentation";
 
@@ -57,32 +57,33 @@ export async function revisionQueriesForCipher(
 ): Promise<CompiledQuery[]> {
 	if (cipher.user_id) return [revisionQuery(db, cipher.user_id, timestamp)];
 	if (!cipher.org_id) return [];
-	const members = await db
-		.selectFrom("org_members")
-		.select("user_id")
-		.where("org_id", "=", cipher.org_id)
-		.where("status", "=", "confirmed")
-		.where("user_id", "is not", null)
-		.execute();
-	return members.map((member) =>
-		revisionQuery(db, member.user_id as string, timestamp),
-	);
+	return [organizationRevisionQuery(db, cipher.org_id, timestamp)];
 }
 
-export async function revisionUserIdsForCipher(
+export function conditionalCipherRevisionQuery(
 	db: Kysely<DB>,
-	cipher: Pick<Selectable<Ciphers>, "user_id" | "org_id">,
-): Promise<string[]> {
-	if (cipher.user_id) return [cipher.user_id];
-	if (!cipher.org_id) return [];
-	const members = await db
-		.selectFrom("org_members")
-		.select("user_id")
-		.where("org_id", "=", cipher.org_id)
-		.where("status", "=", "confirmed")
-		.where("user_id", "is not", null)
-		.execute();
-	return members.map((member) => member.user_id as string);
+	cipherId: string,
+	mutationToken: string,
+	timestamp = now(),
+): CompiledQuery {
+	return sql`
+		INSERT INTO user_revisions (user_id, revision_date)
+		SELECT user_id, ${timestamp} FROM ciphers
+		WHERE id = ${cipherId} AND mutation_token = ${mutationToken}
+		  AND user_id IS NOT NULL
+		UNION
+		SELECT member.user_id, ${timestamp}
+		FROM ciphers cipher
+		INNER JOIN org_members member ON member.org_id = cipher.org_id
+		WHERE cipher.id = ${cipherId}
+		  AND cipher.mutation_token = ${mutationToken}
+		  AND member.status = 'confirmed'
+		  AND member.user_id IS NOT NULL
+		ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
+			user_revisions.revision_date + 1,
+			excluded.revision_date
+		)
+	`.compile(db);
 }
 
 export async function validateOrganizationCollections(

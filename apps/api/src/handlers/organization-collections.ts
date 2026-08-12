@@ -1,12 +1,11 @@
 import { vValidator } from "@hono/valibot-validator";
-import { type Kysely, sql } from "kysely";
+import { sql } from "kysely";
 import { factory } from "../http/factory";
 import {
 	CreateCollectionSchema,
 	UpdateCollectionSchema,
 } from "../schemas/organizations";
-import { executeBatch, revisionQuery } from "../services/db/batch";
-import type { DB } from "../types/db";
+import { executeBatch, organizationRevisionQuery } from "../services/db/batch";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
 
@@ -31,23 +30,6 @@ function collectionResponse(
 		revisionDate: toIso(collection.updated_at),
 		object: "collectionDetails",
 	};
-}
-
-async function memberRevisionQueries(
-	db: Kysely<DB>,
-	orgId: string,
-	timestamp = now(),
-) {
-	const members = await db
-		.selectFrom("org_members")
-		.select("user_id")
-		.where("org_id", "=", orgId)
-		.where("status", "=", "confirmed")
-		.where("user_id", "is not", null)
-		.execute();
-	return members.map((member) =>
-		revisionQuery(db, member.user_id as string, timestamp),
-	);
 }
 
 export const listCollections = factory.createHandlers(async (c) => {
@@ -149,7 +131,7 @@ export const createCollection = factory.createHandlers(
 					updated_at: ts,
 				})
 				.compile(),
-			...(await memberRevisionQueries(db, orgId, ts)),
+			organizationRevisionQuery(db, orgId, ts),
 		]);
 		return c.json(
 			collectionResponse({
@@ -176,7 +158,7 @@ export const updateCollection = factory.createHandlers(
 				.set({ name: c.req.valid("json").name, updated_at: ts })
 				.where("id", "=", collection.id)
 				.compile(),
-			...(await memberRevisionQueries(c.get("db"), collection.org_id, ts)),
+			organizationRevisionQuery(c.get("db"), collection.org_id, ts),
 		]);
 		return c.json(
 			collectionResponse({
@@ -213,7 +195,7 @@ export const deleteCollection = factory.createHandlers(async (c) => {
 	const ts = now();
 	await executeBatch(c.get("dbDialect"), [
 		db.deleteFrom("collections").where("id", "=", collection.id).compile(),
-		...(await memberRevisionQueries(db, collection.org_id, ts)),
+		organizationRevisionQuery(db, collection.org_id, ts),
 	]);
 	return new Response(null, { status: 204 });
 });

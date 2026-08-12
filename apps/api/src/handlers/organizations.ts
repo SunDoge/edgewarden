@@ -7,7 +7,11 @@ import {
 } from "../schemas/organizations";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import { verifyPassword } from "../services/auth";
-import { executeBatch, revisionQuery } from "../services/db/batch";
+import {
+	executeBatch,
+	organizationRevisionQuery,
+	revisionQuery,
+} from "../services/db/batch";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
 
@@ -25,23 +29,6 @@ function organizationResponse(org: any, member: any) {
 		revisionDate: toIso(org.updated_at),
 		object: "profileOrganization",
 	};
-}
-
-async function memberRevisionQueries(
-	db: any,
-	orgId: string,
-	timestamp = now(),
-) {
-	const members = await db
-		.selectFrom("org_members")
-		.select("user_id")
-		.where("org_id", "=", orgId)
-		.where("status", "=", "confirmed")
-		.where("user_id", "is not", null)
-		.execute();
-	return members.map((member: any) =>
-		revisionQuery(db, member.user_id!, timestamp),
-	);
 }
 
 export const listOrganizations = factory.createHandlers(async (c) => {
@@ -170,7 +157,7 @@ export const updateOrganization = factory.createHandlers(
 				.set({ name, updated_at: ts })
 				.where("id", "=", member.org_id)
 				.compile(),
-			...(await memberRevisionQueries(db, member.org_id, ts)),
+			organizationRevisionQuery(db, member.org_id, ts),
 		]);
 		const org = await db
 			.selectFrom("organizations")
@@ -218,7 +205,7 @@ export const deleteOrganization = factory.createHandlers(
 				.set({ deletion_date: timestamp, updated_at: timestamp })
 				.where("org_id", "=", orgId)
 				.compile(),
-			...(await memberRevisionQueries(db, orgId, timestamp)),
+			organizationRevisionQuery(db, orgId, timestamp),
 		]);
 		await safeWriteAuditEvent(c.get("db"), {
 			actorUserId: c.get("user").id,
