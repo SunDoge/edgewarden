@@ -25,10 +25,20 @@ const [r2, kv] = await Promise.all([
 ]);
 
 assert.deepEqual(commonConfig(kv), commonConfig(r2));
-assert.deepEqual(r2.r2_buckets, [{ binding: "ATTACHMENTS_R2" }]);
+assert.deepEqual(r2.d1_databases, [
+	{
+		binding: "DB",
+		database_name: "edgewarden-db",
+		migrations_dir: "apps/api/migrations",
+	},
+]);
+assert.deepEqual(r2.r2_buckets, [
+	{ binding: "ATTACHMENTS_R2", bucket_name: "edgewarden-attachments" },
+]);
 assert.equal(r2.kv_namespaces, undefined);
 assert.equal(r2.vars?.ATTACHMENT_STORAGE, "r2");
 assert.deepEqual(kv.kv_namespaces, [{ binding: "ATTACHMENTS_KV" }]);
+assert.deepEqual(kv.d1_databases, r2.d1_databases);
 assert.equal(kv.r2_buckets, undefined);
 assert.equal(kv.vars?.ATTACHMENT_STORAGE, "kv");
 

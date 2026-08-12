@@ -3,11 +3,13 @@ import type { MiddlewareHandler } from "hono";
 import { Kysely, sql } from "kysely";
 import type { HonoEnv } from "../env";
 import type { DB } from "../types/db";
+import { ensureDatabaseSchema } from "../services/database-migrations";
 
 export async function createDatabase(d1: D1Database): Promise<{
 	db: Kysely<DB>;
 	dialect: D1Dialect;
 }> {
+	await ensureDatabaseSchema(d1);
 	const dialect = new D1Dialect({ database: d1 });
 	const db = new Kysely<DB>({ dialect });
 	// D1/SQLite does not enforce FK constraints by default — enable per connection
