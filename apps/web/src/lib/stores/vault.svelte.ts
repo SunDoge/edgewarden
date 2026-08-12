@@ -10,9 +10,15 @@ import {
 } from "$lib/services/crypto";
 import {
 	loadVaultSnapshot,
-	saveVaultSnapshot,
+	saveValidatedVaultSnapshot,
 	clearVaultSnapshot,
+	type VaultSnapshot,
 } from "$lib/services/vault-db";
+import {
+	broadcastVaultEvent,
+	subscribeToVaultEvents,
+	type VaultEvent,
+} from "$lib/services/vault-events";
 import type {
 	CipherResponse,
 	FolderResponse,
@@ -246,6 +252,7 @@ async function decryptCollections(
 	collections: unknown[],
 ): Promise<Record<string, any>[]> {
 	const output: Record<string, any>[] = [];
+	let failures = 0;
 	for (const raw of collections) {
 		const collection = raw as Record<string, any>;
 		try {
@@ -263,8 +270,11 @@ async function decryptCollections(
 			});
 		} catch (error) {
 			console.error("Failed to decrypt collection", collection.id, error);
+			failures++;
 		}
 	}
+	if (failures)
+		_vault.warning = `${_vault.warning ? `${_vault.warning} ` : ""}${failures} 个集合未通过完整性校验，已隔离。`;
 	return output;
 }
 
@@ -340,6 +350,26 @@ async function decryptAllSends(
 	return decrypted;
 }
 
+async function hydrateVaultSnapshot(
+	snapshot: Omit<VaultSnapshot, "accountId">,
+	status: SyncStatus,
+): Promise<void> {
+	await setupOrganizationKeys(snapshot.profile);
+	const decryptedCiphers = await decryptAllCiphers(snapshot.ciphers);
+	const folders = await decryptAllFolders(snapshot.folders);
+	const collections = await decryptCollections(snapshot.collections ?? []);
+	const sends = await decryptAllSends(snapshot.sends ?? []);
+	_vault.folders = folders;
+	_vault.collections = collections;
+	_vault.ciphers = applyOrganizationAccess(decryptedCiphers, collections);
+	_vault.organizations = ((snapshot.profile as any).organizations ??
+		[]) as Record<string, any>[];
+	_vault.sends = sends;
+	_vault.profile = snapshot.profile;
+	_vault.syncedAt = snapshot.syncedAt;
+	_vault.status = status;
+}
+
 // ── Actions ───────────────────────────────────────────────────────────────────
 
 /**
@@ -354,33 +384,45 @@ export async function syncVaultData(): Promise<void> {
 	try {
 		const data = await syncVault();
 
-		// Save the raw ENCRYPTED data to offline IndexedDB
-		await saveVaultSnapshot({
-			ciphers: data.ciphers,
-			folders: data.folders,
-			collections: data.collections,
-			sends: data.sends as Record<string, unknown>[],
-			profile: data.profile,
-		});
-
 		// Decrypt keys in memory
 		if (!_symEncKey || !_symMacKey) await setupUserKeys(data.profile.key);
-		await setupOrganizationKeys(data.profile);
-
-		// Decrypt all ciphers in memory
-		const decryptedCiphers = await decryptAllCiphers(data.ciphers);
-		_vault.folders = await decryptAllFolders(data.folders);
-		_vault.collections = await decryptCollections(data.collections);
-		_vault.ciphers = applyOrganizationAccess(
-			decryptedCiphers,
-			_vault.collections,
+		const syncedAt = Date.now();
+		await hydrateVaultSnapshot(
+			{
+				ciphers: data.ciphers,
+				folders: data.folders,
+				collections: data.collections,
+				sends: data.sends as Record<string, unknown>[],
+				profile: data.profile,
+				syncedAt,
+			},
+			"idle",
 		);
-		_vault.organizations = ((data.profile as any).organizations ??
-			[]) as Record<string, any>[];
-		_vault.sends = await decryptAllSends(data.sends);
-		_vault.profile = data.profile;
-		_vault.syncedAt = Date.now();
-		_vault.status = "idle";
+
+		// Only replace the last known-good encrypted snapshot after every key and
+		// ciphertext required by this sync has passed validation. A partial sync is
+		// usable online, but must not destroy a complete offline snapshot.
+		try {
+			const saved = await saveValidatedVaultSnapshot(
+				{
+					ciphers: data.ciphers,
+					folders: data.folders,
+					collections: data.collections,
+					sends: data.sends as Record<string, unknown>[],
+					profile: data.profile,
+				},
+				!_vault.warning,
+			);
+			if (saved) {
+				broadcastVaultEvent({
+					type: "snapshot-updated",
+					accountId: data.profile.id,
+				});
+			}
+		} catch (cacheError) {
+			console.error("Failed to update encrypted vault cache", cacheError);
+			_vault.warning = "保险库已同步，但离线缓存更新失败。";
+		}
 	} catch (e: any) {
 		console.error("Sync error:", e);
 		// Network unavailable — try the local cache
@@ -389,20 +431,7 @@ export async function syncVaultData(): Promise<void> {
 			try {
 				// Initialize keys from cached snapshot
 				await setupUserKeys(cached.profile.key);
-				await setupOrganizationKeys(cached.profile);
-				const decryptedCiphers = await decryptAllCiphers(cached.ciphers);
-				_vault.folders = await decryptAllFolders(cached.folders);
-				_vault.collections = await decryptCollections(cached.collections ?? []);
-				_vault.ciphers = applyOrganizationAccess(
-					decryptedCiphers,
-					_vault.collections,
-				);
-				_vault.organizations = ((cached.profile as any).organizations ??
-					[]) as Record<string, any>[];
-				_vault.sends = await decryptAllSends(cached.sends ?? []);
-				_vault.profile = cached.profile;
-				_vault.syncedAt = cached.syncedAt;
-				_vault.status = "offline";
+				await hydrateVaultSnapshot(cached, "offline");
 			} catch (decErr) {
 				_vault.status = "error";
 				_vault.error = "本地缓存解密失败，可能密码已更改。";
@@ -431,19 +460,7 @@ export async function unlock(password: string): Promise<void> {
 
 	// Setup local keys and perform decryption from cache first (so UI updates instantly)
 	await setupUserKeys(cached.profile.key);
-	await setupOrganizationKeys(cached.profile);
-	const decryptedCiphers = await decryptAllCiphers(cached.ciphers);
-	_vault.folders = await decryptAllFolders(cached.folders);
-	_vault.collections = await decryptCollections(cached.collections ?? []);
-	_vault.ciphers = applyOrganizationAccess(
-		decryptedCiphers,
-		_vault.collections,
-	);
-	_vault.organizations = ((cached.profile as any).organizations ??
-		[]) as Record<string, any>[];
-	_vault.sends = await decryptAllSends(cached.sends ?? []);
-	_vault.profile = cached.profile;
-	_vault.syncedAt = cached.syncedAt;
+	await hydrateVaultSnapshot(cached, "idle");
 
 	// Attempt online sync in the background
 	try {
@@ -476,7 +493,7 @@ export function setSymmetricKeys(encKey: Uint8Array, macKey: Uint8Array): void {
  * Lock the vault: clear master key and in-memory data.
  * IndexedDB cache is kept for the next offline unlock.
  */
-export function lock(): void {
+function clearVaultMemory(): void {
 	_masterKey = null;
 	_symEncKey = null;
 	_symMacKey = null;
@@ -496,11 +513,50 @@ export function lock(): void {
 	};
 }
 
+export function lock(): void {
+	clearVaultMemory();
+	broadcastVaultEvent({ type: "locked" });
+}
+
 /**
  * Full logout: lock vault, clear IndexedDB cache, clear auth token.
  */
 export async function logout(): Promise<void> {
-	lock();
+	clearVaultMemory();
 	await clearVaultSnapshot();
+	broadcastVaultEvent({ type: "logged-out" });
 	await apiLogout();
+}
+
+async function applyRemoteVaultEvent(event: VaultEvent): Promise<void> {
+	if (event.type === "locked") {
+		clearVaultMemory();
+		window.location.replace("/vault/unlock?reason=remote");
+		return;
+	}
+	if (event.type === "logged-out") {
+		clearVaultMemory();
+		void apiLogout();
+		window.location.replace("/login?reason=remote");
+		return;
+	}
+	if (
+		!_symEncKey ||
+		!_symMacKey ||
+		_vault.status === "syncing" ||
+		_vault.profile?.id !== event.accountId
+	)
+		return;
+	const cached = await loadVaultSnapshot();
+	if (!cached || cached.accountId !== event.accountId) return;
+	_vault.warning = null;
+	await hydrateVaultSnapshot(cached, "idle");
+}
+
+if (typeof window !== "undefined") {
+	subscribeToVaultEvents((event) => {
+		void applyRemoteVaultEvent(event).catch((error) =>
+			console.error("Failed to apply vault event from another tab", error),
+		);
+	});
 }
