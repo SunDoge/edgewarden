@@ -197,25 +197,16 @@ export async function consumeAccountPasskeyChallenge(
 	userId: string | null,
 ): Promise<Selectable<WebauthnChallenges> | null> {
 	const ts = now();
-	const challenge = await db
-		.selectFrom("webauthn_challenges")
-		.selectAll()
-		.where("challenge_hash", "=", challengeHash)
-		.where("scope", "=", scope)
-		.executeTakeFirst();
-
-	if (!challenge) return null;
-	if (challenge.used_at !== null || challenge.expires_at < ts) return null;
-	if (userId !== null && challenge.user_id !== userId) return null;
-	if (userId === null && challenge.user_id !== null) return null;
-
-	const result = await db
+	let query = db
 		.updateTable("webauthn_challenges")
 		.set({ used_at: ts })
 		.where("challenge_hash", "=", challengeHash)
+		.where("scope", "=", scope)
 		.where("used_at", "is", null)
-		.executeTakeFirst();
-
-	if (Number(result.numUpdatedRows ?? 0) <= 0) return null;
-	return { ...challenge, used_at: ts };
+		.where("expires_at", ">", ts);
+	query =
+		userId !== null
+			? query.where("user_id", "=", userId)
+			: query.where("user_id", "is", null);
+	return (await query.returningAll().executeTakeFirst()) ?? null;
 }

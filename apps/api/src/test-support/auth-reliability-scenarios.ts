@@ -482,4 +482,92 @@ export function registerAuthReliabilityScenarios(
 			await db.destroy();
 		}
 	});
+
+	test("consumes a WebAuthn challenge atomically within its scope", async () => {
+		const { db } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", context.email)
+			.executeTakeFirstOrThrow();
+		const timestamp = Math.floor(Date.now() / 1000);
+		const challengeHash = `challenge-${crypto.randomUUID()}`;
+		const ownerHash = `owner-${crypto.randomUUID()}`;
+		const expiredHash = `expired-${crypto.randomUUID()}`;
+		const hashes = [challengeHash, ownerHash, expiredHash];
+		try {
+			await db
+				.insertInto("webauthn_challenges")
+				.values([
+					{
+						challenge_hash: challengeHash,
+						scope: "action",
+						user_id: user.id,
+						expires_at: timestamp + 60,
+						used_at: null,
+						created_at: timestamp,
+					},
+					{
+						challenge_hash: ownerHash,
+						scope: "action",
+						user_id: user.id,
+						expires_at: timestamp + 60,
+						used_at: null,
+						created_at: timestamp,
+					},
+					{
+						challenge_hash: expiredHash,
+						scope: "action",
+						user_id: user.id,
+						expires_at: timestamp - 1,
+						used_at: null,
+						created_at: timestamp - 60,
+					},
+				])
+				.execute();
+			const consumed = await Promise.all(
+				Array.from({ length: 8 }, () =>
+					webauthnDb.consumeAccountPasskeyChallenge(
+						db,
+						challengeHash,
+						"action",
+						user.id,
+					),
+				),
+			);
+			assert.equal(consumed.filter(Boolean).length, 1);
+			assert.equal(
+				await webauthnDb.consumeAccountPasskeyChallenge(
+					db,
+					ownerHash,
+					"action",
+					crypto.randomUUID(),
+				),
+				null,
+			);
+			assert.ok(
+				await webauthnDb.consumeAccountPasskeyChallenge(
+					db,
+					ownerHash,
+					"action",
+					user.id,
+				),
+			);
+			assert.equal(
+				await webauthnDb.consumeAccountPasskeyChallenge(
+					db,
+					expiredHash,
+					"action",
+					user.id,
+				),
+				null,
+			);
+		} finally {
+			await db
+				.deleteFrom("webauthn_challenges")
+				.where("challenge_hash", "in", hashes)
+				.execute();
+			await db.destroy();
+		}
+	});
 }
