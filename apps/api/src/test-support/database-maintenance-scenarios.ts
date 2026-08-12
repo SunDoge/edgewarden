@@ -21,6 +21,7 @@ import {
 	organizationMemberRevisionQuery,
 	organizationRevisionQuery,
 	revisionQuery,
+	webauthnCredentialRevisionQuery,
 } from "../services/db/batch";
 import {
 	deleteConfigValue,
@@ -252,6 +253,66 @@ export function registerDatabaseMaintenanceScenarios(
 			assert.equal(after.revision_date, before.revision_date + 1);
 		} finally {
 			await db.deleteFrom("org_members").where("id", "=", memberId).execute();
+			await db.destroy();
+		}
+	});
+
+	test("advances a revision once when a passkey is deleted twice", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const credentialId = crypto.randomUUID();
+		const timestamp = Math.floor(Date.now() / 1000);
+		try {
+			await db
+				.insertInto("webauthn_credentials")
+				.values({
+					id: credentialId,
+					user_id: user.id,
+					purpose: "login",
+					name: "concurrent-delete-passkey",
+					public_key: "public-key",
+					credential_id: `credential-${credentialId}`,
+					counter: 0,
+					type: "public-key",
+					aa_guid: null,
+					transports: null,
+					encrypted_user_key: null,
+					encrypted_public_key: null,
+					encrypted_private_key: null,
+					supports_prf: 0,
+					created_at: timestamp,
+					updated_at: timestamp,
+				})
+				.execute();
+			const before = await db
+				.selectFrom("user_revisions")
+				.select("revision_date")
+				.where("user_id", "=", user.id)
+				.executeTakeFirstOrThrow();
+			for (let attempt = 0; attempt < 2; attempt += 1) {
+				await executeBatch(dialect, [
+					webauthnCredentialRevisionQuery(db, user.id, credentialId, timestamp),
+					db
+						.deleteFrom("webauthn_credentials")
+						.where("id", "=", credentialId)
+						.compile(),
+				]);
+			}
+			const after = await db
+				.selectFrom("user_revisions")
+				.select("revision_date")
+				.where("user_id", "=", user.id)
+				.executeTakeFirstOrThrow();
+			assert.equal(after.revision_date, before.revision_date + 1);
+		} finally {
+			await db
+				.deleteFrom("webauthn_credentials")
+				.where("id", "=", credentialId)
+				.execute();
 			await db.destroy();
 		}
 	});
