@@ -120,12 +120,33 @@ export function organizationMemberRevisionQuery(
 	`.compile(db);
 }
 
+export function conditionalOrganizationMemberRevisionQuery(
+	db: Kysely<DB>,
+	memberId: string,
+	mutationToken: string,
+	timestamp = now(),
+) {
+	return sql`
+		INSERT INTO user_revisions (user_id, revision_date)
+		SELECT user_id, ${timestamp}
+		FROM org_members
+		WHERE id = ${memberId}
+		  AND mutation_token = ${mutationToken}
+		  AND user_id IS NOT NULL
+		ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
+			user_revisions.revision_date + 1,
+			excluded.revision_date
+		)
+	`.compile(db);
+}
+
 export function organizationMemberCollectionAccessQuery(
 	db: Kysely<DB>,
 	memberId: string,
 	collectionId: string,
 	readOnly: boolean,
 	hidePasswords: boolean,
+	mutationToken?: string,
 ) {
 	return sql`
 		INSERT INTO collection_members (
@@ -142,6 +163,11 @@ export function organizationMemberCollectionAccessQuery(
 		FROM org_members member
 		INNER JOIN collections collection ON collection.org_id = member.org_id
 		WHERE member.id = ${memberId}
+		  AND ${
+				mutationToken === undefined
+					? sql<boolean>`true`
+					: sql<boolean>`member.mutation_token = ${mutationToken}`
+			}
 		  AND collection.id = ${collectionId}
 	`.compile(db);
 }
