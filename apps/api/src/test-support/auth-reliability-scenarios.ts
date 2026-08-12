@@ -8,6 +8,7 @@ import {
 	conditionalAllDevicesDeletionQuery,
 	conditionalDeviceTrustTokenDeletionQuery,
 	conditionalUserRevisionQuery,
+	conditionalWebauthnChallengeConsumptionQuery,
 	conditionalWebauthnCredentialDeletionClaimQuery,
 	conditionalWebauthnCredentialDeletionQuery,
 	conditionalWebauthnCredentialInsertQuery,
@@ -69,8 +70,22 @@ export function registerAuthReliabilityScenarios(
 			.executeTakeFirstOrThrow();
 		const timestamp = Math.floor(Date.now() / 1000);
 		const ids = [crypto.randomUUID(), crypto.randomUUID()];
+		const challengeHashes = ids.map((id) => `registration-${id}`);
 		try {
-			const affected: Array<[bigint, bigint]> = [];
+			await db
+				.insertInto("webauthn_challenges")
+				.values(
+					challengeHashes.map((challengeHash) => ({
+						challenge_hash: challengeHash,
+						scope: "register",
+						user_id: user.id,
+						expires_at: timestamp + 60,
+						used_at: null,
+						created_at: timestamp,
+					})),
+				)
+				.execute();
+			const affected: Array<[bigint, bigint, bigint]> = [];
 			for (const [attempt, id] of ids.entries()) {
 				const securityStamp = crypto.randomUUID();
 				const credential = {
@@ -92,7 +107,7 @@ export function registerAuthReliabilityScenarios(
 					created_at: timestamp,
 					updated_at: timestamp,
 				};
-				const [claimed, inserted] = await dialect.batch([
+				const [claimed, inserted, consumed] = await dialect.batch([
 					conditionalAccountPasskeyClaimQuery(
 						db,
 						user.id,
@@ -101,23 +116,43 @@ export function registerAuthReliabilityScenarios(
 						securityStamp,
 						5,
 						timestamp,
+						{ hash: challengeHashes[attempt], scope: "register" },
 					),
 					conditionalWebauthnCredentialInsertQuery(
 						db,
 						credential,
 						securityStamp,
 					),
+					conditionalWebauthnChallengeConsumptionQuery(db, {
+						challengeHash: challengeHashes[attempt],
+						scope: "register",
+						userId: user.id,
+						credentialId: credential.credential_id,
+						mutationToken: credential.mutation_token,
+						timestamp,
+					}),
 					conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
 				]);
 				affected.push([
 					claimed.numAffectedRows ?? 0n,
 					inserted.numAffectedRows ?? 0n,
+					consumed.numAffectedRows ?? 0n,
 				]);
 			}
 			assert.deepEqual(affected, [
-				[1n, 1n],
-				[0n, 0n],
+				[1n, 1n, 1n],
+				[0n, 0n, 0n],
 			]);
+			assert.deepEqual(
+				await db
+					.selectFrom("webauthn_challenges")
+					.select(["challenge_hash", "used_at"])
+					.where("challenge_hash", "in", challengeHashes)
+					.orderBy("challenge_hash")
+					.execute()
+					.then((rows) => rows.map((row) => row.used_at !== null).sort()),
+				[false, true],
+			);
 			const after = await db
 				.selectFrom("user_revisions")
 				.select("revision_date")
@@ -125,6 +160,10 @@ export function registerAuthReliabilityScenarios(
 				.executeTakeFirstOrThrow();
 			assert.equal(after.revision_date, revision.revision_date + 1);
 		} finally {
+			await db
+				.deleteFrom("webauthn_challenges")
+				.where("challenge_hash", "in", challengeHashes)
+				.execute();
 			await db
 				.deleteFrom("webauthn_credentials")
 				.where("id", "in", ids)
@@ -516,7 +555,7 @@ export function registerAuthReliabilityScenarios(
 	});
 
 	test("consumes a WebAuthn challenge atomically within its scope", async () => {
-		const { db } = await createDatabase(context.database);
+		const { db, dialect } = await createDatabase(context.database);
 		const user = await db
 			.selectFrom("users")
 			.select("id")
@@ -526,7 +565,20 @@ export function registerAuthReliabilityScenarios(
 		const challengeHash = `challenge-${crypto.randomUUID()}`;
 		const ownerHash = `owner-${crypto.randomUUID()}`;
 		const expiredHash = `expired-${crypto.randomUUID()}`;
-		const hashes = [challengeHash, ownerHash, expiredHash];
+		const assertionHash = `assertion-${crypto.randomUUID()}`;
+		const competingAssertionHashes = [
+			`competing-assertion-${crypto.randomUUID()}`,
+			`competing-assertion-${crypto.randomUUID()}`,
+		];
+		const credentialId = `assertion-credential-${crypto.randomUUID()}`;
+		const credentialRowId = crypto.randomUUID();
+		const hashes = [
+			challengeHash,
+			ownerHash,
+			expiredHash,
+			assertionHash,
+			...competingAssertionHashes,
+		];
 		try {
 			await db
 				.insertInto("webauthn_challenges")
@@ -555,8 +607,120 @@ export function registerAuthReliabilityScenarios(
 						used_at: null,
 						created_at: timestamp - 60,
 					},
+					{
+						challenge_hash: assertionHash,
+						scope: "login",
+						user_id: null,
+						expires_at: timestamp + 60,
+						used_at: null,
+						created_at: timestamp,
+					},
+					...competingAssertionHashes.map((hash) => ({
+						challenge_hash: hash,
+						scope: "login",
+						user_id: null,
+						expires_at: timestamp + 60,
+						used_at: null,
+						created_at: timestamp,
+					})),
 				])
 				.execute();
+			await db
+				.insertInto("webauthn_credentials")
+				.values({
+					id: credentialRowId,
+					user_id: user.id,
+					purpose: "login",
+					name: "Atomic assertion",
+					public_key: "AQID",
+					credential_id: credentialId,
+					counter: 0,
+					type: "public-key",
+					aa_guid: null,
+					transports: "[]",
+					encrypted_user_key: null,
+					encrypted_public_key: null,
+					encrypted_private_key: null,
+					supports_prf: 0,
+					created_at: timestamp,
+					updated_at: timestamp,
+				})
+				.execute();
+			assert.equal(
+				await webauthnDb.claimVerifiedPasskeyAssertion(db, dialect, {
+					challengeHash: assertionHash,
+					scope: "action",
+					challengeUserId: null,
+					credentialUserId: user.id,
+					credentialId,
+					expectedCounter: 0,
+					newCounter: 99,
+				}),
+				null,
+			);
+			assert.deepEqual(
+				await Promise.all([
+					db
+						.selectFrom("webauthn_credentials")
+						.select("counter")
+						.where("id", "=", credentialRowId)
+						.executeTakeFirstOrThrow()
+						.then((row) => row.counter),
+					db
+						.selectFrom("webauthn_challenges")
+						.select("used_at")
+						.where("challenge_hash", "=", assertionHash)
+						.executeTakeFirstOrThrow()
+						.then((row) => row.used_at),
+				]),
+				[0, null],
+			);
+			const assertions = await Promise.all(
+				Array.from({ length: 8 }, () =>
+					webauthnDb.claimVerifiedPasskeyAssertion(db, dialect, {
+						challengeHash: assertionHash,
+						scope: "login",
+						challengeUserId: null,
+						credentialUserId: user.id,
+						credentialId,
+						expectedCounter: 0,
+						// Discoverable passkeys commonly report a permanently-zero counter.
+						newCounter: 0,
+					}),
+				),
+			);
+			assert.equal(assertions.filter(Boolean).length, 1);
+			assert.ok(
+				await db
+					.selectFrom("webauthn_challenges")
+					.select("used_at")
+					.where("challenge_hash", "=", assertionHash)
+					.executeTakeFirstOrThrow()
+					.then((row) => row.used_at),
+			);
+			const competingAssertions = await Promise.all(
+				competingAssertionHashes.map((hash) =>
+					webauthnDb.claimVerifiedPasskeyAssertion(db, dialect, {
+						challengeHash: hash,
+						scope: "login",
+						challengeUserId: null,
+						credentialUserId: user.id,
+						credentialId,
+						expectedCounter: 0,
+						newCounter: 1,
+					}),
+				),
+			);
+			assert.equal(competingAssertions.filter(Boolean).length, 1);
+			assert.deepEqual(
+				await db
+					.selectFrom("webauthn_challenges")
+					.select("used_at")
+					.where("challenge_hash", "in", competingAssertionHashes)
+					.execute()
+					.then((rows) => rows.map((row) => row.used_at !== null).sort()),
+				[false, true],
+			);
 			const consumed = await Promise.all(
 				Array.from({ length: 8 }, () =>
 					webauthnDb.consumeAccountPasskeyChallenge(
@@ -595,6 +759,10 @@ export function registerAuthReliabilityScenarios(
 				null,
 			);
 		} finally {
+			await db
+				.deleteFrom("webauthn_credentials")
+				.where("id", "=", credentialRowId)
+				.execute();
 			await db
 				.deleteFrom("webauthn_challenges")
 				.where("challenge_hash", "in", hashes)

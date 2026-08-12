@@ -190,10 +190,17 @@ export async function handlePasswordGrant(
 					token?: string;
 					deviceResponse?: unknown;
 				};
-				await assertTwoFactorPasskey(c.req.raw, c.env, db, user.id, {
-					token: String(parsed.token ?? ""),
-					deviceResponse: parsed.deviceResponse,
-				});
+				await assertTwoFactorPasskey(
+					c.req.raw,
+					c.env,
+					db,
+					c.get("dbDialect"),
+					user.id,
+					{
+						token: String(parsed.token ?? ""),
+						deviceResponse: parsed.deviceResponse,
+					},
+				);
 			} catch {
 				return identityErrorResponse(
 					"Two-step passkey is invalid. Try again.",

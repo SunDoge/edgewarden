@@ -352,6 +352,7 @@ export function conditionalTwoFactorPasskeyClaimQuery(
 	securityStamp: string,
 	maximumCredentials: number,
 	timestamp = now(),
+	challenge?: { hash: string; scope: string },
 ) {
 	return sql`
 		UPDATE users
@@ -371,6 +372,18 @@ export function conditionalTwoFactorPasskeyClaimQuery(
 		    SELECT COUNT(*) FROM webauthn_credentials
 		    WHERE user_id = ${userId} AND purpose = 'twoFactor'
 		  ) < ${maximumCredentials}
+		  AND ${
+				challenge
+					? sql<boolean>`EXISTS (
+		    SELECT 1 FROM webauthn_challenges
+		    WHERE challenge_hash = ${challenge.hash}
+		      AND scope = ${challenge.scope}
+		      AND user_id = ${userId}
+		      AND used_at IS NULL
+		      AND expires_at > ${timestamp}
+		  )`
+					: sql<boolean>`TRUE`
+			}
 	`.compile(db);
 }
 
@@ -408,6 +421,7 @@ export function conditionalAccountPasskeyClaimQuery(
 	securityStamp: string,
 	maximumCredentials: number,
 	timestamp = now(),
+	challenge?: { hash: string; scope: string },
 ) {
 	return sql`
 		UPDATE users
@@ -422,6 +436,45 @@ export function conditionalAccountPasskeyClaimQuery(
 		    SELECT COUNT(*) FROM webauthn_credentials
 		    WHERE user_id = ${userId} AND purpose = 'login'
 		  ) < ${maximumCredentials}
+		  AND ${
+				challenge
+					? sql<boolean>`EXISTS (
+		    SELECT 1 FROM webauthn_challenges
+		    WHERE challenge_hash = ${challenge.hash}
+		      AND scope = ${challenge.scope}
+		      AND user_id = ${userId}
+		      AND used_at IS NULL
+		      AND expires_at > ${timestamp}
+		  )`
+					: sql<boolean>`TRUE`
+			}
+	`.compile(db);
+}
+
+export function conditionalWebauthnChallengeConsumptionQuery(
+	db: Kysely<DB>,
+	args: {
+		challengeHash: string;
+		scope: string;
+		userId: string;
+		credentialId: string;
+		mutationToken: string;
+		timestamp: number;
+	},
+) {
+	return sql`
+		UPDATE webauthn_challenges
+		SET used_at = ${args.timestamp}
+		WHERE challenge_hash = ${args.challengeHash}
+		  AND scope = ${args.scope}
+		  AND user_id = ${args.userId}
+		  AND used_at IS NULL
+		  AND expires_at > ${args.timestamp}
+		  AND EXISTS (
+		    SELECT 1 FROM webauthn_credentials
+		    WHERE credential_id = ${args.credentialId}
+		      AND mutation_token = ${args.mutationToken}
+		  )
 	`.compile(db);
 }
 
