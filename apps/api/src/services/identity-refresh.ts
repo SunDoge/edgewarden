@@ -1,11 +1,10 @@
 import type { D1Dialect } from "@sundoge/kysely-d1";
-import type { Kysely, Selectable } from "kysely";
+import { type Kysely, type Selectable, sql } from "kysely";
 import { LIMITS } from "../config";
 import type { DB, Users } from "../types/db";
 import { createRefreshToken, hashRefreshToken } from "../utils/jwt";
 import { now } from "../utils/time";
 import { generateAccessToken } from "./auth";
-import { executeBatch } from "./db/batch";
 import * as devicesDb from "./db/devices";
 import * as refreshTokensDb from "./db/refresh-tokens";
 import * as usersDb from "./db/users";
@@ -65,22 +64,29 @@ export async function refreshIdentitySession(args: {
 
 	const refreshToken = createRefreshToken();
 	const sessionTime = now();
-	await executeBatch(args.dialect, [
+	const oldTokenHash = await hashRefreshToken(args.rawToken);
+	const newTokenHash = await hashRefreshToken(refreshToken);
+	const [inserted] = await args.dialect.batch([
+		sql`
+			insert into refresh_tokens (
+				token, user_id, expires_at, device_identifier, device_session_stamp
+			)
+			select
+				${newTokenHash}, user_id,
+				${sessionTime + LIMITS.auth.refreshTokenTtlSeconds},
+				device_identifier, device_session_stamp
+			from refresh_tokens
+			where token = ${oldTokenHash}
+			  and user_id = ${user.id}
+		`.compile(args.db),
 		args.db
 			.deleteFrom("refresh_tokens")
-			.where("token", "=", await hashRefreshToken(args.rawToken))
-			.compile(),
-		args.db
-			.insertInto("refresh_tokens")
-			.values({
-				token: await hashRefreshToken(refreshToken),
-				user_id: user.id,
-				expires_at: sessionTime + LIMITS.auth.refreshTokenTtlSeconds,
-				device_identifier: deviceSession?.identifier ?? null,
-				device_session_stamp: deviceSession?.sessionStamp ?? null,
-			})
+			.where("token", "=", oldTokenHash)
 			.compile(),
 	]);
+	if (Number(inserted.numAffectedRows ?? 0n) !== 1) {
+		return { ok: false, reason: "invalid_refresh_token" };
+	}
 	return {
 		ok: true,
 		user,

@@ -218,6 +218,32 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
 		assert.equal(replay.status, 400);
 	});
 
+	test("allows only one concurrent refresh-token rotation", async () => {
+		const previousRefreshToken = context.refreshToken;
+		const rotate = () =>
+			request("/identity/connect/token", {
+				method: "POST",
+				headers: { "content-type": "application/x-www-form-urlencoded" },
+				body: new URLSearchParams({
+					grant_type: "refresh_token",
+					refresh_token: previousRefreshToken,
+				}),
+			});
+		const responses = await Promise.all([rotate(), rotate()]);
+		assert.deepEqual(
+			responses.map((response) => response.status).sort(),
+			[200, 400],
+		);
+		const winner = responses.find((response) => response.status === 200);
+		assert.ok(winner);
+		const tokens = await winner.json<{
+			access_token: string;
+			refresh_token: string;
+		}>();
+		context.accessToken = tokens.access_token;
+		context.refreshToken = tokens.refresh_token;
+	});
+
 	test("keeps web refresh tokens out of JavaScript-readable responses", async () => {
 		const login = await request("/identity/connect/token", {
 			method: "POST",
