@@ -4,8 +4,8 @@
 
 1. Export an instance backup and verify its filename checksum in the backup center.
 2. Read the release notes for new bindings or secrets.
-3. Deploy normally. `pnpm deploy` resolves D1, validates the exact generated Wrangler configuration with a dry run, applies pending migrations, and publishes only after they succeed. `deploy:kv` does the same with the KV configuration.
-4. Verify `/api/health` returns HTTP 200. This probes the required secrets, selected attachment backend, D1 binding, and newest schema contract.
+3. Set `EDGEWARDEN_HEALTH_URL` to the public instance origin in the Cloudflare build variables (for example, `https://edgewarden.example.com`).
+4. Deploy normally. `pnpm deploy` resolves D1, validates the exact generated Wrangler configuration with a dry run, applies pending migrations, publishes only after they succeed, and waits for `/api/health` to report ready. `deploy:kv` does the same with the KV configuration. The health probe checks required secrets, the selected attachment backend, D1, and the newest schema contract. It retries briefly for edge propagation and fails the deployment command if the new release never becomes healthy.
 5. Run the compatibility smoke test and verify Web Vault login, sync, and attachment download.
 
 After the first real deployment, never rewrite an applied migration. Add a new numbered migration, run `pnpm --filter @edgewarden/api db:codegen` to regenerate `apps/api/src/types/db.d.ts`, and test both a fresh schema and an upgrade from the preceding release.
