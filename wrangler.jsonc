@@ -1,5 +1,5 @@
 {
-	"$schema": "node_modules/.pnpm/wrangler@4.120.1/node_modules/wrangler/config-schema.json",
+	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "edgewarden",
 	"main": "apps/api/src/index.ts",
 	"compatibility_date": "2026-06-22",
@@ -12,8 +12,7 @@
 		{
 			"binding": "DB",
 			"database_name": "edgewarden-db",
-			"migrations_dir": "apps/api/migrations",
-			"database_id": "1d77d7e3-0ea8-402b-ad0f-960d993caed1"
+			"migrations_dir": "apps/api/migrations"
 		}
 	],
 	"r2_buckets": [

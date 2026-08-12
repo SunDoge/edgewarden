@@ -9,6 +9,7 @@ build/
 
 # Cloudflare / Wrangler
 .wrangler/
+.edgewarden-deploy-*.jsonc
 .dev.vars
 
 # OS
