@@ -42,7 +42,6 @@ import {
 	WifiOff,
 } from "@lucide/svelte";
 import { onMount } from "svelte";
-import { match } from "ts-pattern";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import { Button } from "$lib/components/ui/button/index.js";
@@ -84,6 +83,10 @@ import {
 import { buildCipherPayload } from "$lib/services/cipher-draft";
 import { calcTotpNow, encryptCipher, encryptStr } from "$lib/services/crypto";
 import { scanTotpQrFile } from "$lib/services/totp-qr";
+import {
+	createVaultEditorForm,
+	vaultCipherToEditorForm,
+} from "$lib/services/vault-editor";
 import {
 	type DuplicateMode,
 	filterAndSortVaultItems,
@@ -248,21 +251,7 @@ $effect(() => {
 let isEditing = $state(false);
 let isCreating = $state(false);
 
-let editType = $state<CipherType>(CipherType.Login);
-let editName = $state("");
-let editNotes = $state("");
-let editFavorite = $state(false);
-let editFolderId = $state<string | null>(null);
-let editOrganizationId = $state<string | null>(null);
-let editCollectionIds = $state<string[]>([]);
-
-let loginUsername = $state("");
-let loginPassword = $state("");
-let loginUri = $state("");
-let loginUris = $state<Array<{ uri: string; match: number | null }>>([
-	{ uri: "", match: null },
-]);
-let loginTotp = $state("");
+let editor = $state(createVaultEditorForm());
 let totpQrError = $state("");
 let totpQrInput = $state<HTMLInputElement | null>(null);
 
@@ -273,22 +262,11 @@ async function importTotpQr(event: Event) {
 	if (!file) return;
 	totpQrError = "";
 	try {
-		loginTotp = await scanTotpQrFile(file);
+		editor.loginTotp = await scanTotpQrFile(file);
 	} catch (error) {
 		totpQrError = error instanceof Error ? error.message : "无法识别二维码";
 	}
 }
-let customFields = $state<Array<{ name: string; value: string; type: number }>>(
-	[],
-);
-let extraData = $state("{}");
-
-let cardholderName = $state("");
-let cardNumber = $state("");
-
-let firstName = $state("");
-let lastName = $state("");
-let identityNumber = $state("");
 
 onMount(async () => {
 	if (!isLoggedIn()) {
@@ -436,35 +414,11 @@ function copyToClipboard(text: string, fieldName: string) {
 		if (copiedField === fieldName) copiedField = null;
 	}, 2000);
 }
-
-// Action helpers
 function startCreate() {
 	selectedItem = null;
 	isEditing = false;
 	isCreating = true;
-
-	editType = CipherType.Login;
-	editName = "";
-	editNotes = "";
-	editFavorite = false;
-	editFolderId = activeFolder;
-	editOrganizationId = null;
-	editCollectionIds = [];
-
-	loginUsername = "";
-	loginPassword = "";
-	loginUri = "";
-	loginUris = [{ uri: "", match: null }];
-	loginTotp = "";
-	customFields = [];
-	extraData = "{}";
-
-	cardholderName = "";
-	cardNumber = "";
-
-	firstName = "";
-	lastName = "";
-	identityNumber = "";
+	editor = createVaultEditorForm(activeFolder);
 }
 
 function startEdit() {
@@ -475,65 +429,7 @@ function startEdit() {
 	}
 	isCreating = false;
 	isEditing = true;
-
-	editType = selectedItem.type;
-	editName = selectedItem.name;
-	editNotes = selectedItem.notes ?? "";
-	editFavorite = selectedItem.favorite;
-	editFolderId = selectedItem.folderId;
-	editOrganizationId = selectedItem.organizationId ?? null;
-	editCollectionIds = [...(selectedItem.collectionIds ?? [])];
-
-	loginUsername = "";
-	loginPassword = "";
-	loginUri = "";
-	loginUris = [{ uri: "", match: null }];
-	loginTotp = "";
-	customFields = Array.isArray(selectedItem.fields)
-		? selectedItem.fields.map((field: any) => ({
-				name: field.name ?? "",
-				value: field.value ?? "",
-				type: Number(field.type ?? 0),
-			}))
-		: [];
-	extraData = "{}";
-	cardholderName = "";
-	cardNumber = "";
-	firstName = "";
-	lastName = "";
-	identityNumber = "";
-
-	if (editType === CipherType.Login) {
-		const login = selectedItem.login || {};
-		loginUsername = login.username ?? "";
-		loginPassword = login.password ?? "";
-		loginUri = login.uri ?? "";
-		loginUris =
-			Array.isArray(login.uris) && login.uris.length
-				? login.uris.map((entry: any) => ({
-						uri: entry.uri ?? "",
-						match: entry.match ?? null,
-					}))
-				: [{ uri: login.uri ?? "", match: null }];
-		loginTotp = login.totp ?? "";
-	} else if (editType === CipherType.Card) {
-		const card = selectedItem.card || {};
-		cardholderName = card.cardholderName ?? "";
-		cardNumber = card.number ?? "";
-	} else if (editType === CipherType.Identity) {
-		const id = selectedItem.identity || {};
-		firstName = id.firstName ?? "";
-		lastName = id.lastName ?? "";
-		identityNumber = id.number ?? "";
-	} else if (editType >= CipherType.SshKey) {
-		const key = match(editType)
-			.with(CipherType.SshKey, () => "sshKey")
-			.with(CipherType.BankAccount, () => "bankAccount")
-			.with(CipherType.DriversLicense, () => "driversLicense")
-			.with(CipherType.Passport, () => "passport")
-			.otherwise(() => "");
-		extraData = JSON.stringify(selectedItem[key] ?? {}, null, 2);
-	}
+	editor = vaultCipherToEditorForm(selectedItem);
 }
 
 function cancelEdit() {
@@ -542,51 +438,58 @@ function cancelEdit() {
 }
 
 function toggleEditCollection(collectionId: string, checked: boolean) {
-	editCollectionIds = checked
-		? [...new Set([...editCollectionIds, collectionId])]
-		: editCollectionIds.filter((id) => id !== collectionId);
+	editor.collectionIds = checked
+		? [...new Set([...editor.collectionIds, collectionId])]
+		: editor.collectionIds.filter((id) => id !== collectionId);
 }
 
 async function handleSaveCipher() {
 	try {
 		const payload = buildCipherPayload(
 			{
-				type: editType,
-				name: editName,
-				notes: editNotes,
-				favorite: editFavorite,
-				folderId: editFolderId,
+				type: editor.type,
+				name: editor.name,
+				notes: editor.notes,
+				favorite: editor.favorite,
+				folderId: editor.folderId,
 				login: {
-					username: loginUsername,
-					password: loginPassword,
-					uri: loginUri,
-					uris: loginUris,
-					totp: loginTotp,
+					username: editor.loginUsername,
+					password: editor.loginPassword,
+					uri: editor.loginUri,
+					uris: editor.loginUris,
+					totp: editor.loginTotp,
 				},
-				card: { cardholderName, number: cardNumber },
-				identity: { firstName, lastName, number: identityNumber },
-				customFields,
-				extraData,
+				card: {
+					cardholderName: editor.cardholderName,
+					number: editor.cardNumber,
+				},
+				identity: {
+					firstName: editor.firstName,
+					lastName: editor.lastName,
+					number: editor.identityNumber,
+				},
+				customFields: editor.customFields,
+				extraData: editor.extraData,
 			},
 			selectedItem,
 			isEditing,
 		);
-		const ownerKey = editOrganizationId
-			? getOrganizationKey(editOrganizationId)
+		const ownerKey = editor.organizationId
+			? getOrganizationKey(editor.organizationId)
 			: vault.symEncKey && vault.symMacKey
 				? { encKey: vault.symEncKey, macKey: vault.symMacKey }
 				: null;
 		if (!ownerKey) {
 			throw new Error("密钥未就绪，请重新解锁保险库");
 		}
-		if (editOrganizationId && !editCollectionIds.length)
+		if (editor.organizationId && !editor.collectionIds.length)
 			throw new Error("组织条目至少需要选择一个集合");
 		const encryptedPayload = await encryptCipher(
 			{
 				...payload,
-				folderId: editOrganizationId ? null : payload.folderId,
-				organizationId: editOrganizationId,
-				collectionIds: editOrganizationId ? editCollectionIds : [],
+				folderId: editor.organizationId ? null : payload.folderId,
+				organizationId: editor.organizationId,
+				collectionIds: editor.organizationId ? editor.collectionIds : [],
 			},
 			ownerKey.encKey,
 			ownerKey.macKey,
@@ -879,7 +782,7 @@ async function toggleFavorite(item: any) {
 						{#if isCreating}
 							<div class="space-y-1.5">
 								<span class="text-xs font-semibold text-slate-400 font-bold">条目类型</span>
-								<select bind:value={editType} class="w-full p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm">
+								<select bind:value={editor.type} class="w-full p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm">
 									<option value={CipherType.Login}>登录凭据</option>
 									<option value={CipherType.SecureNote}>安全便签</option>
 									<option value={CipherType.Card}>支付卡片</option>
@@ -894,12 +797,12 @@ async function toggleFavorite(item: any) {
 
 						<div class="space-y-1.5">
 							<span class="text-xs font-semibold text-slate-400 font-bold">条目名称</span>
-							<Input bind:value={editName} placeholder="例如: 我的个人邮箱" />
+							<Input bind:value={editor.name} placeholder="例如: 我的个人邮箱" />
 						</div>
 
 						<div class="space-y-1.5">
 							<span class="text-xs font-semibold text-slate-400 font-bold">所有者</span>
-							<select bind:value={editOrganizationId} disabled={isEditing} onchange={() => { editFolderId = null; editCollectionIds = []; }} class="w-full p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm disabled:opacity-60">
+							<select bind:value={editor.organizationId} disabled={isEditing} onchange={() => { editor.folderId = null; editor.collectionIds = []; }} class="w-full p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm disabled:opacity-60">
 								<option value={null}>我的保险库</option>
 								{#each vault.organizations as organization}
 									<option value={organization.id}>{organization.name}</option>
@@ -907,12 +810,12 @@ async function toggleFavorite(item: any) {
 							</select>
 						</div>
 
-						{#if editOrganizationId}
+						{#if editor.organizationId}
 							<div class="space-y-2">
 								<span class="text-xs font-semibold text-slate-400 font-bold">集合</span>
-								{#each vault.collections.filter((collection) => collection.organizationId === editOrganizationId) as collection}
+								{#each vault.collections.filter((collection) => collection.organizationId === editor.organizationId) as collection}
 									<label class="flex items-center gap-2 text-sm">
-										<input type="checkbox" checked={editCollectionIds.includes(collection.id)} disabled={Boolean(collection.readOnly)} onchange={(event) => toggleEditCollection(collection.id, event.currentTarget.checked)} />
+										<input type="checkbox" checked={editor.collectionIds.includes(collection.id)} disabled={Boolean(collection.readOnly)} onchange={(event) => toggleEditCollection(collection.id, event.currentTarget.checked)} />
 										<span>{collection.name}{collection.readOnly ? "（只读）" : ""}</span>
 									</label>
 								{/each}
@@ -920,7 +823,7 @@ async function toggleFavorite(item: any) {
 						{:else}
 							<div class="space-y-1.5">
 								<span class="text-xs font-semibold text-slate-400 font-bold">文件夹</span>
-								<select bind:value={editFolderId} class="w-full p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm">
+								<select bind:value={editor.folderId} class="w-full p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm">
 									<option value={null}>无</option>
 									{#each vault.folders as folder}
 										<option value={folder.id}>{folder.name}</option>
@@ -930,25 +833,25 @@ async function toggleFavorite(item: any) {
 						{/if}
 
 						<div class="flex items-center gap-2 py-1">
-							<input type="checkbox" id="favorite" bind:checked={editFavorite} class="rounded border-slate-300 text-primary focus:ring-primary size-4" />
+							<input type="checkbox" id="favorite" bind:checked={editor.favorite} class="rounded border-slate-300 text-primary focus:ring-primary size-4" />
 							<label for="favorite" class="text-sm font-semibold text-slate-650 cursor-pointer">设为收藏</label>
 						</div>
 
 						<!-- Login Fields -->
-						{#if editType === CipherType.Login}
+						{#if editor.type === CipherType.Login}
 							<div class="space-y-4 border-t border-slate-200 dark:border-slate-850 pt-4">
 								<div class="space-y-1.5">
 									<span class="text-xs font-semibold text-slate-400 font-bold">用户名</span>
-									<Input bind:value={loginUsername} placeholder="用户名" />
+									<Input bind:value={editor.loginUsername} placeholder="用户名" />
 								</div>
 								<div class="space-y-1.5">
 									<span class="text-xs font-semibold text-slate-400 font-bold">密码</span>
-									<Input type="password" bind:value={loginPassword} placeholder="密码" />
+									<Input type="password" bind:value={editor.loginPassword} placeholder="密码" />
 								</div>
-								<div class="space-y-2"><div class="flex items-center justify-between"><span class="text-xs font-semibold text-slate-400 font-bold">网页链接</span><Button type="button" size="xs" variant="ghost" onclick={() => loginUris = [...loginUris, { uri: "", match: null }]}><Plus />添加</Button></div>{#each loginUris as uri, index}<div class="flex gap-2"><Input bind:value={uri.uri} placeholder="https://example.com" /><select bind:value={uri.match} aria-label="匹配方式" class="w-28 rounded-md border bg-background px-2 text-xs"><option value={null}>默认</option><option value={0}>根域</option><option value={1}>主机</option><option value={3}>完全匹配</option><option value={2}>前缀</option><option value={4}>正则</option><option value={5}>从不</option></select>{#if loginUris.length > 1}<Button type="button" variant="ghost" size="icon-sm" onclick={() => loginUris = loginUris.filter((_, itemIndex) => itemIndex !== index)} aria-label="删除网址"><Trash2 /></Button>{/if}</div>{/each}</div>
+								<div class="space-y-2"><div class="flex items-center justify-between"><span class="text-xs font-semibold text-slate-400 font-bold">网页链接</span><Button type="button" size="xs" variant="ghost" onclick={() => editor.loginUris = [...editor.loginUris, { uri: "", match: null }]}><Plus />添加</Button></div>{#each editor.loginUris as uri, index}<div class="flex gap-2"><Input bind:value={uri.uri} placeholder="https://example.com" /><select bind:value={uri.match} aria-label="匹配方式" class="w-28 rounded-md border bg-background px-2 text-xs"><option value={null}>默认</option><option value={0}>根域</option><option value={1}>主机</option><option value={3}>完全匹配</option><option value={2}>前缀</option><option value={4}>正则</option><option value={5}>从不</option></select>{#if editor.loginUris.length > 1}<Button type="button" variant="ghost" size="icon-sm" onclick={() => editor.loginUris = editor.loginUris.filter((_, itemIndex) => itemIndex !== index)} aria-label="删除网址"><Trash2 /></Button>{/if}</div>{/each}</div>
 								<div class="space-y-1.5">
 									<div class="flex items-center justify-between"><span class="text-xs font-semibold text-slate-400 font-bold">TOTP 密钥、otpauth 或 steam URI</span><Button type="button" size="xs" variant="ghost" onclick={() => totpQrInput?.click()}><ScanLine />扫描二维码</Button></div>
-									<Input bind:value={loginTotp} autocomplete="off" />
+									<Input bind:value={editor.loginTotp} autocomplete="off" />
 									<input bind:this={totpQrInput} type="file" accept="image/*" class="hidden" onchange={importTotpQr} />
 									{#if totpQrError}<p class="text-xs text-destructive" role="alert">{totpQrError}</p>{/if}
 								</div>
@@ -956,41 +859,41 @@ async function toggleFavorite(item: any) {
 						{/if}
 
 						<!-- Card Fields -->
-						{#if editType === CipherType.Card}
+						{#if editor.type === CipherType.Card}
 							<div class="space-y-4 border-t border-slate-200 dark:border-slate-850 pt-4">
 								<div class="space-y-1.5">
 									<span class="text-xs font-semibold text-slate-400 font-bold">持卡人姓名</span>
-									<Input bind:value={cardholderName} placeholder="持卡人" />
+									<Input bind:value={editor.cardholderName} placeholder="持卡人" />
 								</div>
 								<div class="space-y-1.5">
 									<span class="text-xs font-semibold text-slate-400 font-bold">卡号</span>
-									<Input bind:value={cardNumber} placeholder="卡号" />
+									<Input bind:value={editor.cardNumber} placeholder="卡号" />
 								</div>
 							</div>
 						{/if}
 
-						{#if editType >= CipherType.SshKey}
-							<div class="space-y-1.5 border-t pt-4"><span class="text-xs font-semibold text-slate-400">类型数据（JSON）</span><Textarea bind:value={extraData} rows={10} class="font-mono text-xs" /><p class="text-xs text-muted-foreground">对象中的所有字符串都会在发送前逐字段加密。</p></div>
+						{#if editor.type >= CipherType.SshKey}
+							<div class="space-y-1.5 border-t pt-4"><span class="text-xs font-semibold text-slate-400">类型数据（JSON）</span><Textarea bind:value={editor.extraData} rows={10} class="font-mono text-xs" /><p class="text-xs text-muted-foreground">对象中的所有字符串都会在发送前逐字段加密。</p></div>
 						{/if}
 
-						<div class="space-y-3 border-t pt-4"><div class="flex items-center justify-between"><span class="text-xs font-semibold text-slate-400">自定义字段</span><Button type="button" size="xs" variant="ghost" onclick={() => customFields = [...customFields, { name: "", value: "", type: 0 }]}><Plus />添加</Button></div>{#each customFields as field, index}<div class="grid grid-cols-[1fr_1fr_auto] gap-2"><Input bind:value={field.name} placeholder="字段名" /><Input bind:value={field.value} type={field.type === 1 ? "password" : "text"} placeholder="字段值" /><Button type="button" variant="ghost" size="icon-sm" onclick={() => customFields = customFields.filter((_, itemIndex) => itemIndex !== index)} aria-label="删除字段"><Trash2 /></Button><select bind:value={field.type} aria-label="字段类型" class="col-span-2 rounded-md border bg-background px-2 py-1 text-xs"><option value={0}>文本</option><option value={1}>隐藏</option><option value={2}>布尔</option></select></div>{/each}</div>
+						<div class="space-y-3 border-t pt-4"><div class="flex items-center justify-between"><span class="text-xs font-semibold text-slate-400">自定义字段</span><Button type="button" size="xs" variant="ghost" onclick={() => editor.customFields = [...editor.customFields, { name: "", value: "", type: 0 }]}><Plus />添加</Button></div>{#each editor.customFields as field, index}<div class="grid grid-cols-[1fr_1fr_auto] gap-2"><Input bind:value={field.name} placeholder="字段名" /><Input bind:value={field.value} type={field.type === 1 ? "password" : "text"} placeholder="字段值" /><Button type="button" variant="ghost" size="icon-sm" onclick={() => editor.customFields = editor.customFields.filter((_, itemIndex) => itemIndex !== index)} aria-label="删除字段"><Trash2 /></Button><select bind:value={field.type} aria-label="字段类型" class="col-span-2 rounded-md border bg-background px-2 py-1 text-xs"><option value={0}>文本</option><option value={1}>隐藏</option><option value={2}>布尔</option></select></div>{/each}</div>
 
 						<!-- Identity Fields -->
-						{#if editType === CipherType.Identity}
+						{#if editor.type === CipherType.Identity}
 							<div class="space-y-4 border-t border-slate-200 dark:border-slate-850 pt-4">
 								<div class="grid grid-cols-2 gap-2">
 									<div class="space-y-1.5">
 										<span class="text-xs font-semibold text-slate-400 font-bold">姓</span>
-										<Input bind:value={lastName} placeholder="姓" />
+										<Input bind:value={editor.lastName} placeholder="姓" />
 									</div>
 									<div class="space-y-1.5">
 										<span class="text-xs font-semibold text-slate-400 font-bold">名</span>
-										<Input bind:value={firstName} placeholder="名" />
+										<Input bind:value={editor.firstName} placeholder="名" />
 									</div>
 								</div>
 								<div class="space-y-1.5">
 									<span class="text-xs font-semibold text-slate-400 font-bold">证件号码</span>
-									<Input bind:value={identityNumber} placeholder="身份证/护照等号码" />
+									<Input bind:value={editor.identityNumber} placeholder="身份证/护照等号码" />
 								</div>
 							</div>
 						{/if}
@@ -998,7 +901,7 @@ async function toggleFavorite(item: any) {
 						<!-- Notes (Notes is common for all) -->
 						<div class="space-y-1.5 border-t border-slate-200 dark:border-slate-850 pt-4">
 							<span class="text-xs font-semibold text-slate-400 font-bold">便签 / 备注</span>
-							<textarea bind:value={editNotes} rows="4" placeholder="便签内容..." class="w-full p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-y"></textarea>
+							<textarea bind:value={editor.notes} rows="4" placeholder="便签内容..." class="w-full p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-y"></textarea>
 						</div>
 					</div>
 
