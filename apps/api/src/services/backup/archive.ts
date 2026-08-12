@@ -325,75 +325,83 @@ export async function buildBackupArchive(
 	});
 	const encoder = new TextEncoder();
 
-	const [
-		configRows,
-		userRows,
-		domainSettingsRows,
-		revisionRows,
-		organizationRows,
-		orgMemberRows,
-		collectionRows,
-		collectionMemberRows,
-		folderRows,
-		cipherRows,
-		cipherCollectionRows,
-		attachmentRows,
-		webauthnRows,
-		deviceTrustRows,
-		sendsRows,
-	] = await Promise.all([
-		db.selectFrom("config").selectAll().orderBy("key asc").execute(),
-		db.selectFrom("users").selectAll().orderBy("created_at asc").execute(),
-		db
-			.selectFrom("domain_settings")
-			.selectAll()
-			.orderBy("user_id asc")
-			.execute(),
-		db
-			.selectFrom("user_revisions")
-			.selectAll()
-			.orderBy("user_id asc")
-			.execute(),
-		db
-			.selectFrom("organizations")
-			.selectAll()
-			.orderBy("created_at asc")
-			.execute(),
-		db
-			.selectFrom("org_members")
-			.selectAll()
-			.orderBy("created_at asc")
-			.execute(),
-		db
-			.selectFrom("collections")
-			.selectAll()
-			.orderBy("created_at asc")
-			.execute(),
-		db
-			.selectFrom("collection_members")
-			.selectAll()
-			.orderBy("collection_id asc")
-			.execute(),
-		db.selectFrom("folders").selectAll().orderBy("created_at asc").execute(),
-		db.selectFrom("ciphers").selectAll().orderBy("created_at asc").execute(),
-		db
-			.selectFrom("cipher_collections")
-			.selectAll()
-			.orderBy("cipher_id asc")
-			.execute(),
-		db.selectFrom("attachments").selectAll().orderBy("id asc").execute(),
-		db
-			.selectFrom("webauthn_credentials")
-			.selectAll()
-			.orderBy("created_at asc")
-			.execute(),
-		db
-			.selectFrom("device_trust_tokens")
-			.selectAll()
-			.orderBy("user_id asc")
-			.execute(),
-		db.selectFrom("sends").selectAll().orderBy("created_at asc").execute(),
-	]);
+	// Kysely-D1 exposes one connection for this archive. Keep reads ordered so
+	// the adapter never overlaps session requests while building a snapshot.
+	const configRows = await db
+		.selectFrom("config")
+		.selectAll()
+		.orderBy("key asc")
+		.execute();
+	const userRows = await db
+		.selectFrom("users")
+		.selectAll()
+		.orderBy("created_at asc")
+		.execute();
+	const domainSettingsRows = await db
+		.selectFrom("domain_settings")
+		.selectAll()
+		.orderBy("user_id asc")
+		.execute();
+	const revisionRows = await db
+		.selectFrom("user_revisions")
+		.selectAll()
+		.orderBy("user_id asc")
+		.execute();
+	const organizationRows = await db
+		.selectFrom("organizations")
+		.selectAll()
+		.orderBy("created_at asc")
+		.execute();
+	const orgMemberRows = await db
+		.selectFrom("org_members")
+		.selectAll()
+		.orderBy("created_at asc")
+		.execute();
+	const collectionRows = await db
+		.selectFrom("collections")
+		.selectAll()
+		.orderBy("created_at asc")
+		.execute();
+	const collectionMemberRows = await db
+		.selectFrom("collection_members")
+		.selectAll()
+		.orderBy("collection_id asc")
+		.execute();
+	const folderRows = await db
+		.selectFrom("folders")
+		.selectAll()
+		.orderBy("created_at asc")
+		.execute();
+	const cipherRows = await db
+		.selectFrom("ciphers")
+		.selectAll()
+		.orderBy("created_at asc")
+		.execute();
+	const cipherCollectionRows = await db
+		.selectFrom("cipher_collections")
+		.selectAll()
+		.orderBy("cipher_id asc")
+		.execute();
+	const attachmentRows = await db
+		.selectFrom("attachments")
+		.selectAll()
+		.orderBy("id asc")
+		.execute();
+	const webauthnRows = await db
+		.selectFrom("webauthn_credentials")
+		.selectAll()
+		.orderBy("created_at asc")
+		.execute();
+	const deviceTrustRows = await db
+		.selectFrom("device_trust_tokens")
+		.selectAll()
+		.orderBy("user_id asc")
+		.execute();
+	const sendsRows = await db
+		.selectFrom("sends")
+		.selectAll()
+		.orderBy("created_at asc")
+		.execute();
 
 	const exportedConfigRows = sanitizeConfigRowsForExport(
 		configRows as unknown as SqlRow[],

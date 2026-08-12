@@ -83,28 +83,26 @@ async function inviteResponse(
 
 export const listAdminUsers = factory.createHandlers(async (c) => {
 	const db = c.get("db");
-	const [users, passkeys] = await Promise.all([
-		db
-			.selectFrom("users")
-			.select([
-				"id",
-				"email",
-				"name",
-				"role",
-				"status",
-				"totp_secret",
-				"yubikey_config",
-				"created_at",
-				"updated_at",
-			])
-			.orderBy("created_at", "desc")
-			.execute(),
-		db
-			.selectFrom("webauthn_credentials")
-			.select("user_id")
-			.where("purpose", "=", "twoFactor")
-			.execute(),
-	]);
+	const users = await db
+		.selectFrom("users")
+		.select([
+			"id",
+			"email",
+			"name",
+			"role",
+			"status",
+			"totp_secret",
+			"yubikey_config",
+			"created_at",
+			"updated_at",
+		])
+		.orderBy("created_at", "desc")
+		.execute();
+	const passkeys = await db
+		.selectFrom("webauthn_credentials")
+		.select("user_id")
+		.where("purpose", "=", "twoFactor")
+		.execute();
 	const passkeyUsers = new Set(
 		passkeys.map((credential) => credential.user_id),
 	);
