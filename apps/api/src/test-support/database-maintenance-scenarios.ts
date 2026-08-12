@@ -16,7 +16,9 @@ import {
 import { drainBlobGcQueue } from "../services/blob-gc";
 import type { BlobStore } from "../services/blob-store";
 import {
+	collectionRevisionQuery,
 	executeBatch,
+	organizationMemberRevisionQuery,
 	organizationRevisionQuery,
 	revisionQuery,
 } from "../services/db/batch";
@@ -146,6 +148,110 @@ export function registerDatabaseMaintenanceScenarios(
 				.set({ status: "confirmed" })
 				.where("id", "=", member.id)
 				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("advances revisions once when a collection is deleted twice", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const member = await db
+			.selectFrom("org_members as member")
+			.innerJoin("users as user", "user.id", "member.user_id")
+			.select(["member.org_id", "member.user_id"])
+			.where("user.email", "=", EMAIL)
+			.where("member.status", "=", "confirmed")
+			.executeTakeFirstOrThrow();
+		assert.ok(member.user_id);
+		const collectionId = crypto.randomUUID();
+		const timestamp = Math.floor(Date.now() / 1000);
+		try {
+			await db
+				.insertInto("collections")
+				.values({
+					id: collectionId,
+					org_id: member.org_id,
+					name: "concurrent-delete-collection",
+					created_at: timestamp,
+					updated_at: timestamp,
+				})
+				.execute();
+			const before = await db
+				.selectFrom("user_revisions")
+				.select("revision_date")
+				.where("user_id", "=", member.user_id)
+				.executeTakeFirstOrThrow();
+			for (let attempt = 0; attempt < 2; attempt += 1) {
+				await executeBatch(dialect, [
+					collectionRevisionQuery(db, collectionId, timestamp),
+					db.deleteFrom("collections").where("id", "=", collectionId).compile(),
+				]);
+			}
+			const after = await db
+				.selectFrom("user_revisions")
+				.select("revision_date")
+				.where("user_id", "=", member.user_id)
+				.executeTakeFirstOrThrow();
+			assert.equal(after.revision_date, before.revision_date + 1);
+		} finally {
+			await db
+				.deleteFrom("collections")
+				.where("id", "=", collectionId)
+				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("advances a member revision once when removal is attempted twice", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const owner = await db
+			.selectFrom("org_members as member")
+			.innerJoin("users as user", "user.id", "member.user_id")
+			.select("member.org_id")
+			.where("user.email", "=", EMAIL)
+			.where("member.status", "=", "confirmed")
+			.executeTakeFirstOrThrow();
+		const user = await db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const memberId = crypto.randomUUID();
+		const timestamp = Math.floor(Date.now() / 1000);
+		try {
+			await db
+				.insertInto("org_members")
+				.values({
+					id: memberId,
+					org_id: owner.org_id,
+					user_id: user.id,
+					email: `removed-${memberId}@example.com`,
+					role: "member",
+					status: "confirmed",
+					access_all: 1,
+					key: "encrypted-key",
+					created_at: timestamp,
+					updated_at: timestamp,
+				})
+				.execute();
+			const before = await db
+				.selectFrom("user_revisions")
+				.select("revision_date")
+				.where("user_id", "=", user.id)
+				.executeTakeFirstOrThrow();
+			for (let attempt = 0; attempt < 2; attempt += 1) {
+				await executeBatch(dialect, [
+					organizationMemberRevisionQuery(db, memberId, timestamp),
+					db.deleteFrom("org_members").where("id", "=", memberId).compile(),
+				]);
+			}
+			const after = await db
+				.selectFrom("user_revisions")
+				.select("revision_date")
+				.where("user_id", "=", user.id)
+				.executeTakeFirstOrThrow();
+			assert.equal(after.revision_date, before.revision_date + 1);
+		} finally {
+			await db.deleteFrom("org_members").where("id", "=", memberId).execute();
 			await db.destroy();
 		}
 	});

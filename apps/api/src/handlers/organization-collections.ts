@@ -5,7 +5,7 @@ import {
 	CreateCollectionSchema,
 	UpdateCollectionSchema,
 } from "../schemas/organizations";
-import { executeBatch, organizationRevisionQuery } from "../services/db/batch";
+import { collectionRevisionQuery, executeBatch } from "../services/db/batch";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
 
@@ -131,7 +131,7 @@ export const createCollection = factory.createHandlers(
 					updated_at: ts,
 				})
 				.compile(),
-			organizationRevisionQuery(db, orgId, ts),
+			collectionRevisionQuery(db, id, ts),
 		]);
 		return c.json(
 			collectionResponse({
@@ -151,15 +151,17 @@ export const updateCollection = factory.createHandlers(
 	async (c) => {
 		const collection = c.get("collection");
 		const ts = now();
-		await executeBatch(c.get("dbDialect"), [
+		const [updated] = await c.get("dbDialect").batch([
 			c
 				.get("db")
 				.updateTable("collections")
 				.set({ name: c.req.valid("json").name, updated_at: ts })
 				.where("id", "=", collection.id)
 				.compile(),
-			organizationRevisionQuery(c.get("db"), collection.org_id, ts),
+			collectionRevisionQuery(c.get("db"), collection.id, ts),
 		]);
+		if (updated.numAffectedRows !== 1n)
+			return errorResponse("Collection not found", 404);
 		return c.json(
 			collectionResponse({
 				...collection,
@@ -194,8 +196,8 @@ export const deleteCollection = factory.createHandlers(async (c) => {
 		);
 	const ts = now();
 	await executeBatch(c.get("dbDialect"), [
+		collectionRevisionQuery(db, collection.id, ts),
 		db.deleteFrom("collections").where("id", "=", collection.id).compile(),
-		organizationRevisionQuery(db, collection.org_id, ts),
 	]);
 	return new Response(null, { status: 204 });
 });

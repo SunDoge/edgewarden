@@ -6,7 +6,12 @@ import {
 	UpdateOrganizationMemberSchema,
 } from "../schemas/organizations";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
-import { executeBatch, revisionQuery } from "../services/db/batch";
+import {
+	executeBatch,
+	organizationMemberCollectionAccessQuery,
+	organizationMemberRevisionQuery,
+	revisionQuery,
+} from "../services/db/batch";
 import { textColumnInJson } from "../services/db/json-array";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
@@ -265,7 +270,7 @@ export const updateOrganizationMember = factory.createHandlers(
 			);
 		}
 		const ts = now();
-		await executeBatch(c.get("dbDialect"), [
+		const [updated] = await c.get("dbDialect").batch([
 			db
 				.updateTable("org_members")
 				.set({
@@ -274,24 +279,25 @@ export const updateOrganizationMember = factory.createHandlers(
 					updated_at: ts,
 				})
 				.where("id", "=", target.id)
+				.where("org_id", "=", actor.org_id)
 				.compile(),
 			db
 				.deleteFrom("collection_members")
 				.where("org_member_id", "=", target.id)
 				.compile(),
 			...access.collections.map((item) =>
-				db
-					.insertInto("collection_members")
-					.values({
-						collection_id: item.id,
-						org_member_id: target.id,
-						read_only: item.readOnly ? 1 : 0,
-						hide_passwords: item.hidePasswords ? 1 : 0,
-					})
-					.compile(),
+				organizationMemberCollectionAccessQuery(
+					db,
+					target.id,
+					item.id,
+					item.readOnly,
+					item.hidePasswords,
+				),
 			),
-			...(target.user_id ? [revisionQuery(db, target.user_id, ts)] : []),
+			organizationMemberRevisionQuery(db, target.id, ts),
 		]);
+		if (updated.numAffectedRows !== 1n)
+			return errorResponse("Member not found", 404);
 		return c.json({
 			id: target.id,
 			email: target.email,
@@ -321,9 +327,17 @@ export const removeOrganizationMember = factory.createHandlers(async (c) => {
 	) {
 		return errorResponse("Member not found", 404);
 	}
-	await executeBatch(c.get("dbDialect"), [
-		db.deleteFrom("org_members").where("id", "=", target.id).compile(),
-		...(target.user_id ? [revisionQuery(db, target.user_id)] : []),
-	]);
+	const [, removed] = await c
+		.get("dbDialect")
+		.batch([
+			organizationMemberRevisionQuery(db, target.id),
+			db
+				.deleteFrom("org_members")
+				.where("id", "=", target.id)
+				.where("org_id", "=", c.get("orgMember").org_id)
+				.compile(),
+		]);
+	if (removed.numAffectedRows !== 1n)
+		return errorResponse("Member not found", 404);
 	return new Response(null, { status: 204 });
 });

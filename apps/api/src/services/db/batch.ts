@@ -60,6 +60,70 @@ export function conditionalOrganizationRevisionQuery(
 	`.compile(db);
 }
 
+export function collectionRevisionQuery(
+	db: Kysely<DB>,
+	collectionId: string,
+	timestamp = now(),
+) {
+	return sql`
+		INSERT INTO user_revisions (user_id, revision_date)
+		SELECT DISTINCT member.user_id, ${timestamp}
+		FROM collections collection
+		INNER JOIN org_members member ON member.org_id = collection.org_id
+		WHERE collection.id = ${collectionId}
+		  AND member.status = 'confirmed'
+		  AND member.user_id IS NOT NULL
+		ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
+			user_revisions.revision_date + 1,
+			excluded.revision_date
+		)
+	`.compile(db);
+}
+
+export function organizationMemberRevisionQuery(
+	db: Kysely<DB>,
+	memberId: string,
+	timestamp = now(),
+) {
+	return sql`
+		INSERT INTO user_revisions (user_id, revision_date)
+		SELECT user_id, ${timestamp}
+		FROM org_members
+		WHERE id = ${memberId}
+		  AND user_id IS NOT NULL
+		ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
+			user_revisions.revision_date + 1,
+			excluded.revision_date
+		)
+	`.compile(db);
+}
+
+export function organizationMemberCollectionAccessQuery(
+	db: Kysely<DB>,
+	memberId: string,
+	collectionId: string,
+	readOnly: boolean,
+	hidePasswords: boolean,
+) {
+	return sql`
+		INSERT INTO collection_members (
+			collection_id,
+			org_member_id,
+			read_only,
+			hide_passwords
+		)
+		SELECT
+			collection.id,
+			member.id,
+			${readOnly ? 1 : 0},
+			${hidePasswords ? 1 : 0}
+		FROM org_members member
+		INNER JOIN collections collection ON collection.org_id = member.org_id
+		WHERE member.id = ${memberId}
+		  AND collection.id = ${collectionId}
+	`.compile(db);
+}
+
 export function folderRevisionQuery(
 	db: Kysely<DB>,
 	userId: string,
