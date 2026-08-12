@@ -17,6 +17,7 @@ import {
 	encryptCredential,
 	hashCredential,
 } from "../services/credential-protection";
+import { conditionalRefreshTokenDeletionQuery } from "../services/db/batch";
 import {
 	loadRegistrationPolicy,
 	saveRegistrationPolicy,
@@ -279,29 +280,42 @@ export const setAdminUserStatus = factory.createHandlers(
 		if (!targetId) return errorResponse("User id required", 400);
 		if (targetId === c.get("user").id && body.status === "banned")
 			return errorResponse("You cannot ban yourself", 400);
+		const db = c.get("db");
+		const target = await db
+			.selectFrom("users")
+			.select(["id", "status"])
+			.where("id", "=", targetId)
+			.where("deletion_requested_at", "is", null)
+			.executeTakeFirst();
+		if (!target) return errorResponse("User not found", 404);
+		const response = () =>
+			c.json({ id: targetId, status: body.status, object: "user" });
+		if (target.status === body.status) return response();
 		const ts = now();
-		const result = await c
-			.get("db")
+		const securityStamp = crypto.randomUUID();
+		const update = db
 			.updateTable("users")
 			.set({
 				status: body.status,
 				updated_at: ts,
-				...(body.status === "banned"
-					? { security_stamp: crypto.randomUUID() }
-					: {}),
+				...(body.status === "banned" ? { security_stamp: securityStamp } : {}),
 			})
 			.where("id", "=", targetId)
+			.where("status", "=", target.status)
 			.where("deletion_requested_at", "is", null)
-			.executeTakeFirst();
-		if (!Number(result.numUpdatedRows))
-			return errorResponse("User not found", 404);
-		if (body.status === "banned")
-			await c
-				.get("db")
-				.deleteFrom("refresh_tokens")
-				.where("user_id", "=", targetId)
-				.execute();
-		await safeWriteAuditEvent(c.get("db"), {
+			.compile();
+		const [updated] = await c
+			.get("dbDialect")
+			.batch([
+				update,
+				...(body.status === "banned"
+					? [conditionalRefreshTokenDeletionQuery(db, targetId, securityStamp)]
+					: []),
+			]);
+		if (updated.numAffectedRows !== 1n)
+			return errorResponse("User status changed by another request", 409);
+		invalidateUserCache(targetId);
+		await safeWriteAuditEvent(db, {
 			actorUserId: c.get("user").id,
 			action: "admin.user.status",
 			category: "admin",
@@ -310,7 +324,7 @@ export const setAdminUserStatus = factory.createHandlers(
 			targetId,
 			metadata: { ...auditRequestMetadata(c.req.raw), status: body.status },
 		});
-		return c.json({ id: targetId, status: body.status, object: "user" });
+		return response();
 	},
 );
 
