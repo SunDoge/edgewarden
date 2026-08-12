@@ -132,6 +132,24 @@ export type AppType = typeof app;
 // 404 fallback
 app.notFound((c) => c.json({ message: "Not found", object: "error" }, 404));
 
+app.onError((error, c) => {
+	console.error(
+		JSON.stringify({
+			event: "request.error",
+			requestId: c.req.header("cf-ray") ?? crypto.randomUUID(),
+			method: c.req.method,
+			path: c.req.path,
+			errorName: error.name,
+			errorMessage: error.message,
+			cause:
+				error.cause instanceof Error
+					? { name: error.cause.name, message: error.cause.message }
+					: undefined,
+		}),
+	);
+	return c.json({ message: "Internal server error", object: "error" }, 500);
+});
+
 import { runScheduledBackupIfDue } from "./services/backup/scheduler";
 import { runScheduledMaintenance } from "./services/maintenance";
 

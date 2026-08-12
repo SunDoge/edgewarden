@@ -106,23 +106,21 @@ export const sync = factory.createHandlers(async (c) => {
 	const user = c.get("user");
 	const db = c.get("db");
 
-	const [
-		ciphers,
-		deletedCiphers,
-		folders,
-		domainSettings,
-		accountPasskeys,
-		twoFactorPasskeyCount,
-		sends,
-	] = await Promise.all([
-		ciphersDb.getCiphersByUserId(db, user.id),
-		ciphersDb.getDeletedCiphersByUserId(db, user.id),
-		foldersDb.getFoldersByUserId(db, user.id),
-		domainSettingsDb.getDomainSettings(db, user.id),
-		webauthnDb.listAccountPasskeyCredentialsByUserId(db, user.id),
-		webauthnDb.countAccountPasskeyCredentialsByUserId(db, user.id, "twoFactor"),
-		sendsDb.getSendsByUserId(db, user.id),
-	]);
+	// Keep queries on the Kysely-D1 connection ordered. Promise.all does not make
+	// a single D1 session faster and can make adapters overlap session requests.
+	const ciphers = await ciphersDb.getCiphersByUserId(db, user.id);
+	const deletedCiphers = await ciphersDb.getDeletedCiphersByUserId(db, user.id);
+	const folders = await foldersDb.getFoldersByUserId(db, user.id);
+	const domainSettings = await domainSettingsDb.getDomainSettings(db, user.id);
+	const accountPasskeys =
+		await webauthnDb.listAccountPasskeyCredentialsByUserId(db, user.id);
+	const twoFactorPasskeyCount =
+		await webauthnDb.countAccountPasskeyCredentialsByUserId(
+			db,
+			user.id,
+			"twoFactor",
+		);
+	const sends = await sendsDb.getSendsByUserId(db, user.id);
 	const organizationRows = await db
 		.selectFrom("org_members as member")
 		.innerJoin("organizations as org", "org.id", "member.org_id")
