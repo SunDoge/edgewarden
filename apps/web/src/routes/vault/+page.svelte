@@ -8,6 +8,8 @@ import VaultDetailPanel from "$lib/components/vault/VaultDetailPanel.svelte";
 import VaultHeader from "$lib/components/vault/VaultHeader.svelte";
 import VaultItemList from "$lib/components/vault/VaultItemList.svelte";
 import VaultSidebar from "$lib/components/vault/VaultSidebar.svelte";
+import { formatTime } from "$lib/i18n/format";
+import { m } from "$lib/paraglide/messages.js";
 import {
 	archiveCipherApi,
 	deleteAttachmentApi,
@@ -68,6 +70,9 @@ let deleteLoading = $state(false);
 let attachmentBusy = $state<string | null>(null);
 let mobileSidebarOpen = $state(false);
 let mobileDetailOpen = $state(false);
+let saveNotice = $state<{ kind: "saved" | "warning"; message: string } | null>(
+	null,
+);
 
 // Folder management dialog state
 let folderDialogOpen = $state(false);
@@ -330,21 +335,44 @@ function cancelEdit() {
 }
 
 async function handleSaveCipher() {
+	saveNotice = null;
+	let saved: Awaited<ReturnType<typeof saveVaultCipher>>;
 	try {
-		await saveVaultCipher({
+		saved = await saveVaultCipher({
 			editor,
 			selectedItem,
 			isCreating,
 			isEditing,
 			resolveOwnerKey,
 		});
-
-		isCreating = false;
-		isEditing = false;
-		selectedItem = null;
-		await syncVaultData();
 	} catch (e: any) {
 		alert("保存失败：" + (e.message || e));
+		return;
+	}
+
+	// The mutation response is the server acknowledgement. Keep this separate
+	// from the following pull so a refresh failure is never reported as a save
+	// failure after D1 has already committed the encrypted item.
+	saveNotice = {
+		kind: "saved",
+		message: m.vault_saved_to_server({
+			time: formatTime(saved.revisionDate),
+		}),
+	};
+	isCreating = false;
+	isEditing = false;
+	selectedItem = null;
+	try {
+		await syncVaultData();
+	} catch {
+		// The server acknowledgement above remains authoritative even when the
+		// subsequent pull cannot refresh the local snapshot.
+	}
+	if (vault.isOffline || vault.status === "error") {
+		saveNotice = {
+			kind: "warning",
+			message: m.vault_saved_refresh_failed(),
+		};
 	}
 }
 
@@ -419,9 +447,7 @@ function clearSelection() {
 	selectedIds = {};
 }
 
-async function runBulkAction(
-	action: VaultBulkAction,
-) {
+async function runBulkAction(action: VaultBulkAction) {
 	if (!selectedIdList.length) return;
 	const items = selectedIdList
 		.map((id) => vault.ciphers.find((cipher) => cipher.id === id))
@@ -464,7 +490,11 @@ async function moveSelectedItems() {
 			if (item?.organizationId)
 				throw new Error("组织条目使用集合，不能移动到个人文件夹");
 			if (item && !item.deletedDate)
-				await updateEncryptedVaultCipher(item, { folderId: moveFolderId }, resolveOwnerKey);
+				await updateEncryptedVaultCipher(
+					item,
+					{ folderId: moveFolderId },
+					resolveOwnerKey,
+				);
 		}
 		moveDialogOpen = false;
 		clearSelection();
@@ -479,7 +509,11 @@ async function moveSelectedItems() {
 async function toggleFavorite(item: any) {
 	deleteLoading = true;
 	try {
-		await updateEncryptedVaultCipher(item, { favorite: !item.favorite }, resolveOwnerKey);
+		await updateEncryptedVaultCipher(
+			item,
+			{ favorite: !item.favorite },
+			resolveOwnerKey,
+		);
 		await syncVaultData();
 		selectedItem =
 			vault.ciphers.find((cipher) => cipher.id === item.id) ?? null;
@@ -496,6 +530,11 @@ async function toggleFavorite(item: any) {
 </svelte:head>
 
 <div class="h-screen bg-slate-50 dark:bg-slate-950 flex flex-col overflow-hidden">
+	{#if saveNotice}
+		<div class="fixed left-1/2 top-3 z-[60] -translate-x-1/2 rounded-md border px-3 py-2 text-sm font-medium shadow-lg {saveNotice.kind === 'saved' ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200' : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200'}" role="status">
+			{saveNotice.message}
+		</div>
+	{/if}
 	<VaultHeader onOpenNavigation={() => mobileSidebarOpen = true} onLogout={handleLogout} />
 
 	<div class="relative flex flex-1 overflow-hidden">
