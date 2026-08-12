@@ -1,5 +1,5 @@
 import { vValidator } from "@hono/valibot-validator";
-import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { deleteCookie, getCookie } from "hono/cookie";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import {
@@ -9,179 +9,55 @@ import {
 import { PreloginSchema } from "../schemas/identity";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import {
-	constantTimeCredentialEqual,
-	decryptCredential,
-	hashCredential,
-} from "../services/credential-protection";
-import {
 	createRefreshToken,
 	generateAccessToken,
 	verifyPassword,
 } from "../services/auth";
+import {
+	constantTimeCredentialEqual,
+	decryptCredential,
+	hashCredential,
+} from "../services/credential-protection";
 import * as authRequestsDb from "../services/db/auth-requests";
+import { executeBatch, revisionQuery } from "../services/db/batch";
 import * as devicesDb from "../services/db/devices";
 import * as refreshTokensDb from "../services/db/refresh-tokens";
-import { executeBatch, revisionQuery } from "../services/db/batch";
 import * as usersDb from "../services/db/users";
-import { identityErrorResponse, jsonResponse } from "../utils/response";
-import { now } from "../utils/time";
-import { isTotpEnabled, verifyTotpToken } from "../utils/totp";
-import {
-	buildAccountKeys,
-	buildUserDecryptionOptions,
-} from "../utils/user-decryption";
-import {
-	assertAccountPasskeyCredential,
-	buildAccountPasskeyTokenUserDecryptionOption,
-	handleGetAccountPasskeyAssertionOptions,
-} from "./account-passkeys";
-import { hashRefreshToken } from "../utils/jwt";
 import * as webauthnDb from "../services/db/webauthn";
-import {
-	assertTwoFactorPasskey,
-	buildTwoFactorPasskeyAssertion,
-} from "./two-factor-passkeys";
-import { loadYubicoCredentials } from "../services/yubico-config";
-import {
-	parseYubikeyConfig,
-	userYubicoPublicIds,
-	verifyYubicoOtp,
-	yubicoPublicId,
-} from "../utils/yubico";
-import { turnstileEnabled, verifyTurnstileToken } from "../services/turnstile";
 import {
 	clearLoginFailures,
 	isLoginLocked,
 	recordLoginFailure,
 } from "../services/login-attempts";
-
-const TWO_FACTOR_AUTHENTICATOR = 0;
-const TWO_FACTOR_RECOVERY = 8;
-const TWO_FACTOR_WEBAUTHN = 7;
-const TWO_FACTOR_YUBIKEY = 3;
-
-async function twoFactorRequiredResponse(
-	request: Request,
-	env: CloudflareBindings,
-	db: any,
-	user: any,
-): Promise<Response> {
-	const providers: string[] = [];
-	const totpSecret = user.totp_secret
-		? await decryptCredential(
-				user.totp_secret,
-				env.DATA_ENCRYPTION_SECRET,
-				"totp-secret",
-			)
-		: null;
-	if (isTotpEnabled(totpSecret))
-		providers.push(String(TWO_FACTOR_AUTHENTICATOR));
-	if (userYubicoPublicIds(user).length)
-		providers.push(String(TWO_FACTOR_YUBIKEY));
-	const webAuthn = await buildTwoFactorPasskeyAssertion(
-		request,
-		env,
-		db,
-		user.id,
-	);
-	if (webAuthn) providers.push(String(TWO_FACTOR_WEBAUTHN));
-	const providers2: Record<string, Record<string, unknown>> = {};
-	for (const p of providers) providers2[p] = { Email: null };
-	if (webAuthn)
-		providers2[String(TWO_FACTOR_WEBAUTHN)] = {
-			Email: null,
-			Challenge: webAuthn,
-		};
-	if (userYubicoPublicIds(user).length)
-		providers2[String(TWO_FACTOR_YUBIKEY)] = {
-			Email: null,
-			Nfc: parseYubikeyConfig(user.yubikey_config).nfc,
-		};
-	return jsonResponse(
-		{
-			error: "invalid_grant",
-			error_description: "Two factor required.",
-			TwoFactorProviders: providers,
-			TwoFactorProviders2: providers2,
-			SsoEmail2faSessionToken: null,
-			MasterPasswordPolicy: { Object: "masterPasswordPolicy" },
-			CustomResponse: {
-				TwoFactorProviders: providers,
-				TwoFactorProviders2: providers2,
-			},
-			ErrorModel: { Message: "Two factor required.", Object: "error" },
-		},
-		400,
-	);
-}
-
-function readDeviceInfo(body: Record<string, unknown>) {
-	const identifier = String(
-		body.deviceIdentifier ?? body.DeviceIdentifier ?? "",
-	).trim();
-	const name = String(body.deviceName ?? body.DeviceName ?? "Unknown").slice(
-		0,
-		128,
-	);
-	const type = Number(body.deviceType ?? body.DeviceType ?? 0);
-	return { identifier, name, type };
-}
-
-function buildTokenResponse(
-	accessToken: string,
-	refreshToken: string,
-	user: Awaited<ReturnType<typeof usersDb.getUserById>> & object,
-	twoFactorToken?: string,
-	webAuthnPrfOption: any = null,
-	exposeRefreshToken = true,
-) {
-	return {
-		access_token: accessToken,
-		expires_in: LIMITS.auth.accessTokenTtlSeconds,
-		token_type: "Bearer",
-		...(exposeRefreshToken ? { refresh_token: refreshToken } : {}),
-		...(twoFactorToken ? { TwoFactorToken: twoFactorToken } : {}),
-		Key: user.key,
-		PrivateKey: user.private_key,
-		AccountKeys: buildAccountKeys(user),
-		accountKeys: buildAccountKeys(user),
-		Kdf: user.kdf_type,
-		KdfIterations: user.kdf_iterations,
-		KdfMemory: user.kdf_memory ?? null,
-		KdfParallelism: user.kdf_parallelism ?? null,
-		ForcePasswordReset: false,
-		ResetMasterPassword: false,
-		MasterPasswordPolicy: { Object: "masterPasswordPolicy" },
-		ApiUseKeyConnector: false,
-		scope: "api offline_access",
-		unofficialServer: true,
-		UserDecryptionOptions: buildUserDecryptionOptions(user, webAuthnPrfOption),
-		userDecryptionOptions: buildUserDecryptionOptions(user, webAuthnPrfOption),
-	};
-}
-
-function webRefreshCookieName(requestUrl: string): string {
-	return new URL(requestUrl).protocol === "https:"
-		? "__Host-edgewarden_refresh"
-		: "edgewarden_refresh";
-}
-
-function isWebClient(body: Record<string, unknown>): boolean {
-	return String(body.client_id ?? "").trim() === "web";
-}
-
-function setWebRefreshCookie(
-	c: Parameters<typeof setCookie>[0],
-	token: string,
-): void {
-	setCookie(c, webRefreshCookieName(c.req.url), token, {
-		httpOnly: true,
-		secure: new URL(c.req.url).protocol === "https:",
-		sameSite: "Strict",
-		path: "/",
-		maxAge: LIMITS.auth.refreshTokenTtlSeconds,
-	});
-}
+import { turnstileEnabled, verifyTurnstileToken } from "../services/turnstile";
+import { loadYubicoCredentials } from "../services/yubico-config";
+import { hashRefreshToken } from "../utils/jwt";
+import { identityErrorResponse } from "../utils/response";
+import { now } from "../utils/time";
+import { isTotpEnabled, verifyTotpToken } from "../utils/totp";
+import {
+	userYubicoPublicIds,
+	verifyYubicoOtp,
+	yubicoPublicId,
+} from "../utils/yubico";
+import {
+	assertAccountPasskeyCredential,
+	buildAccountPasskeyTokenUserDecryptionOption,
+	handleGetAccountPasskeyAssertionOptions,
+} from "./account-passkeys";
+import {
+	buildTokenResponse,
+	isWebClient,
+	readDeviceInfo,
+	setWebRefreshCookie,
+	TWO_FACTOR_AUTHENTICATOR,
+	TWO_FACTOR_RECOVERY,
+	TWO_FACTOR_WEBAUTHN,
+	TWO_FACTOR_YUBIKEY,
+	twoFactorRequiredResponse,
+	webRefreshCookieName,
+} from "./identity-token-helpers";
+import { assertTwoFactorPasskey } from "./two-factor-passkeys";
 
 // POST /identity/accounts/prelogin
 export const prelogin = factory.createHandlers(
