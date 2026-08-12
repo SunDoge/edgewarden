@@ -86,6 +86,18 @@ export async function requireDataOperationLeaseRenewal(
 	}
 }
 
+export async function requireFreshDataOperationLease(
+	db: D1Database,
+	lease: DataOperationLease,
+	minimumRemainingSeconds = 10 * 60,
+): Promise<void> {
+	const timestamp = Math.floor(Date.now() / 1000);
+	if (lease.expiresAt - timestamp > minimumRemainingSeconds) return;
+	if (!(await renewDataOperationLease(db, lease, timestamp))) {
+		throw new Error(`Data operation lease was lost: ${lease.operation}`);
+	}
+}
+
 export async function readActiveDataOperationLeaseValue(
 	db: D1Database,
 	timestamp = Math.floor(Date.now() / 1000),
@@ -105,7 +117,7 @@ export async function readActiveDataOperationLeaseValue(
 export async function withDataOperationLease<T>(
 	db: D1Database,
 	operation: string,
-	callback: () => Promise<T>,
+	callback: (lease: DataOperationLease) => Promise<T>,
 ): Promise<T> {
 	const lease = await acquireDataOperationLease(db, operation);
 	if (!lease) {
@@ -114,7 +126,7 @@ export async function withDataOperationLease<T>(
 		);
 	}
 	try {
-		return await callback();
+		return await callback(lease);
 	} finally {
 		await releaseDataOperationLease(db, lease).catch((error) => {
 			console.error(

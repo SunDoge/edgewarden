@@ -1,26 +1,26 @@
+import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 import { unzipSync, zipSync } from "fflate";
 import {
+	type BlobStore,
 	getStoredAttachmentObjectKey,
 	getStoredSendFileObjectKey,
-	type BlobStore,
 } from "../blob-store";
-import { BACKUP_SETTINGS_CONFIG_KEY } from "./config";
-import { DATA_OPERATION_LEASE_CONFIG_KEY } from "./operation-lease";
-import { readBackupDatabaseSnapshot } from "./snapshot";
-import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
-import { exportPortableBackupSettingsEnvelope } from "./settings-crypto";
 import {
 	buildBackupFileNameInTimeZone,
 	getBackupArchiveChecksumPrefix,
 	verifyBackupArchiveFileNameChecksum,
 } from "./archive-integrity";
+import { BACKUP_SETTINGS_CONFIG_KEY } from "./config";
+import { DATA_OPERATION_LEASE_CONFIG_KEY } from "./operation-lease";
+import { exportPortableBackupSettingsEnvelope } from "./settings-crypto";
+import { readBackupDatabaseSnapshot } from "./snapshot";
 
+export type { BackupFileIntegrityCheckResult } from "./archive-integrity";
 export {
 	extractBackupFileChecksumPrefix,
 	inspectBackupArchiveFileNameChecksum,
 	verifyBackupArchiveFileNameChecksum,
 } from "./archive-integrity";
-export type { BackupFileIntegrityCheckResult } from "./archive-integrity";
 
 type SqlRow = Record<string, string | number | null>;
 
@@ -164,6 +164,7 @@ export interface BuildBackupArchiveOptions {
 	includeAttachments?: boolean;
 	blobStore?: BlobStore | null;
 	progress?: BackupArchiveBuildProgressReporter;
+	checkpoint?: () => Promise<void>;
 	timeZone?: string;
 }
 
@@ -389,6 +390,7 @@ export async function buildBackupArchive(
 		auditRows,
 		sendsRows,
 	} = await readBackupDatabaseSnapshot(db, snapshotTimestamp);
+	await options.checkpoint?.();
 
 	const exportedConfigRows = sanitizeConfigRowsForExport(
 		configRows as unknown as SqlRow[],
@@ -538,6 +540,7 @@ export async function buildBackupArchive(
 
 	if (includeAttachments && options.blobStore) {
 		for (const blob of allBlobs) {
+			await options.checkpoint?.();
 			const object = await options.blobStore.get(blob.storageKey);
 			if (!object?.body) {
 				throw new Error(`Backup blob not found: ${blob.blobName}`);
@@ -552,6 +555,7 @@ export async function buildBackupArchive(
 		}
 	}
 
+	await options.checkpoint?.();
 	await options.progress?.({
 		step: "package_archive",
 		fileName: "",

@@ -313,10 +313,15 @@ describe("Edgewarden API", () => {
 			.run();
 		const blobStore = createBlobStore(bindings);
 		assert.ok(blobStore);
+		let backupCheckpoints = 0;
 		const archive = await buildBackupArchive(testDatabase, new Date(), {
 			includeAttachments: true,
 			blobStore,
+			checkpoint: async () => {
+				backupCheckpoints += 1;
+			},
 		});
+		assert.ok(backupCheckpoints >= 3);
 		const metadataOnlyArchive = await buildBackupArchive(
 			testDatabase,
 			new Date(),

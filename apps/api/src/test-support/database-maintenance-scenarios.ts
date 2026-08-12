@@ -10,6 +10,7 @@ import {
 	acquireDataOperationLease,
 	releaseDataOperationLease,
 	renewDataOperationLease,
+	requireFreshDataOperationLease,
 } from "../services/backup/operation-lease";
 import { drainBlobGcQueue } from "../services/blob-gc";
 import type { BlobStore } from "../services/blob-store";
@@ -185,6 +186,11 @@ export function registerDatabaseMaintenanceScenarios(
 			null,
 		);
 		await releaseDataOperationLease(context.database, recovered);
+		recovered.expiresAt = Math.floor(Date.now() / 1000);
+		await assert.rejects(
+			requireFreshDataOperationLease(context.database, recovered),
+			/Data operation lease was lost/,
+		);
 		assert.equal(
 			await renewDataOperationLease(
 				context.database,
