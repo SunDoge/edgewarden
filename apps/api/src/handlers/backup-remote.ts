@@ -8,6 +8,7 @@ import {
 } from "../schemas/backup";
 import {
 	inspectBackupArchiveFileNameChecksum,
+	parseBackupArchive,
 	verifyBackupArchiveFileNameChecksum,
 } from "../services/backup/archive";
 import { importRemoteBackupArchiveBytes } from "../services/backup/import";
@@ -74,15 +75,34 @@ export const inspectRemoteBackup = factory.createHandlers(
 				destinationId,
 			);
 			const file = await session.download(path);
+			const checksum = await inspectBackupArchiveFileNameChecksum(
+				file.bytes,
+				file.fileName,
+			);
+			let archiveError: string | null = null;
+			try {
+				parseBackupArchive(file.bytes);
+			} catch (error) {
+				archiveError =
+					error instanceof Error ? error.message : "Backup archive is invalid";
+			}
+			const checksumValid = checksum.hasChecksumPrefix
+				? checksum.matches
+				: true;
 			return c.json({
 				object: "backup-remote-integrity",
 				destinationId,
 				path,
 				fileName: file.fileName,
-				integrity: await inspectBackupArchiveFileNameChecksum(
-					file.bytes,
-					file.fileName,
-				),
+				integrity: {
+					...checksum,
+					valid: checksumValid && archiveError === null,
+					reason:
+						archiveError ||
+						(checksumValid
+							? null
+							: "Backup file checksum does not match its filename"),
+				},
 			});
 		} catch (error: any) {
 			return errorResponse(

@@ -113,8 +113,8 @@ async function inspect(path: string) {
 	try {
 		const integrity =
 			(await inspectRemoteBackupApi(destinationId, path)).integrity ?? {};
-		if (integrity.matches === true || integrity.valid === true) {
-			onSuccess("备份文件校验和验证通过。");
+		if (integrity.valid === true) {
+			onSuccess("备份文件校验和与归档结构验证通过。");
 		} else {
 			onError(integrity.reason || "备份文件校验和与文件名不匹配。");
 		}

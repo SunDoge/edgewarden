@@ -1,4 +1,6 @@
+import { zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
+import { assertBackupArchiveIntegrity } from "./archive";
 import {
 	buildBackupFileNameInTimeZone,
 	extractBackupFileChecksumPrefix,
@@ -52,5 +54,47 @@ describe("backup archive integrity", () => {
 		expect(
 			await verifyBackupArchiveFileNameChecksum(bytes, "legacy-backup.zip"),
 		).toBe(true);
+	});
+
+	it("rejects a checksum-valid archive with missing required blobs", async () => {
+		const encoder = new TextEncoder();
+		const manifest = {
+			formatVersion: 3,
+			exportedAt: "2026-08-12T03:04:05.000Z",
+			appVersion: "test",
+			storageKind: "r2",
+			tableCounts: { attachments: 1 },
+			includes: { attachments: true, fileSends: true },
+			blobSummary: {
+				attachmentFiles: 1,
+				sendFiles: 0,
+				totalBytes: 1,
+				largestObjectBytes: 1,
+			},
+		};
+		const db = {
+			config: [],
+			users: [],
+			domain_settings: [],
+			user_revisions: [],
+			folders: [],
+			ciphers: [],
+			attachments: [{ id: "attachment-id", cipher_id: "cipher-id", size: 1 }],
+		};
+		const incomplete = zipSync({
+			"manifest.json": encoder.encode(JSON.stringify(manifest)),
+			"db.json": encoder.encode(JSON.stringify(db)),
+		});
+		const prefix = await getBackupArchiveChecksumPrefix(incomplete);
+
+		await expect(
+			assertBackupArchiveIntegrity(
+				incomplete,
+				`edgewarden_backup_20260812_030405_${prefix}.zip`,
+				incomplete.byteLength,
+			),
+		).rejects.toThrow(
+			"Backup archive is missing required file: attachments/cipher-id/attachment-id.bin",
+		);
 	});
 });

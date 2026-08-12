@@ -3,10 +3,7 @@ import { Kysely, sql } from "kysely";
 import type { DB } from "../../types/db";
 import { safeWriteAuditEvent } from "../audit";
 import { createBlobStore } from "../blob-store";
-import {
-	buildBackupArchive,
-	verifyBackupArchiveFileNameChecksum,
-} from "./archive";
+import { assertBackupArchiveIntegrity, buildBackupArchive } from "./archive";
 import {
 	getBackupLocalDateKey,
 	isBackupDueNow,
@@ -74,16 +71,11 @@ export async function runScheduledBackupIfDue(
 					archive.fileName,
 				);
 				const remoteFile = await session.download(archive.fileName);
-				const checksumValid = await verifyBackupArchiveFileNameChecksum(
+				await assertBackupArchiveIntegrity(
 					remoteFile.bytes,
 					archive.fileName,
+					archive.bytes.byteLength,
 				);
-				if (
-					!checksumValid ||
-					remoteFile.bytes.byteLength !== archive.bytes.byteLength
-				) {
-					throw new Error("Remote backup ZIP integrity verification failed");
-				}
 
 				if (destination.schedule.retentionCount !== null) {
 					await pruneRemoteBackupArchives(

@@ -12,6 +12,7 @@ import { exportPortableBackupSettingsEnvelope } from "./settings-crypto";
 import {
 	buildBackupFileNameInTimeZone,
 	getBackupArchiveChecksumPrefix,
+	verifyBackupArchiveFileNameChecksum,
 } from "./archive-integrity";
 
 export {
@@ -660,4 +661,21 @@ export async function buildBackupArchive(
 		fileName,
 		manifest: manifestBase,
 	};
+}
+
+export async function assertBackupArchiveIntegrity(
+	bytes: Uint8Array,
+	fileName: string,
+	expectedByteLength?: number,
+): Promise<BackupPayload> {
+	if (
+		expectedByteLength !== undefined &&
+		bytes.byteLength !== expectedByteLength
+	) {
+		throw new Error("Backup archive size changed after upload");
+	}
+	if (!(await verifyBackupArchiveFileNameChecksum(bytes, fileName))) {
+		throw new Error("Backup archive checksum does not match its filename");
+	}
+	return parseBackupArchive(bytes).payload;
 }

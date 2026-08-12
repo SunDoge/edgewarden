@@ -9,6 +9,7 @@ import {
 	BackupSettingsSchema,
 } from "../schemas/backup";
 import {
+	assertBackupArchiveIntegrity,
 	buildBackupArchive,
 	verifyBackupArchiveFileNameChecksum,
 } from "../services/backup/archive";
@@ -175,15 +176,11 @@ export const runBackup = factory.createHandlers(
 				archive.fileName,
 			);
 			const remoteFile = await remoteSession.download(archive.fileName);
-			if (
-				!(await verifyBackupArchiveFileNameChecksum(
-					remoteFile.bytes,
-					archive.fileName,
-				)) ||
-				remoteFile.bytes.byteLength !== archive.bytes.byteLength
-			) {
-				throw new Error("Remote backup ZIP integrity verification failed");
-			}
+			await assertBackupArchiveIntegrity(
+				remoteFile.bytes,
+				archive.fileName,
+				archive.bytes.byteLength,
+			);
 
 			let prunedCount = 0;
 			if (destination.schedule.retentionCount !== null) {
