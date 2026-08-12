@@ -1,6 +1,4 @@
 import { unzipSync, zipSync } from "fflate";
-import { type Kysely, sql } from "kysely";
-import type { DB } from "../../types/db";
 import {
 	getStoredAttachmentObjectKey,
 	getStoredSendFileObjectKey,
@@ -8,6 +6,7 @@ import {
 } from "../blob-store";
 import { BACKUP_SETTINGS_CONFIG_KEY } from "./config";
 import { DATA_OPERATION_LEASE_CONFIG_KEY } from "./operation-lease";
+import { readBackupDatabaseSnapshot } from "./snapshot";
 import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 import { exportPortableBackupSettingsEnvelope } from "./settings-crypto";
 import {
@@ -353,7 +352,7 @@ export function parseBackupArchive(
 }
 
 export async function buildBackupArchive(
-	db: Kysely<DB>,
+	db: D1Database,
 	date: Date = new Date(),
 	options: BuildBackupArchiveOptions = {},
 ): Promise<BackupArchiveBundle> {
@@ -373,166 +372,23 @@ export async function buildBackupArchive(
 	const encoder = new TextEncoder();
 	const snapshotTimestamp = Math.floor(date.getTime() / 1000);
 
-	// Kysely-D1 exposes one connection for this archive. Keep reads ordered so
-	// the adapter never overlaps session requests while building a snapshot.
-	const configRows = await db
-		.selectFrom("config")
-		.selectAll()
-		.orderBy("key asc")
-		.execute();
-	const userRows = await db
-		.selectFrom("users")
-		.selectAll()
-		.where("deletion_requested_at", "is", null)
-		.orderBy("created_at asc")
-		.execute();
-	const domainSettingsRows = await db
-		.selectFrom("domain_settings")
-		.selectAll()
-		.where(
-			sql<boolean>`user_id in (select id from users where deletion_requested_at is null)`,
-		)
-		.orderBy("user_id asc")
-		.execute();
-	const revisionRows = await db
-		.selectFrom("user_revisions")
-		.selectAll()
-		.where(
-			sql<boolean>`user_id in (select id from users where deletion_requested_at is null)`,
-		)
-		.orderBy("user_id asc")
-		.execute();
-	const organizationRows = await db
-		.selectFrom("organizations")
-		.selectAll()
-		.where("deletion_requested_at", "is", null)
-		.where(
-			sql<boolean>`owner_id in (select id from users where deletion_requested_at is null)`,
-		)
-		.orderBy("created_at asc")
-		.execute();
-	const orgMemberRows = await db
-		.selectFrom("org_members")
-		.selectAll()
-		.where(
-			sql<boolean>`org_id in (
-				select id from organizations where deletion_requested_at is null
-			)`,
-		)
-		.where(
-			sql<boolean>`user_id is null or user_id in (
-				select id from users where deletion_requested_at is null
-			)`,
-		)
-		.orderBy("created_at asc")
-		.execute();
-	const collectionRows = await db
-		.selectFrom("collections")
-		.selectAll()
-		.where(
-			sql<boolean>`org_id in (
-				select id from organizations where deletion_requested_at is null
-			)`,
-		)
-		.orderBy("created_at asc")
-		.execute();
-	const collectionMemberRows = await db
-		.selectFrom("collection_members")
-		.selectAll()
-		.where(
-			sql<boolean>`org_member_id in (
-				select member.id from org_members member
-				inner join organizations org on org.id = member.org_id
-				where org.deletion_requested_at is null
-					and (member.user_id is null or member.user_id in (
-						select id from users where deletion_requested_at is null
-					))
-			)`,
-		)
-		.orderBy("collection_id asc")
-		.execute();
-	const folderRows = await db
-		.selectFrom("folders")
-		.selectAll()
-		.where(
-			sql<boolean>`user_id in (select id from users where deletion_requested_at is null)`,
-		)
-		.orderBy("created_at asc")
-		.execute();
-	const cipherRows = await db
-		.selectFrom("ciphers")
-		.selectAll()
-		.where((expression) =>
-			expression.or([
-				expression("purge_after", "is", null),
-				expression("purge_after", ">", snapshotTimestamp),
-			]),
-		)
-		.where(
-			sql<boolean>`(
-			user_id in (select id from users where deletion_requested_at is null)
-			or org_id in (select id from organizations where deletion_requested_at is null)
-		)`,
-		)
-		.orderBy("created_at asc")
-		.execute();
-	const cipherCollectionRows = await db
-		.selectFrom("cipher_collections")
-		.selectAll()
-		.where(
-			sql<boolean>`cipher_id in (
-				select id from ciphers
-				where (purge_after is null or purge_after > ${snapshotTimestamp})
-				and (
-					user_id in (select id from users where deletion_requested_at is null)
-					or org_id in (select id from organizations where deletion_requested_at is null)
-				)
-			)`,
-		)
-		.orderBy("cipher_id asc")
-		.execute();
-	const attachmentRows = await db
-		.selectFrom("attachments")
-		.selectAll()
-		.where("deleted_at", "is", null)
-		.where(
-			sql<boolean>`cipher_id in (
-				select id from ciphers
-				where (purge_after is null or purge_after > ${snapshotTimestamp})
-				and (
-					user_id in (select id from users where deletion_requested_at is null)
-					or org_id in (select id from organizations where deletion_requested_at is null)
-				)
-			)`,
-		)
-		.orderBy("id asc")
-		.execute();
-	const webauthnRows = await db
-		.selectFrom("webauthn_credentials")
-		.selectAll()
-		.where(
-			sql<boolean>`user_id in (select id from users where deletion_requested_at is null)`,
-		)
-		.orderBy("created_at asc")
-		.execute();
-	const auditRows = await db
-		.selectFrom("audit_logs")
-		.selectAll()
-		.orderBy("created_at asc")
-		.orderBy("id asc")
-		.execute();
-	const sendsRows = await db
-		.selectFrom("sends")
-		.selectAll()
-		.where("deletion_date", ">", snapshotTimestamp)
-		.where(
-			sql<boolean>`(
-			user_id in (select id from users where deletion_requested_at is null)
-			or org_id in (select id from organizations where deletion_requested_at is null)
-		)`,
-		)
-		.orderBy("created_at asc")
-		.execute();
+	const {
+		configRows,
+		userRows,
+		domainSettingsRows,
+		revisionRows,
+		organizationRows,
+		orgMemberRows,
+		collectionRows,
+		collectionMemberRows,
+		folderRows,
+		cipherRows,
+		cipherCollectionRows,
+		attachmentRows,
+		webauthnRows,
+		auditRows,
+		sendsRows,
+	} = await readBackupDatabaseSnapshot(db, snapshotTimestamp);
 
 	const exportedConfigRows = sanitizeConfigRowsForExport(
 		configRows as unknown as SqlRow[],
@@ -546,8 +402,8 @@ export async function buildBackupArchive(
 	const exportedAuditRows = auditRows.map((row) => ({
 		...row,
 		actor_user_id:
-			row.actor_user_id && exportedUserIds.has(row.actor_user_id)
-				? row.actor_user_id
+			row.actor_user_id && exportedUserIds.has(String(row.actor_user_id))
+				? String(row.actor_user_id)
 				: null,
 	})) as unknown as SqlRow[];
 	const sourceAttachmentRows = includeAttachments ? attachmentRows : [];
@@ -565,7 +421,12 @@ export async function buildBackupArchive(
 			cipherId,
 			attachmentId,
 			blobName: `attachments/${cipherId}/${attachmentId}.bin`,
-			storageKey: getStoredAttachmentObjectKey(row),
+			storageKey: getStoredAttachmentObjectKey({
+				id: attachmentId,
+				cipher_id: cipherId,
+				storage_key:
+					typeof row.storage_key === "string" ? row.storage_key : null,
+			}),
 			sizeBytes: Number(row.size || 0) || 0,
 		};
 	});
@@ -585,7 +446,14 @@ export async function buildBackupArchive(
 				sendId,
 				fileId: file.fileId,
 				blobName: `sends/${sendId}/${file.fileId}`,
-				storageKey: getStoredSendFileObjectKey(row, file.fileId),
+				storageKey: getStoredSendFileObjectKey(
+					{
+						id: sendId,
+						storage_key:
+							typeof row.storage_key === "string" ? row.storage_key : null,
+					},
+					file.fileId,
+				),
 				sizeBytes: file.sizeBytes,
 			},
 		];
