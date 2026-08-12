@@ -807,6 +807,46 @@ describe("Edgewarden API", () => {
 		);
 	});
 
+	test("syncs a vault larger than D1's bound-parameter limit", async () => {
+		const user = await testDatabase
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(EMAIL)
+			.first<{ id: string }>();
+		assert.ok(user);
+		const timestamp = Math.floor(Date.now() / 1000);
+		const cipherIds = Array.from(
+			{ length: 150 },
+			(_, index) => `large-sync-${index}`,
+		);
+		const statements = cipherIds.map((id) =>
+			testDatabase
+				.prepare(
+					"INSERT INTO ciphers (id, user_id, type, name, data, favorite, reprompt, created_at, updated_at) VALUES (?, ?, 1, ?, '{}', 0, 0, ?, ?)",
+				)
+				.bind(id, user.id, `encrypted-${id}`, timestamp, timestamp),
+		);
+
+		try {
+			for (let index = 0; index < statements.length; index += 50) {
+				await testDatabase.batch(statements.slice(index, index + 50));
+			}
+			const response = await request("/api/sync", {
+				headers: { authorization: `Bearer ${accessToken}` },
+			});
+			assert.equal(response.status, 200, await response.clone().text());
+			const body = await response.json<{ ciphers: Array<{ id: string }> }>();
+			assert.equal(
+				body.ciphers.filter((cipher) => cipher.id.startsWith("large-sync-"))
+					.length,
+				cipherIds.length,
+			);
+		} finally {
+			await testDatabase
+				.prepare("DELETE FROM ciphers WHERE id LIKE 'large-sync-%'")
+				.run();
+		}
+	});
+
 	test("stores auth request access codes as protected credentials", async () => {
 		const accessCode = "auth-request-client-secret";
 		const response = await request("/api/auth-requests", {

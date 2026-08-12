@@ -1,4 +1,4 @@
-import type { Insertable, Kysely, Selectable } from "kysely";
+import { sql, type Insertable, type Kysely, type Selectable } from "kysely";
 import type { Attachments, DB } from "../../types/db";
 
 export async function listByCipherIds(
@@ -6,11 +6,50 @@ export async function listByCipherIds(
 	cipherIds: string[],
 ): Promise<Selectable<Attachments>[]> {
 	if (!cipherIds.length) return [];
+	return (
+		db
+			.selectFrom("attachments")
+			.selectAll()
+			// Explicit bulk operations may still contain many IDs. Passing the set as
+			// JSON keeps those operations to one bound parameter.
+			.where(
+				sql<boolean>`cipher_id in (select value from json_each(${JSON.stringify(cipherIds)}))`,
+			)
+			.orderBy("created_at", "asc")
+			.execute()
+	);
+}
+
+/** Load attachments for ciphers visible in a full user sync without binding
+ * every cipher ID. The joins mirror the ownership checks used to load ciphers. */
+export async function listVisibleForSync(
+	db: Kysely<DB>,
+	userId: string,
+	allAccessOrgIds: string[],
+	restrictedCollectionIds: string[],
+): Promise<Selectable<Attachments>[]> {
 	return db
-		.selectFrom("attachments")
-		.selectAll()
-		.where("cipher_id", "in", cipherIds)
-		.orderBy("created_at", "asc")
+		.selectFrom("attachments as attachment")
+		.innerJoin("ciphers as cipher", "cipher.id", "attachment.cipher_id")
+		.leftJoin(
+			"cipher_collections as collection_link",
+			"collection_link.cipher_id",
+			"cipher.id",
+		)
+		.selectAll("attachment")
+		.where(
+			sql<boolean>`
+				cipher.user_id = ${userId}
+				or cipher.org_id in (
+					select value from json_each(${JSON.stringify(allAccessOrgIds)})
+				)
+				or collection_link.collection_id in (
+					select value from json_each(${JSON.stringify(restrictedCollectionIds)})
+				)
+			`,
+		)
+		.distinct()
+		.orderBy("attachment.created_at", "asc")
 		.execute();
 }
 

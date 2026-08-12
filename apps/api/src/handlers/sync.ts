@@ -1,4 +1,4 @@
-import type { Selectable } from "kysely";
+import { sql, type Selectable } from "kysely";
 import { factory } from "../http/factory";
 import * as ciphersDb from "../services/db/ciphers";
 import * as attachmentsDb from "../services/db/attachments";
@@ -151,7 +151,9 @@ export const sync = factory.createHandlers(async (c) => {
 		? await db
 				.selectFrom("collections")
 				.selectAll()
-				.where("org_id", "in", organizationIds)
+				.where(
+					sql<boolean>`org_id in (select value from json_each(${JSON.stringify(organizationIds)}))`,
+				)
 				.execute()
 		: [];
 	const restrictedCollectionAccess = restrictedMembers.length
@@ -159,9 +161,7 @@ export const sync = factory.createHandlers(async (c) => {
 				.selectFrom("collection_members")
 				.select(["collection_id", "read_only", "hide_passwords"])
 				.where(
-					"org_member_id",
-					"in",
-					restrictedMembers.map((row) => row.member_id),
+					sql<boolean>`org_member_id in (select value from json_each(${JSON.stringify(restrictedMembers.map((row) => row.member_id))}))`,
 				)
 				.execute()
 		: [];
@@ -180,7 +180,9 @@ export const sync = factory.createHandlers(async (c) => {
 		? await db
 				.selectFrom("ciphers")
 				.selectAll()
-				.where("org_id", "in", allAccessOrgIds)
+				.where(
+					sql<boolean>`org_id in (select value from json_each(${JSON.stringify(allAccessOrgIds)}))`,
+				)
 				.execute()
 		: [];
 	const restrictedCiphers = allowedRestrictedCollectionIds.length
@@ -188,7 +190,9 @@ export const sync = factory.createHandlers(async (c) => {
 				.selectFrom("ciphers as cipher")
 				.innerJoin("cipher_collections as link", "link.cipher_id", "cipher.id")
 				.selectAll("cipher")
-				.where("link.collection_id", "in", allowedRestrictedCollectionIds)
+				.where(
+					sql<boolean>`link.collection_id in (select value from json_each(${JSON.stringify(allowedRestrictedCollectionIds)}))`,
+				)
 				.execute()
 		: [];
 	const orgCipherMap = new Map(
@@ -209,25 +213,32 @@ export const sync = factory.createHandlers(async (c) => {
 	);
 
 	const allCiphers = [...ciphers, ...deletedCiphers, ...organizationCiphers];
-	const attachments = await attachmentsDb.listByCipherIds(
+	const attachments = await attachmentsDb.listVisibleForSync(
 		db,
-		allCiphers.map((cipher) => cipher.id),
+		user.id,
+		allAccessOrgIds,
+		allowedRestrictedCollectionIds,
 	);
 	const attachmentsByCipher = Map.groupBy(
 		attachments,
 		(attachment) => attachment.cipher_id,
 	);
-	const cipherCollectionLinks = allCiphers.length
-		? await db
-				.selectFrom("cipher_collections")
-				.selectAll()
-				.where(
-					"cipher_id",
-					"in",
-					allCiphers.map((cipher) => cipher.id),
+	const cipherCollectionLinks = await db
+		.selectFrom("cipher_collections as link")
+		.innerJoin("ciphers as cipher", "cipher.id", "link.cipher_id")
+		.selectAll("link")
+		.where(
+			sql<boolean>`
+				cipher.user_id = ${user.id}
+				or cipher.org_id in (
+					select value from json_each(${JSON.stringify(allAccessOrgIds)})
 				)
-				.execute()
-		: [];
+				or link.collection_id in (
+					select value from json_each(${JSON.stringify(allowedRestrictedCollectionIds)})
+				)
+			`,
+		)
+		.execute();
 	const collectionIdsByCipher = Map.groupBy(
 		cipherCollectionLinks,
 		(link) => link.cipher_id,
