@@ -1,73 +1,44 @@
 <script lang="ts">
+import {
+	AlertCircle,
+	ArrowLeft,
+	Check,
+	Database,
+	Info,
+	Lock,
+	RefreshCw,
+	Save,
+	Server,
+	Settings2,
+	Trash2,
+} from "@lucide/svelte";
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
-import { vault } from "$lib/stores/vault.svelte";
-import {
-	fetchBackupSettingsApi,
-	updateBackupSettingsApi,
-	runBackupApi,
-	listRemoteBackupsApi,
-	downloadRemoteBackupApi,
-	inspectRemoteBackupApi,
-	deleteRemoteBackupApi,
-	restoreRemoteBackupApi,
-	importBackupLocalApi,
-	exportBackupLocalApi,
-} from "$lib/services/api";
-import { Button } from "$lib/components/ui/button/index.js";
-import { Input } from "$lib/components/ui/input/index.js";
+import BackupDestinationList from "$lib/components/backup/BackupDestinationList.svelte";
+import LocalBackupPanel from "$lib/components/backup/LocalBackupPanel.svelte";
 import RemoteBackupBrowser, {
 	type RemoteBackupItem,
 } from "$lib/components/backup/RemoteBackupBrowser.svelte";
-import { formatFileSize } from "$lib/services/backup-display";
+import type {
+	BackupDestinationRecord,
+	BackupSettings,
+} from "$lib/components/backup/types";
+import { Button } from "$lib/components/ui/button/index.js";
+import { Input } from "$lib/components/ui/input/index.js";
 import {
-	ArrowLeft,
-	Save,
-	Plus,
-	Trash2,
-	RefreshCw,
-	AlertCircle,
-	Info,
-	Server,
-	Download,
-	History,
-	Check,
-	Lock,
-	FileText,
-	Database,
-	LogOut,
-	Settings2,
-} from "@lucide/svelte";
-
-// Settings & Destinations types
-interface BackupDestinationRecord {
-	id: string;
-	name: string;
-	type: "s3" | "webdav";
-	includeAttachments: boolean;
-	destination: any;
-	schedule: {
-		enabled: boolean;
-		intervalHours: number;
-		startTime: string;
-		timezone: string;
-		retentionCount: number | null;
-	};
-	runtime: {
-		lastAttemptAt: string | null;
-		lastAttemptLocalDate: string | null;
-		lastSuccessAt: string | null;
-		lastErrorAt: string | null;
-		lastErrorMessage: string | null;
-		lastUploadedFileName: string | null;
-		lastUploadedSizeBytes: number | null;
-		lastUploadedDestination: string | null;
-	};
-}
-
-interface BackupSettings {
-	destinations: BackupDestinationRecord[];
-}
+	deleteRemoteBackupApi,
+	downloadRemoteBackupApi,
+	exportBackupLocalApi,
+	fetchBackupSettingsApi,
+	importBackupLocalApi,
+	inspectRemoteBackupApi,
+	listRemoteBackupsApi,
+	restoreRemoteBackupApi,
+	runBackupApi,
+	updateBackupSettingsApi,
+} from "$lib/services/api";
+import { formatFileSize } from "$lib/services/backup-display";
+import { vault } from "$lib/stores/vault.svelte";
 
 // UI State
 let loading = $state(true);
@@ -498,7 +469,6 @@ function showSuccess(msg: string) {
 		if (successMsg === msg) successMsg = "";
 	}, 5000);
 }
-
 </script>
 
 <svelte:head>
@@ -555,81 +525,20 @@ function showSuccess(msg: string) {
 			<div class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
 				<!-- Left Column: Destinations list -->
 				<div class="lg:col-span-1 space-y-4">
-					<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
-						<div class="flex items-center justify-between">
-							<span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">备份目的地</span>
-							<Button size="icon" variant="ghost" onclick={addDestination} class="size-7 text-slate-500" title="添加新目的地">
-								<Plus class="size-4" />
-							</Button>
-						</div>
-
-						<div class="space-y-1.5">
-							{#each settings.destinations as dest}
-								<button
-									class="w-full text-left px-3 py-2 rounded-lg text-sm transition-all border flex items-center justify-between
-										{selectedDestId === dest.id
-											? 'bg-primary/5 text-primary border-primary/20 font-medium'
-											: 'border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}"
-									onclick={() => selectDestination(dest.id)}
-								>
-									<span class="truncate pr-2">{dest.name}</span>
-									<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 uppercase">{dest.type}</span>
-								</button>
-							{/each}
-
-							{#if settings.destinations.length === 0}
-								<p class="text-xs text-slate-400 text-center py-4">未配置备份目的地</p>
-							{/if}
-						</div>
-					</div>
-
-					<!-- Local backup card -->
-					<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-4">
-						<span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">手动备份与恢复</span>
-						
-						<div class="space-y-2">
-							<Button variant="outline" size="sm" onclick={handleLocalExport} class="w-full gap-2">
-								<Download class="size-3.5" />
-								导出本地备份 (.zip)
-							</Button>
-						</div>
-
-						<hr class="border-slate-100 dark:border-slate-800" />
-
-						<div class="space-y-2">
-							<span class="text-xs font-medium text-slate-700 dark:text-slate-300 block">从本地文件恢复</span>
-							<input
-								type="file"
-								accept=".zip"
-								class="text-xs w-full block border dark:border-slate-800 rounded p-1 dark:bg-slate-950 text-slate-500"
-								onchange={(e: Event & { currentTarget: HTMLInputElement }) => { localFile = (e.currentTarget.files?.[0] || null); }}
-							/>
-							<div class="flex items-center gap-4 mt-2">
-								<label class="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-400 cursor-pointer">
-									<input type="checkbox" bind:checked={replaceExisting} class="rounded" />
-									替换现有数据
-								</label>
-								<label class="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-400 cursor-pointer">
-									<input type="checkbox" bind:checked={allowChecksumMismatch} class="rounded" />
-									忽略校验和错误
-								</label>
-							</div>
-							<Button
-								variant="outline"
-								size="sm"
-								onclick={handleLocalImport}
-								disabled={!localFile || restoring}
-								class="w-full mt-1.5"
-							>
-								{#if restoring}
-									<RefreshCw class="size-3.5 animate-spin mr-1.5" />
-									正在导入...
-								{:else}
-									导入并应用
-								{/if}
-							</Button>
-						</div>
-					</div>
+					<BackupDestinationList
+						destinations={settings.destinations}
+						selectedId={selectedDestId}
+						onAdd={addDestination}
+						onSelect={selectDestination}
+					/>
+					<LocalBackupPanel
+						bind:file={localFile}
+						bind:replaceExisting
+						bind:allowChecksumMismatch
+						{restoring}
+						onExport={handleLocalExport}
+						onImport={handleLocalImport}
+					/>
 				</div>
 
 				<!-- Right Column: Destination settings -->
