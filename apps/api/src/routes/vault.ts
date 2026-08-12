@@ -108,23 +108,7 @@ import {
 	saveYubicoConfig,
 	saveYubikeys,
 } from "../handlers/yubikey";
-import {
-	createCollection,
-	createOrganization,
-	deleteCollection,
-	deleteOrganization,
-	getInviteePublicKey,
-	getOrganization,
-	inviteOrganizationMember,
-	listCollections,
-	listUserCollections,
-	listOrganizationMembers,
-	listOrganizations,
-	removeOrganizationMember,
-	updateOrganizationMember,
-	updateCollection,
-	updateOrganization,
-} from "../handlers/organizations";
+import { listUserCollections } from "../handlers/organizations";
 import { authMiddleware, requireAdmin } from "../middleware/auth";
 import { realtimeMutationMiddleware } from "../middleware/realtime";
 import { createRealtimeConnectionTicket } from "../handlers/realtime";
@@ -135,16 +119,17 @@ import {
 	requireFolder,
 	requireSend,
 	requireSendFile,
-	requireOrgMember,
-	requireOrgManager,
-	requireOrgOwner,
-	requireCollection,
 } from "../middleware/resources";
 import {
 	attachmentRoutes,
 	cipherArchiveRoutes,
 	cipherRoutes,
 } from "./vault/ciphers";
+import {
+	organizationBaseRoutes,
+	organizationCollectionRoutes,
+	organizationMemberRoutes,
+} from "./vault/organizations";
 
 const accountRoutes = new Hono<HonoEnv>()
 	.get("/api/accounts/profile", ...getProfile)
@@ -221,108 +206,6 @@ const requestAndSettingsRoutes = new Hono<HonoEnv>()
 	.post("/api/settings/domains", ...updateDomains)
 	.get("/api/collections", ...listUserCollections)
 	.get("/api/policies", ...getEmptyCompatibilityList);
-
-const organizationBaseRoutes = new Hono<HonoEnv>()
-	.get("/api/organizations", ...listOrganizations)
-	.post("/api/organizations", ...createOrganization)
-	.get("/api/organizations/:orgId", requireOrgMember, ...getOrganization)
-	.put(
-		"/api/organizations/:orgId",
-		requireOrgMember,
-		requireOrgOwner,
-		...updateOrganization,
-	)
-	.post(
-		"/api/organizations/:orgId",
-		requireOrgMember,
-		requireOrgOwner,
-		...updateOrganization,
-	)
-	.delete(
-		"/api/organizations/:orgId",
-		requireOrgMember,
-		requireOrgOwner,
-		...deleteOrganization,
-	)
-	.post(
-		"/api/organizations/:orgId/delete",
-		requireOrgMember,
-		requireOrgOwner,
-		...deleteOrganization,
-	);
-
-const organizationMemberRoutes = new Hono<HonoEnv>()
-	.get(
-		"/api/organizations/:orgId/invitee",
-		requireOrgMember,
-		requireOrgManager,
-		...getInviteePublicKey,
-	)
-	.get(
-		"/api/organizations/:orgId/members",
-		requireOrgMember,
-		requireOrgManager,
-		...listOrganizationMembers,
-	)
-	.post(
-		"/api/organizations/:orgId/members",
-		requireOrgMember,
-		requireOrgManager,
-		...inviteOrganizationMember,
-	)
-	.put(
-		"/api/organizations/:orgId/members/:memberId",
-		requireOrgMember,
-		requireOrgManager,
-		...updateOrganizationMember,
-	)
-	.delete(
-		"/api/organizations/:orgId/members/:memberId",
-		requireOrgMember,
-		requireOrgManager,
-		...removeOrganizationMember,
-	);
-
-const organizationCollectionRoutes = new Hono<HonoEnv>()
-	.get(
-		"/api/organizations/:orgId/collections",
-		requireOrgMember,
-		...listCollections,
-	)
-	.post(
-		"/api/organizations/:orgId/collections",
-		requireOrgMember,
-		requireOrgManager,
-		...createCollection,
-	)
-	.put(
-		"/api/organizations/:orgId/collections/:collectionId",
-		requireOrgMember,
-		requireOrgManager,
-		requireCollection,
-		...updateCollection,
-	)
-	.post(
-		"/api/organizations/:orgId/collections/:collectionId",
-		requireOrgMember,
-		requireOrgManager,
-		requireCollection,
-		...updateCollection,
-	)
-	.delete(
-		"/api/organizations/:orgId/collections/:collectionId",
-		requireOrgMember,
-		requireOrgManager,
-		requireCollection,
-		...deleteCollection,
-	)
-	.post(
-		"/api/organizations/:orgId/collections/:collectionId/delete",
-		requireOrgMember,
-		requireOrgManager,
-		requireCollection,
-		...deleteCollection,
-	);
 
 const backupRoutes = new Hono<HonoEnv>()
 	.use("/api/admin/backup/*", requireAdmin)
