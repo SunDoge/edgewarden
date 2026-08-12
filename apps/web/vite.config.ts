@@ -2,11 +2,18 @@
 import tailwindcss from "@tailwindcss/vite";
 import adapter from "@sveltejs/adapter-static";
 import { sveltekit } from "@sveltejs/kit/vite";
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
 	plugins: [
 		tailwindcss(),
+		paraglideVitePlugin({
+			project: "./project.inlang",
+			outdir: "./src/lib/paraglide",
+			emitTsDeclarations: true,
+			strategy: ["localStorage", "preferredLanguage", "baseLocale"],
+		}),
 		sveltekit({
 			csp: {
 				mode: "hash",

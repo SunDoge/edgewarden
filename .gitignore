@@ -6,6 +6,7 @@ dist/
 build/
 .output/
 .svelte-kit/
+apps/web/src/lib/paraglide/
 
 # Cloudflare / Wrangler
 .wrangler/

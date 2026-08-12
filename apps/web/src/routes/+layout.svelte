@@ -13,11 +13,15 @@ import {
 import { Badge } from "$lib/components/ui/badge/index.js";
 import { Wifi, WifiOff } from "@lucide/svelte";
 import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
+import { m } from "$lib/paraglide/messages.js";
+import { syncDocumentLocale } from "$lib/i18n/format";
 
 let { children } = $props();
 let networkStatus = $state<NetworkStatus>("checking");
 
 onMount(() => {
+	syncDocumentLocale();
+
 	const media = matchMedia("(prefers-color-scheme: dark)");
 	const apply = () => applyThemePreference(loadClientPreferences().theme);
 	const onStorage = (event: StorageEvent) => {
@@ -75,7 +79,7 @@ onMount(() => {
 {@render children()}
 <div class="fixed bottom-3 right-3 z-50" aria-live="polite">
 	<Badge variant={networkStatus === "offline" ? "destructive" : "outline"}>
-		{#if networkStatus === "offline"}<WifiOff class="size-3" />离线{:else}<Wifi class="size-3" />{networkStatus === "checking" ? "检查连接" : "在线"}{/if}
+		{#if networkStatus === "offline"}<WifiOff class="size-3" />{m.network_offline()}{:else}<Wifi class="size-3" />{networkStatus === "checking" ? m.network_checking() : m.network_online()}{/if}
 	</Badge>
 	<span class="sr-only">Edgewarden {EDGEWARDEN_VERSION}</span>
 </div>
