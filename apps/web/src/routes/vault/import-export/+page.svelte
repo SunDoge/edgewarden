@@ -7,6 +7,7 @@ import {
 	buildBitwardenCsv,
 	buildBitwardenJson,
 	buildPlainExportDocument,
+	deduplicateTransferDocument,
 	encryptTransferDocument,
 	inspectEncryptedVaultImport,
 	parseVaultImport,
@@ -140,8 +141,49 @@ async function handleImport() {
 			throw new Error("加密密钥未就绪，请重新解锁保险库。");
 		}
 
-		const encryptedPayload = await encryptTransferDocument(
+		const existingData = buildPlainExportDocument(
+			vault.folders,
+			vault.ciphers.filter((cipher) => !cipher.organizationId),
+		);
+		const deduplicated = deduplicateTransferDocument(
 			importedData,
+			existingData,
+		);
+		let documentToImport = importedData;
+		if (deduplicated.duplicateItems > 0 || deduplicated.duplicateFolders > 0) {
+			const details = [
+				deduplicated.duplicateItems > 0
+					? `${deduplicated.duplicateItems} 个重复密码项`
+					: "",
+				deduplicated.duplicateFolders > 0
+					? `${deduplicated.duplicateFolders} 个重复空文件夹`
+					: "",
+			]
+				.filter(Boolean)
+				.join("和");
+			if (
+				confirm(
+					`检测到${details}。\n\n点击“确定”跳过重复内容；点击“取消”仍然全部导入。`,
+				)
+			) {
+				documentToImport = deduplicated.document;
+			}
+		}
+
+		if (
+			documentToImport.folders.length === 0 &&
+			documentToImport.items.length === 0
+		) {
+			successMsg = `没有导入数据：${deduplicated.duplicateItems} 个密码项均已存在。`;
+			files = null;
+			pendingImport = null;
+			encryptedImport = false;
+			importPassword = "";
+			return;
+		}
+
+		const encryptedPayload = await encryptTransferDocument(
+			documentToImport,
 			vault.symEncKey,
 			vault.symMacKey,
 		);
