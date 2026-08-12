@@ -44,6 +44,7 @@ export interface AuthRequests {
 	access_code_hash: string;
 	approved: number | null;
 	authentication_date: number | null;
+	consumption_token: string | null;
 	creation_date: number;
 	id: string;
 	key: string | null;

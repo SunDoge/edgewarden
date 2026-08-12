@@ -89,14 +89,3 @@ export async function approveAuthRequest(
 		.where("id", "=", id)
 		.execute();
 }
-
-export async function markAuthRequestAuthenticated(
-	db: Kysely<DB>,
-	id: string,
-): Promise<void> {
-	await db
-		.updateTable("auth_requests")
-		.set({ authentication_date: now() })
-		.where("id", "=", id)
-		.execute();
-}

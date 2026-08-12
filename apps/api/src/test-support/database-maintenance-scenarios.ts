@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { runScheduledTasks } from "../index";
+import { hashRefreshToken } from "../utils/jwt";
 import { createDatabase } from "../middleware/db";
 import { deleteAccountData } from "../services/account-deletion";
 import {
@@ -31,6 +32,7 @@ import {
 } from "../services/db/config";
 import * as devicesDb from "../services/db/devices";
 import { runMaintenance } from "../services/maintenance";
+import { issueIdentitySession } from "../services/identity-session";
 import { publishSendFileObject } from "../services/sends/file-storage";
 
 export interface DatabaseMaintenanceScenarioContext {
@@ -569,6 +571,85 @@ export function registerDatabaseMaintenanceScenarios(
 			assert.equal(device?.name, "second-login");
 		} finally {
 			await devicesDb.deleteDevice(db, user.id, deviceId);
+			await db.destroy();
+		}
+	});
+
+	test("issues only one session for an approved auth request", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.selectAll()
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const requestId = crypto.randomUUID();
+		const timestamp = Math.floor(Date.now() / 1000);
+		const tokenPrefix = `auth-request-session-${requestId}`;
+		let results: Awaited<ReturnType<typeof issueIdentitySession>>[] = [];
+		try {
+			await db
+				.insertInto("auth_requests")
+				.values({
+					id: requestId,
+					user_id: user.id,
+					organization_id: null,
+					type: 0,
+					request_device_identifier: "concurrent-auth-request",
+					request_device_type: 0,
+					request_ip_address: null,
+					request_country_name: null,
+					response_device_identifier: "approving-device",
+					access_code_hash: "hash",
+					access_code_encrypted: JSON.stringify({
+						v: 1,
+						iv: "test",
+						data: "test",
+					}),
+					public_key: "public-key",
+					key: "encrypted-key",
+					master_password_hash: null,
+					approved: 1,
+					creation_date: timestamp,
+					response_date: timestamp,
+					authentication_date: null,
+					consumption_token: null,
+				})
+				.execute();
+			results = await Promise.all(
+				[0, 1].map((attempt) =>
+					issueIdentitySession({
+						db,
+						dialect,
+						user,
+						device: { identifier: "", name: "", type: 0 },
+						jwtSecret: context.bindings.JWT_SECRET,
+						authRequest: {
+							id: requestId,
+							token: `${tokenPrefix}-${attempt}`,
+						},
+					}),
+				),
+			);
+			assert.equal(results.filter(Boolean).length, 1);
+			const stored = await db
+				.selectFrom("auth_requests")
+				.select(["authentication_date", "consumption_token"])
+				.where("id", "=", requestId)
+				.executeTakeFirstOrThrow();
+			assert.ok(stored.authentication_date);
+			assert.ok(stored.consumption_token?.startsWith(tokenPrefix));
+		} finally {
+			for (const result of results ?? []) {
+				if (result)
+					await db
+						.deleteFrom("refresh_tokens")
+						.where("token", "=", await hashRefreshToken(result.refreshToken))
+						.execute();
+			}
+			await db
+				.deleteFrom("auth_requests")
+				.where("id", "=", requestId)
+				.execute();
 			await db.destroy();
 		}
 	});

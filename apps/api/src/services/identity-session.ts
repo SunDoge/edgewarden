@@ -1,5 +1,5 @@
 import type { D1Dialect } from "@sundoge/kysely-d1";
-import type { Kysely, Selectable } from "kysely";
+import { type Kysely, type Selectable, sql } from "kysely";
 import { LIMITS } from "../config";
 import type { DB, Users } from "../types/db";
 import { createRefreshToken, hashRefreshToken } from "../utils/jwt";
@@ -23,6 +23,11 @@ export interface IssuedIdentitySession {
 	accessToken: string;
 	refreshToken: string;
 	deviceSession: LoginDeviceSession | null;
+}
+
+export interface AuthRequestConsumption {
+	id: string;
+	token: string;
 }
 
 async function registerLoginDevice(
@@ -51,7 +56,8 @@ export async function issueIdentitySession(args: {
 	user: Selectable<Users>;
 	device: LoginDeviceInfo;
 	jwtSecret: string;
-}): Promise<IssuedIdentitySession> {
+	authRequest?: AuthRequestConsumption | null;
+}): Promise<IssuedIdentitySession | null> {
 	const deviceSession = await registerLoginDevice(
 		args.db,
 		args.user.id,
@@ -64,18 +70,66 @@ export async function issueIdentitySession(args: {
 	);
 	const refreshToken = createRefreshToken();
 	const sessionTime = now();
-	await executeBatch(args.dialect, [
-		args.db
-			.insertInto("refresh_tokens")
-			.values({
-				token: await hashRefreshToken(refreshToken),
-				user_id: args.user.id,
-				expires_at: sessionTime + LIMITS.auth.refreshTokenTtlSeconds,
-				device_identifier: deviceSession?.identifier ?? null,
-				device_session_stamp: deviceSession?.sessionStamp ?? null,
-			})
-			.compile(),
-		revisionQuery(args.db, args.user.id, sessionTime),
-	]);
+	const refreshTokenHash = await hashRefreshToken(refreshToken);
+	if (args.authRequest) {
+		const consumption = args.authRequest;
+		const [consumed, inserted] = await args.dialect.batch([
+			args.db
+				.updateTable("auth_requests")
+				.set({
+					authentication_date: sessionTime,
+					consumption_token: consumption.token,
+				})
+				.where("id", "=", consumption.id)
+				.where("user_id", "=", args.user.id)
+				.where("approved", "=", 1)
+				.where("authentication_date", "is", null)
+				.where("consumption_token", "is", null)
+				.compile(),
+			sql`
+				INSERT INTO refresh_tokens (
+					token, user_id, expires_at,
+					device_identifier, device_session_stamp
+				)
+				SELECT
+					${refreshTokenHash}, ${args.user.id},
+					${sessionTime + LIMITS.auth.refreshTokenTtlSeconds},
+					${deviceSession?.identifier ?? null},
+					${deviceSession?.sessionStamp ?? null}
+				FROM auth_requests
+				WHERE id = ${consumption.id}
+				  AND user_id = ${args.user.id}
+				  AND consumption_token = ${consumption.token}
+			`.compile(args.db),
+			sql`
+				INSERT INTO user_revisions (user_id, revision_date)
+				SELECT ${args.user.id}, ${sessionTime}
+				FROM auth_requests
+				WHERE id = ${consumption.id}
+				  AND user_id = ${args.user.id}
+				  AND consumption_token = ${consumption.token}
+				ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
+					user_revisions.revision_date + 1,
+					excluded.revision_date
+				)
+			`.compile(args.db),
+		]);
+		if (consumed.numAffectedRows !== 1n || inserted.numAffectedRows !== 1n)
+			return null;
+	} else {
+		await executeBatch(args.dialect, [
+			args.db
+				.insertInto("refresh_tokens")
+				.values({
+					token: refreshTokenHash,
+					user_id: args.user.id,
+					expires_at: sessionTime + LIMITS.auth.refreshTokenTtlSeconds,
+					device_identifier: deviceSession?.identifier ?? null,
+					device_session_stamp: deviceSession?.sessionStamp ?? null,
+				})
+				.compile(),
+			revisionQuery(args.db, args.user.id, sessionTime),
+		]);
+	}
 	return { accessToken, refreshToken, deviceSession };
 }
