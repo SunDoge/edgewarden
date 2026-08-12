@@ -413,6 +413,39 @@ export function registerAdminOrganizationScenarios(
 					timestamp,
 				),
 		]);
+		const updateRevisionBefore = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(owner.id)
+			.first<{ revision_date: number }>();
+		assert.ok(updateRevisionBefore);
+		const update = (index: number) =>
+			request(`/api/organizations/${orgId}`, {
+				method: "PUT",
+				headers: {
+					authorization: `Bearer ${context.accessToken}`,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ name: `encrypted-org-update-${index}` }),
+			});
+		const updates = await Promise.all(
+			Array.from({ length: 8 }, (_, index) => update(index)),
+		);
+		assert.equal(
+			updates.filter((response) => response.status === 200).length,
+			1,
+		);
+		assert.equal(
+			updates.filter((response) => response.status === 409).length,
+			7,
+		);
+		assert.equal(
+			await context.database
+				.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+				.bind(owner.id)
+				.first<{ revision_date: number }>()
+				.then((row) => row?.revision_date),
+			updateRevisionBefore.revision_date + 1,
+		);
 
 		const revisionBefore = await context.database
 			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
