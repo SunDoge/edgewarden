@@ -69,6 +69,22 @@ export async function revisionQueriesForCipher(
 	);
 }
 
+export async function revisionUserIdsForCipher(
+	db: Kysely<DB>,
+	cipher: Pick<Selectable<Ciphers>, "user_id" | "org_id">,
+): Promise<string[]> {
+	if (cipher.user_id) return [cipher.user_id];
+	if (!cipher.org_id) return [];
+	const members = await db
+		.selectFrom("org_members")
+		.select("user_id")
+		.where("org_id", "=", cipher.org_id)
+		.where("status", "=", "confirmed")
+		.where("user_id", "is not", null)
+		.execute();
+	return members.map((member) => member.user_id as string);
+}
+
 export async function validateOrganizationCollections(
 	db: Kysely<DB>,
 	userId: string,
