@@ -14,6 +14,10 @@ const api = vi.hoisted(() => ({
 	unarchiveMany: vi.fn(),
 	update: vi.fn(),
 }));
+const cipher = vi.hoisted(() => ({
+	buildPayload: vi.fn(),
+	encrypt: vi.fn(),
+}));
 
 vi.mock("./api", () => ({
 	archiveCipherApi: api.archiveOne,
@@ -30,10 +34,10 @@ vi.mock("./api", () => ({
 	updateCipherApi: api.update,
 }));
 
-vi.mock("./cipher-crypto", () => ({ encryptCipher: vi.fn() }));
-vi.mock("./cipher-draft", () => ({ buildCipherPayload: vi.fn() }));
+vi.mock("./cipher-crypto", () => ({ encryptCipher: cipher.encrypt }));
+vi.mock("./cipher-draft", () => ({ buildCipherPayload: cipher.buildPayload }));
 
-import { applyVaultBulkAction } from "./vault-cipher-actions";
+import { applyVaultBulkAction, saveVaultCipher } from "./vault-cipher-actions";
 
 describe("vault cipher actions", () => {
 	beforeEach(() => vi.clearAllMocks());
@@ -60,17 +64,50 @@ describe("vault cipher actions", () => {
 		expect(api.deleteOne).not.toHaveBeenCalled();
 	});
 
+	it("returns the server acknowledgement for a saved cipher", async () => {
+		const encrypted = { type: 1, name: "encrypted" };
+		const acknowledgement = {
+			id: "cipher-1",
+			revisionDate: "2026-08-13T01:00:00.000Z",
+		};
+		cipher.buildPayload.mockReturnValue({ type: 1, name: "plain" });
+		cipher.encrypt.mockResolvedValue(encrypted);
+		api.create.mockResolvedValue(acknowledgement);
+
+		await expect(
+			saveVaultCipher({
+				editor: {
+					type: 1,
+					name: "plain",
+					organizationId: null,
+					collectionIds: [],
+				} as never,
+				selectedItem: null,
+				isCreating: true,
+				isEditing: false,
+				resolveOwnerKey: () => ({
+					encKey: new Uint8Array(32),
+					macKey: new Uint8Array(32),
+				}),
+			}),
+		).resolves.toBe(acknowledgement);
+		expect(api.create).toHaveBeenCalledWith(encrypted);
+	});
+
 	it.each([
 		["delete", api.deleteMany, api.deleteOne],
 		["restore", api.restoreMany, api.restoreOne],
 		["permanent", api.permanentMany, api.permanentOne],
 		["unarchive", api.unarchiveMany, api.unarchiveOne],
-	] as const)("routes the %s action to matching APIs", async (action, many, one) => {
-		await applyVaultBulkAction(action, [
-			{ id: "personal" },
-			{ id: "organization", organizationId: "org-1" },
-		]);
-		expect(many).toHaveBeenCalledWith(["personal"]);
-		expect(one).toHaveBeenCalledWith("organization");
-	});
+	] as const)(
+		"routes the %s action to matching APIs",
+		async (action, many, one) => {
+			await applyVaultBulkAction(action, [
+				{ id: "personal" },
+				{ id: "organization", organizationId: "org-1" },
+			]);
+			expect(many).toHaveBeenCalledWith(["personal"]);
+			expect(one).toHaveBeenCalledWith("organization");
+		},
+	);
 });

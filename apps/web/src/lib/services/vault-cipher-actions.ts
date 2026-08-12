@@ -17,8 +17,15 @@ import { encryptCipher } from "$lib/services/cipher-crypto";
 import { buildCipherPayload } from "$lib/services/cipher-draft";
 
 export type CipherOwnerKey = { encKey: Uint8Array; macKey: Uint8Array };
-export type CipherOwnerKeyResolver = (organizationId?: string | null) => CipherOwnerKey | null;
-export type VaultBulkAction = "delete" | "restore" | "permanent" | "archive" | "unarchive";
+export type CipherOwnerKeyResolver = (
+	organizationId?: string | null,
+) => CipherOwnerKey | null;
+export type VaultBulkAction =
+	| "delete"
+	| "restore"
+	| "permanent"
+	| "archive"
+	| "unarchive";
 
 export async function saveVaultCipher({
 	editor,
@@ -77,8 +84,10 @@ export async function saveVaultCipher({
 		ownerKey.encKey,
 		ownerKey.macKey,
 	);
-	if (isCreating) await createCipherApi(encryptedPayload);
-	else if (isEditing && selectedItem) await updateCipherApi(selectedItem.id, encryptedPayload);
+	if (isCreating) return createCipherApi(encryptedPayload);
+	if (isEditing && selectedItem)
+		return updateCipherApi(selectedItem.id, encryptedPayload);
+	throw new Error("没有可保存的保险库条目");
 }
 
 export async function updateEncryptedVaultCipher(
@@ -113,7 +122,10 @@ const singleCipherActions = {
 	unarchive: unarchiveCipherApi,
 } satisfies Record<VaultBulkAction, (id: string) => Promise<unknown>>;
 
-export async function applyVaultBulkAction(action: VaultBulkAction, items: any[]) {
+export async function applyVaultBulkAction(
+	action: VaultBulkAction,
+	items: any[],
+) {
 	if (items.some((item) => item.readOnly)) {
 		throw new Error("选择中包含只读组织条目");
 	}
