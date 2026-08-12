@@ -17,11 +17,12 @@ import {
 	hashCredential,
 } from "../services/credential-protection";
 import * as authRequestsDb from "../services/db/auth-requests";
-import { executeBatch, revisionQuery } from "../services/db/batch";
+import { executeBatch } from "../services/db/batch";
 import * as devicesDb from "../services/db/devices";
 import * as refreshTokensDb from "../services/db/refresh-tokens";
 import * as usersDb from "../services/db/users";
 import * as webauthnDb from "../services/db/webauthn";
+import { issueIdentitySession } from "../services/identity-session";
 import {
 	clearLoginFailures,
 	isLoginLocked,
@@ -276,27 +277,6 @@ export const connectToken = factory.createHandlers(async (c) => {
 			}
 		}
 
-		// Upsert device
-		let deviceSession: { identifier: string; sessionStamp: string } | null =
-			null;
-		if (deviceInfo.identifier) {
-			const existing = await devicesDb.getDevice(
-				db,
-				user.id,
-				deviceInfo.identifier,
-			);
-			const sessionStamp = existing?.session_stamp ?? crypto.randomUUID();
-			await devicesDb.upsertDevice(
-				db,
-				user.id,
-				deviceInfo.identifier,
-				deviceInfo.name,
-				deviceInfo.type,
-				sessionStamp,
-			);
-			deviceSession = { identifier: deviceInfo.identifier, sessionStamp };
-		}
-
 		if (validatedAuthRequestId) {
 			await authRequestsDb.markAuthRequestAuthenticated(
 				db,
@@ -304,22 +284,13 @@ export const connectToken = factory.createHandlers(async (c) => {
 			);
 		}
 
-		const accessToken = await generateAccessToken(user, deviceSession, secret);
-		const refreshToken = createRefreshToken();
-		const sessionTime = now();
-		await executeBatch(c.get("dbDialect"), [
-			db
-				.insertInto("refresh_tokens")
-				.values({
-					token: await hashRefreshToken(refreshToken),
-					user_id: user.id,
-					expires_at: sessionTime + LIMITS.auth.refreshTokenTtlSeconds,
-					device_identifier: deviceSession?.identifier ?? null,
-					device_session_stamp: deviceSession?.sessionStamp ?? null,
-				})
-				.compile(),
-			revisionQuery(db, user.id, sessionTime),
-		]);
+		const { accessToken, refreshToken } = await issueIdentitySession({
+			db,
+			dialect: c.get("dbDialect"),
+			user,
+			device: deviceInfo,
+			jwtSecret: secret,
+		});
 
 		if (isWebClient(body)) setWebRefreshCookie(c, refreshToken);
 		return c.json(
@@ -390,42 +361,14 @@ export const connectToken = factory.createHandlers(async (c) => {
 		}
 
 		const deviceInfo = readDeviceInfo(body);
-		let deviceSession: { identifier: string; sessionStamp: string } | null =
-			null;
-		if (deviceInfo.identifier) {
-			const existing = await devicesDb.getDevice(
+		const { accessToken, refreshToken, deviceSession } =
+			await issueIdentitySession({
 				db,
-				user.id,
-				deviceInfo.identifier,
-			);
-			const sessionStamp = existing?.session_stamp ?? crypto.randomUUID();
-			await devicesDb.upsertDevice(
-				db,
-				user.id,
-				deviceInfo.identifier,
-				deviceInfo.name,
-				deviceInfo.type,
-				sessionStamp,
-			);
-			deviceSession = { identifier: deviceInfo.identifier, sessionStamp };
-		}
-
-		const accessToken = await generateAccessToken(user, deviceSession, secret);
-		const refreshToken = createRefreshToken();
-		const sessionTime = now();
-		await executeBatch(c.get("dbDialect"), [
-			db
-				.insertInto("refresh_tokens")
-				.values({
-					token: await hashRefreshToken(refreshToken),
-					user_id: user.id,
-					expires_at: sessionTime + LIMITS.auth.refreshTokenTtlSeconds,
-					device_identifier: deviceSession?.identifier ?? null,
-					device_session_stamp: deviceSession?.sessionStamp ?? null,
-				})
-				.compile(),
-			revisionQuery(db, user.id, sessionTime),
-		]);
+				dialect: c.get("dbDialect"),
+				user,
+				device: deviceInfo,
+				jwtSecret: secret,
+			});
 
 		const webAuthnPrfOption =
 			buildAccountPasskeyTokenUserDecryptionOption(credential);
