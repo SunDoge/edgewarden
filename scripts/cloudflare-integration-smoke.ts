@@ -29,7 +29,11 @@ let socket: WebSocket | null = null;
 async function api(path: string, init: RequestInit = {}): Promise<Response> {
 	const headers = new Headers(init.headers);
 	if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
-	return fetch(new URL(path, origin), { ...init, headers });
+	return fetch(new URL(path, origin), {
+		...init,
+		headers,
+		signal: init.signal ?? AbortSignal.timeout(10_000),
+	});
 }
 
 async function json<T>(response: Response): Promise<T> {
@@ -185,6 +189,7 @@ async function verifyR2Attachment(): Promise<void> {
 		method: "PUT",
 		headers: { "content-type": "application/octet-stream" },
 		body: bytes,
+		signal: AbortSignal.timeout(10_000),
 	});
 	if (!uploaded.ok)
 		throw new Error(
@@ -220,12 +225,13 @@ async function cleanup(): Promise<void> {
 }
 
 try {
+	await json<{ status: "ok" }>(await api("/api/health"));
 	await login();
 	await connectRealtime();
 	await verifyRealtime();
 	await verifyR2Attachment();
 	console.log(
-		"Durable Object WebSocket and R2 attachment integration smoke test passed.",
+		"Readiness, realtime, and attachment integration smoke test passed.",
 	);
 } finally {
 	await cleanup();
