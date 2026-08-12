@@ -29,7 +29,6 @@ import {
 	RotateCcw,
 	ScanLine,
 	ScrollText,
-	Search,
 	Settings,
 	Share2,
 	ShieldAlert,
@@ -48,10 +47,11 @@ import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
-import { Textarea } from "$lib/components/ui/textarea/index.js";
 import { Separator } from "$lib/components/ui/separator/index.js";
-import VaultSidebar from "$lib/components/vault/VaultSidebar.svelte";
+import { Textarea } from "$lib/components/ui/textarea/index.js";
 import VaultDialogs from "$lib/components/vault/VaultDialogs.svelte";
+import VaultItemList from "$lib/components/vault/VaultItemList.svelte";
+import VaultSidebar from "$lib/components/vault/VaultSidebar.svelte";
 import {
 	archiveCipherApi,
 	archiveCiphersApi,
@@ -85,19 +85,19 @@ import { buildCipherPayload } from "$lib/services/cipher-draft";
 import { calcTotpNow, encryptCipher, encryptStr } from "$lib/services/crypto";
 import { scanTotpQrFile } from "$lib/services/totp-qr";
 import {
-	cipherDomain as getDomain,
-	cipherExtraData as getExtraData,
-	cipherTypeIcon as getItemIcon,
-	cipherTypeName as getTypeName,
-	formatVaultSyncTime as formatSyncTime,
-} from "$lib/services/vault-item-display";
-import {
 	type DuplicateMode,
 	filterAndSortVaultItems,
 	findDuplicateCipherIds,
 	type VaultCategory,
 	type VaultSort,
 } from "$lib/services/vault-filter";
+import {
+	formatVaultSyncTime as formatSyncTime,
+	cipherDomain as getDomain,
+	cipherExtraData as getExtraData,
+	cipherTypeIcon as getItemIcon,
+	cipherTypeName as getTypeName,
+} from "$lib/services/vault-item-display";
 import {
 	getOrganizationKey,
 	logout,
@@ -779,44 +779,6 @@ async function toggleFavorite(item: any) {
 		deleteLoading = false;
 	}
 }
-
-// Virtual Scroll state for performance with large password lists (similar to nodewarden)
-let listContainer = $state<HTMLDivElement | null>(null);
-let scrollTop = $state(0);
-let viewportHeight = $state(0);
-let currentBucket = $state(0);
-const ROW_HEIGHT = 72;
-const OVERSCAN = 5;
-
-// Derived values for virtualization
-let startIndex = $derived(
-	Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN),
-);
-let endIndex = $derived(
-	Math.min(
-		filteredItems.length,
-		Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN,
-	),
-);
-
-let visibleItems = $derived(filteredItems.slice(startIndex, endIndex));
-
-let padTop = $derived(startIndex * ROW_HEIGHT);
-let padBottom = $derived(
-	Math.max(0, (filteredItems.length - endIndex) * ROW_HEIGHT),
-);
-
-$effect(() => {
-	// track changes to filters
-	searchQuery;
-	activeCategory;
-	activeFolder;
-	if (listContainer) {
-		listContainer.scrollTop = 0;
-		scrollTop = 0;
-		currentBucket = 0;
-	}
-});
 </script>
 
 <svelte:head>
@@ -879,104 +841,22 @@ $effect(() => {
 			onDeleteAllFolders={() => (deleteAllFoldersDialogOpen = true)}
 		/>
 
-		<!-- Items List -->
-		<section class="flex-1 flex flex-col bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 overflow-hidden">
-			<div class="p-4 border-b border-slate-200 dark:border-slate-800 shrink-0 flex flex-col gap-3">
-				<div class="flex gap-2"><div class="relative flex-1">
-					<Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
-					<Input type="search" placeholder="搜索您的保险库项..." class="pl-10" bind:value={searchQuery} />
-				</div>{#if activeCategory === "duplicates"}<select bind:value={duplicateMode} aria-label="重复检测方式" class="h-9 rounded-md border bg-background px-2 text-sm"><option value="exact">完全相同</option><option value="login-site">网站、账号和密码</option><option value="login-credentials">账号和密码</option><option value="password">密码复用</option></select>{/if}<select bind:value={sortMode} aria-label="排序方式" class="h-9 rounded-md border bg-background px-2 text-sm"><option value="edited">最近修改</option><option value="created">最近创建</option><option value="name">名称</option></select></div>
-				{#if selectedIdList.length}<div class="flex flex-wrap items-center gap-2 text-sm"><span>已选择 {selectedIdList.length} 项</span>{#if activeCategory === "trash"}<Button size="sm" variant="outline" onclick={() => runBulkAction("restore")}><RotateCcw />恢复</Button><Button size="sm" variant="destructive" onclick={() => runBulkAction("permanent")}><Trash2 />永久删除</Button>{:else if activeCategory === "archive"}<Button size="sm" variant="outline" onclick={() => runBulkAction("unarchive")}><ArchiveRestore />取消归档</Button><Button size="sm" variant="destructive" onclick={() => runBulkAction("delete")}><Trash2 />移到回收站</Button>{:else}<Button size="sm" variant="outline" onclick={() => runBulkAction("archive")}><Archive />归档</Button><Button size="sm" variant="outline" onclick={() => { moveFolderId = null; moveDialogOpen = true; }}><Folder />移动</Button><Button size="sm" variant="destructive" onclick={() => runBulkAction("delete")}><Trash2 />移到回收站</Button>{/if}<Button size="sm" variant="ghost" onclick={clearSelection}>取消选择</Button></div>{/if}
-			</div>
-
-			<div
-				bind:this={listContainer}
-				bind:clientHeight={viewportHeight}
-				onscroll={(e) => {
-					const top = e.currentTarget.scrollTop;
-					const bucket = Math.floor(Math.max(0, top) / ROW_HEIGHT);
-					if (bucket !== currentBucket) {
-						currentBucket = bucket;
-						scrollTop = top;
-					}
-				}}
-				class="flex-1 overflow-y-auto"
-			>
-				{#if vault.isSyncing}
-					<div class="divide-y divide-slate-100 dark:divide-slate-800/50">
-						{#each Array(6) as _}
-							<div class="animate-pulse w-full p-4 flex items-center gap-3.5">
-								<div class="w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-800 shrink-0"></div>
-								<div class="flex-1 min-w-0 space-y-2 py-1">
-									<div class="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-1/3"></div>
-									<div class="h-2.5 bg-slate-200/60 dark:bg-slate-800/60 rounded w-1/2"></div>
-								</div>
-							</div>
-						{/each}
-					</div>
-				{:else if vault.error}
-					<div class="p-8 text-center text-slate-500 space-y-3">
-						<WifiOff class="size-10 mx-auto text-slate-300 dark:text-slate-700" />
-						<p class="text-sm">{vault.error}</p>
-					</div>
-				{:else if filteredItems.length === 0}
-					<div class="p-12 text-center text-slate-400">
-						<Lock class="size-12 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
-						<p class="font-medium text-sm">找不到符合要求的条目</p>
-						<p class="text-xs text-slate-500 mt-1">点击左侧"添加新条目"来创建一个。</p>
-					</div>
-				{:else}
-					<div style="padding-top: {padTop}px; padding-bottom: {padBottom}px;" class="divide-y divide-slate-100 dark:divide-slate-800/50">
-						{#each visibleItems as item (item.id)}
-							{@const IconComp = getItemIcon(item.type)}
-							<div class="flex items-center">
-							<input type="checkbox" checked={!!selectedIds[item.id]} onchange={() => toggleSelection(item.id)} aria-label={`选择 ${item.name}`} class="ml-3 size-4 rounded border-input" />
-							<button
-								class="w-full p-4 flex items-center gap-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/30 text-left transition-colors
-									{selectedItem?.id === item.id ? 'bg-primary/5 dark:bg-primary/10 border-l-2 border-primary' : 'border-l-2 border-transparent'}"
-								onclick={() => selectedItem = item}
-							>
-								<div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center shrink-0 overflow-hidden relative border border-slate-200/50 dark:border-slate-850">
-									{#if getDomain(item)}
-										<img
-											src="/icons/{encodeURIComponent(getDomain(item) ?? "")}/icon.png"
-											alt=""
-											class="size-5.5 object-contain rounded-md"
-											onload={(e) => {
-												(e.currentTarget as HTMLImageElement).style.opacity = "1";
-											}}
-											onerror={(e) => {
-												const target = e.currentTarget as HTMLImageElement;
-												target.style.display = "none";
-												const fallback = target.nextElementSibling as HTMLElement | null;
-												if (fallback) fallback.classList.remove("hidden");
-											}}
-											style="opacity: 0; transition: opacity 0.2s;"
-										/>
-										<div class="absolute inset-0 flex items-center justify-center hidden">
-											<IconComp class="size-5" />
-										</div>
-									{:else}
-										<IconComp class="size-5" />
-									{/if}
-								</div>
-								<div class="flex-1 min-w-0">
-									<div class="flex items-center gap-1.5">
-										<h4 class="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">{item.name}</h4>
-										{#if item.favorite}
-											<Star class="size-3 fill-current text-amber-400 shrink-0" />
-										{/if}
-									</div>
-									<p class="text-xs text-slate-500 truncate mt-0.5">
-										{(item.login as any)?.username || getTypeName(item.type)}
-									</p>
-								</div>
-							</button></div>
-						{/each}
-					</div>
-				{/if}
-			</div>
-		</section>
+		<VaultItemList
+			items={filteredItems}
+			isSyncing={vault.isSyncing}
+			error={vault.error}
+			{activeCategory}
+			bind:searchQuery
+			bind:duplicateMode
+			bind:sortMode
+			bind:selectedItem
+			{selectedIds}
+			selectedCount={selectedIdList.length}
+			onToggleSelection={toggleSelection}
+			onBulkAction={runBulkAction}
+			onClearSelection={clearSelection}
+			onMove={() => { moveFolderId = null; moveDialogOpen = true; }}
+		/>
 
 		<!-- Detail Panel -->
 		<section class="w-96 bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shrink-0 overflow-y-auto p-6">
