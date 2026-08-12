@@ -20,7 +20,7 @@ if (!database?.database_name) {
 	throw new Error("The DB binding must declare database_name");
 }
 
-function wrangler(args, capture = false) {
+function wrangler(args: string[], capture = false) {
 	const result = spawnSync("pnpm", ["exec", "wrangler", ...args], {
 		cwd: root,
 		encoding: "utf8",
@@ -31,15 +31,30 @@ function wrangler(args, capture = false) {
 	return result;
 }
 
-function requireSuccess(result, action) {
+function requireSuccess(result: ReturnType<typeof spawnSync>, action: string) {
 	if (result.status === 0) return;
-	throw new Error(`${action} failed with exit code ${result.status ?? "unknown"}`);
+	const output = [result.stdout, result.stderr]
+		.filter((value) => typeof value === "string" && value.trim())
+		.map((value) => value.trim())
+		.join("\n");
+	const permissionHint =
+		action.includes("D1") && process.env.WORKERS_CI
+			? "\n\nWorkers Builds requires a custom build API token with Account > D1 > Edit. The default generated build token does not include D1 access. Select that token under Worker Settings > Build > API token, then retry the deployment."
+			: "";
+	throw new Error(
+		`${action} failed with exit code ${result.status ?? "unknown"}${output ? `:\n${output}` : ""}${permissionHint}`,
+	);
 }
 
-function listDatabases() {
+interface D1DatabaseEntry {
+	name: string;
+	uuid: string;
+}
+
+function listDatabases(): D1DatabaseEntry[] {
 	const result = wrangler(["d1", "list", "--json"], true);
 	requireSuccess(result, "Listing D1 databases");
-	return JSON.parse(result.stdout);
+	return JSON.parse(result.stdout) as D1DatabaseEntry[];
 }
 
 function findDatabase() {
@@ -84,7 +99,9 @@ if (useKv) {
 		requireSuccess(result, "Listing KV namespaces");
 		return JSON.parse(result.stdout);
 	};
-	let namespace = listNamespaces().find((entry) => entry.title === namespaceTitle);
+	let namespace = listNamespaces().find(
+		(entry) => entry.title === namespaceTitle,
+	);
 	if (!namespace) {
 		console.log(`Creating KV namespace "${namespaceTitle}"...`);
 		const creation = wrangler([
@@ -112,7 +129,10 @@ if (useKv) {
 }
 
 try {
-	writeFileSync(temporaryConfigPath, JSON.stringify(deploymentConfig, null, "\t"));
+	writeFileSync(
+		temporaryConfigPath,
+		JSON.stringify(deploymentConfig, null, "\t"),
+	);
 	requireSuccess(
 		wrangler([
 			"d1",
@@ -126,18 +146,14 @@ try {
 		"Applying D1 migrations",
 	);
 	requireSuccess(
-		wrangler([
-			"deploy",
-			"--config",
-			temporaryConfigPath,
-			"--minify",
-		]),
+		wrangler(["deploy", "--config", temporaryConfigPath, "--minify"]),
 		"Deploying Worker",
 	);
 } finally {
 	try {
 		unlinkSync(temporaryConfigPath);
 	} catch (error) {
-		if (error?.code !== "ENOENT") throw error;
+		if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
+			console.warn(`Could not remove temporary deploy config: ${error}`);
 	}
 }
