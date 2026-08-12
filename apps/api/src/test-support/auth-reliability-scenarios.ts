@@ -4,6 +4,8 @@ import { createDatabase } from "../middleware/db";
 import {
 	conditionalAccountPasskeyClaimQuery,
 	conditionalUserRevisionQuery,
+	conditionalWebauthnCredentialDeletionClaimQuery,
+	conditionalWebauthnCredentialDeletionQuery,
 	conditionalWebauthnCredentialInsertQuery,
 } from "../services/db/batch";
 
@@ -87,6 +89,98 @@ export function registerAuthReliabilityScenarios(
 			await db
 				.deleteFrom("webauthn_credentials")
 				.where("id", "in", ids)
+				.execute();
+			await db
+				.updateTable("users")
+				.set({ security_stamp: user.security_stamp })
+				.where("id", "=", user.id)
+				.execute();
+			await db
+				.updateTable("user_revisions")
+				.set({ revision_date: revision.revision_date })
+				.where("user_id", "=", user.id)
+				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("removes one login passkey from a shared security snapshot", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select(["id", "security_stamp"])
+			.where("email", "=", context.email)
+			.executeTakeFirstOrThrow();
+		const revision = await db
+			.selectFrom("user_revisions")
+			.select("revision_date")
+			.where("user_id", "=", user.id)
+			.executeTakeFirstOrThrow();
+		const timestamp = Math.floor(Date.now() / 1000);
+		const id = crypto.randomUUID();
+		try {
+			await db
+				.insertInto("webauthn_credentials")
+				.values({
+					id,
+					user_id: user.id,
+					purpose: "login",
+					name: "Concurrent deletion login passkey",
+					public_key: "AQID",
+					credential_id: `delete-login-credential-${id}`,
+					counter: 0,
+					type: "public-key",
+					aa_guid: null,
+					transports: "[]",
+					encrypted_user_key: null,
+					encrypted_public_key: null,
+					encrypted_private_key: null,
+					supports_prf: 0,
+					created_at: timestamp,
+					updated_at: timestamp,
+				})
+				.execute();
+			const affected: Array<[bigint, bigint]> = [];
+			for (let attempt = 0; attempt < 2; attempt += 1) {
+				const securityStamp = crypto.randomUUID();
+				const [claimed, deleted] = await dialect.batch([
+					conditionalWebauthnCredentialDeletionClaimQuery(
+						db,
+						user.id,
+						id,
+						"login",
+						user.security_stamp,
+						securityStamp,
+						timestamp,
+					),
+					conditionalWebauthnCredentialDeletionQuery(
+						db,
+						user.id,
+						id,
+						"login",
+						securityStamp,
+					),
+					conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
+				]);
+				affected.push([
+					claimed.numAffectedRows ?? 0n,
+					deleted.numAffectedRows ?? 0n,
+				]);
+			}
+			assert.deepEqual(affected, [
+				[1n, 1n],
+				[0n, 0n],
+			]);
+			const after = await db
+				.selectFrom("user_revisions")
+				.select("revision_date")
+				.where("user_id", "=", user.id)
+				.executeTakeFirstOrThrow();
+			assert.equal(after.revision_date, revision.revision_date + 1);
+		} finally {
+			await db
+				.deleteFrom("webauthn_credentials")
+				.where("id", "=", id)
 				.execute();
 			await db
 				.updateTable("users")

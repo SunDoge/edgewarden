@@ -366,10 +366,11 @@ export function conditionalAccountPasskeyClaimQuery(
 	`.compile(db);
 }
 
-export function conditionalTwoFactorPasskeyDeletionClaimQuery(
+export function conditionalWebauthnCredentialDeletionClaimQuery(
 	db: Kysely<DB>,
 	userId: string,
 	credentialId: string,
+	purpose: string,
 	expectedSecurityStamp: string,
 	securityStamp: string,
 	timestamp = now(),
@@ -383,22 +384,23 @@ export function conditionalTwoFactorPasskeyDeletionClaimQuery(
 		    SELECT 1 FROM webauthn_credentials
 		    WHERE id = ${credentialId}
 		      AND user_id = ${userId}
-		      AND purpose = 'twoFactor'
+		      AND purpose = ${purpose}
 		  )
 	`.compile(db);
 }
 
-export function conditionalTwoFactorPasskeyDeletionQuery(
+export function conditionalWebauthnCredentialDeletionQuery(
 	db: Kysely<DB>,
 	userId: string,
 	credentialId: string,
+	purpose: string,
 	securityStamp: string,
 ) {
 	return sql`
 		DELETE FROM webauthn_credentials
 		WHERE id = ${credentialId}
 		  AND user_id = ${userId}
-		  AND purpose = 'twoFactor'
+		  AND purpose = ${purpose}
 		  AND EXISTS (
 		    SELECT 1 FROM users
 		    WHERE id = ${userId} AND security_stamp = ${securityStamp}

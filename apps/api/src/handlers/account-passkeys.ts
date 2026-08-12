@@ -23,6 +23,8 @@ import {
 	conditionalAccountPasskeyClaimQuery,
 	conditionalRefreshTokenDeletionQuery,
 	conditionalUserRevisionQuery,
+	conditionalWebauthnCredentialDeletionClaimQuery,
+	conditionalWebauthnCredentialDeletionQuery,
 	conditionalWebauthnCredentialInsertQuery,
 	webauthnCredentialRevisionQuery,
 } from "../services/db/batch";
@@ -484,18 +486,33 @@ export const deleteAccountPasskey = factory.createHandlers(
 			return errorResponse("Master password verification failed", 400);
 		}
 
-		const [, deleted] = await c
+		const securityStamp = crypto.randomUUID();
+		const [claimed, deleted] = await c
 			.get("dbDialect")
 			.batch([
-				webauthnCredentialRevisionQuery(db, user.id, id),
-				db
-					.deleteFrom("webauthn_credentials")
-					.where("user_id", "=", user.id)
-					.where("id", "=", id)
-					.compile(),
+				conditionalWebauthnCredentialDeletionClaimQuery(
+					db,
+					user.id,
+					id,
+					"login",
+					user.security_stamp,
+					securityStamp,
+				),
+				conditionalWebauthnCredentialDeletionQuery(
+					db,
+					user.id,
+					id,
+					"login",
+					securityStamp,
+				),
+				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+				conditionalUserRevisionQuery(db, user.id, securityStamp),
 			]);
+		if (claimed.numAffectedRows !== 1n)
+			return errorResponse("Passkey settings changed by another request", 409);
 		if (deleted.numAffectedRows !== 1n)
-			return errorResponse("Passkey not found", 404);
+			return errorResponse("Passkey deletion could not be persisted", 500);
+		invalidateUserCache(user.id);
 
 		await safeWriteAuditEvent(db, {
 			actorUserId: user.id,
