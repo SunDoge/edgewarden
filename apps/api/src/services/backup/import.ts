@@ -174,20 +174,23 @@ async function validateShadowTableCounts(
 	db: D1Database,
 	expectedCounts: Partial<Record<BackupTableName, number>>,
 ): Promise<void> {
-	await Promise.all(
-		BACKUP_TABLES.map(async (table) => {
-			const expected = expectedCounts[table] ?? 0;
-			const row = await db
-				.prepare(`SELECT COUNT(*) AS count FROM ${shadowTableName(table)}`)
-				.first<{ count: number }>();
-			const actual = Number(row?.count || 0);
-			if (actual !== expected) {
-				throw new Error(
-					`Restore shadow validation failed for ${table}: expected ${expected}, received ${actual}`,
-				);
-			}
-		}),
+	const results = await db.batch(
+		BACKUP_TABLES.map((table) =>
+			db.prepare(`SELECT COUNT(*) AS count FROM ${shadowTableName(table)}`),
+		),
 	);
+	for (const [index, table] of BACKUP_TABLES.entries()) {
+		const expected = expectedCounts[table] ?? 0;
+		const actual = Number(
+			(results[index]?.results?.[0] as { count?: number } | undefined)?.count ??
+				0,
+		);
+		if (actual !== expected) {
+			throw new Error(
+				`Restore shadow validation failed for ${table}: expected ${expected}, received ${actual}`,
+			);
+		}
+	}
 }
 
 async function swapShadowTablesIntoPlace(db: D1Database): Promise<void> {
@@ -206,21 +209,19 @@ async function swapShadowTablesIntoPlace(db: D1Database): Promise<void> {
 }
 
 async function ensureImportTargetIsFresh(db: D1Database): Promise<void> {
-	const counts = await Promise.all([
-		db
-			.prepare("SELECT COUNT(*) AS count FROM ciphers")
-			.first<{ count: number }>(),
-		db
-			.prepare("SELECT COUNT(*) AS count FROM folders")
-			.first<{ count: number }>(),
-		db
-			.prepare("SELECT COUNT(*) AS count FROM attachments")
-			.first<{ count: number }>(),
-		db
-			.prepare("SELECT COUNT(*) AS count FROM sends")
-			.first<{ count: number }>(),
-	]);
-	const total = counts.reduce((sum, row) => sum + Number(row?.count || 0), 0);
+	const counts = await db.batch(
+		["ciphers", "folders", "attachments", "sends"].map((table) =>
+			db.prepare(`SELECT COUNT(*) AS count FROM ${table}`),
+		),
+	);
+	const total = counts.reduce(
+		(sum, result) =>
+			sum +
+			Number(
+				(result.results?.[0] as { count?: number } | undefined)?.count ?? 0,
+			),
+		0,
+	);
 	if (total > 0) {
 		throw new Error(
 			"Backup import requires a fresh instance with no vault or send data",

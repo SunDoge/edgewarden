@@ -163,10 +163,12 @@ export default {
 		ctx: ExecutionContext,
 	) {
 		ctx.waitUntil(
-			Promise.all([
-				runScheduledBackupIfDue(env),
-				runScheduledMaintenance(env),
-			]).then(() => undefined),
+			(async () => {
+				// Keep backup snapshots consistent with scheduled deletion and avoid
+				// overlapping independent D1 sessions on the same database binding.
+				await runScheduledBackupIfDue(env);
+				await runScheduledMaintenance(env);
+			})(),
 		);
 	},
 };

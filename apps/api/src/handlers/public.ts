@@ -45,10 +45,8 @@ export const registerAccount = factory.createHandlers(
 		const db = c.get("db");
 		const email = body.email.toLowerCase();
 		const policy = await loadRegistrationPolicy(db, c.env);
-		const [userCount, bootstrapLock] = await Promise.all([
-			usersDb.getUserCount(db),
-			getConfigValue(db, BOOTSTRAP_LOCK_KEY),
-		]);
+		const userCount = await usersDb.getUserCount(db);
+		const bootstrapLock = await getConfigValue(db, BOOTSTRAP_LOCK_KEY);
 		const isBootstrap = userCount === 0 && !bootstrapLock;
 		if (userCount === 0 && bootstrapLock)
 			return errorResponse("Bootstrap has already been completed", 403);
@@ -215,11 +213,9 @@ function configPayload(
 
 export const getConfig = factory.createHandlers(async (c) => {
 	const db = c.get("db");
-	const [userCount, bootstrapLock, registration] = await Promise.all([
-		usersDb.getUserCount(db),
-		getConfigValue(db, BOOTSTRAP_LOCK_KEY),
-		loadRegistrationPolicy(db, c.env),
-	]);
+	const userCount = await usersDb.getUserCount(db);
+	const bootstrapLock = await getConfigValue(db, BOOTSTRAP_LOCK_KEY);
+	const registration = await loadRegistrationPolicy(db, c.env);
 	const bootstrapRequired = userCount === 0 && !bootstrapLock;
 	return c.json(
 		configPayload(
