@@ -1,58 +1,30 @@
 <script lang="ts">
 import { CipherType } from "@edgewarden/shared";
-import {
-	ArrowLeft,
-	BookUser,
-	Building2,
-	CreditCard,
-	Database,
-	FileText,
-	Globe,
-	IdCard,
-	KeyRound,
-	Landmark,
-	Lock,
-	Menu,
-	LogOut,
-	RefreshCw,
-	ScrollText,
-	Settings,
-	Share2,
-	ShieldAlert,
-	ShieldCheck,
-	User,
-	UserRoundCog,
-	WandSparkles,
-	WifiOff,
-} from "@lucide/svelte";
+import { ArrowLeft, Lock } from "@lucide/svelte";
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import { Button } from "$lib/components/ui/button/index.js";
-import { Separator } from "$lib/components/ui/separator/index.js";
 import VaultDialogs from "$lib/components/vault/VaultDialogs.svelte";
 import VaultEditorForm from "$lib/components/vault/VaultEditorForm.svelte";
+import VaultHeader from "$lib/components/vault/VaultHeader.svelte";
 import VaultItemDetail from "$lib/components/vault/VaultItemDetail.svelte";
 import VaultItemList from "$lib/components/vault/VaultItemList.svelte";
 import VaultSidebar from "$lib/components/vault/VaultSidebar.svelte";
 import {
 	archiveCipherApi,
-	createFolderApi,
 	deleteAttachmentApi,
 	deleteCipherApi,
-	deleteFolderApi,
-	deleteFoldersApi,
 	hardDeleteCipherApi,
 	isLoggedIn,
 	restoreCipherApi,
 	unarchiveCipherApi,
-	updateFolderApi,
 } from "$lib/services/api";
 import {
 	downloadVaultAttachment,
 	uploadVaultAttachment,
 } from "$lib/services/vault-attachments";
-import { calcTotpNow, encryptStr } from "$lib/services/crypto";
+import { calcTotpNow } from "$lib/services/crypto";
 import {
 	applyVaultBulkAction,
 	saveVaultCipher,
@@ -64,13 +36,18 @@ import {
 	vaultCipherToEditorForm,
 } from "$lib/services/vault-editor";
 import {
+	type FolderEditorMode,
+	removeAllVaultFolders,
+	removeVaultFolder,
+	saveVaultFolder,
+} from "$lib/services/vault-folder-actions";
+import {
 	type DuplicateMode,
 	filterAndSortVaultItems,
 	findDuplicateCipherIds,
 	type VaultCategory,
 	type VaultSort,
 } from "$lib/services/vault-filter";
-import { formatVaultSyncTime as formatSyncTime } from "$lib/services/vault-item-display";
 import {
 	getOrganizationKey,
 	logout,
@@ -97,7 +74,7 @@ let mobileDetailOpen = $state(false);
 
 // Folder management dialog state
 let folderDialogOpen = $state(false);
-let folderDialogMode = $state<"create" | "rename">("create");
+let folderDialogMode = $state<FolderEditorMode>("create");
 let folderDialogName = $state("");
 let folderDialogLoading = $state(false);
 let targetFolder = $state<any | null>(null);
@@ -129,20 +106,13 @@ async function handleFolderSubmit() {
 	if (!folderDialogName.trim()) return;
 	folderDialogLoading = true;
 	try {
-		if (!vault.symEncKey || !vault.symMacKey) {
-			throw new Error("密钥未就绪，请重新解锁保险库");
-		}
-		const encryptedName = await encryptStr(
-			folderDialogName.trim(),
-			vault.symEncKey,
-			vault.symMacKey,
-		);
-
-		if (folderDialogMode === "create") {
-			await createFolderApi({ name: encryptedName });
-		} else if (folderDialogMode === "rename" && targetFolder) {
-			await updateFolderApi(targetFolder.id, { name: encryptedName });
-		}
+		await saveVaultFolder({
+			mode: folderDialogMode,
+			name: folderDialogName,
+			folderId: targetFolder?.id,
+			encKey: vault.symEncKey,
+			macKey: vault.symMacKey,
+		});
 
 		await syncVaultData();
 		folderDialogOpen = false;
@@ -157,7 +127,7 @@ async function confirmDeleteFolder() {
 	if (!targetFolder) return;
 	deleteFolderLoading = true;
 	try {
-		await deleteFolderApi(targetFolder.id);
+		await removeVaultFolder(targetFolder.id);
 		if (activeFolder === targetFolder.id) {
 			activeFolder = null;
 		}
@@ -174,7 +144,7 @@ async function confirmDeleteAllFolders() {
 	if (!vault.folders.length) return;
 	deleteFolderLoading = true;
 	try {
-		await deleteFoldersApi(vault.folders.map((folder) => folder.id));
+		await removeAllVaultFolders(vault.folders);
 		activeFolder = null;
 		await syncVaultData();
 		deleteAllFoldersDialogOpen = false;
@@ -529,48 +499,7 @@ async function toggleFavorite(item: any) {
 </svelte:head>
 
 <div class="h-screen bg-slate-50 dark:bg-slate-950 flex flex-col overflow-hidden">
-	<!-- Navbar -->
-	<header class="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-2 sm:px-4 md:px-6">
-		<div class="flex items-center gap-2.5">
-			<Button variant="ghost" size="icon" class="md:hidden" onclick={() => mobileSidebarOpen = true} aria-label="打开保险库导航"><Menu /></Button>
-			<div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground">
-				<ShieldCheck class="size-5" />
-			</div>
-			<span class="hidden text-lg font-bold sm:inline">Edgewarden</span>
-
-			{#if vault.isOffline}
-				<span class="px-2 py-0.5 text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 rounded-full border border-amber-200 dark:border-amber-900/50 flex items-center gap-1">
-					<WifiOff class="size-3" />
-					离线缓存
-				</span>
-			{:else}
-				<span class="px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-full border border-emerald-200 dark:border-emerald-900/50">
-					零知识加密保护中
-				</span>
-			{/if}
-		</div>
-
-		<div class="flex items-center gap-2">
-			{#if vault.syncedAt}
-				<span class="text-xs text-slate-400 hidden sm:block">
-					{vault.isOffline ? "缓存于" : "同步于"} {formatSyncTime(vault.syncedAt)}
-				</span>
-			{/if}
-			<Button
-				variant="ghost" size="sm"
-				onclick={() => syncVaultData()}
-				disabled={vault.isSyncing}
-				class="text-slate-500"
-			>
-				<RefreshCw class="size-4 {vault.isSyncing ? 'animate-spin' : ''}" />
-			</Button>
-			<Button variant="ghost" size="sm" onclick={handleLogout} class="text-muted-foreground" aria-label="锁定并退出">
-				<LogOut />
-				<span class="hidden sm:inline">锁定并退出</span>
-			</Button>
-		</div>
-	</header>
-	{#if vault.warning}<div class="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">{vault.warning}</div>{/if}
+	<VaultHeader onOpenNavigation={() => mobileSidebarOpen = true} onLogout={handleLogout} />
 
 	<div class="relative flex flex-1 overflow-hidden">
 		<!-- Sidebar -->
