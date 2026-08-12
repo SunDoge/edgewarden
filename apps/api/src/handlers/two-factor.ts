@@ -1,4 +1,5 @@
 import { vValidator } from "@hono/valibot-validator";
+import { sql } from "kysely";
 import { factory } from "../http/factory";
 import {
 	checkAccountRateLimit,
@@ -9,7 +10,7 @@ import {
 	RecoverTwoFactorSchema,
 	TotpSetupSchema,
 } from "../schemas/two-factor";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import { invalidateUserCache, verifyPassword } from "../services/auth";
 import {
 	decryptCredential,
@@ -109,22 +110,36 @@ export const enableAuthenticator = factory.createHandlers(
 				"totp-recovery",
 			),
 		]);
-		const [changed] = await c
-			.get("dbDialect")
-			.batch([
-				conditionalAuthenticatorUpdateQuery(
-					db,
-					userId,
-					user.security_stamp,
-					user.totp_secret,
-					encryptedSecret,
-					encryptedRecoveryCode,
-					securityStamp,
-					ts,
-				),
-				conditionalRefreshTokenDeletionQuery(db, userId, securityStamp),
-				conditionalUserRevisionQuery(db, userId, securityStamp, ts),
-			]);
+		const [changed] = await c.get("dbDialect").batch([
+			conditionalAuthenticatorUpdateQuery(
+				db,
+				userId,
+				user.security_stamp,
+				user.totp_secret,
+				encryptedSecret,
+				encryptedRecoveryCode,
+				securityStamp,
+				ts,
+			),
+			conditionalRefreshTokenDeletionQuery(db, userId, securityStamp),
+			conditionalUserRevisionQuery(db, userId, securityStamp, ts),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: userId,
+					action: "account.two_factor.authenticator.enable",
+					category: "auth",
+					targetType: "user",
+					targetId: userId,
+					metadata: auditRequestMetadata(c.req.raw),
+				},
+				sql<boolean>`EXISTS (
+						SELECT 1 FROM users
+						WHERE id = ${userId} AND security_stamp = ${securityStamp}
+					)`,
+				ts,
+			),
+		]);
 		if (changed.numAffectedRows !== 1n)
 			return errorResponse(
 				"Authenticator was changed by another request.",
@@ -172,6 +187,22 @@ function disableAuthenticatorHandler(providerResponse: boolean) {
 					.compile(),
 				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
 				conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
+				auditEventInsertQuery(
+					db,
+					{
+						actorUserId: user.id,
+						action: "account.two_factor.authenticator.disable",
+						category: "auth",
+						targetType: "user",
+						targetId: user.id,
+						metadata: auditRequestMetadata(c.req.raw),
+					},
+					sql<boolean>`EXISTS (
+						SELECT 1 FROM users
+						WHERE id = ${user.id} AND security_stamp = ${securityStamp}
+					)`,
+					ts,
+				),
 			]);
 			if (updated.numAffectedRows !== 1n) return response();
 			invalidateUserCache(user.id);
@@ -275,19 +306,27 @@ export const recoverTwoFactor = factory.createHandlers(
 			conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
 			conditionalTwoFactorCredentialDeletionQuery(db, user.id, securityStamp),
 			conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: user.id,
+					action: "account.two_factor.recovered",
+					category: "auth",
+					level: "warning",
+					targetType: "user",
+					targetId: user.id,
+					metadata: { ...auditRequestMetadata(c.req.raw), email },
+				},
+				sql<boolean>`EXISTS (
+					SELECT 1 FROM users
+					WHERE id = ${user.id} AND security_stamp = ${securityStamp}
+				)`,
+				ts,
+			),
 		]);
 		if (updated.numAffectedRows !== 1n)
 			return errorResponse("Invalid credentials or recovery code.", 400);
 		invalidateUserCache(user.id);
-		await safeWriteAuditEvent(db, {
-			actorUserId: user.id,
-			action: "account.two_factor.recovered",
-			category: "auth",
-			level: "warning",
-			targetType: "user",
-			targetId: user.id,
-			metadata: { ...auditRequestMetadata(c.req.raw), email },
-		});
 		return new Response(null, { status: 204 });
 	},
 );

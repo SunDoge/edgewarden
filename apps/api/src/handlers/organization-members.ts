@@ -6,11 +6,7 @@ import {
 	OrganizationInviteeQuerySchema,
 	UpdateOrganizationMemberSchema,
 } from "../schemas/organizations";
-import {
-	auditEventInsertQuery,
-	auditRequestMetadata,
-	safeWriteAuditEvent,
-} from "../services/audit";
+import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import {
 	conditionalOrganizationMemberRevisionQuery,
 	organizationMemberCollectionAccessQuery,
@@ -258,20 +254,28 @@ export const inviteOrganizationMember = factory.createHandlers(
 				mutationToken,
 				ts,
 			),
+			auditEventInsertQuery(
+				db,
+				{
+					actorUserId: c.get("user").id,
+					action: "organization.member.add",
+					category: "org",
+					targetType: "organizationMember",
+					targetId: memberId,
+					metadata: {
+						...auditRequestMetadata(c.req.raw),
+						targetEmail: target.email,
+					},
+				},
+				sql<boolean>`EXISTS (
+					SELECT 1 FROM org_members
+					WHERE id = ${memberId} AND mutation_token = ${mutationToken}
+				)`,
+				ts,
+			),
 		]);
 		if (inserted.numAffectedRows !== 1n)
 			return errorResponse("Member invitation changed or already exists", 409);
-		await safeWriteAuditEvent(db, {
-			actorUserId: c.get("user").id,
-			action: "organization.member.add",
-			category: "org",
-			targetType: "organizationMember",
-			targetId: memberId,
-			metadata: {
-				...auditRequestMetadata(c.req.raw),
-				targetEmail: target.email,
-			},
-		});
 		return c.json(
 			{
 				id: memberId,
