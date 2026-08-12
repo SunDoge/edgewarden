@@ -46,13 +46,12 @@ import { onMount } from "svelte";
 import { match } from "ts-pattern";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
-import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
 import { Button } from "$lib/components/ui/button/index.js";
-import * as Dialog from "$lib/components/ui/dialog/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import { Textarea } from "$lib/components/ui/textarea/index.js";
 import { Separator } from "$lib/components/ui/separator/index.js";
 import VaultSidebar from "$lib/components/vault/VaultSidebar.svelte";
+import VaultDialogs from "$lib/components/vault/VaultDialogs.svelte";
 import {
 	archiveCipherApi,
 	archiveCiphersApi,
@@ -1571,113 +1570,25 @@ $effect(() => {
 	</div>
 </div>
 
-<!-- 删除确认弹窗 -->
-<AlertDialog.Root bind:open={deleteDialogOpen}>
-	<AlertDialog.Portal>
-		<AlertDialog.Overlay />
-		<AlertDialog.Content>
-			<AlertDialog.Header>
-				<AlertDialog.Title>确认删除</AlertDialog.Title>
-				<AlertDialog.Description>
-					{selectedItem?.deletedDate ? `确定要永久删除“${selectedItem?.name}”吗？此操作无法撤销。` : `确定要将“${selectedItem?.name}”移到回收站吗？`}
-				</AlertDialog.Description>
-			</AlertDialog.Header>
-			<AlertDialog.Footer>
-				<AlertDialog.Cancel disabled={deleteLoading}>取消</AlertDialog.Cancel>
-				<AlertDialog.Action
-					onclick={confirmDeleteCipher}
-					disabled={deleteLoading}
-					class="bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20"
-				>
-					{#if deleteLoading}
-						<div class="size-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5"></div>
-					{/if}
-					{selectedItem?.deletedDate ? "永久删除" : "移到回收站"}
-				</AlertDialog.Action>
-			</AlertDialog.Footer>
-		</AlertDialog.Content>
-	</AlertDialog.Portal>
-</AlertDialog.Root>
-
-<AlertDialog.Root bind:open={deleteAllFoldersDialogOpen}>
-	<AlertDialog.Content>
-		<AlertDialog.Header><AlertDialog.Title>删除全部文件夹</AlertDialog.Title><AlertDialog.Description>将删除全部 {vault.folders.length} 个文件夹。保险库项目不会被删除，而会移至“无文件夹”。此操作不可撤销。</AlertDialog.Description></AlertDialog.Header>
-		<AlertDialog.Footer><AlertDialog.Cancel disabled={deleteFolderLoading}>取消</AlertDialog.Cancel><AlertDialog.Action onclick={confirmDeleteAllFolders} disabled={deleteFolderLoading} class="bg-destructive text-white hover:bg-destructive/90">确认删除全部</AlertDialog.Action></AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>
-
-<Dialog.Root bind:open={moveDialogOpen}><Dialog.Content><Dialog.Header><Dialog.Title>移动所选条目</Dialog.Title><Dialog.Description>选择目标文件夹；选择“无文件夹”会移出当前文件夹。</Dialog.Description></Dialog.Header><select bind:value={moveFolderId} class="h-9 rounded-md border bg-background px-3 text-sm"><option value={null}>无文件夹</option>{#each vault.folders as folder}<option value={folder.id}>{folder.name}</option>{/each}</select><Dialog.Footer><Button variant="outline" onclick={() => moveDialogOpen = false}>取消</Button><Button onclick={moveSelectedItems} disabled={deleteLoading}>移动 {selectedIdList.length} 项</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
-
-<!-- 文件夹创建/重命名弹窗 -->
-<AlertDialog.Root bind:open={folderDialogOpen}>
-	<AlertDialog.Portal>
-		<AlertDialog.Overlay />
-		<AlertDialog.Content>
-			<AlertDialog.Header>
-				<AlertDialog.Title>
-					{folderDialogMode === 'create' ? '新建文件夹' : '重命名文件夹'}
-				</AlertDialog.Title>
-				<AlertDialog.Description>
-					请输入文件夹的名称：
-				</AlertDialog.Description>
-			</AlertDialog.Header>
-			<div class="py-4">
-				<Input
-					type="text"
-					placeholder="文件夹名称"
-					bind:value={folderDialogName}
-					onkeydown={(e) => {
-						if (e.key === 'Enter') {
-							e.preventDefault();
-							handleFolderSubmit();
-						}
-					}}
-					class="w-full"
-					autofocus
-				/>
-			</div>
-			<AlertDialog.Footer>
-				<AlertDialog.Cancel disabled={folderDialogLoading} onclick={() => { folderDialogOpen = false; }}>取消</AlertDialog.Cancel>
-				<AlertDialog.Action
-					onclick={handleFolderSubmit}
-					disabled={folderDialogLoading || !folderDialogName.trim()}
-					class="bg-primary text-white hover:bg-primary/90"
-				>
-					{#if folderDialogLoading}
-						<div class="size-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5"></div>
-					{/if}
-					保存
-				</AlertDialog.Action>
-			</AlertDialog.Footer>
-		</AlertDialog.Content>
-	</AlertDialog.Portal>
-</AlertDialog.Root>
-
-<!-- 文件夹删除确认弹窗 -->
-<AlertDialog.Root bind:open={deleteFolderDialogOpen}>
-	<AlertDialog.Portal>
-		<AlertDialog.Overlay />
-		<AlertDialog.Content>
-			<AlertDialog.Header>
-				<AlertDialog.Title>确认删除文件夹</AlertDialog.Title>
-				<AlertDialog.Description>
-					确定要删除文件夹「{targetFolder?.name}」吗？
-					<p class="text-xs text-red-500 mt-2">注意：此操作仅删除文件夹本身，文件夹内的密码项不会被删除，它们将被移至未分类。</p>
-				</AlertDialog.Description>
-			</AlertDialog.Header>
-			<AlertDialog.Footer>
-				<AlertDialog.Cancel disabled={deleteFolderLoading} onclick={() => { deleteFolderDialogOpen = false; }}>取消</AlertDialog.Cancel>
-				<AlertDialog.Action
-					onclick={confirmDeleteFolder}
-					disabled={deleteFolderLoading}
-					class="bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20"
-				>
-					{#if deleteFolderLoading}
-						<div class="size-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5"></div>
-					{/if}
-					确认删除
-				</AlertDialog.Action>
-			</AlertDialog.Footer>
-		</AlertDialog.Content>
-	</AlertDialog.Portal>
-</AlertDialog.Root>
+<VaultDialogs
+	bind:deleteOpen={deleteDialogOpen}
+	bind:deleteAllFoldersOpen={deleteAllFoldersDialogOpen}
+	bind:moveOpen={moveDialogOpen}
+	bind:folderOpen={folderDialogOpen}
+	bind:deleteFolderOpen={deleteFolderDialogOpen}
+	bind:moveFolderId
+	bind:folderName={folderDialogName}
+	selectedItemName={selectedItem?.name}
+	selectedItemDeleted={!!selectedItem?.deletedDate}
+	{deleteLoading}
+	folders={vault.folders}
+	selectedCount={selectedIdList.length}
+	folderMode={folderDialogMode}
+	folderLoading={folderDialogLoading || deleteFolderLoading}
+	targetFolderName={targetFolder?.name}
+	onDeleteItem={confirmDeleteCipher}
+	onDeleteAllFolders={confirmDeleteAllFolders}
+	onMoveItems={moveSelectedItems}
+	onSaveFolder={handleFolderSubmit}
+	onDeleteFolder={confirmDeleteFolder}
+/>
