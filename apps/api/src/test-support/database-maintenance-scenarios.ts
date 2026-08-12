@@ -27,6 +27,8 @@ import {
 	collectionRevisionQuery,
 	conditionalAuthenticatorUpdateQuery,
 	conditionalRefreshTokenDeletionQuery,
+	conditionalTwoFactorPasskeyClaimQuery,
+	conditionalTwoFactorPasskeyInsertQuery,
 	conditionalUserRevisionQuery,
 	conditionalYubikeyUpdateQuery,
 	deletedAttachmentCipherUpdateQuery,
@@ -707,6 +709,99 @@ export function registerDatabaseMaintenanceScenarios(
 				.updateTable("users")
 				.set({
 					yubikey_config: user.yubikey_config,
+					totp_recovery_code: user.totp_recovery_code,
+					security_stamp: user.security_stamp,
+				})
+				.where("id", "=", user.id)
+				.execute();
+			await db
+				.updateTable("user_revisions")
+				.set({ revision_date: revision.revision_date })
+				.where("user_id", "=", user.id)
+				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("adds one two-factor passkey from a shared security snapshot", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select(["id", "totp_recovery_code", "security_stamp"])
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const revision = await db
+			.selectFrom("user_revisions")
+			.select("revision_date")
+			.where("user_id", "=", user.id)
+			.executeTakeFirstOrThrow();
+		const timestamp = Math.floor(Date.now() / 1000);
+		const credentialIds = [crypto.randomUUID(), crypto.randomUUID()];
+		try {
+			const affected: Array<[bigint, bigint]> = [];
+			for (const [attempt, id] of credentialIds.entries()) {
+				const securityStamp = crypto.randomUUID();
+				const envelope = JSON.stringify({
+					v: 1,
+					iv: `passkey-iv-${attempt}`,
+					data: `passkey-data-${attempt}`,
+				});
+				const credential = {
+					id,
+					user_id: user.id,
+					purpose: "twoFactor",
+					name: `Concurrent passkey ${attempt}`,
+					public_key: "AQID",
+					credential_id: `credential-${id}`,
+					counter: 0,
+					type: "public-key",
+					aa_guid: null,
+					transports: "[]",
+					encrypted_user_key: null,
+					encrypted_public_key: null,
+					encrypted_private_key: null,
+					supports_prf: 0,
+					created_at: timestamp,
+					updated_at: timestamp,
+				};
+				const [claimed, inserted] = await dialect.batch([
+					conditionalTwoFactorPasskeyClaimQuery(
+						db,
+						user.id,
+						user.security_stamp,
+						credential.credential_id,
+						envelope,
+						securityStamp,
+						5,
+						timestamp,
+					),
+					conditionalTwoFactorPasskeyInsertQuery(db, credential, securityStamp),
+					conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+					conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
+				]);
+				affected.push([
+					claimed.numAffectedRows ?? 0n,
+					inserted.numAffectedRows ?? 0n,
+				]);
+			}
+			assert.deepEqual(affected, [
+				[1n, 1n],
+				[0n, 0n],
+			]);
+			const after = await db
+				.selectFrom("user_revisions")
+				.select("revision_date")
+				.where("user_id", "=", user.id)
+				.executeTakeFirstOrThrow();
+			assert.equal(after.revision_date, revision.revision_date + 1);
+		} finally {
+			await db
+				.deleteFrom("webauthn_credentials")
+				.where("id", "in", credentialIds)
+				.execute();
+			await db
+				.updateTable("users")
+				.set({
 					totp_recovery_code: user.totp_recovery_code,
 					security_stamp: user.security_stamp,
 				})

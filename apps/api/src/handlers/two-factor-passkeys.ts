@@ -15,7 +15,12 @@ import {
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import { invalidateUserCache, verifyPassword } from "../services/auth";
 import { encryptCredential } from "../services/credential-protection";
-import { executeBatch, revisionQuery } from "../services/db/batch";
+import {
+	conditionalRefreshTokenDeletionQuery,
+	conditionalTwoFactorPasskeyClaimQuery,
+	conditionalTwoFactorPasskeyInsertQuery,
+	conditionalUserRevisionQuery,
+} from "../services/db/batch";
 import * as webauthnDb from "../services/db/webauthn";
 import {
 	createAccountPasskeyToken,
@@ -254,16 +259,32 @@ export const createTwoFactorPasskey = factory.createHandlers(
 				c.env.DATA_ENCRYPTION_SECRET,
 				"totp-recovery",
 			));
-		await executeBatch(c.get("dbDialect"), [
-			db.insertInto("webauthn_credentials").values(credential).compile(),
-			db
-				.updateTable("users")
-				.set({ totp_recovery_code: encryptedRecoveryCode, updated_at: ts })
-				.where("id", "=", user.id)
-				.compile(),
-			db.deleteFrom("refresh_tokens").where("user_id", "=", user.id).compile(),
-			revisionQuery(db, user.id, ts),
-		]);
+		const securityStamp = crypto.randomUUID();
+		const [claimed, inserted] = await c
+			.get("dbDialect")
+			.batch([
+				conditionalTwoFactorPasskeyClaimQuery(
+					db,
+					user.id,
+					user.security_stamp,
+					credential.credential_id,
+					encryptedRecoveryCode,
+					securityStamp,
+					MAX_TWO_FACTOR_PASSKEYS,
+					ts,
+				),
+				conditionalTwoFactorPasskeyInsertQuery(db, credential, securityStamp),
+				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+				conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
+			]);
+		if (claimed.numAffectedRows !== 1n)
+			return errorResponse(
+				"Passkey settings changed or reached their limit",
+				409,
+			);
+		if (inserted.numAffectedRows !== 1n)
+			return errorResponse("Passkey registration could not be persisted", 500);
+		invalidateUserCache(user.id);
 		await safeWriteAuditEvent(db, {
 			actorUserId: user.id,
 			action: "account.two_factor.passkey.create",
