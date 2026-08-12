@@ -1,11 +1,6 @@
 import { vValidator } from "@hono/valibot-validator";
 import { factory } from "../http/factory";
-import {
-	AdminPasswordSchema,
-	AuditLogQuerySchema,
-	AuditLogSettingsSchema,
-} from "../schemas/admin";
-import { verifyAdminPassword } from "../services/admin-auth";
+import { AuditLogQuerySchema, AuditLogSettingsSchema } from "../schemas/admin";
 import {
 	auditRequestMetadata,
 	getAuditLogSettings,
@@ -85,32 +80,6 @@ export const listAuditLogs = factory.createHandlers(
 			hasMore: offset + data.length < total,
 			object: "list",
 		});
-	},
-);
-
-export const clearAuditLogs = factory.createHandlers(
-	vValidator("json", AdminPasswordSchema),
-	async (c) => {
-		const passwordError = await verifyAdminPassword(
-			c as any,
-			c.req.valid("json").masterPasswordHash,
-		);
-		if (passwordError) return passwordError;
-		const result = await c
-			.get("db")
-			.deleteFrom("audit_logs")
-			.executeTakeFirst();
-		await safeWriteAuditEvent(c.get("db"), {
-			actorUserId: c.get("user").id,
-			action: "admin.audit.clear",
-			category: "admin",
-			level: "warning",
-			metadata: {
-				...auditRequestMetadata(c.req.raw),
-				size: Number(result.numDeletedRows),
-			},
-		});
-		return c.json({ deleted: Number(result.numDeletedRows) });
 	},
 );
 

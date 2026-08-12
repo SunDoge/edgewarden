@@ -122,14 +122,6 @@ export async function listAuditLogsApi(filters: AuditLogQuery = {}): Promise<{
 	}>;
 }
 
-export async function clearAuditLogsApi(
-	masterPasswordHash: string,
-): Promise<{ deleted: number }> {
-	return rpcJson(
-		await rpc.api.admin.logs.$delete({ json: { masterPasswordHash } }),
-	) as Promise<{ deleted: number }>;
-}
-
 export async function fetchAuditLogSettingsApi(): Promise<{
 	retentionDays: number | null;
 	maxEntries: number | null;

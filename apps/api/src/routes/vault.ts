@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { HonoEnv } from "../env";
+import { deleteAccount } from "../handlers/account-deletion";
 import {
 	createAccountPasskey,
 	deleteAccountPasskey,
@@ -8,22 +9,6 @@ import {
 	listAccountPasskeys,
 	updateAccountPasskeyEncryption,
 } from "../handlers/account-passkeys";
-import { deleteAccount } from "../handlers/account-deletion";
-import {
-	clearAuditLogs,
-	createAdminInvite,
-	deleteAdminInvite,
-	deleteAdminInvites,
-	deleteAdminUser,
-	listAdminInvites,
-	listAdminUsers,
-	listAuditLogs,
-	getAuditSettings,
-	getAdminRegistrationPolicy,
-	updateAuditSettings,
-	updateAdminRegistrationPolicy,
-	setAdminUserStatus,
-} from "../handlers/admin";
 import {
 	changePassword,
 	getApiKey,
@@ -35,6 +20,20 @@ import {
 	updateProfile,
 	verifyAccountPassword,
 } from "../handlers/accounts";
+import {
+	createAdminInvite,
+	deleteAdminInvite,
+	deleteAdminInvites,
+	deleteAdminUser,
+	getAdminRegistrationPolicy,
+	getAuditSettings,
+	listAdminInvites,
+	listAdminUsers,
+	listAuditLogs,
+	setAdminUserStatus,
+	updateAdminRegistrationPolicy,
+	updateAuditSettings,
+} from "../handlers/admin";
 import {
 	createAuthRequest,
 	getAuthRequest,
@@ -74,6 +73,8 @@ import {
 	listFolders,
 	updateFolder,
 } from "../handlers/folders";
+import { listUserCollections } from "../handlers/organizations";
+import { createRealtimeConnectionTicket } from "../handlers/realtime";
 import {
 	createFileSend,
 	createTextSend,
@@ -108,10 +109,8 @@ import {
 	saveYubicoConfig,
 	saveYubikeys,
 } from "../handlers/yubikey";
-import { listUserCollections } from "../handlers/organizations";
 import { authMiddleware, requireAdmin } from "../middleware/auth";
 import { realtimeMutationMiddleware } from "../middleware/realtime";
-import { createRealtimeConnectionTicket } from "../handlers/realtime";
 import {
 	requireAccountPasskey,
 	requireAuthRequest,
@@ -234,8 +233,7 @@ const adminRoutes = new Hono<HonoEnv>()
 	.delete("/api/admin/invites", ...deleteAdminInvites)
 	.get("/api/admin/logs", ...listAuditLogs)
 	.get("/api/admin/logs/settings", ...getAuditSettings)
-	.put("/api/admin/logs/settings", ...updateAuditSettings)
-	.delete("/api/admin/logs", ...clearAuditLogs);
+	.put("/api/admin/logs/settings", ...updateAuditSettings);
 
 const apiPasskeyRoutes = new Hono<HonoEnv>()
 	.get("/api/webauthn", ...listAccountPasskeys)
