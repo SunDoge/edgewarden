@@ -28,8 +28,8 @@ import {
 	conditionalAuthenticatorUpdateQuery,
 	conditionalRefreshTokenDeletionQuery,
 	conditionalTwoFactorPasskeyClaimQuery,
-	conditionalTwoFactorPasskeyInsertQuery,
 	conditionalUserRevisionQuery,
+	conditionalWebauthnCredentialInsertQuery,
 	conditionalYubikeyUpdateQuery,
 	deletedAttachmentCipherUpdateQuery,
 	deletedAttachmentRevisionQuery,
@@ -775,7 +775,11 @@ export function registerDatabaseMaintenanceScenarios(
 						5,
 						timestamp,
 					),
-					conditionalTwoFactorPasskeyInsertQuery(db, credential, securityStamp),
+					conditionalWebauthnCredentialInsertQuery(
+						db,
+						credential,
+						securityStamp,
+					),
 					conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
 					conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
 				]);

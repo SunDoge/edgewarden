@@ -316,7 +316,7 @@ export function conditionalTwoFactorPasskeyClaimQuery(
 	`.compile(db);
 }
 
-export function conditionalTwoFactorPasskeyInsertQuery(
+export function conditionalWebauthnCredentialInsertQuery(
 	db: Kysely<DB>,
 	credential: Insertable<WebauthnCredentials>,
 	securityStamp: string,
@@ -338,6 +338,31 @@ export function conditionalTwoFactorPasskeyInsertQuery(
 		FROM users
 		WHERE id = ${credential.user_id}
 		  AND security_stamp = ${securityStamp}
+	`.compile(db);
+}
+
+export function conditionalAccountPasskeyClaimQuery(
+	db: Kysely<DB>,
+	userId: string,
+	expectedSecurityStamp: string,
+	credentialId: string,
+	securityStamp: string,
+	maximumCredentials: number,
+	timestamp = now(),
+) {
+	return sql`
+		UPDATE users
+		SET security_stamp = ${securityStamp}, updated_at = ${timestamp}
+		WHERE id = ${userId}
+		  AND security_stamp = ${expectedSecurityStamp}
+		  AND NOT EXISTS (
+		    SELECT 1 FROM webauthn_credentials
+		    WHERE credential_id = ${credentialId}
+		  )
+		  AND (
+		    SELECT COUNT(*) FROM webauthn_credentials
+		    WHERE user_id = ${userId} AND purpose = 'login'
+		  ) < ${maximumCredentials}
 	`.compile(db);
 }
 

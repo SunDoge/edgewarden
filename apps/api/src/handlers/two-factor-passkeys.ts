@@ -19,8 +19,8 @@ import {
 	conditionalTwoFactorPasskeyClaimQuery,
 	conditionalTwoFactorPasskeyDeletionClaimQuery,
 	conditionalTwoFactorPasskeyDeletionQuery,
-	conditionalTwoFactorPasskeyInsertQuery,
 	conditionalUserRevisionQuery,
+	conditionalWebauthnCredentialInsertQuery,
 } from "../services/db/batch";
 import * as webauthnDb from "../services/db/webauthn";
 import {
@@ -274,7 +274,7 @@ export const createTwoFactorPasskey = factory.createHandlers(
 					MAX_TWO_FACTOR_PASSKEYS,
 					ts,
 				),
-				conditionalTwoFactorPasskeyInsertQuery(db, credential, securityStamp),
+				conditionalWebauthnCredentialInsertQuery(db, credential, securityStamp),
 				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
 				conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
 			]);
