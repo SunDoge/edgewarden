@@ -133,6 +133,60 @@ export function registerSendScenarios(context: SendScenarioContext): void {
 		assert.ok(sync.sends.some((send) => send.id === context.sendId));
 	});
 
+	test("advances revision and audit once for concurrent Send deletion", async () => {
+		const auth = {
+			authorization: `Bearer ${context.accessToken}`,
+			"content-type": "application/json",
+		};
+		const created = await request("/api/sends", {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({
+				type: 0,
+				name: "concurrent-delete-send",
+				key: "encrypted-key",
+				text: { text: "encrypted-text", hidden: false },
+				deletionDate: new Date(Date.now() + 86_400_000).toISOString(),
+			}),
+		});
+		assert.equal(created.status, 200, await created.clone().text());
+		const sendId = (await created.json<{ id: string }>()).id;
+		const owner = await context.database
+			.prepare("SELECT user_id FROM sends WHERE id = ?")
+			.bind(sendId)
+			.first<{ user_id: string }>();
+		assert.ok(owner);
+		const before = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(owner.user_id)
+			.first<{ revision_date: number }>();
+		assert.ok(before);
+
+		const responses = await Promise.all([
+			request(`/api/sends/${sendId}`, { method: "DELETE", headers: auth }),
+			request(`/api/sends/${sendId}`, { method: "DELETE", headers: auth }),
+		]);
+		assert.ok(responses.some((response) => response.status === 200));
+		assert.ok(
+			responses.every((response) => [200, 404].includes(response.status)),
+		);
+		const after = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(owner.user_id)
+			.first<{ revision_date: number }>();
+		assert.equal(after?.revision_date, before.revision_date + 1);
+		assert.equal(
+			await context.database
+				.prepare(
+					"SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'send.delete' AND target_id = ?",
+				)
+				.bind(sendId)
+				.first<{ count: number }>()
+				.then((row) => Number(row?.count)),
+			1,
+		);
+	});
+
 	test("bulk deletes only Sends owned by the authenticated user", async () => {
 		const createSend = async (token: string, name: string) => {
 			const response = await request("/api/sends", {
