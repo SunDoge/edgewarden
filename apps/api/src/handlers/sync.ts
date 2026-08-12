@@ -109,18 +109,17 @@ export const sync = factory.createHandlers(async (c) => {
 
 	// Keep queries on the Kysely-D1 connection ordered. Promise.all does not make
 	// a single D1 session faster and can make adapters overlap session requests.
-	const ciphers = await ciphersDb.getCiphersByUserId(db, user.id);
-	const deletedCiphers = await ciphersDb.getDeletedCiphersByUserId(db, user.id);
+	const personalCiphers = await ciphersDb.getAllCiphersByUserId(db, user.id);
 	const folders = await foldersDb.getFoldersByUserId(db, user.id);
 	const domainSettings = await domainSettingsDb.getDomainSettings(db, user.id);
-	const accountPasskeys =
-		await webauthnDb.listAccountPasskeyCredentialsByUserId(db, user.id);
-	const twoFactorPasskeyCount =
-		await webauthnDb.countAccountPasskeyCredentialsByUserId(
-			db,
-			user.id,
-			"twoFactor",
-		);
+	const accountCredentials =
+		await webauthnDb.listAllAccountPasskeyCredentialsByUserId(db, user.id);
+	const accountPasskeys = accountCredentials.filter(
+		(credential) => credential.purpose === "login",
+	);
+	const hasTwoFactorPasskey = accountCredentials.some(
+		(credential) => credential.purpose === "twoFactor",
+	);
 	const sends = await sendsDb.getSendsByUserId(db, user.id);
 	const organizationRows = await db
 		.selectFrom("org_members as member")
@@ -213,7 +212,7 @@ export const sync = factory.createHandlers(async (c) => {
 		firstPrfOption,
 	);
 
-	const allCiphers = [...ciphers, ...deletedCiphers, ...organizationCiphers];
+	const allCiphers = [...personalCiphers, ...organizationCiphers];
 	const attachments = await attachmentsDb.listVisibleForSync(
 		db,
 		user.id,
@@ -256,7 +255,7 @@ export const sync = factory.createHandlers(async (c) => {
 		culture: "en-US",
 		twoFactorEnabled:
 			!!user.totp_secret ||
-			twoFactorPasskeyCount > 0 ||
+			hasTwoFactorPasskey ||
 			userYubicoPublicIds(user as any).length > 0,
 		key: user.key,
 		privateKey: user.private_key,

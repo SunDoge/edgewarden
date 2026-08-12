@@ -61,6 +61,18 @@ export async function listAccountPasskeyCredentialsByUserId(
 		.execute();
 }
 
+export async function listAllAccountPasskeyCredentialsByUserId(
+	db: Kysely<DB>,
+	userId: string,
+): Promise<Selectable<WebauthnCredentials>[]> {
+	return db
+		.selectFrom("webauthn_credentials")
+		.selectAll()
+		.where("user_id", "=", userId)
+		.orderBy("created_at", "asc")
+		.execute();
+}
+
 export async function getAccountPasskeyCredentialById(
 	db: Kysely<DB>,
 	userId: string,
