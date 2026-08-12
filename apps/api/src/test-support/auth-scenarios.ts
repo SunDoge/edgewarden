@@ -244,6 +244,43 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
 		context.refreshToken = tokens.refresh_token;
 	});
 
+	test("keeps concurrent first logins for one device valid", async () => {
+		const deviceIdentifier = `concurrent-device-${crypto.randomUUID()}`;
+		const login = () =>
+			request("/identity/connect/token", {
+				method: "POST",
+				headers: { "content-type": "application/x-www-form-urlencoded" },
+				body: new URLSearchParams({
+					grant_type: "password",
+					username: EMAIL,
+					password: MASTER_PASSWORD_HASH,
+					deviceIdentifier,
+					deviceName: "Concurrent device",
+					deviceType: "0",
+				}),
+			});
+		const responses = await Promise.all([login(), login()]);
+		assert.deepEqual(
+			responses.map((response) => response.status),
+			[200, 200],
+		);
+		const tokens = await Promise.all(
+			responses.map((response) =>
+				response.json<{ access_token: string; refresh_token: string }>(),
+			),
+		);
+		for (const token of tokens) {
+			assert.equal(
+				(
+					await request("/api/accounts/profile", {
+						headers: { authorization: `Bearer ${token.access_token}` },
+					})
+				).status,
+				200,
+			);
+		}
+	});
+
 	test("keeps web refresh tokens out of JavaScript-readable responses", async () => {
 		const login = await request("/identity/connect/token", {
 			method: "POST",

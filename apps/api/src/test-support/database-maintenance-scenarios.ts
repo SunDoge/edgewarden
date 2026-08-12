@@ -538,6 +538,41 @@ export function registerDatabaseMaintenanceScenarios(
 		}
 	});
 
+	test("preserves a device session stamp across concurrent login upserts", async () => {
+		const { db } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const deviceId = crypto.randomUUID();
+		const firstStamp = crypto.randomUUID();
+		try {
+			await devicesDb.upsertDevice(
+				db,
+				user.id,
+				deviceId,
+				"first-login",
+				0,
+				firstStamp,
+			);
+			await devicesDb.upsertDevice(
+				db,
+				user.id,
+				deviceId,
+				"second-login",
+				1,
+				crypto.randomUUID(),
+			);
+			const device = await devicesDb.getDevice(db, user.id, deviceId);
+			assert.equal(device?.session_stamp, firstStamp);
+			assert.equal(device?.name, "second-login");
+		} finally {
+			await devicesDb.deleteDevice(db, user.id, deviceId);
+			await db.destroy();
+		}
+	});
+
 	test("claims blob GC rows before deleting external objects", async () => {
 		const firstConnection = await createDatabase(context.database);
 		const secondConnection = await createDatabase(context.database);

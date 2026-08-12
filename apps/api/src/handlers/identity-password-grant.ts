@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import type { HonoEnv } from "../env";
 import { checkAccountRateLimit } from "../middleware/rate-limit";
-import { verifyPassword } from "../services/auth";
+import { invalidateUserCache, verifyPassword } from "../services/auth";
 import {
 	constantTimeCredentialEqual,
 	decryptCredential,
@@ -9,6 +9,11 @@ import {
 } from "../services/credential-protection";
 import * as authRequestsDb from "../services/db/auth-requests";
 import * as usersDb from "../services/db/users";
+import {
+	conditionalRefreshTokenDeletionQuery,
+	conditionalTwoFactorCredentialDeletionQuery,
+	conditionalUserRevisionQuery,
+} from "../services/db/batch";
 import * as webauthnDb from "../services/db/webauthn";
 import { issueIdentitySession } from "../services/identity-session";
 import {
@@ -83,7 +88,7 @@ export async function handlePasswordGrant(
 		);
 	}
 
-	const user = await usersDb.getUserByEmail(db, email);
+	let user = await usersDb.getUserByEmail(db, email);
 	if (!user || user.status !== "active") {
 		await recordLoginFailure(db, email);
 		return identityErrorResponse(
@@ -225,11 +230,42 @@ export async function handlePasswordGrant(
 					400,
 				);
 			}
-			await usersDb.updateUser(db, user.id, {
-				totp_secret: null,
-				totp_recovery_code: null,
-				updated_at: now(),
-			});
+			const timestamp = now();
+			const securityStamp = crypto.randomUUID();
+			const [consumed] = await c.get("dbDialect").batch([
+				db
+					.updateTable("users")
+					.set({
+						totp_secret: null,
+						totp_recovery_code: null,
+						yubikey_config: JSON.stringify({ keys: [], nfc: false }),
+						security_stamp: securityStamp,
+						updated_at: timestamp,
+					})
+					.where("id", "=", user.id)
+					.where("totp_recovery_code", "=", user.totp_recovery_code)
+					.compile(),
+				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+				conditionalTwoFactorCredentialDeletionQuery(db, user.id, securityStamp),
+				conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
+			]);
+			if (consumed.numAffectedRows !== 1n) {
+				return identityErrorResponse(
+					"Recovery code is invalid.",
+					"invalid_grant",
+					400,
+				);
+			}
+			invalidateUserCache(user.id);
+			const updatedUser = await usersDb.getUserById(db, user.id);
+			if (!updatedUser || updatedUser.status !== "active") {
+				return identityErrorResponse(
+					"Account is unavailable.",
+					"invalid_grant",
+					400,
+				);
+			}
+			user = updatedUser;
 		} else {
 			return identityErrorResponse(
 				"Two-step token is invalid. Try again.",

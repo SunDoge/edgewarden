@@ -53,7 +53,6 @@ export async function upsertDevice(
 			oc.columns(["user_id", "device_identifier"]).doUpdateSet({
 				name,
 				type,
-				session_stamp: sessionStamp,
 				last_seen_at: ts,
 				updated_at: ts,
 			}),

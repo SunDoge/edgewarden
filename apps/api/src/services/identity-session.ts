@@ -31,8 +31,7 @@ async function registerLoginDevice(
 	device: LoginDeviceInfo,
 ): Promise<LoginDeviceSession | null> {
 	if (!device.identifier) return null;
-	const existing = await devicesDb.getDevice(db, userId, device.identifier);
-	const sessionStamp = existing?.session_stamp ?? crypto.randomUUID();
+	const sessionStamp = crypto.randomUUID();
 	await devicesDb.upsertDevice(
 		db,
 		userId,
@@ -41,7 +40,9 @@ async function registerLoginDevice(
 		device.type,
 		sessionStamp,
 	);
-	return { identifier: device.identifier, sessionStamp };
+	const stored = await devicesDb.getDevice(db, userId, device.identifier);
+	if (!stored?.session_stamp) throw new Error("Login device was not persisted");
+	return { identifier: device.identifier, sessionStamp: stored.session_stamp };
 }
 
 export async function issueIdentitySession(args: {
