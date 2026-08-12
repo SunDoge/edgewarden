@@ -238,6 +238,28 @@ export function conditionalUserRevisionQuery(
 	`.compile(db);
 }
 
+export function conditionalAuthenticatorUpdateQuery(
+	db: Kysely<DB>,
+	userId: string,
+	expectedSecurityStamp: string,
+	expectedSecret: string | null,
+	encryptedSecret: string,
+	encryptedRecoveryCode: string,
+	securityStamp: string,
+	timestamp = now(),
+) {
+	return sql`
+		UPDATE users
+		SET totp_secret = ${encryptedSecret},
+		    totp_recovery_code = ${encryptedRecoveryCode},
+		    security_stamp = ${securityStamp},
+		    updated_at = ${timestamp}
+		WHERE id = ${userId}
+		  AND security_stamp = ${expectedSecurityStamp}
+		  AND totp_secret IS ${expectedSecret}
+	`.compile(db);
+}
+
 export function conditionalRefreshTokenDeletionQuery(
 	db: Kysely<DB>,
 	userId: string,

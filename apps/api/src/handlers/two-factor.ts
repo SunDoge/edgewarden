@@ -16,11 +16,10 @@ import {
 	encryptCredential,
 } from "../services/credential-protection";
 import {
+	conditionalAuthenticatorUpdateQuery,
 	conditionalRefreshTokenDeletionQuery,
 	conditionalTwoFactorCredentialDeletionQuery,
 	conditionalUserRevisionQuery,
-	executeBatch,
-	revisionQuery,
 } from "../services/db/batch";
 import * as usersDb from "../services/db/users";
 import * as webauthnDb from "../services/db/webauthn";
@@ -98,8 +97,10 @@ export const enableAuthenticator = factory.createHandlers(
 			return errorResponse("TOTP token is invalid.", 400);
 		}
 		const db = c.get("db");
-		const userId = c.get("user").id;
+		const user = c.get("user");
+		const userId = user.id;
 		const ts = now();
+		const securityStamp = crypto.randomUUID();
 		const [encryptedSecret, encryptedRecoveryCode] = await Promise.all([
 			encryptCredential(key, c.env.DATA_ENCRYPTION_SECRET, "totp-secret"),
 			encryptCredential(
@@ -108,20 +109,27 @@ export const enableAuthenticator = factory.createHandlers(
 				"totp-recovery",
 			),
 		]);
-		await executeBatch(c.get("dbDialect"), [
-			db
-				.updateTable("users")
-				.set({
-					totp_secret: encryptedSecret,
-					totp_recovery_code: encryptedRecoveryCode,
-					security_stamp: crypto.randomUUID(),
-					updated_at: ts,
-				})
-				.where("id", "=", userId)
-				.compile(),
-			db.deleteFrom("refresh_tokens").where("user_id", "=", userId).compile(),
-			revisionQuery(db, userId, ts),
-		]);
+		const [changed] = await c
+			.get("dbDialect")
+			.batch([
+				conditionalAuthenticatorUpdateQuery(
+					db,
+					userId,
+					user.security_stamp,
+					user.totp_secret,
+					encryptedSecret,
+					encryptedRecoveryCode,
+					securityStamp,
+					ts,
+				),
+				conditionalRefreshTokenDeletionQuery(db, userId, securityStamp),
+				conditionalUserRevisionQuery(db, userId, securityStamp, ts),
+			]);
+		if (changed.numAffectedRows !== 1n)
+			return errorResponse(
+				"Authenticator was changed by another request.",
+				409,
+			);
 		invalidateUserCache(userId);
 		return c.json({ key, enabled: true, object: "twoFactorAuthenticator" });
 	},
