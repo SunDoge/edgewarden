@@ -701,6 +701,7 @@ export function registerDatabaseMaintenanceScenarios(
 			.where("email", "=", EMAIL)
 			.executeTakeFirstOrThrow();
 		const deviceId = crypto.randomUUID();
+		const sessionStamp = crypto.randomUUID();
 		try {
 			await devicesDb.upsertDevice(
 				db,
@@ -708,7 +709,7 @@ export function registerDatabaseMaintenanceScenarios(
 				deviceId,
 				"temporary-device",
 				0,
-				crypto.randomUUID(),
+				sessionStamp,
 			);
 			await devicesDb.deleteDevice(db, user.id, deviceId);
 			assert.equal(
@@ -717,6 +718,8 @@ export function registerDatabaseMaintenanceScenarios(
 					user.id,
 					deviceId,
 					"resurrected-device",
+					sessionStamp,
+					null,
 				),
 				false,
 			);
@@ -728,10 +731,36 @@ export function registerDatabaseMaintenanceScenarios(
 					"user-key",
 					"public-key",
 					"private-key",
+					sessionStamp,
+					null,
 				),
 				false,
 			);
 			assert.equal(await devicesDb.getDevice(db, user.id, deviceId), null);
+			const recreatedSessionStamp = crypto.randomUUID();
+			await devicesDb.upsertDevice(
+				db,
+				user.id,
+				deviceId,
+				"recreated-device",
+				0,
+				recreatedSessionStamp,
+			);
+			assert.equal(
+				await devicesDb.updateDeviceName(
+					db,
+					user.id,
+					deviceId,
+					"stale-name-on-recreated-device",
+					sessionStamp,
+					null,
+				),
+				false,
+			);
+			assert.equal(
+				(await devicesDb.getDevice(db, user.id, deviceId))?.name,
+				"recreated-device",
+			);
 		} finally {
 			await devicesDb.deleteDevice(db, user.id, deviceId);
 			await db.destroy();

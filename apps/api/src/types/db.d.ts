@@ -128,6 +128,7 @@ export interface Devices {
 	encrypted_public_key: string | null;
 	encrypted_user_key: string | null;
 	last_seen_at: number | null;
+	mutation_token: string | null;
 	name: string;
 	session_stamp: string | null;
 	type: number;

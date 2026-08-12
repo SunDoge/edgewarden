@@ -873,6 +873,45 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 			body: JSON.stringify({ name: "" }),
 		});
 		assert.equal(invalidName.status, 400);
+		const rename = (index: number) =>
+			request("/api/devices/api-test-device/name", {
+				method: "PUT",
+				headers: { ...auth, "content-type": "application/json" },
+				body: JSON.stringify({ name: `Concurrent Device ${index}` }),
+			});
+		const renames = await Promise.all(
+			Array.from({ length: 8 }, (_, index) => rename(index)),
+		);
+		assert.equal(
+			renames.filter((response) => response.status === 200).length,
+			1,
+		);
+		assert.equal(
+			renames.filter((response) => response.status === 409).length,
+			7,
+		);
+
+		const updateKeys = (index: number) =>
+			request("/api/devices/api-test-device/keys", {
+				method: "PUT",
+				headers: { ...auth, "content-type": "application/json" },
+				body: JSON.stringify({
+					encryptedUserKey: `encrypted-user-key-${index}`,
+					encryptedPublicKey: `encrypted-public-key-${index}`,
+					encryptedPrivateKey: `encrypted-private-key-${index}`,
+				}),
+			});
+		const keyUpdates = await Promise.all(
+			Array.from({ length: 8 }, (_, index) => updateKeys(index)),
+		);
+		assert.equal(
+			keyUpdates.filter((response) => response.status === 200).length,
+			1,
+		);
+		assert.equal(
+			keyUpdates.filter((response) => response.status === 409).length,
+			7,
+		);
 
 		const missingDevice = await request(`/api/devices/${crypto.randomUUID()}`, {
 			headers: auth,
