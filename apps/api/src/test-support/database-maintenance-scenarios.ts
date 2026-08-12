@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { runScheduledTasks } from "../index";
 import { createDatabase } from "../middleware/db";
+import {
+	getDefaultBackupSettings,
+	saveBackupSettings,
+} from "../services/backup/config";
 import { executeBatch } from "../services/db/batch";
+import {
+	deleteConfigValue,
+	getConfigValue,
+	setConfigValue,
+} from "../services/db/config";
 import { runMaintenance } from "../services/maintenance";
 
 export interface DatabaseMaintenanceScenarioContext {
@@ -435,6 +445,59 @@ export function registerDatabaseMaintenanceScenarios(
 			context.r2Values.delete(attachmentKey);
 			context.r2Values.delete(deletedAttachmentKey);
 			context.r2Values.delete(sendKey);
+			await db.destroy();
+		}
+	});
+
+	test("scheduled maintenance still runs when backup settings cannot decrypt", async () => {
+		const { db } = await createDatabase(context.database);
+		const configKey = "backup.settings.v1";
+		const original = await getConfigValue(db, configKey);
+		const user = await db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const expiredToken = `scheduled-failure-${crypto.randomUUID()}`;
+		try {
+			await saveBackupSettings(
+				db,
+				context.bindings.DATA_ENCRYPTION_SECRET,
+				getDefaultBackupSettings("UTC"),
+			);
+			await db
+				.insertInto("refresh_tokens")
+				.values({
+					token: expiredToken,
+					user_id: user.id,
+					expires_at: Math.floor(Date.now() / 1000) - 1,
+					device_identifier: null,
+					device_session_stamp: null,
+				})
+				.execute();
+			await assert.rejects(
+				runScheduledTasks({
+					...context.bindings,
+					DATA_ENCRYPTION_SECRET:
+						"wrong-but-long-enough-data-encryption-secret",
+				}),
+				/One or more scheduled tasks failed/,
+			);
+			assert.equal(
+				await db
+					.selectFrom("refresh_tokens")
+					.select("token")
+					.where("token", "=", expiredToken)
+					.executeTakeFirst(),
+				undefined,
+			);
+		} finally {
+			if (original === null) await deleteConfigValue(db, configKey);
+			else await setConfigValue(db, configKey, original);
+			await db
+				.deleteFrom("refresh_tokens")
+				.where("token", "=", expiredToken)
+				.execute();
 			await db.destroy();
 		}
 	});

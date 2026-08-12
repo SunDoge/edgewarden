@@ -297,10 +297,10 @@ export async function runMaintenance(
 
 export async function runScheduledMaintenance(
 	env: CloudflareBindings,
-): Promise<void> {
+): Promise<MaintenanceResult> {
 	const { db } = await createDatabase(env.DB);
 	try {
-		await runMaintenance(db, env);
+		return await runMaintenance(db, env);
 	} finally {
 		await db.destroy();
 	}

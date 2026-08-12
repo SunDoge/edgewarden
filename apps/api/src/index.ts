@@ -155,6 +155,57 @@ import { runScheduledMaintenance } from "./services/maintenance";
 
 export { VaultRealtime } from "./durable-objects/vault-realtime";
 
+export async function runScheduledTasks(
+	env: CloudflareBindings,
+): Promise<void> {
+	const startedAt = Date.now();
+	let backupResult: Awaited<ReturnType<typeof runScheduledBackupIfDue>> | null =
+		null;
+	let maintenanceResult: Awaited<
+		ReturnType<typeof runScheduledMaintenance>
+	> | null = null;
+	const errors: unknown[] = [];
+	try {
+		backupResult = await runScheduledBackupIfDue(env);
+	} catch (error) {
+		errors.push(error);
+		console.error(
+			JSON.stringify({
+				event: "backup.scheduled.error",
+				error: error instanceof Error ? error.message : String(error),
+			}),
+		);
+	}
+	try {
+		maintenanceResult = await runScheduledMaintenance(env);
+	} catch (error) {
+		errors.push(error);
+		console.error(
+			JSON.stringify({
+				event: "maintenance.scheduled.error",
+				error: error instanceof Error ? error.message : String(error),
+			}),
+		);
+	}
+	console.log(
+		JSON.stringify({
+			event: "scheduled.completed",
+			durationMs: Date.now() - startedAt,
+			backup: backupResult,
+			maintenance: maintenanceResult,
+			errorCount: errors.length,
+		}),
+	);
+	if (errors.length) {
+		throw new AggregateError(errors, "One or more scheduled tasks failed");
+	}
+	if (backupResult?.failed) {
+		throw new Error(
+			`${backupResult.failed} scheduled backup destination(s) failed`,
+		);
+	}
+}
+
 export default {
 	fetch: app.fetch,
 	async scheduled(
@@ -163,12 +214,9 @@ export default {
 		ctx: ExecutionContext,
 	) {
 		ctx.waitUntil(
-			(async () => {
-				// Keep backup snapshots consistent with scheduled deletion and avoid
-				// overlapping independent D1 sessions on the same database binding.
-				await runScheduledBackupIfDue(env);
-				await runScheduledMaintenance(env);
-			})(),
+			// Keep backup snapshots consistent with scheduled deletion. The
+			// orchestrator still runs maintenance when backup configuration fails.
+			runScheduledTasks(env),
 		);
 	},
 };
