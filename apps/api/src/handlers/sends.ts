@@ -16,10 +16,25 @@ import {
 	putBlobObject,
 } from "../services/blob-store";
 import { executeBatch, revisionQuery } from "../services/db/batch";
+import { textColumnInJson } from "../services/db/json-array";
 import * as revisionsDb from "../services/db/revisions";
 import * as sendsDb from "../services/db/sends";
-import * as usersDb from "../services/db/users";
-import { textColumnInJson } from "../services/db/json-array";
+import {
+	setSendPassword,
+	verifySendPassword,
+	verifySendPasswordHashB64,
+} from "../services/sends/password";
+import {
+	fromAccessId,
+	getCreatorIdentifier,
+	isSendAvailable,
+	parseDateSeconds,
+	parseInteger,
+	parseStoredSendData,
+	sendToAccessResponse,
+	sendToResponse,
+	serializeSendEmails,
+} from "../services/sends/presentation";
 import {
 	buildDirectUploadUrl,
 	parseDirectUploadPayload,
@@ -34,283 +49,12 @@ import {
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
 
-// ── Sends Cryptographic Helper Functions ────────────────────────────────────
-
-function uuidToBytes(uuid: string): Uint8Array | null {
-	const hex = uuid.replace(/-/g, "").toLowerCase();
-	if (!/^[0-9a-f]{32}$/.test(hex)) return null;
-	const bytes = new Uint8Array(16);
-	for (let i = 0; i < 16; i++) {
-		bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-	}
-	return bytes;
-}
-
-function bytesToUuid(bytes: Uint8Array): string | null {
-	if (bytes.length !== 16) return null;
-	const hex = Array.from(bytes)
-		.map((b) => b.toString(16).padStart(2, "0"))
-		.join("");
-	return [
-		hex.slice(0, 8),
-		hex.slice(8, 12),
-		hex.slice(12, 16),
-		hex.slice(16, 20),
-		hex.slice(20, 32),
-	].join("-");
-}
-
-function base64UrlEncode(data: Uint8Array): string {
-	let bin = "";
-	for (let i = 0; i < data.length; i++) {
-		bin += String.fromCharCode(data[i]);
-	}
-	const base64 = btoa(bin);
-	return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function base64UrlDecode(input: string): Uint8Array | null {
-	try {
-		let normalized = input.replace(/-/g, "+").replace(/_/g, "/");
-		while (normalized.length % 4) normalized += "=";
-		const raw = atob(normalized);
-		const out = new Uint8Array(raw.length);
-		for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-		return out;
-	} catch {
-		return null;
-	}
-}
-
-export function toAccessId(sendId: string): string {
-	const bytes = uuidToBytes(sendId);
-	if (!bytes) return "";
-	return base64UrlEncode(bytes);
-}
-
-export function fromAccessId(accessId: string): string | null {
-	const bytes = base64UrlDecode(accessId);
-	if (!bytes || bytes.length !== 16) return null;
-	return bytesToUuid(bytes);
-}
-
-function isSendAvailable(send: any): boolean {
-	const nowTs = now();
-
-	if (
-		send.max_access_count !== null &&
-		send.access_count >= send.max_access_count
-	) {
-		return false;
-	}
-
-	if (send.expiration_date && nowTs >= send.expiration_date) {
-		return false;
-	}
-
-	if (send.deletion_date && nowTs >= send.deletion_date) {
-		return false;
-	}
-
-	if (send.disabled === 1) {
-		return false;
-	}
-
-	return true;
-}
-
-function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
-	if (a.length !== b.length) return false;
-	let diff = 0;
-	for (let i = 0; i < a.length; i++) {
-		diff |= a[i] ^ b[i];
-	}
-	return diff === 0;
-}
-
-async function deriveSendPasswordHash(
-	password: string,
-	salt: Uint8Array,
-	iterations: number,
-): Promise<Uint8Array> {
-	const encoder = new TextEncoder();
-	const key = await crypto.subtle.importKey(
-		"raw",
-		encoder.encode(password),
-		{ name: "PBKDF2" },
-		false,
-		["deriveBits"],
-	);
-	const bits = await crypto.subtle.deriveBits(
-		{
-			name: "PBKDF2",
-			salt,
-			iterations,
-			hash: "SHA-256",
-		},
-		key,
-		256,
-	);
-	return new Uint8Array(bits);
-}
-
-async function verifySendPassword(
-	send: any,
-	password: string,
-): Promise<boolean> {
-	if (!send.password_hash) return false;
-
-	if (!send.password_salt || !send.password_iterations) {
-		return verifySendPasswordHashB64(send, password);
-	}
-
-	const salt = base64UrlDecode(send.password_salt);
-	const expected = base64UrlDecode(send.password_hash);
-	if (!salt || !expected) return false;
-
-	const actual = await deriveSendPasswordHash(
-		password,
-		salt,
-		send.password_iterations,
-	);
-	return constantTimeEqual(actual, expected);
-}
-
-function verifySendPasswordHashB64(
-	send: any,
-	passwordHashB64: string,
-): boolean {
-	if (!send.password_hash || !passwordHashB64) return false;
-	const expected = base64UrlDecode(send.password_hash);
-	const provided = base64UrlDecode(passwordHashB64);
-	if (!expected || !provided) return false;
-	return constantTimeEqual(expected, provided);
-}
-
-async function setSendPassword(
-	send: any,
-	password: string | null,
-): Promise<void> {
-	if (!password) {
-		send.password_hash = null;
-		send.password_salt = null;
-		send.password_iterations = null;
-		send.password_algorithm = null;
-		if (send.auth_type === 1) {
-			send.auth_type = 2; // None
-		}
-		return;
-	}
-
-	const salt = crypto.getRandomValues(new Uint8Array(64));
-	const hash = await deriveSendPasswordHash(password, salt, 100000);
-
-	send.password_salt = base64UrlEncode(salt);
-	send.password_hash = base64UrlEncode(hash);
-	send.password_iterations = 100000;
-	send.password_algorithm = "pbkdf2-sha256";
-	send.auth_type = 1; // Password
-}
-
 function getSafeJwtSecret(env: CloudflareBindings): string | null {
 	const secret = (env.JWT_SECRET || "").trim();
 	if (!secret || secret.length < LIMITS.auth.jwtSecretMinLength) {
 		return null;
 	}
 	return secret;
-}
-
-function parseStoredSendData(send: any): Record<string, unknown> {
-	try {
-		return JSON.parse(send.data);
-	} catch {
-		return {};
-	}
-}
-
-function serializeSendEmails(
-	emails: string[] | null | undefined,
-): string | null {
-	return emails?.length ? JSON.stringify(emails) : null;
-}
-
-function parseSendEmails(emails: string | null): string[] | null {
-	if (!emails) return null;
-	try {
-		const parsed = JSON.parse(emails);
-		return Array.isArray(parsed) ? parsed : null;
-	} catch {
-		return null;
-	}
-}
-
-function parseInteger(val: any): number | null {
-	if (val === null || val === undefined || val === "") return null;
-	const num = Number(val);
-	return Number.isInteger(num) ? num : null;
-}
-
-function parseDateSeconds(val: any): number | null {
-	if (!val || typeof val !== "string") return null;
-	const date = new Date(val);
-	return Number.isNaN(date.getTime())
-		? null
-		: Math.floor(date.getTime() / 1000);
-}
-
-function formatIso(ts: number | null | undefined): string | null {
-	if (!ts) return null;
-	return new Date(ts * 1000).toISOString();
-}
-
-function sendToResponse(send: any) {
-	const data = parseStoredSendData(send);
-	return {
-		id: send.id,
-		accessId: toAccessId(send.id),
-		type: Number(send.type) || 0,
-		name: send.name,
-		notes: send.notes,
-		text: send.type === 0 ? data : null,
-		file: send.type === 1 ? data : null,
-		key: send.key,
-		maxAccessCount: send.max_access_count,
-		accessCount: send.access_count,
-		password: send.password_hash ? "true" : null,
-		emails: parseSendEmails(send.emails),
-		authType: send.auth_type,
-		disabled: send.disabled === 1,
-		hideEmail: send.hide_email === 1,
-		revisionDate: formatIso(send.updated_at),
-		expirationDate: formatIso(send.expiration_date),
-		deletionDate: formatIso(send.deletion_date),
-		object: "send",
-	};
-}
-
-async function getCreatorIdentifier(
-	db: any,
-	send: any,
-): Promise<string | null> {
-	if (send.hide_email === 1) return null;
-	if (!send.user_id) return null;
-	const user = await usersDb.getUserById(db, send.user_id);
-	return user?.email ?? null;
-}
-
-function sendToAccessResponse(send: any, creatorIdentifier: string | null) {
-	const data = parseStoredSendData(send);
-	return {
-		id: send.id,
-		type: Number(send.type) || 0,
-		name: send.name,
-		text: send.type === 0 ? data : null,
-		file: send.type === 1 ? data : null,
-		expirationDate: formatIso(send.expiration_date),
-		deletionDate: formatIso(send.deletion_date),
-		creatorIdentifier,
-		object: "send-access",
-	};
 }
 
 // ── Authenticated sends router (private APIs) ───────────────────────────────
