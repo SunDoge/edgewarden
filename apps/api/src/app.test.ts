@@ -337,6 +337,11 @@ describe("Edgewarden API", () => {
 		);
 		const parsedArchive = parseBackupArchive(archive.bytes);
 		assert.equal(parsedArchive.payload.manifest.formatVersion, 3);
+		assert.ok(
+			(parsedArchive.payload.db.ciphers || []).every(
+				(row) => !("mutation_token" in row),
+			),
+		);
 		assert.ok((parsedArchive.payload.manifest.blobSummary.sendFiles || 0) >= 1);
 		assert.ok(
 			(parsedArchive.payload.db.audit_logs || []).some(

@@ -190,6 +190,7 @@ export const updateCipher = factory.createHandlers(
 
 		// Keep revisions monotonic even when two writes happen in the same second.
 		const ts = Math.max(now(), cipher.updated_at + 1);
+		const mutationToken = crypto.randomUUID();
 		const updateQuery = db
 			.updateTable("ciphers")
 			.set({
@@ -206,6 +207,7 @@ export const updateCipher = factory.createHandlers(
 					? JSON.stringify(body.passwordHistory)
 					: null,
 				updated_at: ts,
+				mutation_token: mutationToken,
 			})
 			.where("id", "=", cipher.id)
 			.$if(Boolean(body.lastKnownRevisionDate), (query) =>
@@ -216,7 +218,7 @@ export const updateCipher = factory.createHandlers(
 			.selectFrom("ciphers")
 			.select("id")
 			.where("id", "=", cipher.id)
-			.where("updated_at", "=", ts);
+			.where("mutation_token", "=", mutationToken);
 		const followupQueries: CompiledQuery[] = [
 			db
 				.deleteFrom("cipher_collections")
@@ -243,7 +245,8 @@ export const updateCipher = factory.createHandlers(
 					SELECT ${userId}, ${ts}
 					WHERE EXISTS (
 						SELECT 1 FROM ciphers
-						WHERE id = ${cipher.id} AND updated_at = ${ts}
+						WHERE id = ${cipher.id}
+						  AND mutation_token = ${mutationToken}
 					)
 					ON CONFLICT (user_id) DO UPDATE
 					SET revision_date = MAX(

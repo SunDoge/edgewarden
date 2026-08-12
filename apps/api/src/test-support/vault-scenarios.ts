@@ -134,6 +134,65 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		);
 	});
 
+	test("commits follow-up work only for the winning concurrent Cipher update", async () => {
+		const auth = { authorization: `Bearer ${context.accessToken}` };
+		const user = await context.database
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(EMAIL)
+			.first<{ id: string }>();
+		assert.ok(user);
+		const current = await request(`/api/ciphers/${context.cipherId}`, {
+			headers: auth,
+		});
+		assert.equal(current.status, 200, await current.clone().text());
+		const cipher = await current.json<{
+			revisionDate: string;
+			folderId: string | null;
+			fields: Array<{ name: string; value: string; type?: number }>;
+		}>();
+		const beforeRevision = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(user.id)
+			.first<{ revision_date: number }>();
+		assert.ok(beforeRevision);
+
+		const responses = await Promise.all(
+			Array.from({ length: 8 }, (_, index) =>
+				request(`/api/ciphers/${context.cipherId}`, {
+					method: "PUT",
+					headers: { ...auth, "content-type": "application/json" },
+					body: JSON.stringify({
+						type: 1,
+						name: `concurrent-encrypted-${index}`,
+						folderId: cipher.folderId,
+						fields: cipher.fields,
+						login: {
+							username: "encrypted-user",
+							password: `encrypted-password-${index}`,
+						},
+						lastKnownRevisionDate: cipher.revisionDate,
+					}),
+				}),
+			),
+		);
+		assert.equal(
+			responses.filter((response) => response.status === 200).length,
+			1,
+		);
+		assert.equal(
+			responses.filter((response) => response.status === 409).length,
+			7,
+		);
+		const afterRevision = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(user.id)
+			.first<{ revision_date: number }>();
+		assert.equal(
+			afterRevision?.revision_date,
+			beforeRevision.revision_date + 1,
+		);
+	});
+
 	test("syncs a vault larger than D1's bound-parameter limit", async () => {
 		const user = await context.database
 			.prepare("SELECT id FROM users WHERE email = ?")

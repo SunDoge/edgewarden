@@ -463,6 +463,9 @@ export async function buildBackupArchive(
 	const exportedSendRows = sourceSendRows.map(
 		({ storage_key: _storageKey, ...row }) => row as SqlRow,
 	);
+	const exportedCipherRows = cipherRows.map(
+		({ mutation_token: _mutationToken, ...row }) => row as SqlRow,
+	);
 	const manifestSendBlobs: BackupManifestSendBlob[] = sendBlobs.map(
 		({ storageKey: _storageKey, ...blob }) => blob,
 	);
@@ -483,7 +486,7 @@ export async function buildBackupArchive(
 			collections: collectionRows.length,
 			collection_members: collectionMemberRows.length,
 			folders: folderRows.length,
-			ciphers: cipherRows.length,
+			ciphers: exportedCipherRows.length,
 			cipher_collections: cipherCollectionRows.length,
 			attachments: exportedAttachmentRows.length,
 			webauthn_credentials: webauthnRows.length,
@@ -524,7 +527,7 @@ export async function buildBackupArchive(
 					collections: collectionRows,
 					collection_members: collectionMemberRows,
 					folders: folderRows,
-					ciphers: cipherRows,
+					ciphers: exportedCipherRows,
 					cipher_collections: cipherCollectionRows,
 					attachments: exportedAttachmentRows,
 					webauthn_credentials: webauthnRows,
