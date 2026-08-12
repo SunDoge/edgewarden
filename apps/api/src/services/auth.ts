@@ -34,6 +34,14 @@ export function invalidateUserCache(userId: string) {
 	}
 }
 
+/** A full instance restore replaces users and devices outside the request's
+ * Kysely connection. Clear isolate-local authentication state immediately so
+ * pre-restore access tokens cannot survive until the normal cache TTL. */
+export function invalidateAllAuthCaches(): void {
+	userCache.clear();
+	deviceCache.clear();
+}
+
 async function getCachedUser(
 	db: Kysely<DB>,
 	userId: string,

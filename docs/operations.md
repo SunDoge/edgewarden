@@ -18,6 +18,8 @@ R2 is the preferred blob backend. KV is a fallback with a 25 MiB per-object limi
 
 Restore uses shadow tables and validates row counts before replacing live allowlisted tables. Attachment files are staged under immutable object keys, then their D1 references switch atomically with the restored tables; a failed restore leaves the previous database and its files intact. A restore invalidates persisted device and refresh sessions through user replacement. After restoring, verify:
 
+Old or failed-staging object keys are inserted into `blob_gc_queue` in the same D1 transaction as the shadow-table switch. Cleanup checks that a key is no longer referenced before deletion and retries R2/KV failures with bounded exponential backoff during hourly maintenance. The queue contains only opaque object keys and retry state, not decrypted metadata or vault contents.
+
 - personal and organization cipher counts;
 - collection membership and read-only/hide-password permissions;
 - one attachment byte-for-byte;

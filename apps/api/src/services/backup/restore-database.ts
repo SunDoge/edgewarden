@@ -171,8 +171,22 @@ function buildResetImportTargetStatements(
 	].map((sql) => db.prepare(sql));
 }
 
-export async function swapShadowTablesIntoPlace(db: D1Database): Promise<void> {
+export async function swapShadowTablesIntoPlace(
+	db: D1Database,
+	previousBlobKeys: Iterable<string> = [],
+): Promise<void> {
 	const statements = buildResetImportTargetStatements(db);
+	const timestamp = Math.floor(Date.now() / 1000);
+	for (const key of new Set(previousBlobKeys)) {
+		if (!key) continue;
+		statements.push(
+			db
+				.prepare(
+					"INSERT OR IGNORE INTO blob_gc_queue (object_key, attempts, next_attempt_at, last_error, created_at) VALUES (?, 0, ?, NULL, ?)",
+				)
+				.bind(key, timestamp, timestamp),
+		);
+	}
 	for (const table of BACKUP_TABLES) {
 		statements.push(
 			db.prepare(
