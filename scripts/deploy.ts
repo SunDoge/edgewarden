@@ -3,6 +3,7 @@ import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const useKv = process.argv.includes("--kv");
+const healthOrigin = process.env.EDGEWARDEN_HEALTH_URL?.trim();
 const root = resolve(import.meta.dirname, "..");
 const sourceConfigPath = resolve(
 	root,
@@ -47,6 +48,36 @@ function requireSuccess(result: ReturnType<typeof spawnSync>, action: string) {
 			: "";
 	throw new Error(
 		`${action} failed with exit code ${result.status ?? "unknown"}${output ? `:\n${output}` : ""}${permissionHint}`,
+	);
+}
+
+async function verifyDeploymentHealth(origin: string): Promise<void> {
+	const url = new URL("/api/health", origin);
+	let lastFailure = "health endpoint did not respond";
+
+	for (let attempt = 1; attempt <= 10; attempt += 1) {
+		try {
+			const response = await fetch(url, {
+				headers: { accept: "application/json" },
+				signal: AbortSignal.timeout(10_000),
+			});
+			const body = (await response.json()) as { status?: unknown };
+			if (response.ok && body.status === "ok") {
+				console.log(`Deployment health check passed: ${url}`);
+				return;
+			}
+			lastFailure = `${response.status} ${JSON.stringify(body)}`;
+		} catch (error) {
+			lastFailure = error instanceof Error ? error.message : String(error);
+		}
+
+		if (attempt < 10) {
+			await new Promise((resolve) => setTimeout(resolve, 2_000));
+		}
+	}
+
+	throw new Error(
+		`Deployment completed, but ${url} did not become healthy: ${lastFailure}`,
 	);
 }
 
@@ -166,6 +197,13 @@ try {
 		wrangler(["deploy", "--config", temporaryConfigPath, "--minify"]),
 		"Deploying Worker",
 	);
+	if (healthOrigin) {
+		await verifyDeploymentHealth(healthOrigin);
+	} else {
+		console.warn(
+			"Skipping post-deploy health verification because EDGEWARDEN_HEALTH_URL is not configured.",
+		);
+	}
 } finally {
 	try {
 		unlinkSync(temporaryConfigPath);
