@@ -38,6 +38,63 @@ function affectedRows(result: {
 	return Number(result.numDeletedRows ?? result.numUpdatedRows ?? 0n);
 }
 
+interface PurgeAuditEvent {
+	action: string;
+	category: "vault" | "org" | "admin";
+	targetType: string;
+	targetId: string;
+}
+
+function purgeAuditStatement(
+	db: D1Database,
+	event: PurgeAuditEvent,
+	timestamp: number,
+	eligibilitySql: string,
+	eligibilityValues: unknown[],
+): D1PreparedStatement {
+	return db
+		.prepare(`
+			INSERT INTO audit_logs (
+				id, actor_user_id, action, category, level,
+				target_type, target_id, metadata, created_at
+			)
+			SELECT ?, NULL, ?, ?, 'info', ?, ?, '{"status":"purged"}', ?
+			WHERE EXISTS (${eligibilitySql})
+		`)
+		.bind(
+			crypto.randomUUID(),
+			event.action,
+			event.category,
+			event.targetType,
+			event.targetId,
+			timestamp,
+			...eligibilityValues,
+		);
+}
+
+async function deleteWithPurgeAudit(
+	db: D1Database,
+	events: PurgeAuditEvent[],
+	timestamp: number,
+	eligibilitySql: string,
+	eligibilityValues: unknown[],
+	deleteSql: string,
+	deleteValues: unknown[],
+): Promise<number> {
+	const statements = events.map((event) =>
+		purgeAuditStatement(
+			db,
+			event,
+			timestamp,
+			eligibilitySql,
+			eligibilityValues,
+		),
+	);
+	statements.push(db.prepare(deleteSql).bind(...deleteValues));
+	const results = await db.batch(statements);
+	return Number(results.at(-1)?.meta?.changes ?? 0);
+}
+
 async function purgeCiphers(
 	db: Kysely<DB>,
 	env: CloudflareBindings,
@@ -69,12 +126,29 @@ async function purgeCiphers(
 					deleteBlobObject(env, getStoredAttachmentObjectKey(attachment)),
 				),
 			);
-			const deleted = await db
-				.deleteFrom("ciphers")
-				.where("id", "=", cipher.id)
-				.where("purge_after", "<=", timestamp)
-				.executeTakeFirst();
-			purged += Number(deleted.numDeletedRows ?? 0n);
+			const cipherAttachments = attachments.get(cipher.id) ?? [];
+			purged += await deleteWithPurgeAudit(
+				env.DB,
+				[
+					...cipherAttachments.map((attachment) => ({
+						action: "attachment.purged",
+						category: "vault" as const,
+						targetType: "attachment",
+						targetId: attachment.id,
+					})),
+					{
+						action: "cipher.purged",
+						category: "vault",
+						targetType: "cipher",
+						targetId: cipher.id,
+					},
+				],
+				timestamp,
+				"SELECT 1 FROM ciphers WHERE id = ? AND purge_after <= ?",
+				[cipher.id, timestamp],
+				"DELETE FROM ciphers WHERE id = ? AND purge_after <= ?",
+				[cipher.id, timestamp],
+			);
 		} catch (error) {
 			console.error(
 				JSON.stringify({
@@ -105,12 +179,22 @@ async function purgeAttachments(
 	for (const attachment of attachments) {
 		try {
 			await deleteBlobObject(env, getStoredAttachmentObjectKey(attachment));
-			const deleted = await db
-				.deleteFrom("attachments")
-				.where("id", "=", attachment.id)
-				.where("deleted_at", "is not", null)
-				.executeTakeFirst();
-			purged += Number(deleted.numDeletedRows ?? 0n);
+			purged += await deleteWithPurgeAudit(
+				env.DB,
+				[
+					{
+						action: "attachment.purged",
+						category: "vault",
+						targetType: "attachment",
+						targetId: attachment.id,
+					},
+				],
+				timestamp,
+				"SELECT 1 FROM attachments WHERE id = ? AND deleted_at IS NOT NULL",
+				[attachment.id],
+				"DELETE FROM attachments WHERE id = ? AND deleted_at IS NOT NULL",
+				[attachment.id],
+			);
 		} catch (error) {
 			console.error(
 				JSON.stringify({
@@ -156,12 +240,22 @@ async function purgeSends(
 		try {
 			const key = objectKeys.get(send.id);
 			if (key) await deleteBlobObject(env, key);
-			const deleted = await db
-				.deleteFrom("sends")
-				.where("id", "=", send.id)
-				.where("deletion_date", "<=", timestamp)
-				.executeTakeFirst();
-			purged += Number(deleted.numDeletedRows ?? 0n);
+			purged += await deleteWithPurgeAudit(
+				env.DB,
+				[
+					{
+						action: "send.purged",
+						category: "vault",
+						targetType: "send",
+						targetId: send.id,
+					},
+				],
+				timestamp,
+				"SELECT 1 FROM sends WHERE id = ? AND deletion_date <= ?",
+				[send.id, timestamp],
+				"DELETE FROM sends WHERE id = ? AND deletion_date <= ?",
+				[send.id, timestamp],
+			);
 		} catch (error) {
 			console.error(
 				JSON.stringify({
@@ -177,10 +271,12 @@ async function purgeSends(
 
 async function purgeOrganizations(
 	db: Kysely<DB>,
+	env: CloudflareBindings,
 	timestamp: number,
 ): Promise<number> {
-	const result = await db
-		.deleteFrom("organizations")
+	const organizations = await db
+		.selectFrom("organizations")
+		.select("id")
 		.where("deletion_requested_at", "is not", null)
 		.where("deletion_requested_at", "<=", timestamp)
 		.where(
@@ -193,13 +289,50 @@ async function purgeOrganizations(
 				select 1 from sends where sends.org_id = organizations.id
 			)`,
 		)
-		.executeTakeFirst();
-	return Number(result.numDeletedRows ?? 0n);
+		.orderBy("deletion_requested_at", "asc")
+		.limit(BATCH_LIMIT)
+		.execute();
+	let purged = 0;
+	const eligibilitySql = `
+		SELECT 1 FROM organizations
+		WHERE id = ? AND deletion_requested_at IS NOT NULL
+			AND deletion_requested_at <= ?
+			AND NOT EXISTS (SELECT 1 FROM ciphers WHERE ciphers.org_id = organizations.id)
+			AND NOT EXISTS (SELECT 1 FROM sends WHERE sends.org_id = organizations.id)
+	`;
+	for (const organization of organizations) {
+		purged += await deleteWithPurgeAudit(
+			env.DB,
+			[
+				{
+					action: "organization.purged",
+					category: "org",
+					targetType: "organization",
+					targetId: organization.id,
+				},
+			],
+			timestamp,
+			eligibilitySql,
+			[organization.id, timestamp],
+			`DELETE FROM organizations
+			 WHERE id = ? AND deletion_requested_at IS NOT NULL
+			   AND deletion_requested_at <= ?
+			   AND NOT EXISTS (SELECT 1 FROM ciphers WHERE ciphers.org_id = organizations.id)
+			   AND NOT EXISTS (SELECT 1 FROM sends WHERE sends.org_id = organizations.id)`,
+			[organization.id, timestamp],
+		);
+	}
+	return purged;
 }
 
-async function purgeUsers(db: Kysely<DB>, timestamp: number): Promise<number> {
-	const result = await db
-		.deleteFrom("users")
+async function purgeUsers(
+	db: Kysely<DB>,
+	env: CloudflareBindings,
+	timestamp: number,
+): Promise<number> {
+	const users = await db
+		.selectFrom("users")
+		.select("id")
 		.where("deletion_requested_at", "is not", null)
 		.where("deletion_requested_at", "<=", timestamp)
 		.where(
@@ -217,8 +350,42 @@ async function purgeUsers(db: Kysely<DB>, timestamp: number): Promise<number> {
 				select 1 from organizations where organizations.owner_id = users.id
 			)`,
 		)
-		.executeTakeFirst();
-	return Number(result.numDeletedRows ?? 0n);
+		.orderBy("deletion_requested_at", "asc")
+		.limit(BATCH_LIMIT)
+		.execute();
+	let purged = 0;
+	const eligibilitySql = `
+		SELECT 1 FROM users
+		WHERE id = ? AND deletion_requested_at IS NOT NULL
+			AND deletion_requested_at <= ?
+			AND NOT EXISTS (SELECT 1 FROM ciphers WHERE ciphers.user_id = users.id)
+			AND NOT EXISTS (SELECT 1 FROM sends WHERE sends.user_id = users.id)
+			AND NOT EXISTS (SELECT 1 FROM organizations WHERE organizations.owner_id = users.id)
+	`;
+	for (const user of users) {
+		purged += await deleteWithPurgeAudit(
+			env.DB,
+			[
+				{
+					action: "account.purged",
+					category: "admin",
+					targetType: "user",
+					targetId: user.id,
+				},
+			],
+			timestamp,
+			eligibilitySql,
+			[user.id, timestamp],
+			`DELETE FROM users
+			 WHERE id = ? AND deletion_requested_at IS NOT NULL
+			   AND deletion_requested_at <= ?
+			   AND NOT EXISTS (SELECT 1 FROM ciphers WHERE ciphers.user_id = users.id)
+			   AND NOT EXISTS (SELECT 1 FROM sends WHERE sends.user_id = users.id)
+			   AND NOT EXISTS (SELECT 1 FROM organizations WHERE organizations.owner_id = users.id)`,
+			[user.id, timestamp],
+		);
+	}
+	return purged;
 }
 
 export async function runMaintenance(
@@ -282,8 +449,8 @@ export async function runMaintenance(
 	const purgedAttachments = await purgeAttachments(db, env, timestamp);
 	const purgedCiphers = await purgeCiphers(db, env, timestamp);
 	const purgedSends = await purgeSends(db, env, timestamp);
-	const purgedOrganizations = await purgeOrganizations(db, timestamp);
-	const purgedUsers = await purgeUsers(db, timestamp);
+	const purgedOrganizations = await purgeOrganizations(db, env, timestamp);
+	const purgedUsers = await purgeUsers(db, env, timestamp);
 	const blobGc = await drainBlobGcQueue(db, blobStore, timestamp);
 	return {
 		refreshTokens,

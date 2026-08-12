@@ -232,6 +232,22 @@ export function registerDatabaseMaintenanceScenarios(
 					.executeTakeFirst(),
 				undefined,
 			);
+			const purgeAuditTargets = await db
+				.selectFrom("audit_logs")
+				.select(["action", "target_id"])
+				.where("target_id", "in", [cipherId, attachmentId, sendId])
+				.execute();
+			assert.equal(purgeAuditTargets.length, 3);
+			assert.deepEqual(
+				new Set(
+					purgeAuditTargets.map((row) => `${row.action}:${row.target_id}`),
+				),
+				new Set([
+					`cipher.purged:${cipherId}`,
+					`attachment.purged:${attachmentId}`,
+					`send.purged:${sendId}`,
+				]),
+			);
 		} finally {
 			await db.destroy();
 		}
@@ -395,10 +411,48 @@ export function registerDatabaseMaintenanceScenarios(
 			);
 
 			r2.delete = originalDelete;
-			const recovered = await runMaintenance(
+			await context.database
+				.prepare(`
+					CREATE TRIGGER test_fail_purge_audit
+					BEFORE INSERT ON audit_logs
+					WHEN NEW.action LIKE '%.purged'
+					BEGIN
+						SELECT RAISE(ABORT, 'simulated audit outage');
+					END
+				`)
+				.run();
+			const auditDeferred = await runMaintenance(
 				db,
 				context.bindings,
 				timestamp + 1,
+			);
+			assert.equal(auditDeferred.purgedCiphers, 0);
+			assert.equal(auditDeferred.purgedAttachments, 0);
+			assert.equal(auditDeferred.purgedSends, 0);
+			assert.equal(context.r2Values.has(attachmentKey), false);
+			assert.equal(context.r2Values.has(deletedAttachmentKey), false);
+			assert.equal(context.r2Values.has(sendKey), false);
+			assert.ok(
+				await db
+					.selectFrom("ciphers")
+					.select("id")
+					.where("id", "=", cipherId)
+					.executeTakeFirst(),
+			);
+			assert.ok(
+				await db
+					.selectFrom("sends")
+					.select("id")
+					.where("id", "=", sendId)
+					.executeTakeFirst(),
+			);
+			await context.database
+				.prepare("DROP TRIGGER test_fail_purge_audit")
+				.run();
+			const recovered = await runMaintenance(
+				db,
+				context.bindings,
+				timestamp + 2,
 			);
 			assert.ok(recovered.purgedCiphers >= 1);
 			assert.ok(recovered.purgedAttachments >= 1);
@@ -439,6 +493,9 @@ export function registerDatabaseMaintenanceScenarios(
 			);
 		} finally {
 			r2.delete = originalDelete;
+			await context.database
+				.prepare("DROP TRIGGER IF EXISTS test_fail_purge_audit")
+				.run();
 			await db.deleteFrom("ciphers").where("id", "=", cipherId).execute();
 			await db.deleteFrom("ciphers").where("id", "=", activeCipherId).execute();
 			await db.deleteFrom("sends").where("id", "=", sendId).execute();

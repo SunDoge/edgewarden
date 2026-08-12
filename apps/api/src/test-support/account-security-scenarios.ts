@@ -478,6 +478,14 @@ export function registerAccountSecurityScenarios(
 				.then((row) => Number(row?.count)),
 			0,
 		);
+		assert.ok(
+			await context.database
+				.prepare(
+					"SELECT 1 FROM audit_logs WHERE action = 'account.purged' AND target_type = 'user' AND target_id = ?",
+				)
+				.bind(deletingUser.id)
+				.first(),
+		);
 	});
 
 	test("requires password verification and invalidates every session when removing all devices", async () => {

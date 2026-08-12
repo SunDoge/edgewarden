@@ -396,6 +396,14 @@ export function registerAdminOrganizationScenarios(
 				.first(),
 			null,
 		);
+		assert.ok(
+			await context.database
+				.prepare(
+					"SELECT 1 FROM audit_logs WHERE action = 'organization.purged' AND target_type = 'organization' AND target_id = ?",
+				)
+				.bind(orgId)
+				.first(),
+		);
 	});
 
 	test("enforces organization collection visibility and read-only writes", async () => {
