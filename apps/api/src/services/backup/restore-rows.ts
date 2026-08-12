@@ -314,6 +314,7 @@ export async function importBackupRows(
 				"target_type",
 				"target_id",
 				"metadata",
+				"is_tombstone",
 				"created_at",
 			],
 			payload.audit_logs || [],

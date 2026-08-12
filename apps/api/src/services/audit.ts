@@ -50,6 +50,14 @@ const DEFAULT_AUDIT_SETTINGS: AuditLogSettings = {
 	maxEntries: null,
 };
 
+export function isAuditTombstoneAction(action: string): boolean {
+	return (
+		action.endsWith(".delete") ||
+		action.includes(".delete.") ||
+		action.endsWith(".purged")
+	);
+}
+
 export async function getAuditLogSettings(
 	db: Kysely<DB>,
 ): Promise<AuditLogSettings> {
@@ -88,11 +96,13 @@ export async function applyAuditLogRetention(
 		await db
 			.deleteFrom("audit_logs")
 			.where("created_at", "<", now() - settings.retentionDays * 86_400)
+			.where("is_tombstone", "=", 0)
 			.execute();
 	if (settings.maxEntries) {
 		const excess = await db
 			.selectFrom("audit_logs")
 			.select("id")
+			.where("is_tombstone", "=", 0)
 			.orderBy("created_at", "desc")
 			.limit(1_000_000)
 			.offset(settings.maxEntries)
@@ -177,6 +187,7 @@ export async function safeWriteAuditEvent(
 				target_type: event.targetType ?? null,
 				target_id: event.targetId ?? null,
 				metadata: metadataJson,
+				is_tombstone: isAuditTombstoneAction(event.action) ? 1 : 0,
 				created_at: now(),
 			})
 			.execute();

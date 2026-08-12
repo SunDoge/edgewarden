@@ -23,6 +23,7 @@ import { registerAuthReliabilityScenarios } from "./test-support/auth-reliabilit
 import { registerAuthScenarios } from "./test-support/auth-scenarios";
 import { registerDatabaseMaintenanceScenarios } from "./test-support/database-maintenance-scenarios";
 import { registerInfrastructureScenarios } from "./test-support/infrastructure-scenarios";
+import { registerMaintenanceReliabilityScenarios } from "./test-support/maintenance-reliability-scenarios";
 import { registerSendScenarios } from "./test-support/send-scenarios";
 import { registerVaultScenarios } from "./test-support/vault-scenarios";
 
@@ -221,6 +222,18 @@ describe("Edgewarden API", () => {
 		},
 		email: EMAIL,
 	});
+	registerMaintenanceReliabilityScenarios({
+		get database() {
+			return testDatabase;
+		},
+		get bindings() {
+			return bindings;
+		},
+		get r2Values() {
+			return r2Values;
+		},
+		email: EMAIL,
+	});
 	registerAccountSecurityScenarios({
 		get database() {
 			return testDatabase;
@@ -298,17 +311,18 @@ describe("Edgewarden API", () => {
 		r2Values.set(originalSendStorageKey, sendFileBytes);
 		await testDatabase
 			.prepare(
-				"INSERT INTO audit_logs (id,actor_user_id,action,category,level,target_type,target_id,metadata,created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+				"INSERT INTO audit_logs (id,actor_user_id,action,category,level,target_type,target_id,metadata,is_tombstone,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
 			)
 			.bind(
 				auditId,
 				owner.id,
-				"send.backup_test",
+				"send.delete",
 				"system",
 				"info",
 				"send",
 				fileSendId,
 				JSON.stringify({ status: "test" }),
+				1,
 				timestamp,
 			)
 			.run();
@@ -346,7 +360,7 @@ describe("Edgewarden API", () => {
 		assert.equal(parsedArchive.payload.manifest.formatVersion, 3);
 		assert.ok(
 			(parsedArchive.payload.db.ciphers || []).every(
-				(row) => !("mutation_token" in row),
+				(row) => !("mutation_token" in row) && !("purge_token" in row),
 			),
 		);
 		assert.ok(
@@ -551,7 +565,7 @@ describe("Edgewarden API", () => {
 		assert.ok(
 			await testDatabase
 				.prepare(
-					"SELECT 1 FROM audit_logs WHERE id = ? AND actor_user_id = ? AND target_id = ?",
+					"SELECT 1 FROM audit_logs WHERE id = ? AND actor_user_id = ? AND target_id = ? AND is_tombstone = 1",
 				)
 				.bind(auditId, owner.id, fileSendId)
 				.first(),

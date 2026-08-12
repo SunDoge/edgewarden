@@ -364,6 +364,7 @@ export const restoreCipher = factory.createHandlers(async (c) => {
 			})
 			.where("id", "=", id)
 			.where("deleted_at", "is not", null)
+			.where("purge_token", "is", null)
 			.where(sql<boolean>`mutation_token IS ${existing.mutation_token}`)
 			.compile(),
 		conditionalCipherRevisionQuery(db, id, mutationToken, ts),

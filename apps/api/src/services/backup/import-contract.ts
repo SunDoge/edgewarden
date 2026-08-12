@@ -1,3 +1,4 @@
+import { isAuditTombstoneAction } from "../audit";
 import type { BackupPayload } from "./archive";
 import type { BackupImportSkipSummary } from "./import-types";
 import type { BackupTableName } from "./restore-database";
@@ -52,6 +53,11 @@ export function ensureBackupCompatibilityFields(payload: BackupPayload) {
 	payload.db.sends ??= [];
 	payload.db.device_trust_tokens ??= [];
 	payload.db.audit_logs ??= [];
+	for (const row of payload.db.audit_logs) {
+		row.is_tombstone ??= isAuditTombstoneAction(String(row.action ?? ""))
+			? 1
+			: 0;
+	}
 	payload.db.webauthn_credentials ??= [];
 }
 
