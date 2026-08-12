@@ -936,6 +936,74 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		);
 	});
 
+	test("atomically revokes every credential bound to a deleted device", async () => {
+		const user = await context.database
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(EMAIL)
+			.first<{ id: string }>();
+		assert.ok(user);
+		const deviceId = `revoked-device-${crypto.randomUUID()}`;
+		const sessionStamp = crypto.randomUUID();
+		const refreshToken = `refresh-${crypto.randomUUID()}`;
+		const trustToken = `trust-${crypto.randomUUID()}`;
+		const timestamp = Math.floor(Date.now() / 1000);
+		await context.database.batch([
+			context.database
+				.prepare(
+					"INSERT INTO devices (user_id,device_identifier,name,type,session_stamp,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+				)
+				.bind(
+					user.id,
+					deviceId,
+					"Revoked Device",
+					14,
+					sessionStamp,
+					timestamp,
+					timestamp,
+				),
+			context.database
+				.prepare(
+					"INSERT INTO refresh_tokens (token,user_id,expires_at,device_identifier,device_session_stamp) VALUES (?,?,?,?,?)",
+				)
+				.bind(refreshToken, user.id, timestamp + 3600, deviceId, sessionStamp),
+			context.database
+				.prepare(
+					"INSERT INTO device_trust_tokens (token,user_id,device_identifier,expires_at) VALUES (?,?,?,?)",
+				)
+				.bind(trustToken, user.id, deviceId, timestamp + 3600),
+		]);
+		const remove = () =>
+			request(`/api/devices/${deviceId}`, {
+				method: "DELETE",
+				headers: { authorization: `Bearer ${context.accessToken}` },
+			});
+		const responses = await Promise.all([
+			remove(),
+			remove(),
+			remove(),
+			remove(),
+		]);
+		assert.equal(
+			responses.filter((response) => response.status === 200).length,
+			1,
+		);
+		assert.ok(
+			responses.every((response) => [200, 404].includes(response.status)),
+		);
+		for (const table of ["devices", "refresh_tokens", "device_trust_tokens"]) {
+			assert.equal(
+				await context.database
+					.prepare(
+						`SELECT COUNT(*) AS count FROM ${table} WHERE user_id = ? AND device_identifier = ?`,
+					)
+					.bind(user.id, deviceId)
+					.first<{ count: number }>()
+					.then((row) => Number(row?.count)),
+				0,
+			);
+		}
+	});
+
 	test("validates domain settings before persistence", async () => {
 		const response = await request("/api/settings/domains", {
 			method: "PUT",

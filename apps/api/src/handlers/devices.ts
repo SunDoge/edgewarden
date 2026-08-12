@@ -1,5 +1,5 @@
 import { vValidator } from "@hono/valibot-validator";
-import type { Selectable } from "kysely";
+import { type Selectable, sql } from "kysely";
 import { factory } from "../http/factory";
 import { DeviceKeysSchema, DeviceNameSchema } from "../schemas/requests";
 import { VerifyPasswordSchema } from "../schemas/accounts";
@@ -67,21 +67,34 @@ export const getDevice = factory.createHandlers(async (c) =>
 export const deleteDevice = factory.createHandlers(async (c) => {
 	const db = c.get("db");
 	const userId = c.get("user").id;
-	const id = c.get("device").device_identifier;
-	const [, deleted] = await c
-		.get("dbDialect")
-		.batch([
-			db
-				.deleteFrom("refresh_tokens")
-				.where("user_id", "=", userId)
-				.where("device_identifier", "=", id)
-				.compile(),
-			db
-				.deleteFrom("devices")
-				.where("user_id", "=", userId)
-				.where("device_identifier", "=", id)
-				.compile(),
-		]);
+	const device = c.get("device");
+	const id = device.device_identifier;
+	const currentDevice = db
+		.selectFrom("devices")
+		.select("device_identifier")
+		.where("user_id", "=", userId)
+		.where("device_identifier", "=", id)
+		.where(sql<boolean>`session_stamp IS ${device.session_stamp}`);
+	const [, , deleted] = await c.get("dbDialect").batch([
+		db
+			.deleteFrom("refresh_tokens")
+			.where("user_id", "=", userId)
+			.where("device_identifier", "=", id)
+			.where(({ exists }) => exists(currentDevice))
+			.compile(),
+		db
+			.deleteFrom("device_trust_tokens")
+			.where("user_id", "=", userId)
+			.where("device_identifier", "=", id)
+			.where(({ exists }) => exists(currentDevice))
+			.compile(),
+		db
+			.deleteFrom("devices")
+			.where("user_id", "=", userId)
+			.where("device_identifier", "=", id)
+			.where(sql<boolean>`session_stamp IS ${device.session_stamp}`)
+			.compile(),
+	]);
 	if (deleted.numAffectedRows !== 1n)
 		return errorResponse("Device not found", 404);
 	invalidateUserCache(userId);
@@ -94,29 +107,51 @@ export const deleteDevices = factory.createHandlers(
 		const db = c.get("db");
 		const userId = c.get("user").id;
 		const ids = [...new Set(c.req.valid("json").ids)];
-		const ownedIds = (
-			await db
-				.selectFrom("devices")
-				.select("device_identifier")
-				.where("user_id", "=", userId)
-				.where(textColumnInJson("device_identifier", ids))
-				.execute()
-		).map((device) => device.device_identifier);
-		if (ownedIds.length) {
-			const [, deleted] = await c
-				.get("dbDialect")
-				.batch([
-					db
-						.deleteFrom("refresh_tokens")
-						.where("user_id", "=", userId)
-						.where(textColumnInJson("device_identifier", ownedIds))
-						.compile(),
-					db
-						.deleteFrom("devices")
-						.where("user_id", "=", userId)
-						.where(textColumnInJson("device_identifier", ownedIds))
-						.compile(),
-				]);
+		const ownedDevices = await db
+			.selectFrom("devices")
+			.select(["device_identifier", "session_stamp"])
+			.where("user_id", "=", userId)
+			.where(textColumnInJson("device_identifier", ids))
+			.execute();
+		if (ownedDevices.length) {
+			const expectedState = JSON.stringify(ownedDevices);
+			const matchesRefreshDevice = sql<boolean>`exists (
+				select 1 from devices current_device
+				join json_each(${expectedState}) expected
+				  on json_extract(expected.value, '$.device_identifier') = current_device.device_identifier
+				 and current_device.session_stamp is json_extract(expected.value, '$.session_stamp')
+				where current_device.user_id = ${userId}
+				  and current_device.device_identifier = refresh_tokens.device_identifier
+			)`;
+			const matchesTrustedDevice = sql<boolean>`exists (
+				select 1 from devices current_device
+				join json_each(${expectedState}) expected
+				  on json_extract(expected.value, '$.device_identifier') = current_device.device_identifier
+				 and current_device.session_stamp is json_extract(expected.value, '$.session_stamp')
+				where current_device.user_id = ${userId}
+				  and current_device.device_identifier = device_trust_tokens.device_identifier
+			)`;
+			const [, , deleted] = await c.get("dbDialect").batch([
+				db
+					.deleteFrom("refresh_tokens")
+					.where("user_id", "=", userId)
+					.where(matchesRefreshDevice)
+					.compile(),
+				db
+					.deleteFrom("device_trust_tokens")
+					.where("user_id", "=", userId)
+					.where(matchesTrustedDevice)
+					.compile(),
+				db
+					.deleteFrom("devices")
+					.where("user_id", "=", userId)
+					.where(sql<boolean>`exists (
+							select 1 from json_each(${expectedState}) expected
+							where json_extract(expected.value, '$.device_identifier') = devices.device_identifier
+							  and devices.session_stamp is json_extract(expected.value, '$.session_stamp')
+						)`)
+					.compile(),
+			]);
 			const deletedCount = Number(deleted.numAffectedRows ?? 0n);
 			if (deletedCount) {
 				invalidateUserCache(userId);
@@ -208,6 +243,10 @@ export const deleteAllDevices = factory.createHandlers(
 		const userId = user.id;
 		await executeBatch(c.get("dbDialect"), [
 			db.deleteFrom("refresh_tokens").where("user_id", "=", userId).compile(),
+			db
+				.deleteFrom("device_trust_tokens")
+				.where("user_id", "=", userId)
+				.compile(),
 			db.deleteFrom("devices").where("user_id", "=", userId).compile(),
 			db
 				.updateTable("users")
