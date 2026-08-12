@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WebDavBackupDestination } from "./config";
-import { listWebDavEntries, putToWebDav } from "./webdav-adapter";
+import { MAX_BACKUP_ARCHIVE_BYTES } from "./limits";
+import {
+	downloadFromWebDav,
+	listWebDavEntries,
+	putToWebDav,
+} from "./webdav-adapter";
 
 const config: WebDavBackupDestination = {
 	baseUrl: "https://example.test/dav",
@@ -54,7 +59,10 @@ describe("WebDAV backup adapter", () => {
 		});
 		expect(fetch).toHaveBeenCalledWith(
 			"https://example.test/dav/edgewarden",
-			expect.objectContaining({ method: "PROPFIND" }),
+			expect.objectContaining({
+				method: "PROPFIND",
+				signal: expect.any(AbortSignal),
+			}),
 		);
 	});
 
@@ -81,5 +89,24 @@ describe("WebDAV backup adapter", () => {
 			"Content-Type": "application/zip",
 			"Content-Length": "3",
 		});
+		expect(
+			fetchMock.mock.calls.every(
+				([, init]) => init?.signal instanceof AbortSignal,
+			),
+		).toBe(true);
+	});
+
+	it("rejects oversized backup downloads before buffering", async () => {
+		globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(null, {
+				status: 200,
+				headers: {
+					"content-length": String(MAX_BACKUP_ARCHIVE_BYTES + 1),
+				},
+			}),
+		);
+		await expect(downloadFromWebDav(config, "backup.zip")).rejects.toThrow(
+			"WebDAV backup download exceeds",
+		);
 	});
 });

@@ -1,4 +1,14 @@
 import type { WebDavBackupDestination } from "./config";
+import {
+	MAX_BACKUP_ARCHIVE_BYTES,
+	MAX_REMOTE_LISTING_BYTES,
+	REMOTE_METADATA_TIMEOUT_MS,
+	REMOTE_TRANSFER_TIMEOUT_MS,
+} from "./limits";
+import {
+	readBoundedResponseBytes,
+	readBoundedResponseText,
+} from "./remote-http";
 import type {
 	BackupUploadResult,
 	RemoteBackupFile,
@@ -57,6 +67,7 @@ async function ensureWebDavDirectory(
 			headers: {
 				Authorization: authHeader,
 			},
+			signal: AbortSignal.timeout(REMOTE_METADATA_TIMEOUT_MS),
 		});
 		if ([200, 201, 204, 301, 302, 405].includes(response.status)) continue;
 		throw new Error(`WebDAV directory creation failed: ${response.status}`);
@@ -80,6 +91,7 @@ async function ensureWebDavDirectoryCached(
 			headers: {
 				Authorization: authHeader,
 			},
+			signal: AbortSignal.timeout(REMOTE_METADATA_TIMEOUT_MS),
 		});
 		if ([200, 201, 204, 301, 302, 405].includes(response.status)) {
 			ensuredDirectories.add(current);
@@ -121,6 +133,7 @@ export async function putToWebDav(
 			"Content-Length": String(bytes.byteLength),
 		},
 		body: bytes,
+		signal: AbortSignal.timeout(REMOTE_TRANSFER_TIMEOUT_MS),
 	});
 
 	if (!response.ok) {
@@ -169,6 +182,7 @@ export async function listWebDavEntries(
 			"Content-Type": "application/xml; charset=utf-8",
 		},
 		body: '<?xml version="1.0" encoding="utf-8"?><propfind xmlns="DAV:"><prop><resourcetype/><getcontentlength/><getlastmodified/></prop></propfind>',
+		signal: AbortSignal.timeout(REMOTE_METADATA_TIMEOUT_MS),
 	});
 	if (response.status === 404) {
 		return {
@@ -182,7 +196,11 @@ export async function listWebDavEntries(
 		throw new Error(`WebDAV listing failed: ${response.status}`);
 	}
 
-	const xml = await response.text();
+	const xml = await readBoundedResponseText(
+		response,
+		MAX_REMOTE_LISTING_BYTES,
+		"WebDAV listing",
+	);
 	const rootFullPath = trimSlashes(config.remotePath);
 	const items: RemoteBackupItem[] = [];
 	for (const block of extractXmlBlocks(xml, "response")) {
@@ -244,6 +262,7 @@ export async function downloadFromWebDav(
 		headers: {
 			Authorization: authHeader,
 		},
+		signal: AbortSignal.timeout(REMOTE_TRANSFER_TIMEOUT_MS),
 	});
 	if (!response.ok) {
 		throw new Error(`WebDAV download failed: ${response.status}`);
@@ -255,7 +274,11 @@ export async function downloadFromWebDav(
 		contentType: String(
 			response.headers.get("Content-Type") || "application/zip",
 		).trim(),
-		bytes: new Uint8Array(await response.arrayBuffer()),
+		bytes: await readBoundedResponseBytes(
+			response,
+			MAX_BACKUP_ARCHIVE_BYTES,
+			"WebDAV backup download",
+		),
 	};
 }
 
@@ -270,6 +293,7 @@ export async function deleteFromWebDav(
 		headers: {
 			Authorization: authHeader,
 		},
+		signal: AbortSignal.timeout(REMOTE_METADATA_TIMEOUT_MS),
 	});
 	if (!response.ok && response.status !== 404) {
 		throw new Error(`WebDAV delete failed: ${response.status}`);
@@ -287,6 +311,7 @@ export async function existsInWebDav(
 		headers: {
 			Authorization: authHeader,
 		},
+		signal: AbortSignal.timeout(REMOTE_METADATA_TIMEOUT_MS),
 	});
 	if (response.status === 404) return false;
 	if (!response.ok) {
