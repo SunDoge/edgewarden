@@ -63,7 +63,15 @@ describe("backup archive integrity", () => {
 			exportedAt: "2026-08-12T03:04:05.000Z",
 			appVersion: "test",
 			storageKind: "r2",
-			tableCounts: { attachments: 1 },
+			tableCounts: {
+				config: 0,
+				users: 0,
+				domain_settings: 0,
+				user_revisions: 0,
+				folders: 0,
+				ciphers: 0,
+				attachments: 1,
+			},
 			includes: { attachments: true, fileSends: true },
 			blobSummary: {
 				attachmentFiles: 1,
@@ -95,6 +103,39 @@ describe("backup archive integrity", () => {
 			),
 		).rejects.toThrow(
 			"Backup archive is missing required file: attachments/cipher-id/attachment-id.bin",
+		);
+	});
+
+	it("rejects a syntactically valid database payload with truncated rows", async () => {
+		const encoder = new TextEncoder();
+		const archive = zipSync({
+			"manifest.json": encoder.encode(
+				JSON.stringify({
+					formatVersion: 3,
+					exportedAt: "2026-08-12T03:04:05.000Z",
+					appVersion: "test",
+					storageKind: null,
+					tableCounts: { users: 1 },
+					includes: { attachments: false, fileSends: false },
+					blobSummary: {
+						attachmentFiles: 0,
+						sendFiles: 0,
+						totalBytes: 0,
+						largestObjectBytes: 0,
+					},
+				}),
+			),
+			"db.json": encoder.encode(JSON.stringify({ users: [] })),
+		});
+		const prefix = await getBackupArchiveChecksumPrefix(archive);
+
+		await expect(
+			assertBackupArchiveIntegrity(
+				archive,
+				`edgewarden_backup_20260812_030405_${prefix}.zip`,
+			),
+		).rejects.toThrow(
+			"Backup archive table count mismatch for users: expected 1, received 0",
 		);
 	});
 });
