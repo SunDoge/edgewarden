@@ -152,6 +152,7 @@ export interface DomainSettings {
 export interface Folders {
 	created_at: number;
 	id: string;
+	mutation_token: string | null;
 	name: string;
 	updated_at: number;
 	user_id: string;

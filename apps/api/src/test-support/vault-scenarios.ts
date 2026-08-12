@@ -721,6 +721,85 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		assert.equal(after?.revision_date, before.revision_date + 1);
 	});
 
+	test("fences concurrent Folder updates and rolls back failed revisions", async () => {
+		const auth = {
+			authorization: `Bearer ${context.accessToken}`,
+			"content-type": "application/json",
+		};
+		const created = await request("/api/folders", {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({ name: "folder-before-fenced-update" }),
+		});
+		assert.equal(created.status, 200, await created.clone().text());
+		const folderId = (await created.json<{ id: string }>()).id;
+		const user = await context.database
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(EMAIL)
+			.first<{ id: string }>();
+		assert.ok(user);
+
+		await context.database
+			.prepare(`
+				CREATE TRIGGER test_fail_folder_revision
+				BEFORE UPDATE ON user_revisions
+				BEGIN
+					SELECT RAISE(ABORT, 'forced folder revision failure');
+				END
+			`)
+			.run();
+		try {
+			const failed = await request(`/api/folders/${folderId}`, {
+				method: "PUT",
+				headers: auth,
+				body: JSON.stringify({ name: "folder-must-not-commit" }),
+			});
+			assert.equal(failed.status, 500, await failed.clone().text());
+		} finally {
+			await context.database
+				.prepare("DROP TRIGGER IF EXISTS test_fail_folder_revision")
+				.run();
+		}
+		assert.deepEqual(
+			await context.database
+				.prepare("SELECT name, mutation_token FROM folders WHERE id = ?")
+				.bind(folderId)
+				.first<{ name: string; mutation_token: string | null }>(),
+			{ name: "folder-before-fenced-update", mutation_token: null },
+		);
+
+		const beforeRevision = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(user.id)
+			.first<{ revision_date: number }>();
+		assert.ok(beforeRevision);
+		const responses = await Promise.all(
+			Array.from({ length: 8 }, (_, index) =>
+				request(`/api/folders/${folderId}`, {
+					method: "PUT",
+					headers: auth,
+					body: JSON.stringify({ name: `folder-concurrent-${index}` }),
+				}),
+			),
+		);
+		assert.equal(
+			responses.filter((response) => response.status === 200).length,
+			1,
+		);
+		assert.equal(
+			responses.filter((response) => response.status === 409).length,
+			7,
+		);
+		assert.equal(
+			await context.database
+				.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+				.bind(user.id)
+				.first<{ revision_date: number }>()
+				.then((row) => row?.revision_date),
+			beforeRevision.revision_date + 1,
+		);
+	});
+
 	test("audits only folders actually removed by concurrent bulk deletion", async () => {
 		const auth = {
 			authorization: `Bearer ${context.accessToken}`,
