@@ -16,7 +16,7 @@
 		"test:compat:bw": "node scripts/bw-compat-smoke.ts",
 		"test:integration:cloudflare": "node scripts/cloudflare-integration-smoke.ts",
 		"domains:sync": "node scripts/sync-bitwarden-domains.ts",
-		"check": "pnpm --parallel --filter './apps/*' --if-present run check && node scripts/check-cloudflare-config.ts",
+		"check": "pnpm --parallel --filter './apps/*' --if-present run check && node scripts/check-cloudflare-config.ts && node scripts/check-migrations.ts",
 		"lint": "biome lint .",
 		"format": "biome format --write ."
 	},

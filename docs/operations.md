@@ -4,16 +4,19 @@
 
 1. Export an instance backup and verify its filename checksum in the backup center.
 2. Read the release notes for new bindings or secrets.
-3. Deploy normally. `pnpm deploy` resolves D1, applies pending migrations with Wrangler, and publishes only after they succeed. `deploy:kv` does the same with the KV configuration.
-4. Run the compatibility smoke test and verify Web Vault login, sync, and attachment download.
+3. Deploy normally. `pnpm deploy` resolves D1, validates the exact generated Wrangler configuration with a dry run, applies pending migrations, and publishes only after they succeed. `deploy:kv` does the same with the KV configuration.
+4. Verify `/api/health` returns HTTP 200. This probes the required secrets, selected attachment backend, D1 binding, and newest schema contract.
+5. Run the compatibility smoke test and verify Web Vault login, sync, and attachment download.
 
 After the first real deployment, never rewrite an applied migration. Add a new numbered migration, run `pnpm --filter @edgewarden/api db:codegen` to regenerate `apps/api/src/types/db.d.ts`, and test both a fresh schema and an upgrade from the preceding release.
+
+Migrations run before the new Worker becomes active, so every migration must remain compatible with the currently deployed Worker. Use expand/backfill/contract across releases instead of dropping or renaming a live column in one release. `pnpm check` enforces ordered migration filenames and rejects common destructive SQL operations. Wrangler rolls back the failing migration itself and D1 Time Travel remains available for operator recovery, but neither replaces an application backup before a risky upgrade.
 
 ## Backup and restore
 
 R2 is the preferred blob backend. KV is a fallback with a 25 MiB per-object limit. Instance backups use a strict table allowlist and include users, encrypted vault data, organizations/collections, Sends, WebAuthn encrypted material, and optionally encrypted attachment blobs. They intentionally exclude JWT/data-encryption/bootstrap secrets, API keys, refresh tokens, device sessions, login-attempt records, audit logs, and transient locks.
 
-Restore uses shadow tables and validates row counts before replacing live allowlisted tables. A restore invalidates persisted device and refresh sessions through user replacement. After restoring, verify:
+Restore uses shadow tables and validates row counts before replacing live allowlisted tables. Attachment files are staged under immutable object keys, then their D1 references switch atomically with the restored tables; a failed restore leaves the previous database and its files intact. A restore invalidates persisted device and refresh sessions through user replacement. After restoring, verify:
 
 - personal and organization cipher counts;
 - collection membership and read-only/hide-password permissions;

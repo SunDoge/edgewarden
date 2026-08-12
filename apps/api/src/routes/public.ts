@@ -8,6 +8,7 @@ import {
 } from "../handlers/identity";
 import {
 	getConfig,
+	getHealth,
 	getVersion,
 	publicPasswordHint,
 	registerAccount,
@@ -67,4 +68,5 @@ export const publicRouter = new Hono<HonoEnv>()
 	.post("/api/accounts/password-hint", ...publicPasswordHint)
 	.get("/config", ...getConfig)
 	.get("/api/config", ...getConfig)
+	.get("/api/health", ...getHealth)
 	.get("/api/version", ...getVersion);

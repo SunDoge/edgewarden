@@ -137,6 +137,19 @@ try {
 		temporaryConfigPath,
 		JSON.stringify(deploymentConfig, null, "\t"),
 	);
+	// Compile and validate the exact generated configuration before changing D1.
+	// A broken Worker bundle must never leave production on a newer schema while
+	// the previous Worker version remains active.
+	requireSuccess(
+		wrangler([
+			"deploy",
+			"--config",
+			temporaryConfigPath,
+			"--minify",
+			"--dry-run",
+		]),
+		"Validating Worker deployment",
+	);
 	requireSuccess(
 		wrangler([
 			"d1",
