@@ -26,7 +26,8 @@ import {
 	conditionalWebauthnCredentialDeletionClaimQuery,
 	conditionalWebauthnCredentialDeletionQuery,
 	conditionalWebauthnCredentialInsertQuery,
-	webauthnCredentialRevisionQuery,
+	conditionalWebauthnEncryptionRevisionQuery,
+	conditionalWebauthnEncryptionUpdateQuery,
 } from "../services/db/batch";
 import * as webauthnDb from "../services/db/webauthn";
 import type { WebauthnCredentials } from "../types/db";
@@ -359,6 +360,7 @@ export const createAccountPasskey = factory.createHandlers(
 			encrypted_public_key: prfKeySet.encryptedPublicKey,
 			encrypted_private_key: prfKeySet.encryptedPrivateKey,
 			supports_prf: supportsPrf ? 1 : 0,
+			mutation_token: crypto.randomUUID(),
 			created_at: ts,
 			updated_at: ts,
 		};
@@ -441,23 +443,32 @@ export const updateAccountPasskeyEncryption = factory.createHandlers(
 		}
 
 		const ts = now();
-		const [updated] = await c.get("dbDialect").batch([
-			db
-				.updateTable("webauthn_credentials")
-				.set({
-					encrypted_user_key: prfKeySet.encryptedUserKey,
-					encrypted_public_key: prfKeySet.encryptedPublicKey,
-					encrypted_private_key: prfKeySet.encryptedPrivateKey,
-					supports_prf: 1,
-					updated_at: ts,
-				})
-				.where("user_id", "=", user.id)
-				.where("credential_id", "=", assertion.credential.credential_id)
-				.compile(),
-			webauthnCredentialRevisionQuery(db, user.id, assertion.credential.id, ts),
-		]);
+		const mutationToken = crypto.randomUUID();
+		const [updated] = await c
+			.get("dbDialect")
+			.batch([
+				conditionalWebauthnEncryptionUpdateQuery(
+					db,
+					assertion.credential,
+					prfKeySet.encryptedUserKey,
+					prfKeySet.encryptedPublicKey,
+					prfKeySet.encryptedPrivateKey,
+					mutationToken,
+					ts,
+				),
+				conditionalWebauthnEncryptionRevisionQuery(
+					db,
+					user.id,
+					assertion.credential.id,
+					mutationToken,
+					ts,
+				),
+			]);
 		if (updated.numAffectedRows !== 1n)
-			return errorResponse("Passkey not found", 404);
+			return errorResponse(
+				"Passkey encryption changed by another request",
+				409,
+			);
 
 		await safeWriteAuditEvent(db, {
 			actorUserId: user.id,

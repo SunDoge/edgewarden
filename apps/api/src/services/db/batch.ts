@@ -219,6 +219,64 @@ export function webauthnCredentialRevisionQuery(
 	`.compile(db);
 }
 
+export function conditionalWebauthnEncryptionUpdateQuery(
+	db: Kysely<DB>,
+	credential: {
+		id: string;
+		user_id: string;
+		purpose: string;
+		encrypted_user_key: string | null;
+		encrypted_public_key: string | null;
+		encrypted_private_key: string | null;
+		supports_prf: number;
+		mutation_token: string | null;
+	},
+	encryptedUserKey: string,
+	encryptedPublicKey: string,
+	encryptedPrivateKey: string,
+	mutationToken: string,
+	timestamp = now(),
+) {
+	return sql`
+		UPDATE webauthn_credentials
+		SET encrypted_user_key = ${encryptedUserKey},
+		    encrypted_public_key = ${encryptedPublicKey},
+		    encrypted_private_key = ${encryptedPrivateKey},
+		    supports_prf = 1,
+		    mutation_token = ${mutationToken},
+		    updated_at = ${timestamp}
+		WHERE id = ${credential.id}
+		  AND user_id = ${credential.user_id}
+		  AND purpose = ${credential.purpose}
+		  AND encrypted_user_key IS ${credential.encrypted_user_key}
+		  AND encrypted_public_key IS ${credential.encrypted_public_key}
+		  AND encrypted_private_key IS ${credential.encrypted_private_key}
+		  AND supports_prf = ${credential.supports_prf}
+		  AND mutation_token IS ${credential.mutation_token}
+	`.compile(db);
+}
+
+export function conditionalWebauthnEncryptionRevisionQuery(
+	db: Kysely<DB>,
+	userId: string,
+	credentialId: string,
+	mutationToken: string,
+	timestamp = now(),
+) {
+	return sql`
+		INSERT INTO user_revisions (user_id, revision_date)
+		SELECT user_id, ${timestamp}
+		FROM webauthn_credentials
+		WHERE id = ${credentialId}
+		  AND user_id = ${userId}
+		  AND mutation_token = ${mutationToken}
+		ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
+			user_revisions.revision_date + 1,
+			excluded.revision_date
+		)
+	`.compile(db);
+}
+
 export function conditionalUserRevisionQuery(
 	db: Kysely<DB>,
 	userId: string,
@@ -325,7 +383,7 @@ export function conditionalWebauthnCredentialInsertQuery(
 		INSERT INTO webauthn_credentials (
 		  id, user_id, purpose, name, public_key, credential_id, counter,
 		  type, aa_guid, transports, encrypted_user_key, encrypted_public_key,
-		  encrypted_private_key, supports_prf, created_at, updated_at
+		  encrypted_private_key, supports_prf, mutation_token, created_at, updated_at
 		)
 		SELECT
 		  ${credential.id}, ${credential.user_id}, ${credential.purpose},
@@ -333,7 +391,8 @@ export function conditionalWebauthnCredentialInsertQuery(
 		  ${credential.counter}, ${credential.type}, ${credential.aa_guid},
 		  ${credential.transports}, ${credential.encrypted_user_key},
 		  ${credential.encrypted_public_key}, ${credential.encrypted_private_key},
-		  ${credential.supports_prf}, ${credential.created_at},
+		  ${credential.supports_prf}, ${credential.mutation_token},
+		  ${credential.created_at},
 		  ${credential.updated_at}
 		FROM users
 		WHERE id = ${credential.user_id}

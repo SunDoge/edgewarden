@@ -291,6 +291,7 @@ export interface WebauthnCredentials {
 	encrypted_public_key: string | null;
 	encrypted_user_key: string | null;
 	id: string;
+	mutation_token: string | null;
 	name: string;
 	public_key: string;
 	purpose: Generated<string>;
