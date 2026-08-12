@@ -93,14 +93,20 @@ export const connectToken = factory.createHandlers(async (c) => {
 		}
 
 		const deviceInfo = readDeviceInfo(body);
-		const { accessToken, refreshToken, deviceSession } =
-			await issueIdentitySession({
-				db,
-				dialect: c.get("dbDialect"),
-				user,
-				device: deviceInfo,
-				jwtSecret: secret,
-			});
+		const session = await issueIdentitySession({
+			db,
+			dialect: c.get("dbDialect"),
+			user,
+			device: deviceInfo,
+			jwtSecret: secret,
+		});
+		if (!session)
+			return identityErrorResponse(
+				"Unable to create session",
+				"server_error",
+				500,
+			);
+		const { accessToken, refreshToken, deviceSession } = session;
 		const webAuthnPrfOption =
 			buildAccountPasskeyTokenUserDecryptionOption(credential);
 

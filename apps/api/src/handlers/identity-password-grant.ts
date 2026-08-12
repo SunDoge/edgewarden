@@ -275,20 +275,24 @@ export async function handlePasswordGrant(
 		}
 	}
 
-	if (validatedAuthRequestId) {
-		await authRequestsDb.markAuthRequestAuthenticated(
-			db,
-			validatedAuthRequestId,
-		);
-	}
-
-	const { accessToken, refreshToken } = await issueIdentitySession({
+	const session = await issueIdentitySession({
 		db,
 		dialect: c.get("dbDialect"),
 		user,
 		device: deviceInfo,
 		jwtSecret: c.env.JWT_SECRET,
+		authRequest: validatedAuthRequestId
+			? { id: validatedAuthRequestId, token: crypto.randomUUID() }
+			: null,
 	});
+	if (!session) {
+		return identityErrorResponse(
+			"Authentication request has already been used.",
+			"invalid_grant",
+			400,
+		);
+	}
+	const { accessToken, refreshToken } = session;
 	if (isWebClient(body)) setWebRefreshCookie(c, refreshToken);
 	return c.json(
 		buildTokenResponse(
