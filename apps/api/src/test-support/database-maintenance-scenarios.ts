@@ -1411,7 +1411,7 @@ export function registerDatabaseMaintenanceScenarios(
 		);
 	});
 
-	test("publishes immutable Send file versions and queues replaced objects atomically", async () => {
+	test("publishes one Send file version per storage snapshot", async () => {
 		const { db } = await createDatabase(context.database);
 		const timestamp = Math.floor(Date.now() / 1000);
 		const user = await db
@@ -1424,6 +1424,10 @@ export function registerDatabaseMaintenanceScenarios(
 		const initialKey = `sends/${sendId}/${fileId}`;
 		const firstKey = `${initialKey}.first.bin`;
 		const secondKey = `${initialKey}.second.bin`;
+		const competingKeys = [
+			`${initialKey}.competing-a.bin`,
+			`${initialKey}.competing-b.bin`,
+		];
 		const blockedKey = `${initialKey}.blocked.bin`;
 		try {
 			await db
@@ -1462,10 +1466,11 @@ export function registerDatabaseMaintenanceScenarios(
 						userId: user.id,
 						fileId,
 						storageKey: firstKey,
+						expectedStorageKey: initialKey,
 					},
 					timestamp + 1,
 				),
-				true,
+				"published",
 			);
 			assert.equal(
 				await publishSendFileObject(
@@ -1475,10 +1480,36 @@ export function registerDatabaseMaintenanceScenarios(
 						userId: user.id,
 						fileId,
 						storageKey: secondKey,
+						expectedStorageKey: firstKey,
 					},
 					timestamp + 2,
 				),
-				true,
+				"published",
+			);
+			const competingPublications = await Promise.all(
+				competingKeys.map((storageKey, index) =>
+					publishSendFileObject(
+						context.database,
+						{
+							sendId,
+							userId: user.id,
+							fileId,
+							storageKey,
+							expectedStorageKey: secondKey,
+						},
+						timestamp + 3 + index,
+					),
+				),
+			);
+			assert.deepEqual(competingPublications.sort(), ["conflict", "published"]);
+			const publishedCompetingKey = await db
+				.selectFrom("sends")
+				.select("storage_key")
+				.where("id", "=", sendId)
+				.executeTakeFirstOrThrow()
+				.then((row) => row.storage_key);
+			assert.ok(
+				publishedCompetingKey && competingKeys.includes(publishedCompetingKey),
 			);
 			const revisionBeforeClaimedPublish = await db
 				.selectFrom("user_revisions")
@@ -1499,10 +1530,11 @@ export function registerDatabaseMaintenanceScenarios(
 						userId: user.id,
 						fileId,
 						storageKey: blockedKey,
+						expectedStorageKey: publishedCompetingKey,
 					},
-					timestamp + 3,
+					timestamp + 5,
 				),
-				false,
+				"missing",
 			);
 			assert.deepEqual(
 				await db
@@ -1510,7 +1542,7 @@ export function registerDatabaseMaintenanceScenarios(
 					.select(["storage_key", "purge_token"])
 					.where("id", "=", sendId)
 					.executeTakeFirstOrThrow(),
-				{ storage_key: secondKey, purge_token: purgeToken },
+				{ storage_key: publishedCompetingKey, purge_token: purgeToken },
 			);
 			assert.equal(
 				await db
@@ -1528,7 +1560,7 @@ export function registerDatabaseMaintenanceScenarios(
 					.where("id", "=", sendId)
 					.executeTakeFirstOrThrow()
 					.then((row) => row.storage_key),
-				secondKey,
+				publishedCompetingKey,
 			);
 			assert.deepEqual(
 				new Set(
@@ -1536,11 +1568,11 @@ export function registerDatabaseMaintenanceScenarios(
 						await db
 							.selectFrom("blob_gc_queue")
 							.select("object_key")
-							.where("object_key", "in", [initialKey, firstKey])
+							.where("object_key", "in", [initialKey, firstKey, secondKey])
 							.execute()
 					).map((row) => row.object_key),
 				),
-				new Set([initialKey, firstKey]),
+				new Set([initialKey, firstKey, secondKey]),
 			);
 		} finally {
 			await db.deleteFrom("sends").where("id", "=", sendId).execute();
@@ -1550,6 +1582,7 @@ export function registerDatabaseMaintenanceScenarios(
 					initialKey,
 					firstKey,
 					secondKey,
+					...competingKeys,
 					blockedKey,
 				])
 				.execute();
