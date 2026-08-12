@@ -61,6 +61,7 @@ const AttachmentUploadClaimsSchema = v.object({
 const SendFileDownloadClaimsSchema = v.object({
 	sendId: v.pipe(v.string(), v.minLength(1)),
 	fileId: v.pipe(v.string(), v.minLength(1)),
+	storageKey: v.pipe(v.string(), v.minLength(1)),
 	jti: v.pipe(v.string(), v.minLength(1)),
 	exp: v.number(),
 });
@@ -222,12 +223,14 @@ export async function verifyAttachmentUploadToken(
 export async function createSendFileDownloadToken(
 	sendId: string,
 	fileId: string,
+	storageKey: string,
 	secret: string,
 ): Promise<string> {
 	const now = Math.floor(Date.now() / 1000);
 	const payload: SendFileDownloadClaims = {
 		sendId,
 		fileId,
+		storageKey,
 		jti: createRefreshToken(),
 		exp: now + LIMITS.auth.fileDownloadTokenTtlSeconds,
 	};

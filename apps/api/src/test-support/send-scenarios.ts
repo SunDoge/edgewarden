@@ -103,6 +103,93 @@ export function registerSendScenarios(context: SendScenarioContext): void {
 		);
 	});
 
+	test("binds file Send download links to the published file version", async () => {
+		const auth = {
+			authorization: `Bearer ${context.accessToken}`,
+			"content-type": "application/json",
+		};
+		const firstBytes = new Uint8Array([1, 2, 3, 4]);
+		const secondBytes = new Uint8Array([5, 6, 7, 8]);
+		const created = await request("/api/sends/file/v2", {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({
+				type: 1,
+				name: "encrypted-file-send-name",
+				key: "encrypted-file-send-key",
+				fileLength: firstBytes.byteLength,
+				file: { fileName: "encrypted-file-name" },
+				deletionDate: new Date(Date.now() + 86_400_000).toISOString(),
+			}),
+		});
+		assert.equal(created.status, 200, await created.clone().text());
+		const metadata = await created.json<{
+			url: string;
+			sendResponse: {
+				id: string;
+				accessId: string;
+				file: { id: string };
+			};
+		}>();
+		const uploadUrl = new URL(metadata.url);
+		const upload = (bytes: Uint8Array) =>
+			request(`${uploadUrl.pathname}${uploadUrl.search}`, {
+				method: "PUT",
+				headers: {
+					"content-type": "application/octet-stream",
+					"content-length": String(bytes.byteLength),
+				},
+				body: bytes,
+			});
+		assert.equal((await upload(firstBytes)).status, 201);
+
+		const issueDownload = async () => {
+			const response = await request(
+				`/api/sends/${metadata.sendResponse.accessId}/access/file/${metadata.sendResponse.file.id}`,
+				{
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify({}),
+				},
+			);
+			assert.equal(response.status, 200, await response.clone().text());
+			return new URL((await response.json<{ url: string }>()).url);
+		};
+		const firstDownloadUrl = await issueDownload();
+		const download = (url: URL) => request(`${url.pathname}${url.search}`);
+		const firstDownload = await download(firstDownloadUrl);
+		assert.equal(firstDownload.status, 200);
+		assert.deepEqual(
+			new Uint8Array(await firstDownload.arrayBuffer()),
+			firstBytes,
+		);
+
+		assert.equal((await upload(secondBytes)).status, 201);
+		assert.equal((await download(firstDownloadUrl)).status, 404);
+
+		const secondDownloadUrl = await issueDownload();
+		for (let attempt = 0; attempt < 2; attempt += 1) {
+			const retried = await download(secondDownloadUrl);
+			assert.equal(retried.status, 200);
+			assert.deepEqual(
+				new Uint8Array(await retried.arrayBuffer()),
+				secondBytes,
+			);
+		}
+
+		const disabled = await request(`/api/sends/${metadata.sendResponse.id}`, {
+			method: "PUT",
+			headers: auth,
+			body: JSON.stringify({ disabled: true }),
+		});
+		assert.equal(disabled.status, 200, await disabled.clone().text());
+		assert.equal((await download(secondDownloadUrl)).status, 404);
+		await context.database
+			.prepare("DELETE FROM sends WHERE id = ?")
+			.bind(metadata.sendResponse.id)
+			.run();
+	});
+
 	test("updates text Send data without replacing it with an incompatible shape", async () => {
 		const updated = await request(`/api/sends/${context.sendId}`, {
 			method: "PUT",

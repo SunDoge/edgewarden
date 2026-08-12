@@ -110,6 +110,7 @@ describe("jwt utils", () => {
 			const token = await createSendFileDownloadToken(
 				"send-id",
 				"file-id",
+				"sends/send-id/file-id.version.bin",
 				secret,
 			);
 			const verified = await verifySendFileDownloadToken(token, secret);
@@ -118,12 +119,17 @@ describe("jwt utils", () => {
 			if (!verified) return;
 			assert.strictEqual(verified.sendId, "send-id");
 			assert.strictEqual(verified.fileId, "file-id");
+			assert.strictEqual(
+				verified.storageKey,
+				"sends/send-id/file-id.version.bin",
+			);
 		});
 
 		test("returns null for expired download token", async () => {
 			const token = await createSendFileDownloadToken(
 				"send-id",
 				"file-id",
+				"sends/send-id/file-id.version.bin",
 				secret,
 			);
 			const verified = await verifySendFileDownloadToken(token, "wrong-secret");
