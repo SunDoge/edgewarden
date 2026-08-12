@@ -8,8 +8,13 @@ import {
 	getAttachmentObjectKey,
 } from "../services/blob-store";
 import {
+	getCipherCollectionIds,
+	getCipherPermissions,
+	revisionQueriesForCipher,
+	validateOrganizationCollections,
+} from "../services/ciphers/access";
+import {
 	buildCipherData,
-	type CipherPermissions,
 	cipherToResponse,
 } from "../services/ciphers/presentation";
 import * as attachmentsDb from "../services/db/attachments";
@@ -20,113 +25,9 @@ import {
 } from "../services/db/batch";
 import * as ciphersDb from "../services/db/ciphers";
 import * as foldersDb from "../services/db/folders";
-import { textColumnInJson } from "../services/db/json-array";
-import type { Attachments, Ciphers } from "../types/db";
+import type { Attachments } from "../types/db";
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
-
-async function getCipherCollectionIds(
-	db: any,
-	cipherId: string,
-): Promise<string[]> {
-	return (
-		await db
-			.selectFrom("cipher_collections")
-			.select("collection_id")
-			.where("cipher_id", "=", cipherId)
-			.execute()
-	).map((row: any) => row.collection_id);
-}
-
-async function getCipherPermissions(
-	db: any,
-	cipher: Selectable<Ciphers>,
-	member: any,
-	collectionIds: string[],
-): Promise<CipherPermissions> {
-	if (
-		!cipher.org_id ||
-		!member ||
-		member.access_all === 1 ||
-		["manager", "admin", "owner"].includes(member.role)
-	) {
-		return { edit: true, viewPassword: true };
-	}
-	const access = collectionIds.length
-		? await db
-				.selectFrom("collection_members")
-				.select(["read_only", "hide_passwords"])
-				.where("org_member_id", "=", member.id)
-				.where(textColumnInJson("collection_id", collectionIds))
-				.execute()
-		: [];
-	return {
-		edit:
-			access.length === collectionIds.length &&
-			access.every((row: any) => row.read_only !== 1),
-		viewPassword:
-			access.length === collectionIds.length &&
-			access.every((row: any) => row.hide_passwords !== 1),
-	};
-}
-
-async function revisionQueriesForCipher(
-	db: any,
-	cipher: Pick<Selectable<Ciphers>, "user_id" | "org_id">,
-	timestamp = now(),
-): Promise<CompiledQuery[]> {
-	if (cipher.user_id) return [revisionQuery(db, cipher.user_id, timestamp)];
-	const members = await db
-		.selectFrom("org_members")
-		.select("user_id")
-		.where("org_id", "=", cipher.org_id!)
-		.where("status", "=", "confirmed")
-		.where("user_id", "is not", null)
-		.execute();
-	return members.map((member: any) =>
-		revisionQuery(db, member.user_id, timestamp),
-	);
-}
-
-async function validateOrganizationCollections(
-	db: any,
-	userId: string,
-	organizationId: string,
-	collectionIds: string[],
-) {
-	const uniqueIds = [...new Set(collectionIds)];
-	if (!uniqueIds.length)
-		return { error: "At least one collection is required" } as const;
-	const member = await db
-		.selectFrom("org_members")
-		.selectAll()
-		.where("org_id", "=", organizationId)
-		.where("user_id", "=", userId)
-		.where("status", "=", "confirmed")
-		.executeTakeFirst();
-	if (!member) return { error: "Organization not found" } as const;
-	const collections = await db
-		.selectFrom("collections")
-		.select("id")
-		.where("org_id", "=", organizationId)
-		.where(textColumnInJson("id", uniqueIds))
-		.execute();
-	if (collections.length !== uniqueIds.length)
-		return { error: "Collection not found" } as const;
-	const elevated = ["manager", "admin", "owner"].includes(member.role);
-	if (!elevated && !member.access_all) {
-		const writable = await db
-			.selectFrom("collection_members")
-			.select("collection_id")
-			.where("org_member_id", "=", member.id)
-			.where(textColumnInJson("collection_id", uniqueIds))
-			.where("read_only", "=", 0)
-			.execute();
-		if (writable.length !== uniqueIds.length)
-			return { error: "Collection is read-only" } as const;
-	}
-	return { member, collectionIds: uniqueIds } as const;
-}
 
 async function deleteAttachmentObjects(
 	env: CloudflareBindings,
