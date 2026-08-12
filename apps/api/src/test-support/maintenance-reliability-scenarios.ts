@@ -14,6 +14,39 @@ export interface MaintenanceReliabilityScenarioContext {
 export function registerMaintenanceReliabilityScenarios(
 	context: MaintenanceReliabilityScenarioContext,
 ): void {
+	async function insertExpiredCipher(
+		db: Awaited<ReturnType<typeof createDatabase>>["db"],
+		userId: string,
+		cipherId: string,
+		timestamp: number,
+		purgeToken: string | null = null,
+	): Promise<void> {
+		await db
+			.insertInto("ciphers")
+			.values({
+				id: cipherId,
+				user_id: userId,
+				org_id: null,
+				type: 1,
+				folder_id: null,
+				name: "gc-reliability-cipher",
+				notes: null,
+				fields: null,
+				password_history: null,
+				favorite: 0,
+				data: "{}",
+				reprompt: 0,
+				key: null,
+				created_at: timestamp - 2,
+				updated_at: timestamp - 2,
+				archived_at: null,
+				deleted_at: timestamp - 2,
+				purge_after: timestamp - 1,
+				purge_token: purgeToken,
+			})
+			.execute();
+	}
+
 	test("fences cipher restore before deleting attachment objects", async () => {
 		const { db } = await createDatabase(context.database);
 		const user = await db
@@ -30,29 +63,7 @@ export function registerMaintenanceReliabilityScenarios(
 		let restoreChanges = -1;
 
 		try {
-			await db
-				.insertInto("ciphers")
-				.values({
-					id: cipherId,
-					user_id: user.id,
-					org_id: null,
-					type: 1,
-					folder_id: null,
-					name: "gc-restore-race",
-					notes: null,
-					fields: null,
-					password_history: null,
-					favorite: 0,
-					data: "{}",
-					reprompt: 0,
-					key: null,
-					created_at: timestamp - 2,
-					updated_at: timestamp - 2,
-					archived_at: null,
-					deleted_at: timestamp - 2,
-					purge_after: timestamp - 1,
-				})
-				.execute();
+			await insertExpiredCipher(db, user.id, cipherId, timestamp);
 			await db
 				.insertInto("attachments")
 				.values({
@@ -112,6 +123,94 @@ export function registerMaintenanceReliabilityScenarios(
 				.where("target_id", "in", [cipherId, attachmentId])
 				.execute();
 			context.r2Values.delete(storageKey);
+			await db.destroy();
+		}
+	});
+
+	test("emits one purge tombstone across overlapping maintenance runs", async () => {
+		const first = await createDatabase(context.database);
+		const second = await createDatabase(context.database);
+		const user = await first.db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", context.email)
+			.executeTakeFirstOrThrow();
+		const timestamp = Math.floor(Date.now() / 1000);
+		const cipherId = crypto.randomUUID();
+		try {
+			await insertExpiredCipher(first.db, user.id, cipherId, timestamp);
+			await Promise.all([
+				runMaintenance(first.db, context.bindings, timestamp),
+				runMaintenance(second.db, context.bindings, timestamp),
+			]);
+			const audits = await first.db
+				.selectFrom("audit_logs")
+				.select(({ fn }) => fn.countAll<number>().as("count"))
+				.where("action", "=", "cipher.purged")
+				.where("target_id", "=", cipherId)
+				.executeTakeFirstOrThrow();
+			assert.equal(Number(audits.count), 1);
+			assert.equal(
+				await first.db
+					.selectFrom("ciphers")
+					.select("id")
+					.where("id", "=", cipherId)
+					.executeTakeFirst(),
+				undefined,
+			);
+		} finally {
+			await first.db.deleteFrom("ciphers").where("id", "=", cipherId).execute();
+			await first.db
+				.deleteFrom("audit_logs")
+				.where("target_id", "=", cipherId)
+				.execute();
+			await first.db.destroy();
+			await second.db.destroy();
+		}
+	});
+
+	test("takes over a purge claim left by an interrupted worker", async () => {
+		const { db } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", context.email)
+			.executeTakeFirstOrThrow();
+		const timestamp = Math.floor(Date.now() / 1000);
+		const cipherId = crypto.randomUUID();
+		const abandonedClaim = crypto.randomUUID();
+		try {
+			await insertExpiredCipher(
+				db,
+				user.id,
+				cipherId,
+				timestamp,
+				abandonedClaim,
+			);
+			const result = await runMaintenance(db, context.bindings, timestamp);
+			assert.ok(result.purgedCiphers >= 1);
+			assert.equal(
+				await db
+					.selectFrom("ciphers")
+					.select("id")
+					.where("id", "=", cipherId)
+					.executeTakeFirst(),
+				undefined,
+			);
+			assert.ok(
+				await db
+					.selectFrom("audit_logs")
+					.select("id")
+					.where("action", "=", "cipher.purged")
+					.where("target_id", "=", cipherId)
+					.executeTakeFirst(),
+			);
+		} finally {
+			await db.deleteFrom("ciphers").where("id", "=", cipherId).execute();
+			await db
+				.deleteFrom("audit_logs")
+				.where("target_id", "=", cipherId)
+				.execute();
 			await db.destroy();
 		}
 	});
