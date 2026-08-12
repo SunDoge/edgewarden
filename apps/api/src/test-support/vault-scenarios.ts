@@ -818,6 +818,13 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		) as { storageKind: string; blobSummary: { attachmentFiles: number } };
 		assert.equal(manifest.storageKind, "r2");
 		assert.equal(manifest.blobSummary.attachmentFiles, 1);
+		assert.ok(
+			await context.database
+				.prepare(
+					"SELECT 1 FROM audit_logs WHERE action = 'backup.exported' AND target_type = 'backup' ORDER BY created_at DESC LIMIT 1",
+				)
+				.first(),
+		);
 
 		const removed = await request(
 			`/api/ciphers/${context.cipherId}/attachment/${metadata.attachmentId}/delete`,

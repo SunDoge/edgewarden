@@ -23,7 +23,7 @@ export type { BackupFileIntegrityCheckResult } from "./archive-integrity";
 
 type SqlRow = Record<string, string | number | null>;
 
-const BACKUP_FORMAT_VERSION = 2;
+const BACKUP_FORMAT_VERSION = 3;
 const BACKUP_RUNNER_LOCK_CONFIG_KEY = "backup.runner.lock.v1";
 const BACKUP_TEXT_COMPRESSION_LEVEL = 0;
 const BACKUP_JSON_INDENT = 2;
@@ -33,7 +33,7 @@ const MAX_BACKUP_EXTRACTED_BYTES = 64 * 1024 * 1024;
 const MAX_BACKUP_DB_JSON_BYTES = 32 * 1024 * 1024;
 
 export interface BackupManifest {
-	formatVersion: 1 | 2;
+	formatVersion: 1 | 2 | 3;
 	exportedAt: string;
 	appVersion: string;
 	storageKind: "kv" | "r2" | null;
@@ -83,6 +83,7 @@ export interface BackupPayload {
 		attachments: SqlRow[];
 		webauthn_credentials?: SqlRow[];
 		device_trust_tokens?: SqlRow[];
+		audit_logs?: SqlRow[];
 		sends?: SqlRow[];
 	};
 }
@@ -171,7 +172,7 @@ function parseSendFileMetadata(row: SqlRow): {
 
 function getRequiredZipEntries(
 	db: BackupPayload["db"],
-	formatVersion: 1 | 2,
+	formatVersion: 1 | 2 | 3,
 ): string[] {
 	const entries: string[] = [];
 	for (const row of db.attachments) {
@@ -261,7 +262,11 @@ export function parseBackupArchive(
 		throw new Error("Backup archive contains invalid JSON metadata");
 	}
 
-	if (manifest?.formatVersion !== 1 && manifest?.formatVersion !== 2) {
+	if (
+		manifest?.formatVersion !== 1 &&
+		manifest?.formatVersion !== 2 &&
+		manifest?.formatVersion !== 3
+	) {
 		throw new Error("Unsupported backup format version");
 	}
 	if (!db || typeof db !== "object") {
@@ -455,13 +460,11 @@ export async function buildBackupArchive(
 		)
 		.orderBy("created_at asc")
 		.execute();
-	const deviceTrustRows = await db
-		.selectFrom("device_trust_tokens")
+	const auditRows = await db
+		.selectFrom("audit_logs")
 		.selectAll()
-		.where(
-			sql<boolean>`user_id in (select id from users where deletion_requested_at is null)`,
-		)
-		.orderBy("user_id asc")
+		.orderBy("created_at asc")
+		.orderBy("id asc")
 		.execute();
 	const sendsRows = await db
 		.selectFrom("sends")
@@ -482,6 +485,16 @@ export async function buildBackupArchive(
 	const exportedUserRows = sanitizeUserRowsForExport(
 		userRows as unknown as SqlRow[],
 	);
+	const exportedUserIds = new Set(
+		exportedUserRows.map((row) => String(row.id || "").trim()),
+	);
+	const exportedAuditRows = auditRows.map((row) => ({
+		...row,
+		actor_user_id:
+			row.actor_user_id && exportedUserIds.has(row.actor_user_id)
+				? row.actor_user_id
+				: null,
+	})) as unknown as SqlRow[];
 	const sourceAttachmentRows = includeAttachments ? attachmentRows : [];
 	const sourceSendRows = sendsRows.filter(
 		(row) => Number(row.type) !== 1 || includeAttachments,
@@ -549,7 +562,8 @@ export async function buildBackupArchive(
 			cipher_collections: cipherCollectionRows.length,
 			attachments: exportedAttachmentRows.length,
 			webauthn_credentials: webauthnRows.length,
-			device_trust_tokens: deviceTrustRows.length,
+			device_trust_tokens: 0,
+			audit_logs: exportedAuditRows.length,
 			sends: exportedSendRows.length,
 		},
 		includes: {
@@ -589,7 +603,8 @@ export async function buildBackupArchive(
 					cipher_collections: cipherCollectionRows,
 					attachments: exportedAttachmentRows,
 					webauthn_credentials: webauthnRows,
-					device_trust_tokens: deviceTrustRows,
+					device_trust_tokens: [],
+					audit_logs: exportedAuditRows,
 					sends: exportedSendRows,
 				},
 				null,

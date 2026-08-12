@@ -173,16 +173,6 @@ export async function importBackupRows(
 	);
 	await runInsertBatch(
 		db,
-		tableName("device_trust_tokens"),
-		buildInsertStatements(
-			db,
-			tableName("device_trust_tokens"),
-			["token", "user_id", "device_identifier", "expires_at"],
-			payload.device_trust_tokens || [],
-		),
-	);
-	await runInsertBatch(
-		db,
 		tableName("webauthn_credentials"),
 		buildInsertStatements(
 			db,
@@ -307,6 +297,26 @@ export async function importBackupRows(
 				"storage_key",
 			],
 			payload.sends || [],
+		),
+	);
+	await runInsertBatch(
+		db,
+		tableName("audit_logs"),
+		buildInsertStatements(
+			db,
+			tableName("audit_logs"),
+			[
+				"id",
+				"actor_user_id",
+				"action",
+				"category",
+				"level",
+				"target_type",
+				"target_id",
+				"metadata",
+				"created_at",
+			],
+			payload.audit_logs || [],
 		),
 	);
 }

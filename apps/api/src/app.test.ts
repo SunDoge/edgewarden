@@ -243,6 +243,8 @@ describe("Edgewarden API", () => {
 		const sendFileId = crypto.randomUUID();
 		const originalSendStorageKey = `sends/${fileSendId}/${sendFileId}`;
 		const sendFileBytes = new Uint8Array([255, 128, 23, 7, 0]);
+		const auditId = crypto.randomUUID();
+		const deviceTrustToken = `backup-must-not-export-${crypto.randomUUID()}`;
 		const timestamp = Math.floor(Date.now() / 1000);
 		await testDatabase
 			.prepare(
@@ -283,6 +285,28 @@ describe("Edgewarden API", () => {
 			)
 			.run();
 		r2Values.set(originalSendStorageKey, sendFileBytes);
+		await testDatabase
+			.prepare(
+				"INSERT INTO audit_logs (id,actor_user_id,action,category,level,target_type,target_id,metadata,created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+			)
+			.bind(
+				auditId,
+				owner.id,
+				"send.backup_test",
+				"system",
+				"info",
+				"send",
+				fileSendId,
+				JSON.stringify({ status: "test" }),
+				timestamp,
+			)
+			.run();
+		await testDatabase
+			.prepare(
+				"INSERT INTO device_trust_tokens (token,user_id,device_identifier,expires_at) VALUES (?,?,?,?)",
+			)
+			.bind(deviceTrustToken, owner.id, "backup-test-device", timestamp + 3600)
+			.run();
 		const blobStore = createBlobStore(bindings);
 		assert.ok(blobStore);
 		const { db } = await createDatabase(testDatabase);
@@ -306,8 +330,14 @@ describe("Edgewarden API", () => {
 			false,
 		);
 		const parsedArchive = parseBackupArchive(archive.bytes);
-		assert.equal(parsedArchive.payload.manifest.formatVersion, 2);
+		assert.equal(parsedArchive.payload.manifest.formatVersion, 3);
 		assert.ok((parsedArchive.payload.manifest.blobSummary.sendFiles || 0) >= 1);
+		assert.ok(
+			(parsedArchive.payload.db.audit_logs || []).some(
+				(row) => row.id === auditId && row.actor_user_id === owner.id,
+			),
+		);
+		assert.deepEqual(parsedArchive.payload.db.device_trust_tokens, []);
 		assert.deepEqual(
 			parsedArchive.files[`sends/${fileSendId}/${sendFileId}`],
 			sendFileBytes,
@@ -378,6 +408,12 @@ describe("Edgewarden API", () => {
 			originalSendStorageKey,
 		);
 		assert.deepEqual(r2Values.get(originalSendStorageKey), sendFileBytes);
+		assert.ok(
+			await testDatabase
+				.prepare("SELECT 1 FROM device_trust_tokens WHERE token = ?")
+				.bind(deviceTrustToken)
+				.first(),
+		);
 
 		const r2 = bindings.ATTACHMENTS_R2 as R2Bucket;
 		const originalDelete = r2.delete.bind(r2);
@@ -406,6 +442,8 @@ describe("Edgewarden API", () => {
 		}
 		assert.equal(restored.result.imported.attachments, 1);
 		assert.equal(restored.result.imported.sendFiles, 1);
+		assert.ok(restored.result.imported.auditLogs >= 1);
+		assert.equal(restored.result.imported.deviceTrustTokens, 0);
 		const restoredStorageKey = await testDatabase
 			.prepare("SELECT storage_key FROM attachments WHERE id = ?")
 			.bind(attachmentId)
@@ -453,6 +491,21 @@ describe("Edgewarden API", () => {
 		}
 		assert.equal(r2Values.has(originalStorageKey), false);
 		assert.equal(r2Values.has(originalSendStorageKey), false);
+		assert.ok(
+			await testDatabase
+				.prepare(
+					"SELECT 1 FROM audit_logs WHERE id = ? AND actor_user_id = ? AND target_id = ?",
+				)
+				.bind(auditId, owner.id, fileSendId)
+				.first(),
+		);
+		assert.equal(
+			await testDatabase
+				.prepare("SELECT 1 FROM device_trust_tokens WHERE token = ?")
+				.bind(deviceTrustToken)
+				.first(),
+			null,
+		);
 		assert.equal(
 			(
 				await request("/api/accounts/profile", {
