@@ -262,6 +262,7 @@ export const sync = factory.createHandlers(async (c) => {
 						(access) => access?.hide_passwords === 1,
 					),
 				},
+				"cipher",
 			);
 		}),
 		domains,
