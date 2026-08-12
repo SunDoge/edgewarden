@@ -83,6 +83,7 @@ export interface Ciphers {
 	folder_id: string | null;
 	id: string;
 	key: string | null;
+	mutation_token: string | null;
 	name: string;
 	notes: string | null;
 	org_id: string | null;
