@@ -41,7 +41,7 @@ export async function publishSendFileObject(
 				INSERT INTO user_revisions (user_id, revision_date)
 				SELECT user_id, ? FROM sends WHERE id = ? AND storage_key = ?
 				ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
-					user_revisions.revision_date,
+					user_revisions.revision_date + 1,
 					excluded.revision_date
 				)
 			`)

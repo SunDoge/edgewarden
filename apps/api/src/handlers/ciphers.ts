@@ -246,7 +246,10 @@ export const updateCipher = factory.createHandlers(
 						WHERE id = ${cipher.id} AND updated_at = ${ts}
 					)
 					ON CONFLICT (user_id) DO UPDATE
-					SET revision_date = excluded.revision_date
+					SET revision_date = MAX(
+						user_revisions.revision_date + 1,
+						excluded.revision_date
+					)
 				`.compile(db),
 			),
 		];

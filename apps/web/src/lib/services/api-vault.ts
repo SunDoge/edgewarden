@@ -5,7 +5,7 @@ import type {
 	SyncResponse,
 } from "@edgewarden/shared";
 import type { InferRequestType } from "hono/client";
-import { ApiError, rpc, rpcJson, rpcVoid } from "./rpc";
+import { ApiError, rpc, rpcJson } from "./rpc";
 
 type CreateCipherPayload = InferRequestType<
 	typeof rpc.api.ciphers.$post
@@ -16,7 +16,7 @@ type UpdateCipherPayload = InferRequestType<
 
 export async function syncVault(): Promise<SyncResponse> {
 	const response = await rpc.api.sync.$get();
-	return rpcJson(response) as Promise<SyncResponse>;
+	return rpcJson(response as unknown as { json(): Promise<SyncResponse> });
 }
 
 export async function fetchRevisionDateApi(): Promise<number> {
