@@ -13,7 +13,7 @@ Build command:  pnpm build
 Deploy command: pnpm deploy
 ```
 
-Cloudflare automatically provisions and binds the required D1 database and R2 bucket. The deploy command applies every pending D1 migration through the `DB` binding before publishing the Worker.
+Cloudflare automatically provisions and binds the required D1 database and R2 bucket. On the first deployment, the deploy command bootstraps missing auto-provisioned resources, applies every pending D1 migration through the `DB` binding, and publishes the Worker again. Later deployments retain the safer migration-before-publish order.
 
 Configure these required secrets in the deployment form:
 
