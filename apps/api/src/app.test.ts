@@ -268,6 +268,10 @@ describe("Edgewarden API", () => {
 		const originalSendStorageKey = `sends/${fileSendId}/${sendFileId}`;
 		const sendFileBytes = new Uint8Array([255, 128, 23, 7, 0]);
 		const auditId = crypto.randomUUID();
+		const postBackupAuditId = crypto.randomUUID();
+		const postBackupOrdinaryAuditId = crypto.randomUUID();
+		const postBackupTargetId = crypto.randomUUID();
+		const postBackupActorId = crypto.randomUUID();
 		const deviceTrustToken = `backup-must-not-export-${crypto.randomUUID()}`;
 		const timestamp = Math.floor(Date.now() / 1000);
 		await testDatabase
@@ -418,6 +422,62 @@ describe("Edgewarden API", () => {
 				.formatVersion,
 			1,
 		);
+		await testDatabase
+			.prepare(
+				"INSERT INTO users (id,email,master_password_hash,key,kdf_type,kdf_iterations,security_stamp,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+			)
+			.bind(
+				postBackupActorId,
+				`post-backup-${postBackupActorId}@example.com`,
+				"post-backup-master-password-hash",
+				"post-backup-encrypted-key",
+				0,
+				600_000,
+				crypto.randomUUID(),
+				timestamp + 1,
+				timestamp + 1,
+			)
+			.run();
+		await testDatabase
+			.prepare(
+				"INSERT INTO audit_logs (id,actor_user_id,action,category,level,target_type,target_id,metadata,is_tombstone,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+			)
+			.bind(
+				postBackupAuditId,
+				postBackupActorId,
+				"cipher.delete.permanent",
+				"vault",
+				"warning",
+				"cipher",
+				postBackupTargetId,
+				JSON.stringify({ status: "deleted-after-backup" }),
+				1,
+				timestamp + 1,
+			)
+			.run();
+		await testDatabase
+			.prepare(
+				"INSERT INTO audit_logs (id,actor_user_id,action,category,level,target_type,target_id,metadata,is_tombstone,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+			)
+			.bind(
+				postBackupOrdinaryAuditId,
+				owner.id,
+				"vault.read",
+				"vault",
+				"info",
+				"cipher",
+				postBackupTargetId,
+				"{}",
+				0,
+				timestamp + 1,
+			)
+			.run();
+		assert.equal(
+			(parsedArchive.payload.db.audit_logs || []).some(
+				(row) => row.id === postBackupAuditId,
+			),
+			false,
+		);
 
 		const originalObjectKeys = new Set(r2Values.keys());
 		await testDatabase
@@ -471,7 +531,20 @@ describe("Edgewarden API", () => {
 				.bind(deviceTrustToken)
 				.first(),
 		);
-
+		assert.ok(
+			await testDatabase
+				.prepare("SELECT 1 FROM audit_logs WHERE id = ?")
+				.bind(postBackupOrdinaryAuditId)
+				.first(),
+		);
+		assert.ok(
+			await testDatabase
+				.prepare(
+					"SELECT 1 FROM audit_logs WHERE id = ? AND actor_user_id = ? AND target_id = ? AND is_tombstone = 1",
+				)
+				.bind(postBackupAuditId, postBackupActorId, postBackupTargetId)
+				.first(),
+		);
 		const r2 = bindings.ATTACHMENTS_R2 as R2Bucket;
 		const originalDelete = r2.delete.bind(r2);
 		r2.delete = async (key: string | string[]) => {
@@ -569,6 +642,21 @@ describe("Edgewarden API", () => {
 				)
 				.bind(auditId, owner.id, fileSendId)
 				.first(),
+		);
+		assert.ok(
+			await testDatabase
+				.prepare(
+					"SELECT 1 FROM audit_logs WHERE id = ? AND actor_user_id IS NULL AND target_id = ? AND is_tombstone = 1",
+				)
+				.bind(postBackupAuditId, postBackupTargetId)
+				.first(),
+		);
+		assert.equal(
+			await testDatabase
+				.prepare("SELECT 1 FROM audit_logs WHERE id = ?")
+				.bind(postBackupOrdinaryAuditId)
+				.first(),
+			null,
 		);
 		assert.equal(
 			await testDatabase
