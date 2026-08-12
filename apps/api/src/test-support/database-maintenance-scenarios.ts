@@ -21,6 +21,8 @@ import {
 	attachmentRevisionQuery,
 	collectionRevisionQuery,
 	conditionalUserRevisionQuery,
+	deletedAttachmentCipherUpdateQuery,
+	deletedAttachmentRevisionQuery,
 	executeBatch,
 	organizationMemberRevisionQuery,
 	organizationRevisionQuery,
@@ -276,6 +278,103 @@ export function registerDatabaseMaintenanceScenarios(
 					.then((row) => row.storage_key),
 				keys[0],
 			);
+			assert.equal(
+				await db
+					.selectFrom("user_revisions")
+					.select("revision_date")
+					.where("user_id", "=", cipher.user_id)
+					.executeTakeFirstOrThrow()
+					.then((row) => row.revision_date),
+				revisionAfterFirst,
+			);
+		} finally {
+			await db
+				.deleteFrom("attachments")
+				.where("id", "=", attachmentId)
+				.execute();
+			await db
+				.updateTable("ciphers")
+				.set({ updated_at: cipher.updated_at })
+				.where("id", "=", cipher.id)
+				.execute();
+			await db
+				.updateTable("user_revisions")
+				.set({ revision_date: revision.revision_date })
+				.where("user_id", "=", cipher.user_id)
+				.execute();
+			await db.destroy();
+		}
+	});
+
+	test("tombstones an attachment only once", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const cipher = await db
+			.selectFrom("ciphers as cipher")
+			.innerJoin("users as user", "user.id", "cipher.user_id")
+			.select(["cipher.id", "cipher.updated_at", "user.id as user_id"])
+			.where("user.email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const revision = await db
+			.selectFrom("user_revisions")
+			.select("revision_date")
+			.where("user_id", "=", cipher.user_id)
+			.executeTakeFirstOrThrow();
+		const attachmentId = crypto.randomUUID();
+		const timestamp = Math.max(
+			Math.floor(Date.now() / 1000),
+			cipher.updated_at + 1,
+		);
+		let revisionAfterFirst = revision.revision_date;
+		try {
+			await db
+				.insertInto("attachments")
+				.values({
+					id: attachmentId,
+					cipher_id: cipher.id,
+					file_name: "encrypted-name",
+					size: 4,
+					size_name: "4 Bytes",
+					key: "encrypted-key",
+					storage_key: `attachments/${cipher.id}/${attachmentId}.bin`,
+					created_at: timestamp,
+				})
+				.execute();
+			const affected: bigint[] = [];
+			for (let attempt = 0; attempt < 2; attempt += 1) {
+				const deletionToken = crypto.randomUUID();
+				const [deleted] = await dialect.batch([
+					db
+						.updateTable("attachments")
+						.set({ deleted_at: timestamp, deletion_token: deletionToken })
+						.where("id", "=", attachmentId)
+						.where("cipher_id", "=", cipher.id)
+						.where("deleted_at", "is", null)
+						.compile(),
+					deletedAttachmentCipherUpdateQuery(
+						db,
+						cipher.id,
+						attachmentId,
+						deletionToken,
+						timestamp,
+					),
+					deletedAttachmentRevisionQuery(
+						db,
+						attachmentId,
+						deletionToken,
+						timestamp,
+					),
+				]);
+				affected.push(deleted.numAffectedRows ?? 0n);
+				if (attempt === 0)
+					revisionAfterFirst = await db
+						.selectFrom("user_revisions")
+						.select("revision_date")
+						.where("user_id", "=", cipher.user_id)
+						.executeTakeFirstOrThrow()
+						.then((row) => row.revision_date);
+			}
+			assert.deepEqual(affected, [1n, 0n]);
+			assert.ok(revisionAfterFirst > revision.revision_date);
 			assert.equal(
 				await db
 					.selectFrom("user_revisions")
