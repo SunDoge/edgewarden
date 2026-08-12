@@ -15,7 +15,7 @@ export async function getCiphersByUserId(
 		.execute();
 }
 
-export async function getDeletedCiphersByUserId(
+export async function getAllCiphersByUserId(
 	db: Kysely<DB>,
 	userId: string,
 ): Promise<Selectable<Ciphers>[]> {
@@ -23,7 +23,6 @@ export async function getDeletedCiphersByUserId(
 		.selectFrom("ciphers")
 		.selectAll()
 		.where("user_id", "=", userId)
-		.where("deleted_at", "is not", null)
 		.execute();
 }
 
