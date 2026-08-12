@@ -16,6 +16,7 @@ import {
 import * as ciphersDb from "../services/db/ciphers";
 import * as attachmentsDb from "../services/db/attachments";
 import * as foldersDb from "../services/db/folders";
+import { textColumnInJson } from "../services/db/json-array";
 import {
 	deleteBlobObject,
 	getAttachmentObjectKey,
@@ -114,7 +115,7 @@ async function getCipherPermissions(
 				.selectFrom("collection_members")
 				.select(["read_only", "hide_passwords"])
 				.where("org_member_id", "=", member.id)
-				.where("collection_id", "in", collectionIds)
+				.where(textColumnInJson("collection_id", collectionIds))
 				.execute()
 		: [];
 	return {
@@ -166,7 +167,7 @@ async function validateOrganizationCollections(
 		.selectFrom("collections")
 		.select("id")
 		.where("org_id", "=", organizationId)
-		.where("id", "in", uniqueIds)
+		.where(textColumnInJson("id", uniqueIds))
 		.execute();
 	if (collections.length !== uniqueIds.length)
 		return { error: "Collection not found" } as const;
@@ -176,7 +177,7 @@ async function validateOrganizationCollections(
 			.selectFrom("collection_members")
 			.select("collection_id")
 			.where("org_member_id", "=", member.id)
-			.where("collection_id", "in", uniqueIds)
+			.where(textColumnInJson("collection_id", uniqueIds))
 			.where("read_only", "=", 0)
 			.execute();
 		if (writable.length !== uniqueIds.length)
@@ -701,7 +702,7 @@ export const deleteCiphers = factory.createHandlers(
 					purge_after: ts + LIMITS.cipher.trashRetentionSeconds,
 					updated_at: ts,
 				})
-				.where("id", "in", ids)
+				.where(textColumnInJson("id", ids))
 				.where("user_id", "=", user.id)
 				.compile(),
 			revisionQuery(db, user.id, ts),
@@ -723,7 +724,7 @@ export const moveCiphers = factory.createHandlers(
 			db
 				.updateTable("ciphers")
 				.set({ folder_id: folderId, updated_at: ts })
-				.where("id", "in", ids)
+				.where(textColumnInJson("id", ids))
 				.where("user_id", "=", userId)
 				.compile(),
 			revisionQuery(db, userId, ts),
@@ -743,7 +744,7 @@ export const hardDeleteCiphers = factory.createHandlers(
 			await db
 				.selectFrom("ciphers")
 				.select("id")
-				.where("id", "in", ids)
+				.where(textColumnInJson("id", ids))
 				.where("user_id", "=", user.id)
 				.execute()
 		).map((cipher) => cipher.id);
@@ -751,7 +752,7 @@ export const hardDeleteCiphers = factory.createHandlers(
 		await executeBatch(c.get("dbDialect"), [
 			db
 				.deleteFrom("ciphers")
-				.where("id", "in", ids)
+				.where(textColumnInJson("id", ids))
 				.where("user_id", "=", user.id)
 				.compile(),
 			revisionQuery(db, user.id),
@@ -772,7 +773,7 @@ export const archiveCiphers = factory.createHandlers(
 			db
 				.updateTable("ciphers")
 				.set({ archived_at: ts, updated_at: ts })
-				.where("id", "in", ids)
+				.where(textColumnInJson("id", ids))
 				.where("user_id", "=", user.id)
 				.where("deleted_at", "is", null)
 				.compile(),
@@ -793,7 +794,7 @@ export const unarchiveCiphers = factory.createHandlers(
 			db
 				.updateTable("ciphers")
 				.set({ archived_at: null, updated_at: ts })
-				.where("id", "in", ids)
+				.where(textColumnInJson("id", ids))
 				.where("user_id", "=", user.id)
 				.compile(),
 			revisionQuery(db, user.id, ts),
@@ -814,7 +815,7 @@ export const restoreCiphers = factory.createHandlers(
 			db
 				.updateTable("ciphers")
 				.set({ deleted_at: null, purge_after: null, updated_at: ts })
-				.where("id", "in", ids)
+				.where(textColumnInJson("id", ids))
 				.where("user_id", "=", user.id)
 				.compile(),
 			revisionQuery(db, user.id, ts),

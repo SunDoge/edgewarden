@@ -6,6 +6,7 @@ import * as devicesDb from "../services/db/devices";
 import * as foldersDb from "../services/db/folders";
 import * as sendsDb from "../services/db/sends";
 import * as webauthnDb from "../services/db/webauthn";
+import { textColumnInJson } from "../services/db/json-array";
 import { errorResponse } from "../utils/response";
 
 export const requireFolder = createMiddleware<HonoEnv>(async (c, next) => {
@@ -107,9 +108,10 @@ export const requireCipherWrite = createMiddleware<HonoEnv>(async (c, next) => {
 		.select("collection_id")
 		.where("org_member_id", "=", member.id)
 		.where(
-			"collection_id",
-			"in",
-			links.map((link) => link.collection_id),
+			textColumnInJson(
+				"collection_id",
+				links.map((link) => link.collection_id),
+			),
 		)
 		.where("read_only", "=", 0)
 		.execute();

@@ -6,6 +6,7 @@ import { BulkIdsSchema } from "../schemas/ciphers";
 import { executeBatch, revisionQuery } from "../services/db/batch";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import * as foldersDb from "../services/db/folders";
+import { textColumnInJson } from "../services/db/json-array";
 import type { Folders } from "../types/db";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
@@ -112,7 +113,7 @@ export const deleteFolders = factory.createHandlers(
 				.selectFrom("folders")
 				.select("id")
 				.where("user_id", "=", userId)
-				.where("id", "in", ids)
+				.where(textColumnInJson("id", ids))
 				.execute()
 		).map((folder) => folder.id);
 		if (!ownedIds.length) return new Response(null, { status: 204 });
@@ -122,12 +123,12 @@ export const deleteFolders = factory.createHandlers(
 				.updateTable("ciphers")
 				.set({ folder_id: null, updated_at: ts })
 				.where("user_id", "=", userId)
-				.where("folder_id", "in", ownedIds)
+				.where(textColumnInJson("folder_id", ownedIds))
 				.compile(),
 			db
 				.deleteFrom("folders")
 				.where("user_id", "=", userId)
-				.where("id", "in", ownedIds)
+				.where(textColumnInJson("id", ownedIds))
 				.compile(),
 			revisionQuery(db, userId, ts),
 		]);

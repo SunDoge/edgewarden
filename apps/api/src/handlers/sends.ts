@@ -19,6 +19,7 @@ import { executeBatch, revisionQuery } from "../services/db/batch";
 import * as revisionsDb from "../services/db/revisions";
 import * as sendsDb from "../services/db/sends";
 import * as usersDb from "../services/db/users";
+import { textColumnInJson } from "../services/db/json-array";
 import {
 	buildDirectUploadUrl,
 	parseDirectUploadPayload,
@@ -558,7 +559,7 @@ export const deleteSends = factory.createHandlers(
 		await executeBatch(c.get("dbDialect"), [
 			db
 				.deleteFrom("sends")
-				.where("id", "in", ids)
+				.where(textColumnInJson("id", ids))
 				.where("user_id", "=", user.id)
 				.compile(),
 			revisionQuery(db, user.id),

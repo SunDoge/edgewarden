@@ -840,6 +840,15 @@ describe("Edgewarden API", () => {
 					.length,
 				cipherIds.length,
 			);
+			const bulkResponse = await request("/api/ciphers/archive", {
+				method: "POST",
+				headers: {
+					authorization: `Bearer ${accessToken}`,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ ids: cipherIds }),
+			});
+			assert.equal(bulkResponse.status, 200, await bulkResponse.clone().text());
 		} finally {
 			await testDatabase
 				.prepare("DELETE FROM ciphers WHERE id LIKE 'large-sync-%'")
