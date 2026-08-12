@@ -37,7 +37,6 @@ import VaultSidebar from "$lib/components/vault/VaultSidebar.svelte";
 import {
 	archiveCipherApi,
 	archiveCiphersApi,
-	createAttachmentApi,
 	createCipherApi,
 	createFolderApi,
 	deleteAttachmentApi,
@@ -45,7 +44,6 @@ import {
 	deleteCiphersApi,
 	deleteFolderApi,
 	deleteFoldersApi,
-	downloadAttachmentApi,
 	hardDeleteCipherApi,
 	hardDeleteCiphersApi,
 	isLoggedIn,
@@ -55,14 +53,11 @@ import {
 	unarchiveCiphersApi,
 	updateCipherApi,
 	updateFolderApi,
-	uploadAttachmentApi,
 } from "$lib/services/api";
 import {
-	type AttachmentKeys,
-	decryptAttachmentFile,
-	prepareAttachment,
-	safeAttachmentFileName,
-} from "$lib/services/attachment-crypto";
+	downloadVaultAttachment,
+	uploadVaultAttachment,
+} from "$lib/services/vault-attachments";
 import { encryptCipher } from "$lib/services/cipher-crypto";
 import { buildCipherPayload } from "$lib/services/cipher-draft";
 import { calcTotpNow, encryptStr } from "$lib/services/crypto";
@@ -282,26 +277,10 @@ async function handleAttachmentUpload(event: Event) {
 		return;
 	}
 	attachmentBusy = "upload";
-	let createdId: string | null = null;
 	try {
-		const prepared = await prepareAttachment(
-			cipher,
-			file,
-			ownerKey.encKey,
-			ownerKey.macKey,
-		);
-		const created = await createAttachmentApi(cipher.id, prepared.metadata);
-		createdId = created.attachmentId;
-		await uploadAttachmentApi(created.url, prepared.encryptedData);
+		await uploadVaultAttachment(cipher, file, ownerKey);
 		await refreshSelectedItem(cipher.id);
 	} catch (error) {
-		if (createdId) {
-			try {
-				await deleteAttachmentApi(cipher.id, createdId);
-			} catch {
-				/* best-effort metadata cleanup */
-			}
-		}
 		alert(
 			`附件上传失败：${error instanceof Error ? error.message : String(error)}`,
 		);
@@ -314,22 +293,18 @@ async function handleAttachmentDownload(attachment: any) {
 	if (!selectedItem || !attachment?._keys) return;
 	attachmentBusy = attachment.id;
 	try {
-		const encrypted = await downloadAttachmentApi(
+		const downloaded = await downloadVaultAttachment(
 			selectedItem.id,
-			attachment.id,
+			attachment,
 		);
-		const plain = await decryptAttachmentFile(
-			encrypted,
-			attachment._keys as AttachmentKeys,
-		);
-		const bytes = plain.buffer.slice(
-			plain.byteOffset,
-			plain.byteOffset + plain.byteLength,
+		const bytes = downloaded.bytes.buffer.slice(
+			downloaded.bytes.byteOffset,
+			downloaded.bytes.byteOffset + downloaded.bytes.byteLength,
 		) as ArrayBuffer;
 		const url = URL.createObjectURL(new Blob([bytes]));
 		const anchor = document.createElement("a");
 		anchor.href = url;
-		anchor.download = safeAttachmentFileName(attachment.fileName);
+		anchor.download = downloaded.fileName;
 		anchor.click();
 		setTimeout(() => URL.revokeObjectURL(url), 0);
 	} catch (error) {
