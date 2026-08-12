@@ -265,19 +265,32 @@ export const updateCipher = factory.createHandlers(
 export const deleteCipher = factory.createHandlers(async (c) => {
 	const db = c.get("db");
 	const cipher = c.get("cipher");
-	const ts = now();
-	await executeBatch(c.get("dbDialect"), [
+	if (cipher.deleted_at !== null) return new Response(null, { status: 200 });
+	const deletionTimestamp = now();
+	const revisionTimestamp = Math.max(deletionTimestamp, cipher.updated_at + 1);
+	const mutationToken = crypto.randomUUID();
+	const [deleted] = await c.get("dbDialect").batch([
 		db
 			.updateTable("ciphers")
 			.set({
-				deleted_at: ts,
-				purge_after: ts + LIMITS.cipher.trashRetentionSeconds,
-				updated_at: ts,
+				deleted_at: deletionTimestamp,
+				purge_after: deletionTimestamp + LIMITS.cipher.trashRetentionSeconds,
+				updated_at: revisionTimestamp,
+				mutation_token: mutationToken,
 			})
 			.where("id", "=", cipher.id)
+			.where("deleted_at", "is", null)
+			.where(sql<boolean>`mutation_token IS ${cipher.mutation_token}`)
 			.compile(),
-		...(await revisionQueriesForCipher(db, cipher, ts)),
+		conditionalCipherRevisionQuery(
+			db,
+			cipher.id,
+			mutationToken,
+			revisionTimestamp,
+		),
 	]);
+	if (deleted.numAffectedRows !== 1n)
+		return errorResponse("Cipher changed during deletion", 409);
 	await safeWriteAuditEvent(db, {
 		actorUserId: c.get("user").id,
 		action: "cipher.delete",
@@ -373,19 +386,32 @@ export const archiveCipher = factory.createHandlers(async (c) => {
 	const cipher = c.get("cipher");
 	if (cipher.deleted_at)
 		return errorResponse("Cannot archive a deleted cipher", 400);
-	const ts = now();
-	await executeBatch(c.get("dbDialect"), [
-		db
-			.updateTable("ciphers")
-			.set({ archived_at: ts, updated_at: ts })
-			.where("id", "=", cipher.id)
-			.compile(),
-		...(await revisionQueriesForCipher(db, cipher, ts)),
-	]);
+	if (cipher.archived_at === null) {
+		const ts = Math.max(now(), cipher.updated_at + 1);
+		const mutationToken = crypto.randomUUID();
+		const [archived] = await c.get("dbDialect").batch([
+			db
+				.updateTable("ciphers")
+				.set({
+					archived_at: now(),
+					updated_at: ts,
+					mutation_token: mutationToken,
+				})
+				.where("id", "=", cipher.id)
+				.where("deleted_at", "is", null)
+				.where("archived_at", "is", null)
+				.where(sql<boolean>`mutation_token IS ${cipher.mutation_token}`)
+				.compile(),
+			conditionalCipherRevisionQuery(db, cipher.id, mutationToken, ts),
+		]);
+		if (archived.numAffectedRows !== 1n)
+			return errorResponse("Cipher changed during archive", 409);
+	}
 	const updated = await ciphersDb.getCipherById(db, cipher.id);
+	if (!updated) return errorResponse("Cipher changed after archive", 409);
 	return c.json(
 		cipherToResponse(
-			updated!,
+			updated,
 			await attachmentsDb.listByCipherIds(db, [cipher.id]),
 			await getCipherCollectionIds(db, cipher.id),
 		),
@@ -395,19 +421,34 @@ export const archiveCipher = factory.createHandlers(async (c) => {
 export const unarchiveCipher = factory.createHandlers(async (c) => {
 	const db = c.get("db");
 	const cipher = c.get("cipher");
-	const ts = now();
-	await executeBatch(c.get("dbDialect"), [
-		db
-			.updateTable("ciphers")
-			.set({ archived_at: null, updated_at: ts })
-			.where("id", "=", cipher.id)
-			.compile(),
-		...(await revisionQueriesForCipher(db, cipher, ts)),
-	]);
+	if (cipher.deleted_at)
+		return errorResponse("Cannot unarchive a deleted cipher", 400);
+	if (cipher.archived_at !== null) {
+		const ts = Math.max(now(), cipher.updated_at + 1);
+		const mutationToken = crypto.randomUUID();
+		const [unarchived] = await c.get("dbDialect").batch([
+			db
+				.updateTable("ciphers")
+				.set({
+					archived_at: null,
+					updated_at: ts,
+					mutation_token: mutationToken,
+				})
+				.where("id", "=", cipher.id)
+				.where("deleted_at", "is", null)
+				.where("archived_at", "is not", null)
+				.where(sql<boolean>`mutation_token IS ${cipher.mutation_token}`)
+				.compile(),
+			conditionalCipherRevisionQuery(db, cipher.id, mutationToken, ts),
+		]);
+		if (unarchived.numAffectedRows !== 1n)
+			return errorResponse("Cipher changed during unarchive", 409);
+	}
 	const updated = await ciphersDb.getCipherById(db, cipher.id);
+	if (!updated) return errorResponse("Cipher changed after unarchive", 409);
 	return c.json(
 		cipherToResponse(
-			updated!,
+			updated,
 			await attachmentsDb.listByCipherIds(db, [cipher.id]),
 			await getCipherCollectionIds(db, cipher.id),
 		),
