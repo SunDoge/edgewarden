@@ -35,10 +35,7 @@ function sessionEligibility(
 	deviceSession: LoginDeviceSession | null,
 ) {
 	return sql<boolean>`
-		current_user.id = ${userId}
-		AND current_user.status = 'active'
-		AND current_user.deletion_requested_at IS NULL
-		AND current_user.security_stamp = ${expectedSecurityStamp}
+		${userEligibility(userId, expectedSecurityStamp)}
 		AND (
 		  (
 		    ${deviceSession?.identifier ?? null} IS NULL
@@ -53,6 +50,56 @@ function sessionEligibility(
 		  )
 		)
 	`;
+}
+
+function userEligibility(userId: string, expectedSecurityStamp: string) {
+	return sql<boolean>`
+		current_user.id = ${userId}
+		AND current_user.status = 'active'
+		AND current_user.deletion_requested_at IS NULL
+		AND current_user.security_stamp = ${expectedSecurityStamp}
+	`;
+}
+
+export function loginDeviceUpsertQuery(
+	db: Kysely<DB>,
+	args: {
+		userId: string;
+		expectedSecurityStamp: string;
+		device: LoginDeviceInfo;
+		deviceSession: LoginDeviceSession;
+		sessionTime: number;
+		authRequest?: AuthRequestConsumption | null;
+	},
+) {
+	return sql`
+		INSERT INTO devices (
+			user_id, device_identifier, name, type, session_stamp,
+			created_at, updated_at
+		)
+		SELECT
+			current_user.id, ${args.device.identifier}, ${args.device.name},
+			${args.device.type}, ${args.deviceSession.sessionStamp},
+			${args.sessionTime}, ${args.sessionTime}
+		FROM users current_user
+		WHERE ${userEligibility(args.userId, args.expectedSecurityStamp)}
+		  AND ${
+				args.authRequest
+					? sql<boolean>`EXISTS (
+						SELECT 1 FROM auth_requests request
+						WHERE request.id = ${args.authRequest.id}
+						  AND request.user_id = ${args.userId}
+						  AND request.consumption_token = ${args.authRequest.token}
+					)`
+					: sql<boolean>`TRUE`
+			}
+		ON CONFLICT(user_id, device_identifier) DO UPDATE SET
+			name = excluded.name,
+			type = excluded.type,
+			session_stamp = COALESCE(devices.session_stamp, excluded.session_stamp),
+			last_seen_at = excluded.updated_at,
+			updated_at = excluded.updated_at
+	`.compile(db);
 }
 
 export function identitySessionInsertQuery(
@@ -142,35 +189,31 @@ export function authRequestConsumptionClaimQuery(
 	`.compile(db);
 }
 
-async function registerLoginDevice(
+async function prepareLoginDevice(
 	db: Kysely<DB>,
 	userId: string,
 	device: LoginDeviceInfo,
 ): Promise<LoginDeviceSession | null> {
 	if (!device.identifier) return null;
-	const sessionStamp = crypto.randomUUID();
-	await devicesDb.upsertDevice(
-		db,
-		userId,
-		device.identifier,
-		device.name,
-		device.type,
-		sessionStamp,
-	);
 	const stored = await devicesDb.getDevice(db, userId, device.identifier);
-	if (!stored?.session_stamp) throw new Error("Login device was not persisted");
-	return { identifier: device.identifier, sessionStamp: stored.session_stamp };
+	return {
+		identifier: device.identifier,
+		sessionStamp: stored?.session_stamp ?? crypto.randomUUID(),
+	};
 }
 
-export async function issueIdentitySession(args: {
-	db: Kysely<DB>;
-	dialect: D1Dialect;
-	user: Selectable<Users>;
-	device: LoginDeviceInfo;
-	jwtSecret: string;
-	authRequest?: AuthRequestConsumption | null;
-}): Promise<IssuedIdentitySession | null> {
-	const deviceSession = await registerLoginDevice(
+export async function issueIdentitySession(
+	args: {
+		db: Kysely<DB>;
+		dialect: D1Dialect;
+		user: Selectable<Users>;
+		device: LoginDeviceInfo;
+		jwtSecret: string;
+		authRequest?: AuthRequestConsumption | null;
+	},
+	deviceConflictRetries = 1,
+): Promise<IssuedIdentitySession | null> {
+	const deviceSession = await prepareLoginDevice(
 		args.db,
 		args.user.id,
 		args.device,
@@ -185,7 +228,7 @@ export async function issueIdentitySession(args: {
 	const refreshTokenHash = await hashRefreshToken(refreshToken);
 	if (args.authRequest) {
 		const consumption = args.authRequest;
-		const [consumed, inserted] = await args.dialect.batch([
+		const queries = [
 			authRequestConsumptionClaimQuery(args.db, {
 				request: consumption,
 				userId: args.user.id,
@@ -193,6 +236,18 @@ export async function issueIdentitySession(args: {
 				deviceSession,
 				timestamp: sessionTime,
 			}),
+			...(deviceSession
+				? [
+						loginDeviceUpsertQuery(args.db, {
+							userId: args.user.id,
+							expectedSecurityStamp: args.user.security_stamp,
+							device: args.device,
+							deviceSession,
+							sessionTime,
+							authRequest: consumption,
+						}),
+					]
+				: []),
 			identitySessionInsertQuery(args.db, {
 				refreshTokenHash,
 				userId: args.user.id,
@@ -207,11 +262,29 @@ export async function issueIdentitySession(args: {
 				refreshTokenHash,
 				sessionTime,
 			),
-		]);
+		];
+		const results = await args.dialect.batch(queries);
+		const consumed = results[0];
+		const inserted = results[deviceSession ? 2 : 1];
 		if (consumed.numAffectedRows !== 1n || inserted.numAffectedRows !== 1n)
-			return null;
+			return retryAfterDeviceConflict(
+				args,
+				deviceSession,
+				deviceConflictRetries,
+			);
 	} else {
-		const [inserted] = await args.dialect.batch([
+		const queries = [
+			...(deviceSession
+				? [
+						loginDeviceUpsertQuery(args.db, {
+							userId: args.user.id,
+							expectedSecurityStamp: args.user.security_stamp,
+							device: args.device,
+							deviceSession,
+							sessionTime,
+						}),
+					]
+				: []),
 			identitySessionInsertQuery(args.db, {
 				refreshTokenHash,
 				userId: args.user.id,
@@ -225,8 +298,34 @@ export async function issueIdentitySession(args: {
 				refreshTokenHash,
 				sessionTime,
 			),
-		]);
-		if (inserted.numAffectedRows !== 1n) return null;
+		];
+		const results = await args.dialect.batch(queries);
+		const inserted = results[deviceSession ? 1 : 0];
+		if (inserted.numAffectedRows !== 1n)
+			return retryAfterDeviceConflict(
+				args,
+				deviceSession,
+				deviceConflictRetries,
+			);
 	}
 	return { accessToken, refreshToken, deviceSession };
+}
+
+async function retryAfterDeviceConflict(
+	args: Parameters<typeof issueIdentitySession>[0],
+	expectedDevice: LoginDeviceSession | null,
+	retriesRemaining: number,
+): Promise<IssuedIdentitySession | null> {
+	if (!expectedDevice || retriesRemaining < 1) return null;
+	const stored = await devicesDb.getDevice(
+		args.db,
+		args.user.id,
+		expectedDevice.identifier,
+	);
+	if (
+		!stored?.session_stamp ||
+		stored.session_stamp === expectedDevice.sessionStamp
+	)
+		return null;
+	return issueIdentitySession(args, retriesRemaining - 1);
 }
