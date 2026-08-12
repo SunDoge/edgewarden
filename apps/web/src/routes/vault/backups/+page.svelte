@@ -8,13 +8,13 @@ import {
 	Lock,
 	RefreshCw,
 	Save,
-	Server,
 	Settings2,
 	Trash2,
 } from "@lucide/svelte";
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
 import BackupDestinationList from "$lib/components/backup/BackupDestinationList.svelte";
+import BackupRuntimePanel from "$lib/components/backup/BackupRuntimePanel.svelte";
 import LocalBackupPanel from "$lib/components/backup/LocalBackupPanel.svelte";
 import RemoteBackupBrowser, {
 	type RemoteBackupItem,
@@ -37,7 +37,6 @@ import {
 	runBackupApi,
 	updateBackupSettingsApi,
 } from "$lib/services/api";
-import { formatFileSize } from "$lib/services/backup-display";
 import { vault } from "$lib/stores/vault.svelte";
 
 // UI State
@@ -688,69 +687,14 @@ function showSuccess(msg: string) {
 							</div>
 						</div>
 
-						<!-- Actions & Runtime State Card -->
-						<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-4">
-							<div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-								<div>
-									<h2 class="text-base font-bold text-slate-900 dark:text-slate-50">备份任务状态</h2>
-									<p class="text-xs text-slate-500">查看最后一次备份触发运行的结果和时间</p>
-								</div>
-								<Button size="sm" onclick={triggerBackup} disabled={running} class="gap-1.5 bg-primary hover:bg-primary/95 text-white">
-									{#if running}
-										<RefreshCw class="size-3.5 animate-spin" />
-										正在备份上传...
-									{:else}
-										<Server class="size-3.5" />
-										立即执行备份
-									{/if}
-								</Button>
-							</div>
-							<div class="flex items-center gap-2 text-xs"><Button variant="outline" size="sm" onclick={openParentDirectory} disabled={!currentRemotePath || browsing}>上一级</Button><code class="rounded bg-muted px-2 py-1">/{currentRemotePath}</code></div>
-
-							<div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3.5 text-sm">
-								<div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/50">
-									<span class="text-slate-500">上次运行时间：</span>
-									<span class="font-medium text-slate-900 dark:text-slate-100">
-										{currentDest?.runtime.lastAttemptAt ? new Date(currentDest.runtime.lastAttemptAt).toLocaleString("zh-CN") : "从未运行"}
-									</span>
-								</div>
-								<div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/50">
-									<span class="text-slate-500">上次成功备份时间：</span>
-									<span class="font-medium text-slate-900 dark:text-slate-100 text-emerald-600 dark:text-emerald-400">
-										{currentDest?.runtime.lastSuccessAt ? new Date(currentDest.runtime.lastSuccessAt).toLocaleString("zh-CN") : "从未成功"}
-									</span>
-								</div>
-								<div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/50 md:col-span-2">
-									<span class="text-slate-500 font-medium">上次生成的文件名：</span>
-									<span class="font-mono text-xs text-slate-800 dark:text-slate-200">
-										{currentDest?.runtime.lastUploadedFileName || "--"}
-									</span>
-								</div>
-								<div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/50">
-									<span class="text-slate-500">备份文件大小：</span>
-									<span class="font-medium text-slate-900 dark:text-slate-100">
-									{formatFileSize(currentDest?.runtime.lastUploadedSizeBytes)}
-									</span>
-								</div>
-								<div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/50">
-									<span class="text-slate-500 font-medium">运行状态结果：</span>
-									{#if currentDest?.runtime.lastErrorAt}
-										<span class="text-red-500 text-xs font-semibold flex items-center gap-1 select-all">
-											<AlertCircle class="size-3.5 shrink-0" />
-											错误：{currentDest.runtime.lastErrorMessage}
-										</span>
-									{:else if currentDest?.runtime.lastSuccessAt}
-										<span class="text-emerald-500 text-xs font-semibold flex items-center gap-0.5">
-											<Check class="size-3.5" />
-											正常
-										</span>
-									{:else}
-										<span class="text-slate-400 text-xs font-medium">无状态信息</span>
-									{/if}
-								</div>
-							</div>
-						</div>
-
+						<BackupRuntimePanel
+							destination={currentDest}
+							currentPath={currentRemotePath}
+							{running}
+							{browsing}
+							onRun={triggerBackup}
+							onOpenParent={openParentDirectory}
+						/>
 						<RemoteBackupBrowser
 							items={remoteFiles}
 							{browsing}
