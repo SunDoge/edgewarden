@@ -13,6 +13,8 @@ import {
 } from "../services/blob-store";
 import * as attachmentsDb from "../services/db/attachments";
 import {
+	attachmentCipherUpdateQuery,
+	attachmentRevisionQuery,
 	executeBatch,
 	organizationRevisionQuery,
 	revisionQuery,
@@ -194,13 +196,14 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
 				})
 				.onConflict((conflict) => conflict.column("id").doNothing())
 				.compile(),
-			c
-				.get("db")
-				.updateTable("ciphers")
-				.set({ updated_at: ts })
-				.where("id", "=", cipher.id)
-				.compile(),
-			...(await ownerRevisionQueries(c.get("db"), cipher, ts)),
+			attachmentCipherUpdateQuery(
+				c.get("db"),
+				cipher.id,
+				claims.attachmentId,
+				objectKey,
+				ts,
+			),
+			attachmentRevisionQuery(c.get("db"), claims.attachmentId, objectKey, ts),
 		]);
 	} catch (error) {
 		await discardUnpublishedBlob(c.env, objectKey).catch(() => undefined);
