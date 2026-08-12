@@ -8,6 +8,7 @@ import {
 	BACKUP_SETTINGS_CONFIG_KEY,
 	normalizeImportedBackupSettingsValue,
 } from "./config";
+import { DATA_OPERATION_LEASE_CONFIG_KEY } from "./operation-lease";
 import {
 	type BackupImportSkipSummary,
 	BLOB_STORAGE_UNAVAILABLE_SKIP_REASON,
@@ -88,13 +89,21 @@ export async function importPreparedBackupRows(
 	db: D1Database,
 	payload: BackupPayload["db"],
 	dataEncryptionSecret: string,
+	activeOperationLeaseValue: string | null = null,
 ): Promise<BackupPayload["db"]> {
+	const importedConfigRows = await prepareImportedConfigRows(
+		dataEncryptionSecret,
+		payload.config || [],
+		payload.users || [],
+	);
 	const preparedDb: BackupPayload["db"] = {
-		config: await prepareImportedConfigRows(
-			dataEncryptionSecret,
-			payload.config || [],
-			payload.users || [],
-		),
+		config: activeOperationLeaseValue
+			? upsertConfigRow(
+					importedConfigRows,
+					DATA_OPERATION_LEASE_CONFIG_KEY,
+					activeOperationLeaseValue,
+				)
+			: importedConfigRows,
 		users: cloneRows(payload.users || []).map((row) => ({
 			...row,
 			verify_devices: row.verify_devices ?? 1,

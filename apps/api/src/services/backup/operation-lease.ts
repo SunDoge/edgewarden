@@ -51,6 +51,22 @@ export async function releaseDataOperationLease(
 		.run();
 }
 
+export async function readActiveDataOperationLeaseValue(
+	db: D1Database,
+	timestamp = Math.floor(Date.now() / 1000),
+): Promise<string | null> {
+	const row = await db
+		.prepare(`
+			SELECT value FROM config
+			WHERE key = ?
+			  AND json_valid(value)
+			  AND COALESCE(json_extract(value, '$.expiresAt'), 0) > ?
+		`)
+		.bind(DATA_OPERATION_LEASE_CONFIG_KEY, timestamp)
+		.first<{ value: string }>();
+	return typeof row?.value === "string" ? row.value : null;
+}
+
 export async function withDataOperationLease<T>(
 	db: D1Database,
 	operation: string,
