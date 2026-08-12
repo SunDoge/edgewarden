@@ -341,6 +341,46 @@ export function conditionalTwoFactorPasskeyInsertQuery(
 	`.compile(db);
 }
 
+export function conditionalTwoFactorPasskeyDeletionClaimQuery(
+	db: Kysely<DB>,
+	userId: string,
+	credentialId: string,
+	expectedSecurityStamp: string,
+	securityStamp: string,
+	timestamp = now(),
+) {
+	return sql`
+		UPDATE users
+		SET security_stamp = ${securityStamp}, updated_at = ${timestamp}
+		WHERE id = ${userId}
+		  AND security_stamp = ${expectedSecurityStamp}
+		  AND EXISTS (
+		    SELECT 1 FROM webauthn_credentials
+		    WHERE id = ${credentialId}
+		      AND user_id = ${userId}
+		      AND purpose = 'twoFactor'
+		  )
+	`.compile(db);
+}
+
+export function conditionalTwoFactorPasskeyDeletionQuery(
+	db: Kysely<DB>,
+	userId: string,
+	credentialId: string,
+	securityStamp: string,
+) {
+	return sql`
+		DELETE FROM webauthn_credentials
+		WHERE id = ${credentialId}
+		  AND user_id = ${userId}
+		  AND purpose = 'twoFactor'
+		  AND EXISTS (
+		    SELECT 1 FROM users
+		    WHERE id = ${userId} AND security_stamp = ${securityStamp}
+		  )
+	`.compile(db);
+}
+
 export function conditionalRefreshTokenDeletionQuery(
 	db: Kysely<DB>,
 	userId: string,

@@ -196,15 +196,28 @@ export function registerAccountSecurityScenarios(
 			.first<{ revision_date: number }>();
 		assert.ok(revisionBeforeDelete);
 
-		const removed = await request("/api/two-factor/webauthn", {
-			method: "DELETE",
-			headers: { ...auth, "content-type": "application/json" },
-			body: JSON.stringify({
-				masterPasswordHash: MASTER_PASSWORD_HASH,
-				id: twoFactorId,
-			}),
-		});
-		assert.equal(removed.status, 200, await removed.clone().text());
+		const remove = () =>
+			request("/api/two-factor/webauthn", {
+				method: "DELETE",
+				headers: { ...auth, "content-type": "application/json" },
+				body: JSON.stringify({
+					masterPasswordHash: MASTER_PASSWORD_HASH,
+					id: twoFactorId,
+				}),
+			});
+		const removals = await Promise.all([remove(), remove()]);
+		assert.equal(
+			removals.filter((response) => response.status === 200).length,
+			1,
+		);
+		assert.equal(
+			removals.filter(
+				(response) => response.status === 409 || response.status === 401,
+			).length,
+			1,
+		);
+		const removed = removals.find((response) => response.status === 200);
+		assert.ok(removed);
 		assert.equal((await removed.json<{ enabled: boolean }>()).enabled, false);
 		const revisionAfterDelete = await context.database
 			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
@@ -223,6 +236,10 @@ export function registerAccountSecurityScenarios(
 				.first<{ count: number }>()
 				.then((row) => Number(row?.count)),
 			1,
+		);
+		assert.equal(
+			(await request("/api/webauthn", { headers: auth })).status,
+			401,
 		);
 	});
 
