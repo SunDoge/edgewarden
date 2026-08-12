@@ -11,7 +11,8 @@ import {
 	buildDomainsResponse,
 	normalizeCustomEquivalentDomains,
 } from "../services/domain-rules";
-import type { Attachments, Ciphers, Folders, Sends } from "../types/db";
+import { sendToResponse } from "../services/sends/presentation";
+import type { Attachments, Ciphers, Folders } from "../types/db";
 import { buildWebAuthnPrfOption } from "../utils/account-passkeys";
 import { toIso } from "../utils/time";
 import { buildUserDecryptionOptions } from "../utils/user-decryption";
@@ -68,28 +69,6 @@ function cipherToResponse(
 			? JSON.parse(cipher.password_history)
 			: null,
 		object: "cipherDetails",
-	};
-}
-
-function sendToResponse(send: Selectable<Sends>) {
-	return {
-		id: send.id,
-		type: send.type,
-		name: send.name,
-		notes: send.notes,
-		text: send.type === 0 ? JSON.parse(send.data) : null,
-		file: send.type === 1 ? JSON.parse(send.data) : null,
-		key: send.key,
-		maxAccessCount: send.max_access_count,
-		accessCount: send.access_count,
-		password: send.password_hash ? "true" : null,
-		authType: send.auth_type,
-		disabled: send.disabled === 1,
-		hideEmail: send.hide_email === 1,
-		revisionDate: toIso(send.updated_at),
-		expirationDate: send.expiration_date ? toIso(send.expiration_date) : null,
-		deletionDate: toIso(send.deletion_date),
-		object: "send",
 	};
 }
 
