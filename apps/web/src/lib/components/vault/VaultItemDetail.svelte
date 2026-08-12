@@ -7,7 +7,6 @@ import {
 	Copy,
 	Download,
 	Edit,
-	ExternalLink,
 	Eye,
 	EyeOff,
 	Folder,
@@ -18,6 +17,7 @@ import {
 	Upload,
 } from "@lucide/svelte";
 import { Button } from "$lib/components/ui/button/index.js";
+import LoginCipherDetail from "./LoginCipherDetail.svelte";
 import {
 	cipherDomain as getDomain,
 	cipherExtraData as getExtraData,
@@ -54,7 +54,6 @@ let {
 } = $props();
 
 let copiedField = $state<string | null>(null);
-let showPassword = $state(false);
 let showCardCode = $state(false);
 let hiddenFieldsMap = $state<Record<number, boolean>>({});
 let attachmentInput = $state<HTMLInputElement | null>(null);
@@ -62,7 +61,6 @@ let IconComp = $derived(getItemIcon(item.type));
 
 $effect(() => {
 	item.id;
-	showPassword = false;
 	showCardCode = false;
 	hiddenFieldsMap = {};
 });
@@ -143,99 +141,7 @@ function copyToClipboard(text: string, fieldName: string) {
 
 					<!-- Login -->
 					{#if item.type === CipherType.Login}
-						{@const login = item.login as Record<string, string>}
-						<div class="space-y-4">
-							{#if login?.username}
-								<div class="space-y-1.5">
-									<span class="text-xs font-semibold text-slate-400">用户名</span>
-									<div class="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-										<span class="text-sm font-medium truncate pr-2 select-all">{login.username}</span>
-										<Button variant="ghost" size="icon" class="size-8" onclick={() => copyToClipboard(login.username, "username")}>
-											{#if copiedField === "username"}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}
-										</Button>
-									</div>
-								</div>
-							{/if}
-							{#if login?.password}
-								<div class="space-y-1.5">
-									<span class="text-xs font-semibold text-slate-400">密码</span>
-									<div class="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-										<span class="text-sm font-mono truncate pr-2 select-all">
-										{#if showPassword && !item.hidePasswords}{login.password}{:else}••••••••••••{/if}
-										</span>
-										<div class="flex items-center gap-1 shrink-0">
-										{#if !item.hidePasswords}<Button variant="ghost" size="icon" class="size-8" onclick={() => showPassword = !showPassword}>
-												{#if showPassword}
-													<EyeOff class="size-4 text-slate-400" />
-												{:else}
-													<Eye class="size-4 text-slate-400" />
-												{/if}
-										</Button>
-										<Button variant="ghost" size="icon" class="size-8" onclick={() => copyToClipboard(login.password, "password")}>
-												{#if copiedField === "password"}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}
-											</Button>
-										{/if}
-										</div>
-									</div>
-								</div>
-							{/if}
-							<!-- TOTP -->
-							{#if login?.totp && !item.hidePasswords}
-								<div class="space-y-1.5">
-									<span class="text-xs font-semibold text-slate-400">单次有效密码 (TOTP)</span>
-									<div class="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-										{#if totp}
-											<div class="flex items-center gap-2">
-												<span class="text-sm font-mono font-bold tracking-wider text-primary select-all">
-													{totp.code.slice(0, 3)} {totp.code.slice(3)}
-												</span>
-												<span class="text-xs text-slate-400">({totp.remain}s)</span>
-											</div>
-											<Button variant="ghost" size="icon" class="size-8 shrink-0" onclick={() => copyToClipboard(totp?.code || "", "totp")}>
-												{#if copiedField === "totp"}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}
-											</Button>
-										{:else}
-											<span class="text-xs text-slate-400">正在计算...</span>
-										{/if}
-									</div>
-								</div>
-							{/if}
-
-							<!-- URIs -->
-							{#if login?.uris && Array.isArray(login.uris) && login.uris.length > 0}
-								<div class="space-y-2">
-									<span class="text-xs font-semibold text-slate-400">网页链接列表</span>
-									{#each login.uris as uriItem, idx}
-										{#if uriItem.uri}
-											<div class="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-												<a href={uriItem.uri} target="_blank" rel="noopener noreferrer"
-													class="text-sm text-primary font-medium hover:underline flex items-center gap-1 truncate pr-2">
-													{uriItem.uri}<ExternalLink class="size-3 shrink-0" />
-												</a>
-												<Button variant="ghost" size="icon" class="size-8 shrink-0" onclick={() => copyToClipboard(uriItem.uri, `uri-${idx}`)}>
-													{#if copiedField === `uri-${idx}`}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}
-												</Button>
-											</div>
-										{/if}
-									{/each}
-								</div>
-							{:else}
-								{#if login?.uri}
-									<div class="space-y-1.5">
-										<span class="text-xs font-semibold text-slate-400">网页链接</span>
-										<div class="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-											<a href={login.uri} target="_blank" rel="noopener noreferrer"
-												class="text-sm text-primary font-medium hover:underline flex items-center gap-1 truncate pr-2">
-												{login.uri}<ExternalLink class="size-3 shrink-0" />
-											</a>
-											<Button variant="ghost" size="icon" class="size-8 shrink-0" onclick={() => copyToClipboard(login.uri, "uri")}>
-												{#if copiedField === "uri"}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}
-											</Button>
-										</div>
-									</div>
-								{/if}
-							{/if}
-						</div>
+						{#key item.id}<LoginCipherDetail login={item.login} hidePasswords={item.hidePasswords} {totp} />{/key}
 					{/if}
 
 					<!-- Card -->
