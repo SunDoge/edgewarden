@@ -106,7 +106,9 @@ export async function importPreparedBackupRows(
 		org_members: cloneRows(payload.org_members || []),
 		collections: cloneRows(payload.collections || []),
 		collection_members: cloneRows(payload.collection_members || []),
-		device_trust_tokens: cloneRows(payload.device_trust_tokens || []),
+		// Device trust tokens are bearer credentials, not portable instance data.
+		device_trust_tokens: [],
+		audit_logs: cloneRows(payload.audit_logs || []),
 		webauthn_credentials: cloneRows(payload.webauthn_credentials || []),
 		folders: cloneRows(payload.folders || []),
 		ciphers: cloneRows(payload.ciphers || []).map((row) => ({

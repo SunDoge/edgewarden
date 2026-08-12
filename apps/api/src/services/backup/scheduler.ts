@@ -1,6 +1,7 @@
 import { D1Dialect } from "@sundoge/kysely-d1";
 import { Kysely, sql } from "kysely";
 import type { DB } from "../../types/db";
+import { safeWriteAuditEvent } from "../audit";
 import { createBlobStore } from "../blob-store";
 import {
 	buildBackupArchive,
@@ -98,6 +99,18 @@ export async function runScheduledBackupIfDue(
 				destination.runtime.lastUploadedSizeBytes = archive.bytes.byteLength;
 				destination.runtime.lastUploadedDestination = upload.remotePath;
 				await saveBackupSettings(db, dataEncryptionSecret, settings);
+				await safeWriteAuditEvent(db, {
+					actorUserId: null,
+					action: "backup.scheduled_uploaded",
+					category: "system",
+					targetType: "backup-destination",
+					targetId: destination.id,
+					metadata: {
+						fileName: archive.fileName,
+						status: "success",
+						type: destination.type,
+					},
+				});
 				result.succeeded += 1;
 			} catch (error: unknown) {
 				result.failed += 1;
@@ -109,6 +122,19 @@ export async function runScheduledBackupIfDue(
 				await saveBackupSettings(db, dataEncryptionSecret, settings).catch(
 					() => null,
 				);
+				await safeWriteAuditEvent(db, {
+					actorUserId: null,
+					action: "backup.scheduled_failed",
+					category: "system",
+					level: "error",
+					targetType: "backup-destination",
+					targetId: destination.id,
+					metadata: {
+						status: "failed",
+						type: destination.type,
+						error: destination.runtime.lastErrorMessage,
+					},
+				});
 				console.error(
 					JSON.stringify({
 						event: "backup.scheduled.failed",

@@ -19,6 +19,7 @@ export interface BackupImportResultBody {
 		attachments: number;
 		webauthnCredentials: number;
 		deviceTrustTokens: number;
+		auditLogs: number;
 		sends: number;
 		attachmentFiles: number;
 		sendFiles: number;
@@ -50,6 +51,7 @@ export type BackupRestoreProgressReporter = (
 export function ensureBackupCompatibilityFields(payload: BackupPayload) {
 	payload.db.sends ??= [];
 	payload.db.device_trust_tokens ??= [];
+	payload.db.audit_logs ??= [];
 	payload.db.webauthn_credentials ??= [];
 }
 
@@ -68,6 +70,7 @@ export function backupTableCounts(
 		collections: (db.collections || []).length,
 		collection_members: (db.collection_members || []).length,
 		device_trust_tokens: (db.device_trust_tokens || []).length,
+		audit_logs: (db.audit_logs || []).length,
 		webauthn_credentials: (db.webauthn_credentials || []).length,
 		folders: (db.folders || []).length,
 		ciphers: (db.ciphers || []).length,
@@ -108,6 +111,7 @@ export function buildImportExecutionResult(
 				attachments: restoredAttachmentCount,
 				webauthnCredentials: (db.webauthn_credentials || []).length,
 				deviceTrustTokens: (db.device_trust_tokens || []).length,
+				auditLogs: (db.audit_logs || []).length,
 				sends: restoredSendCount,
 				attachmentFiles: restoredAttachmentCount,
 				sendFiles: restoredSendFileCount,

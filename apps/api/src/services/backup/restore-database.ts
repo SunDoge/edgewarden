@@ -15,6 +15,7 @@ export type BackupTableName =
 	| "attachments"
 	| "webauthn_credentials"
 	| "device_trust_tokens"
+	| "audit_logs"
 	| "sends";
 
 const BACKUP_TABLES: BackupTableName[] = [
@@ -32,6 +33,7 @@ const BACKUP_TABLES: BackupTableName[] = [
 	"attachments",
 	"webauthn_credentials",
 	"device_trust_tokens",
+	"audit_logs",
 	"sends",
 ];
 
@@ -153,6 +155,7 @@ function buildResetImportTargetStatements(
 	db: D1Database,
 ): D1PreparedStatement[] {
 	return [
+		"DELETE FROM audit_logs",
 		"DELETE FROM sends",
 		"DELETE FROM attachments",
 		"DELETE FROM cipher_collections",

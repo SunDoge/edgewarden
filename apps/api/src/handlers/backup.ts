@@ -1,5 +1,6 @@
 import { vValidator } from "@hono/valibot-validator";
 import { factory } from "../http/factory";
+import { safeWriteAuditEvent } from "../services/audit";
 import {
 	BackupBlobQuerySchema,
 	BackupExportSchema,
@@ -49,6 +50,14 @@ export const exportBackup = factory.createHandlers(
 			const archive = await buildBackupArchive(c.get("db"), new Date(), {
 				includeAttachments: !!c.req.valid("json")?.includeAttachments,
 				blobStore: createBlobStore(c.env),
+			});
+			await safeWriteAuditEvent(c.get("db"), {
+				actorUserId: c.get("user").id,
+				action: "backup.exported",
+				category: "system",
+				targetType: "backup",
+				targetId: archive.fileName,
+				metadata: { fileName: archive.fileName, status: "success" },
 			});
 			return new Response(archive.bytes, {
 				status: 200,
@@ -191,6 +200,18 @@ export const runBackup = factory.createHandlers(
 			destination.runtime.lastUploadedSizeBytes = archive.bytes.byteLength;
 			destination.runtime.lastUploadedDestination = upload.remotePath;
 			await saveBackupSettings(db, secret, settings);
+			await safeWriteAuditEvent(db, {
+				actorUserId: c.get("user").id,
+				action: "backup.uploaded",
+				category: "system",
+				targetType: "backup-destination",
+				targetId: destination.id,
+				metadata: {
+					fileName: archive.fileName,
+					status: "success",
+					type: destination.type,
+				},
+			});
 			return c.json({
 				result: {
 					fileName: archive.fileName,
@@ -251,6 +272,15 @@ export const importBackup = factory.createHandlers(
 				undefined,
 				fileName || "edgewarden_backup.zip",
 			);
+			await safeWriteAuditEvent(c.get("db"), {
+				actorUserId: imported.auditActorUserId,
+				action: "backup.restored",
+				category: "system",
+				level: "warning",
+				targetType: "backup",
+				targetId: fileName || null,
+				metadata: { fileName: fileName || null, status: "success" },
+			});
 			return c.json(imported.result);
 		} catch (error: any) {
 			const message = error.message || "Backup import failed";
