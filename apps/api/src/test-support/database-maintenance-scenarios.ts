@@ -13,7 +13,7 @@ import {
 } from "../services/backup/operation-lease";
 import { drainBlobGcQueue } from "../services/blob-gc";
 import type { BlobStore } from "../services/blob-store";
-import { executeBatch } from "../services/db/batch";
+import { executeBatch, revisionQuery } from "../services/db/batch";
 import {
 	deleteConfigValue,
 	getConfigValue,
@@ -33,6 +33,33 @@ export function registerDatabaseMaintenanceScenarios(
 	context: DatabaseMaintenanceScenarioContext,
 ): void {
 	const EMAIL = context.email;
+	test("advances user revisions for multiple writes in the same second", async () => {
+		const { db, dialect } = await createDatabase(context.database);
+		const user = await db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const timestamp = Math.floor(Date.now() / 1000);
+		try {
+			await executeBatch(dialect, [revisionQuery(db, user.id, timestamp)]);
+			const first = await db
+				.selectFrom("user_revisions")
+				.select("revision_date")
+				.where("user_id", "=", user.id)
+				.executeTakeFirstOrThrow();
+			await executeBatch(dialect, [revisionQuery(db, user.id, timestamp)]);
+			const second = await db
+				.selectFrom("user_revisions")
+				.select("revision_date")
+				.where("user_id", "=", user.id)
+				.executeTakeFirstOrThrow();
+			assert.equal(second.revision_date, first.revision_date + 1);
+		} finally {
+			await db.destroy();
+		}
+	});
+
 	test("claims blob GC rows before deleting external objects", async () => {
 		const firstConnection = await createDatabase(context.database);
 		const secondConnection = await createDatabase(context.database);

@@ -1,5 +1,5 @@
 import type { D1Dialect } from "@sundoge/kysely-d1";
-import type { CompiledQuery, Kysely } from "kysely";
+import { type CompiledQuery, type Kysely, sql } from "kysely";
 import type { DB } from "../../types/db";
 import { now } from "../../utils/time";
 
@@ -12,7 +12,9 @@ export function revisionQuery(
 		.insertInto("user_revisions")
 		.values({ user_id: userId, revision_date: timestamp })
 		.onConflict((oc) =>
-			oc.column("user_id").doUpdateSet({ revision_date: timestamp }),
+			oc.column("user_id").doUpdateSet({
+				revision_date: sql<number>`MAX(user_revisions.revision_date + 1, excluded.revision_date)`,
+			}),
 		)
 		.compile();
 }

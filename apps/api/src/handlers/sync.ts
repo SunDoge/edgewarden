@@ -1,4 +1,6 @@
+import type { Context } from "hono";
 import { type Selectable, sql } from "kysely";
+import type { HonoEnv } from "../env";
 import { factory } from "../http/factory";
 import { cipherToResponse } from "../services/ciphers/presentation";
 import * as attachmentsDb from "../services/db/attachments";
@@ -6,7 +8,12 @@ import * as ciphersDb from "../services/db/ciphers";
 import * as domainSettingsDb from "../services/db/domain-settings";
 import * as foldersDb from "../services/db/folders";
 import { textColumnInJson } from "../services/db/json-array";
+import {
+	getRevisionValue,
+	readAtStableRevision,
+} from "../services/db/revisions";
 import * as sendsDb from "../services/db/sends";
+import * as usersDb from "../services/db/users";
 import * as webauthnDb from "../services/db/webauthn";
 import {
 	buildDomainsResponse,
@@ -28,10 +35,10 @@ function folderToResponse(folder: Selectable<Folders>) {
 	};
 }
 
-// GET /api/sync
-export const sync = factory.createHandlers(async (c) => {
-	const user = c.get("user");
+async function buildSyncPayload(c: Context<HonoEnv>) {
 	const db = c.get("db");
+	const userId = c.get("user").id;
+	const user = (await usersDb.getUserById(db, userId)) ?? c.get("user");
 
 	// Keep queries on the Kysely-D1 connection ordered. Promise.all does not make
 	// a single D1 session faster and can make adapters overlap session requests.
@@ -234,7 +241,7 @@ export const sync = factory.createHandlers(async (c) => {
 		excludedGlobalEquivalentDomains,
 	);
 
-	return c.json({
+	return {
 		profile,
 		folders: folders.map(folderToResponse),
 		collections: visibleCollections.map((collection) => {
@@ -288,5 +295,26 @@ export const sync = factory.createHandlers(async (c) => {
 		UserDecryptionOptions: userDecryptionOptions,
 		userDecryptionOptions,
 		object: "sync",
+	};
+}
+
+// GET /api/sync
+export const sync = factory.createHandlers(async (c) => {
+	const db = c.get("db");
+	const userId = c.get("user").id;
+	const payload = await readAtStableRevision({
+		readRevision: () => getRevisionValue(db, userId),
+		read: () => buildSyncPayload(c),
 	});
+	if (!payload) {
+		return c.json(
+			{
+				message: "Vault changed repeatedly while synchronizing; retry",
+				object: "error",
+			},
+			503,
+			{ "Retry-After": "1" },
+		);
+	}
+	return c.json(payload);
 });
