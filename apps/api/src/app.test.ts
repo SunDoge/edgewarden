@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { unzipSync } from "fflate";
-import { Miniflare } from "miniflare";
 import { afterAll as after, beforeAll as before, describe, test } from "vitest";
-import { app } from "./index";
 import { createDatabase } from "./middleware/db";
 import { invalidateUserCache } from "./services/auth";
 import { importBackupArchiveBytes } from "./services/backup/import";
@@ -16,6 +14,10 @@ import {
 import { executeBatch } from "./services/db/batch";
 import { runMaintenance } from "./services/maintenance";
 import { loadYubicoCredentials } from "./services/yubico-config";
+import {
+	type ApiTestHarness,
+	createApiTestHarness,
+} from "./test-support/api-harness";
 
 const JWT_SECRET = "test-secret-that-is-at-least-thirty-two-characters";
 const DATA_ENCRYPTION_SECRET =
@@ -25,7 +27,7 @@ const MASTER_PASSWORD_HASH = "client-side-master-password-hash";
 const MEMBER_EMAIL = "member-api-test@example.com";
 const ADMIN_PASSWORD = "test-bootstrap-admin-password";
 
-let miniflare: Miniflare;
+let harness: ApiTestHarness;
 let bindings: CloudflareBindings;
 let testDatabase: D1Database;
 let accessToken = "";
@@ -37,107 +39,29 @@ let memberAccessToken = "";
 let organizationBackup = new Uint8Array();
 let backedUpOrganizationId = "";
 let backedUpCollectionId = "";
-const r2Values = new Map<string, Uint8Array>();
+let r2Values: Map<string, Uint8Array>;
 
-async function request(
+function request(
 	path: string,
 	init: RequestInit = {},
-	executionCtx?: ExecutionContext,
+	executionContext?: ExecutionContext,
 ) {
-	return app.request(path, init, bindings, executionCtx);
+	return harness.request(path, init, executionContext);
 }
 
 before(async () => {
-	miniflare = new Miniflare({
-		workers: [
-			{
-				config: {
-					name: "edgewarden-test",
-					type: "worker",
-					compatibilityDate: "2026-08-04",
-					manifest: {
-						mainModule: "index.js",
-						modules: {
-							"index.js": {
-								type: "esm",
-								contents:
-									"export default { fetch() { return new Response('ok') } }",
-							},
-						},
-					},
-					env: {
-						DB: { type: "d1", name: "DB" },
-						ATTACHMENTS_KV: { type: "kv" },
-					},
-				},
-			},
-		],
+	harness = await createApiTestHarness({
+		adminPassword: ADMIN_PASSWORD,
+		jwtSecret: JWT_SECRET,
+		dataEncryptionSecret: DATA_ENCRYPTION_SECRET,
 	});
-	const db = await miniflare.getD1Database("DB");
-	testDatabase = db;
-	const migrationsDirectory = resolve(
-		dirname(fileURLToPath(import.meta.url)),
-		"../migrations",
-	);
-	const migrationStatements = readdirSync(migrationsDirectory)
-		.filter((file) => /^\d+.*\.sql$/.test(file))
-		.sort()
-		.map((file) => readFileSync(resolve(migrationsDirectory, file), "utf8"))
-		.join("\n")
-		.replace(/--.*$/gm, "")
-		.split(";")
-		.map((statement) => statement.trim())
-		.filter(
-			(statement) => statement && !statement.startsWith("PRAGMA foreign_keys"),
-		);
-	for (const [index, statement] of migrationStatements.entries()) {
-		try {
-			await db.prepare(statement).run();
-		} catch (error) {
-			throw new Error(`Migration statement ${index + 1} failed: ${statement}`, {
-				cause: error,
-			});
-		}
-	}
-	const rateLimiter = { limit: async () => ({ success: true }) };
-	bindings = {
-		DB: db,
-		ATTACHMENTS_KV: await miniflare.getKVNamespace("ATTACHMENTS_KV"),
-		ATTACHMENTS_R2: {
-			put: async (key: string, value: unknown) => {
-				const bytes =
-					value instanceof ReadableStream
-						? new Uint8Array(await new Response(value).arrayBuffer())
-						: new Uint8Array(value as ArrayBuffer);
-				r2Values.set(key, bytes);
-			},
-			get: async (key: string) => {
-				const bytes = r2Values.get(key);
-				return bytes
-					? {
-							body: new Response(bytes).body,
-							size: bytes.byteLength,
-							httpMetadata: { contentType: "application/octet-stream" },
-						}
-					: null;
-			},
-			delete: async (key: string) => {
-				r2Values.delete(key);
-			},
-		},
-		ATTACHMENT_STORAGE: "r2",
-		ADMIN_PASSWORD,
-		SIGNUPS_ALLOWED: "true",
-		INVITATIONS_ALLOWED: "true",
-		JWT_SECRET,
-		DATA_ENCRYPTION_SECRET,
-		RL_IP: rateLimiter,
-		RL_ACCOUNT: rateLimiter,
-	} as unknown as CloudflareBindings;
+	bindings = harness.bindings;
+	testDatabase = harness.database;
+	r2Values = harness.r2Values;
 });
 
 after(async () => {
-	await miniflare.dispose();
+	await harness.dispose();
 });
 
 describe("Edgewarden API", () => {
