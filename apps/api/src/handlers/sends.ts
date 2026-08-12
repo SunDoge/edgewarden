@@ -3,14 +3,18 @@ import { factory } from "../http/factory";
 import { BulkIdsSchema } from "../schemas/ciphers";
 import { CreateTextSendSchema, UpdateSendSchema } from "../schemas/sends";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
-import { executeBatch, revisionQuery } from "../services/db/batch";
+import {
+	activeSendRevisionQuery,
+	executeBatch,
+	revisionQuery,
+	sendRevisionQuery,
+} from "../services/db/batch";
 import { textColumnInJson } from "../services/db/json-array";
 import * as sendsDb from "../services/db/sends";
 import { setSendPassword } from "../services/sends/password";
 import {
 	parseDateSeconds,
 	parseInteger,
-	parseStoredSendData,
 	sendToResponse,
 	serializeSendEmails,
 } from "../services/sends/presentation";
@@ -128,22 +132,30 @@ export const deleteSends = factory.createHandlers(
 		}
 
 		const ts = now();
-		await executeBatch(c.get("dbDialect"), [
-			db
-				.updateTable("sends")
-				.set({ deletion_date: ts, updated_at: ts })
-				.where(textColumnInJson("id", ids))
-				.where("user_id", "=", user.id)
-				.compile(),
-			revisionQuery(db, user.id, ts),
-		]);
-		await safeWriteAuditEvent(db, {
-			actorUserId: user.id,
-			action: "send.delete.bulk",
-			category: "vault",
-			targetType: "send",
-			metadata: { ...auditRequestMetadata(c.req.raw), size: ids.length },
-		});
+		const [, deleted] = await c
+			.get("dbDialect")
+			.batch([
+				activeSendRevisionQuery(db, user.id, ids, ts),
+				db
+					.updateTable("sends")
+					.set({ deletion_date: ts, updated_at: ts })
+					.where(textColumnInJson("id", ids))
+					.where("user_id", "=", user.id)
+					.where("deletion_date", ">", ts)
+					.compile(),
+			]);
+		const deletedCount = Number(deleted.numAffectedRows ?? 0n);
+		if (deletedCount > 0)
+			await safeWriteAuditEvent(db, {
+				actorUserId: user.id,
+				action: "send.delete.bulk",
+				category: "vault",
+				targetType: "send",
+				metadata: {
+					...auditRequestMetadata(c.req.raw),
+					size: deletedCount,
+				},
+			});
 		return new Response(null, { status: 200 });
 	},
 );
@@ -226,7 +238,7 @@ export const updateSend = factory.createHandlers(
 				.where("id", "=", sendId)
 				.where("user_id", "=", user.id)
 				.compile(),
-			revisionQuery(db, user.id, ts),
+			sendRevisionQuery(db, user.id, [sendId], ts),
 		]);
 
 		const updated = await sendsDb.getSendById(db, sendId);
@@ -242,23 +254,27 @@ export const deleteSend = factory.createHandlers(async (c) => {
 	const sendId = send.id;
 
 	const ts = now();
-	await executeBatch(c.get("dbDialect"), [
-		db
-			.updateTable("sends")
-			.set({ deletion_date: ts, updated_at: ts })
-			.where("id", "=", sendId)
-			.where("user_id", "=", user.id)
-			.compile(),
-		revisionQuery(db, user.id, ts),
-	]);
-	await safeWriteAuditEvent(db, {
-		actorUserId: user.id,
-		action: "send.delete",
-		category: "vault",
-		targetType: "send",
-		targetId: sendId,
-		metadata: auditRequestMetadata(c.req.raw),
-	});
+	const [, deleted] = await c
+		.get("dbDialect")
+		.batch([
+			activeSendRevisionQuery(db, user.id, [sendId], ts),
+			db
+				.updateTable("sends")
+				.set({ deletion_date: ts, updated_at: ts })
+				.where("id", "=", sendId)
+				.where("user_id", "=", user.id)
+				.where("deletion_date", ">", ts)
+				.compile(),
+		]);
+	if (deleted.numAffectedRows === 1n)
+		await safeWriteAuditEvent(db, {
+			actorUserId: user.id,
+			action: "send.delete",
+			category: "vault",
+			targetType: "send",
+			targetId: sendId,
+			metadata: auditRequestMetadata(c.req.raw),
+		});
 	return new Response(null, { status: 200 });
 });
 
@@ -286,7 +302,7 @@ export const removeSendPassword = factory.createHandlers(async (c) => {
 			.where("id", "=", sendId)
 			.where("user_id", "=", user.id)
 			.compile(),
-		revisionQuery(db, user.id, ts),
+		sendRevisionQuery(db, user.id, [sendId], ts),
 	]);
 
 	const updated = await sendsDb.getSendById(db, sendId);
@@ -308,7 +324,7 @@ export const removeSendAuth = factory.createHandlers(async (c) => {
 			.where("id", "=", sendId)
 			.where("user_id", "=", user.id)
 			.compile(),
-		revisionQuery(db, user.id, ts),
+		sendRevisionQuery(db, user.id, [sendId], ts),
 	]);
 
 	const updated = await sendsDb.getSendById(db, sendId);
@@ -317,6 +333,11 @@ export const removeSendAuth = factory.createHandlers(async (c) => {
 });
 
 export {
+	createFileSend,
+	getSendFileUpload,
+	uploadSendFile,
+} from "./sends-file";
+export {
 	accessPublicSend,
 	accessPublicSendFile,
 	accessSendFileWithToken,
@@ -324,9 +345,3 @@ export {
 	downloadSendFile,
 	uploadPublicSendFile,
 } from "./sends-public";
-
-export {
-	createFileSend,
-	getSendFileUpload,
-	uploadSendFile,
-} from "./sends-file";
