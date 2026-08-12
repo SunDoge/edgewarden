@@ -89,6 +89,62 @@ export interface BackupPayload {
 	};
 }
 
+const BACKUP_DB_TABLES = [
+	"config",
+	"users",
+	"domain_settings",
+	"user_revisions",
+	"organizations",
+	"org_members",
+	"collections",
+	"collection_members",
+	"folders",
+	"ciphers",
+	"cipher_collections",
+	"attachments",
+	"webauthn_credentials",
+	"device_trust_tokens",
+	"audit_logs",
+	"sends",
+] as const satisfies readonly (keyof BackupPayload["db"])[];
+
+function validateBackupDatabasePayload(
+	manifest: BackupManifest,
+	db: BackupPayload["db"],
+): void {
+	if (!db || typeof db !== "object" || Array.isArray(db)) {
+		throw new Error("Backup archive database payload is invalid");
+	}
+	if (
+		!manifest.tableCounts ||
+		typeof manifest.tableCounts !== "object" ||
+		Array.isArray(manifest.tableCounts)
+	) {
+		throw new Error("Backup archive table counts are invalid");
+	}
+	for (const table of BACKUP_DB_TABLES) {
+		const rows = db[table];
+		const declared = manifest.tableCounts[table];
+		if (rows === undefined && declared === undefined) continue;
+		if (!Array.isArray(rows)) {
+			throw new Error(`Backup archive table is not an array: ${table}`);
+		}
+		if (
+			rows.some((row) => !row || typeof row !== "object" || Array.isArray(row))
+		) {
+			throw new Error(`Backup archive contains an invalid row in: ${table}`);
+		}
+		if (!Number.isSafeInteger(declared) || Number(declared) < 0) {
+			throw new Error(`Backup archive table count is invalid: ${table}`);
+		}
+		if (rows.length !== declared) {
+			throw new Error(
+				`Backup archive table count mismatch for ${table}: expected ${declared}, received ${rows.length}`,
+			);
+		}
+	}
+}
+
 function sanitizeUserRowsForExport(rows: SqlRow[]): SqlRow[] {
 	return rows.map(
 		({
@@ -270,9 +326,7 @@ export function parseBackupArchive(
 	) {
 		throw new Error("Unsupported backup format version");
 	}
-	if (!db || typeof db !== "object") {
-		throw new Error("Backup archive database payload is invalid");
-	}
+	validateBackupDatabasePayload(manifest, db);
 
 	const externalAttachmentKeys = new Set<string>(
 		options.allowExternalAttachmentBlobs
