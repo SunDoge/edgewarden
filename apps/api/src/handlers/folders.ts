@@ -1,5 +1,5 @@
 import { vValidator } from "@hono/valibot-validator";
-import type { Selectable } from "kysely";
+import { type Selectable, sql } from "kysely";
 import { factory } from "../http/factory";
 import { BulkIdsSchema } from "../schemas/ciphers";
 import { FolderSchema } from "../schemas/folders";
@@ -89,7 +89,10 @@ export const deleteFolder = factory.createHandlers(async (c) => {
 		folderRevisionQuery(db, userId, [id], ts),
 		db
 			.updateTable("ciphers")
-			.set({ folder_id: null, updated_at: ts })
+			.set({
+				folder_id: null,
+				updated_at: sql<number>`MAX(updated_at + 1, ${ts})`,
+			})
 			.where("folder_id", "=", id)
 			.where("user_id", "=", userId)
 			.compile(),
@@ -118,11 +121,14 @@ export const deleteFolders = factory.createHandlers(
 		).map((folder) => folder.id);
 		if (!ownedIds.length) return new Response(null, { status: 204 });
 		const ts = now();
-		await executeBatch(c.get("dbDialect"), [
+		const [, , deleted] = await c.get("dbDialect").batch([
 			folderRevisionQuery(db, userId, ownedIds, ts),
 			db
 				.updateTable("ciphers")
-				.set({ folder_id: null, updated_at: ts })
+				.set({
+					folder_id: null,
+					updated_at: sql<number>`MAX(updated_at + 1, ${ts})`,
+				})
 				.where("user_id", "=", userId)
 				.where(textColumnInJson("folder_id", ownedIds))
 				.compile(),
@@ -132,13 +138,18 @@ export const deleteFolders = factory.createHandlers(
 				.where(textColumnInJson("id", ownedIds))
 				.compile(),
 		]);
-		await safeWriteAuditEvent(db, {
-			actorUserId: userId,
-			action: "folder.delete.bulk",
-			category: "vault",
-			targetType: "folder",
-			metadata: { ...auditRequestMetadata(c.req.raw), size: ownedIds.length },
-		});
+		const deletedCount = Number(deleted.numAffectedRows);
+		if (deletedCount > 0)
+			await safeWriteAuditEvent(db, {
+				actorUserId: userId,
+				action: "folder.delete.bulk",
+				category: "vault",
+				targetType: "folder",
+				metadata: {
+					...auditRequestMetadata(c.req.raw),
+					size: deletedCount,
+				},
+			});
 		return new Response(null, { status: 204 });
 	},
 );

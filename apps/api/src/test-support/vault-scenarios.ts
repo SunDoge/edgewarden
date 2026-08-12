@@ -721,6 +721,66 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		assert.equal(after?.revision_date, before.revision_date + 1);
 	});
 
+	test("audits only folders actually removed by concurrent bulk deletion", async () => {
+		const auth = {
+			authorization: `Bearer ${context.accessToken}`,
+			"content-type": "application/json",
+		};
+		const created = await request("/api/folders", {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({ name: "concurrent-bulk-delete-folder" }),
+		});
+		assert.equal(created.status, 200, await created.clone().text());
+		const folderId = (await created.json<{ id: string }>()).id;
+		const user = await context.database
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(EMAIL)
+			.first<{ id: string }>();
+		assert.ok(user);
+		const beforeRevision = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(user.id)
+			.first<{ revision_date: number }>();
+		assert.ok(beforeRevision);
+		const beforeAudit = await context.database
+			.prepare(
+				"SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'folder.delete.bulk'",
+			)
+			.first<{ count: number }>()
+			.then((row) => Number(row?.count));
+		const remove = () =>
+			request("/api/folders/delete", {
+				method: "POST",
+				headers: auth,
+				body: JSON.stringify({ ids: [folderId] }),
+			});
+		const responses = await Promise.all([
+			remove(),
+			remove(),
+			remove(),
+			remove(),
+		]);
+		assert.ok(responses.every((response) => response.status === 204));
+		assert.equal(
+			await context.database
+				.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+				.bind(user.id)
+				.first<{ revision_date: number }>()
+				.then((row) => row?.revision_date),
+			beforeRevision.revision_date + 1,
+		);
+		assert.equal(
+			await context.database
+				.prepare(
+					"SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'folder.delete.bulk'",
+				)
+				.first<{ count: number }>()
+				.then((row) => Number(row?.count)),
+			beforeAudit + 1,
+		);
+	});
+
 	test("validates device updates and hides resources outside the user scope", async () => {
 		const auth = { authorization: `Bearer ${context.accessToken}` };
 		const ownDevice = await request("/api/devices/api-test-device", {
