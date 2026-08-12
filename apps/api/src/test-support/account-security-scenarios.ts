@@ -67,6 +67,11 @@ export function registerAccountSecurityScenarios(
 				timestamp,
 			)
 			.run();
+		const revisionBeforeRecovery = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(owner.id)
+			.first<{ revision_date: number }>();
+		assert.ok(revisionBeforeRecovery);
 
 		const invalid = await request("/identity/accounts/recover-2fa", {
 			method: "POST",
@@ -100,6 +105,14 @@ export function registerAccountSecurityScenarios(
 			}>();
 		assert.equal(user?.totp_secret, null);
 		assert.equal(user?.totp_recovery_code, null);
+		assert.equal(
+			await context.database
+				.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+				.bind(owner.id)
+				.first<{ revision_date: number }>()
+				.then((row) => row?.revision_date),
+			revisionBeforeRecovery.revision_date + 1,
+		);
 		assert.equal(
 			await context.database
 				.prepare(
@@ -177,6 +190,11 @@ export function registerAccountSecurityScenarios(
 		const challenge = await login.json<any>();
 		assert.ok(challenge.TwoFactorProviders.includes("7"));
 		assert.ok(challenge.TwoFactorProviders2["7"].Challenge.token);
+		const revisionBeforeDelete = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(user.id)
+			.first<{ revision_date: number }>();
+		assert.ok(revisionBeforeDelete);
 
 		const removed = await request("/api/two-factor/webauthn", {
 			method: "DELETE",
@@ -188,6 +206,14 @@ export function registerAccountSecurityScenarios(
 		});
 		assert.equal(removed.status, 200, await removed.clone().text());
 		assert.equal((await removed.json<{ enabled: boolean }>()).enabled, false);
+		assert.equal(
+			await context.database
+				.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+				.bind(user.id)
+				.first<{ revision_date: number }>()
+				.then((row) => row?.revision_date),
+			revisionBeforeDelete.revision_date + 1,
+		);
 		assert.equal(
 			await context.database
 				.prepare(

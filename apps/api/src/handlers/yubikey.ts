@@ -5,22 +5,22 @@ import {
 	SaveYubicoKeysSchema,
 	YubicoSettingsSchema,
 } from "../schemas/two-factor";
+import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import { invalidateUserCache, verifyPassword } from "../services/auth";
-import { executeBatch } from "../services/db/batch";
+import { encryptCredential } from "../services/credential-protection";
+import { executeBatch, revisionQuery } from "../services/db/batch";
 import {
 	loadYubicoCredentials,
 	saveYubicoCredentials,
 } from "../services/yubico-config";
-import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
-import { encryptCredential } from "../services/credential-protection";
 import { errorResponse } from "../utils/response";
+import { now } from "../utils/time";
 import {
 	parseYubikeyConfig,
 	serializeYubikeyConfig,
 	verifyYubicoOtp,
 	yubicoPublicId,
 } from "../utils/yubico";
-import { now } from "../utils/time";
 
 function recoveryCode(): string {
 	return Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) =>
@@ -102,6 +102,7 @@ export const saveYubikeys = factory.createHandlers(
 				.where("id", "=", user.id)
 				.compile(),
 			db.deleteFrom("refresh_tokens").where("user_id", "=", user.id).compile(),
+			revisionQuery(db, user.id, ts),
 		]);
 		invalidateUserCache(user.id);
 		await safeWriteAuditEvent(db, {
@@ -129,17 +130,21 @@ export const disableYubikeys = factory.createHandlers(
 		if (!(await verified(c, body.masterPasswordHash)))
 			return errorResponse("Master password verification failed", 400);
 		const user = c.get("user");
-		await c
-			.get("db")
-			.updateTable("users")
-			.set({
-				yubikey_config: serializeYubikeyConfig({ keys: [], nfc: false }),
-				updated_at: now(),
-			})
-			.where("id", "=", user.id)
-			.execute();
+		const db = c.get("db");
+		const ts = now();
+		await executeBatch(c.get("dbDialect"), [
+			db
+				.updateTable("users")
+				.set({
+					yubikey_config: serializeYubikeyConfig({ keys: [], nfc: false }),
+					updated_at: ts,
+				})
+				.where("id", "=", user.id)
+				.compile(),
+			revisionQuery(db, user.id, ts),
+		]);
 		invalidateUserCache(user.id);
-		await safeWriteAuditEvent(c.get("db"), {
+		await safeWriteAuditEvent(db, {
 			actorUserId: user.id,
 			action: "account.two_factor.yubikey.disable",
 			category: "auth",

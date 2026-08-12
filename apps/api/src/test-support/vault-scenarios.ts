@@ -536,6 +536,42 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		assert.equal(response.status, 400);
 	});
 
+	test("advances the vault revision with domain settings atomically", async () => {
+		const user = await context.database
+			.prepare("SELECT id FROM users WHERE email = ?")
+			.bind(EMAIL)
+			.first<{ id: string }>();
+		assert.ok(user);
+		const before = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(user.id)
+			.first<{ revision_date: number }>();
+		assert.ok(before);
+		const response = await request("/api/settings/domains", {
+			method: "PUT",
+			headers: {
+				authorization: `Bearer ${context.accessToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({
+				customEquivalentDomains: [
+					{
+						type: 1,
+						domains: ["example.com", "example.net"],
+						excluded: false,
+					},
+				],
+				excludedGlobalEquivalentDomains: [1],
+			}),
+		});
+		assert.equal(response.status, 200, await response.clone().text());
+		const after = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(user.id)
+			.first<{ revision_date: number }>();
+		assert.equal(after?.revision_date, before.revision_date + 1);
+	});
+
 	test("uses cipher ownership middleware for soft-delete and restore", async () => {
 		const auth = { authorization: `Bearer ${context.accessToken}` };
 		const missing = await request(`/api/ciphers/${crypto.randomUUID()}`, {

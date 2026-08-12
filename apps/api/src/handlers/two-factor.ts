@@ -1,28 +1,27 @@
 import { vValidator } from "@hono/valibot-validator";
 import { factory } from "../http/factory";
 import {
+	checkAccountRateLimit,
+	checkIpRateLimit,
+} from "../middleware/rate-limit";
+import {
 	DisableTotpSchema,
 	RecoverTwoFactorSchema,
 	TotpSetupSchema,
 } from "../schemas/two-factor";
-import { invalidateUserCache, verifyPassword } from "../services/auth";
-import { executeBatch } from "../services/db/batch";
-import * as usersDb from "../services/db/users";
-import {
-	checkAccountRateLimit,
-	checkIpRateLimit,
-} from "../middleware/rate-limit";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
+import { invalidateUserCache, verifyPassword } from "../services/auth";
 import {
 	decryptCredential,
 	encryptCredential,
 } from "../services/credential-protection";
+import { executeBatch, revisionQuery } from "../services/db/batch";
+import * as usersDb from "../services/db/users";
+import * as webauthnDb from "../services/db/webauthn";
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
-import { serializeYubikeyConfig } from "../utils/yubico";
 import { isTotpEnabled, verifyTotpToken } from "../utils/totp";
-import * as webauthnDb from "../services/db/webauthn";
-import { userYubicoPublicIds } from "../utils/yubico";
+import { serializeYubikeyConfig, userYubicoPublicIds } from "../utils/yubico";
 
 const TOTP_BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
@@ -115,6 +114,7 @@ export const enableAuthenticator = factory.createHandlers(
 				.where("id", "=", userId)
 				.compile(),
 			db.deleteFrom("refresh_tokens").where("user_id", "=", userId).compile(),
+			revisionQuery(db, userId, ts),
 		]);
 		invalidateUserCache(userId);
 		return c.json({ key, enabled: true, object: "twoFactorAuthenticator" });
@@ -137,6 +137,7 @@ function disableAuthenticatorHandler(providerResponse: boolean) {
 				return errorResponse("Password is incorrect.", 400);
 			}
 			const db = c.get("db");
+			const ts = now();
 			await executeBatch(c.get("dbDialect"), [
 				db
 					.updateTable("users")
@@ -144,7 +145,7 @@ function disableAuthenticatorHandler(providerResponse: boolean) {
 						totp_secret: null,
 						totp_recovery_code: null,
 						security_stamp: crypto.randomUUID(),
-						updated_at: now(),
+						updated_at: ts,
 					})
 					.where("id", "=", user.id)
 					.compile(),
@@ -152,6 +153,7 @@ function disableAuthenticatorHandler(providerResponse: boolean) {
 					.deleteFrom("refresh_tokens")
 					.where("user_id", "=", user.id)
 					.compile(),
+				revisionQuery(db, user.id, ts),
 			]);
 			invalidateUserCache(user.id);
 			return providerResponse
@@ -257,6 +259,7 @@ export const recoverTwoFactor = factory.createHandlers(
 				.where("user_id", "=", user.id)
 				.where("purpose", "=", "twoFactor")
 				.compile(),
+			revisionQuery(db, user.id, ts),
 		]);
 		invalidateUserCache(user.id);
 		await safeWriteAuditEvent(db, {
