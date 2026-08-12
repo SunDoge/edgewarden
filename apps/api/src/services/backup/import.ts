@@ -1,4 +1,7 @@
 import type { BlobStore } from "../blob-store";
+import { invalidateAllAuthCaches } from "../auth";
+import { drainBlobGcQueue, enqueueBlobGcKeys } from "../blob-gc";
+import { createDatabase } from "../../middleware/db";
 import { parseBackupArchive } from "./archive";
 import {
 	importPreparedBackupRows,
@@ -17,7 +20,6 @@ import {
 } from "./import-contract";
 import {
 	attachmentRowKey,
-	cleanupOrphanedBlobFiles,
 	removeAttachmentRows,
 	restoreBlobFiles,
 } from "./import-attachments";
@@ -30,6 +32,19 @@ import {
 	swapShadowTablesIntoPlace,
 	validateShadowTableCounts,
 } from "./restore-database";
+
+async function drainRestoreBlobGc(
+	dbBinding: D1Database,
+	blobStore: BlobStore | null,
+): Promise<void> {
+	if (!blobStore) return;
+	const { db } = await createDatabase(dbBinding);
+	try {
+		await drainBlobGcQueue(db, blobStore);
+	} finally {
+		await db.destroy();
+	}
+}
 
 export async function importBackupArchiveBytes(
 	archiveBytes: Uint8Array,
@@ -124,20 +139,10 @@ export async function importBackupArchiveBytes(
 			stageDetail: "txt_backup_restore_progress_local_finalize_detail",
 			replaceExisting,
 		});
-		await swapShadowTablesIntoPlace(dbBinding);
+		await swapShadowTablesIntoPlace(dbBinding, previousBlobKeys);
+		invalidateAllAuthCaches();
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);
-		if (replaceExisting && previousBlobKeys.size) {
-			const nextBlobKeys = await collectCurrentBlobKeys(dbBinding).catch(
-				() => null,
-			);
-			if (nextBlobKeys) {
-				await cleanupOrphanedBlobFiles(
-					blobStore,
-					previousBlobKeys,
-					nextBlobKeys,
-				).catch(() => undefined);
-			}
-		}
+		await drainRestoreBlobGc(dbBinding, blobStore).catch(() => undefined);
 
 		await progress?.({
 			source: "local",
@@ -157,11 +162,8 @@ export async function importBackupArchiveBytes(
 		);
 	} catch (error) {
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);
-		if (blobStore && stagedBlobKeys.size) {
-			await Promise.allSettled(
-				Array.from(stagedBlobKeys, (key) => blobStore.delete(key)),
-			);
-		}
+		await enqueueBlobGcKeys(dbBinding, stagedBlobKeys).catch(() => undefined);
+		await drainRestoreBlobGc(dbBinding, blobStore).catch(() => undefined);
 		await progress?.({
 			source: "local",
 			step: "local_failed",
@@ -334,20 +336,10 @@ export async function importRemoteBackupArchiveBytes(
 			stageDetail: "txt_backup_restore_progress_remote_finalize_detail",
 			replaceExisting,
 		});
-		await swapShadowTablesIntoPlace(dbBinding);
+		await swapShadowTablesIntoPlace(dbBinding, previousBlobKeys);
+		invalidateAllAuthCaches();
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);
-		if (replaceExisting && previousBlobKeys.size) {
-			const nextBlobKeys = await collectCurrentBlobKeys(dbBinding).catch(
-				() => null,
-			);
-			if (nextBlobKeys) {
-				await cleanupOrphanedBlobFiles(
-					blobStore,
-					previousBlobKeys,
-					nextBlobKeys,
-				).catch(() => undefined);
-			}
-		}
+		await drainRestoreBlobGc(dbBinding, blobStore).catch(() => undefined);
 
 		await progress?.({
 			source: "remote",
@@ -372,11 +364,8 @@ export async function importRemoteBackupArchiveBytes(
 		);
 	} catch (error) {
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);
-		if (blobStore && stagedBlobKeys.size) {
-			await Promise.allSettled(
-				Array.from(stagedBlobKeys, (key) => blobStore.delete(key)),
-			);
-		}
+		await enqueueBlobGcKeys(dbBinding, stagedBlobKeys).catch(() => undefined);
+		await drainRestoreBlobGc(dbBinding, blobStore).catch(() => undefined);
 		await progress?.({
 			source: "remote",
 			step: "remote_failed",

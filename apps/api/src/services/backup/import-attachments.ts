@@ -101,15 +101,3 @@ export async function removeAttachmentRows(
 	if (!statements.length) return;
 	await db.batch(statements);
 }
-
-export async function cleanupOrphanedBlobFiles(
-	blobStore: BlobStore | null,
-	beforeKeys: Set<string>,
-	afterKeys: Set<string>,
-): Promise<void> {
-	if (!blobStore) return;
-	const staleKeys = Array.from(beforeKeys).filter((key) => !afterKeys.has(key));
-	for (const key of staleKeys) {
-		await blobStore.delete(key);
-	}
-}

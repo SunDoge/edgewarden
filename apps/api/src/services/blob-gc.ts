@@ -1,0 +1,104 @@
+import { type Kysely, sql } from "kysely";
+import type { DB } from "../types/db";
+import { now } from "../utils/time";
+import type { BlobStore } from "./blob-store";
+
+const BATCH_LIMIT = 100;
+
+export interface BlobGcResult {
+	deleted: number;
+	referenced: number;
+	deferred: number;
+}
+
+export async function enqueueBlobGcKeys(
+	db: D1Database,
+	keys: Iterable<string>,
+	timestamp = now(),
+): Promise<void> {
+	const uniqueKeys = [...new Set(keys)].filter(Boolean);
+	if (!uniqueKeys.length) return;
+	await db.batch(
+		uniqueKeys.map((key) =>
+			db
+				.prepare(
+					"INSERT OR IGNORE INTO blob_gc_queue (object_key, attempts, next_attempt_at, last_error, created_at) VALUES (?, 0, ?, NULL, ?)",
+				)
+				.bind(key, timestamp, timestamp),
+		),
+	);
+}
+
+async function isReferenced(
+	db: Kysely<DB>,
+	objectKey: string,
+): Promise<boolean> {
+	const result = await sql<{ referenced: number }>`
+		select exists(
+			select 1 from attachments
+			where coalesce(storage_key, 'attachments/' || cipher_id || '/' || id || '.bin') = ${objectKey}
+			union all
+			select 1 from sends
+			where type = 1
+				and json_valid(data)
+				and json_type(data, '$.id') = 'text'
+				and 'sends/' || id || '/' || json_extract(data, '$.id') = ${objectKey}
+		) as referenced
+	`.execute(db);
+	return Number(result.rows[0]?.referenced ?? 0) === 1;
+}
+
+function retryAt(timestamp: number, attempts: number): number {
+	return timestamp + Math.min(86_400, 60 * 2 ** Math.min(attempts, 10));
+}
+
+export async function drainBlobGcQueue(
+	db: Kysely<DB>,
+	blobStore: BlobStore,
+	timestamp = now(),
+): Promise<BlobGcResult> {
+	const rows = await db
+		.selectFrom("blob_gc_queue")
+		.selectAll()
+		.where("next_attempt_at", "<=", timestamp)
+		.orderBy("next_attempt_at", "asc")
+		.orderBy("created_at", "asc")
+		.limit(BATCH_LIMIT)
+		.execute();
+	const result: BlobGcResult = { deleted: 0, referenced: 0, deferred: 0 };
+
+	for (const row of rows) {
+		if (await isReferenced(db, row.object_key)) {
+			await db
+				.deleteFrom("blob_gc_queue")
+				.where("object_key", "=", row.object_key)
+				.execute();
+			result.referenced += 1;
+			continue;
+		}
+		try {
+			await blobStore.delete(row.object_key);
+			await db
+				.deleteFrom("blob_gc_queue")
+				.where("object_key", "=", row.object_key)
+				.execute();
+			result.deleted += 1;
+		} catch (error) {
+			const attempts = row.attempts + 1;
+			await db
+				.updateTable("blob_gc_queue")
+				.set({
+					attempts,
+					next_attempt_at: retryAt(timestamp, attempts),
+					last_error: (error instanceof Error
+						? error.message
+						: String(error)
+					).slice(0, 500),
+				})
+				.where("object_key", "=", row.object_key)
+				.execute();
+			result.deferred += 1;
+		}
+	}
+	return result;
+}

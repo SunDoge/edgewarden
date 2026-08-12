@@ -60,6 +60,14 @@ export interface AuthRequests {
 	user_id: string;
 }
 
+export interface BlobGcQueue {
+	attempts: Generated<number>;
+	created_at: number;
+	last_error: string | null;
+	next_attempt_at: number;
+	object_key: string;
+}
+
 export interface CipherCollections {
 	cipher_id: string;
 	collection_id: string;
@@ -288,6 +296,7 @@ export interface DB {
 	attachments: Attachments;
 	audit_logs: AuditLogs;
 	auth_requests: AuthRequests;
+	blob_gc_queue: BlobGcQueue;
 	cipher_collections: CipherCollections;
 	ciphers: Ciphers;
 	collection_members: CollectionMembers;

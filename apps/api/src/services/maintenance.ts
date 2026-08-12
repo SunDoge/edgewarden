@@ -2,7 +2,9 @@ import { type Kysely, sql } from "kysely";
 import { createDatabase } from "../middleware/db";
 import type { DB } from "../types/db";
 import { now } from "../utils/time";
+import { drainBlobGcQueue, type BlobGcResult } from "./blob-gc";
 import {
+	createBlobStore,
 	deleteBlobObject,
 	getStoredAttachmentObjectKey,
 	getSendFileObjectKey,
@@ -26,6 +28,7 @@ export interface MaintenanceResult {
 	purgedSends: number;
 	purgedOrganizations: number;
 	purgedUsers: number;
+	blobGc: BlobGcResult;
 }
 
 function affectedRows(result: {
@@ -223,6 +226,8 @@ export async function runMaintenance(
 	env: CloudflareBindings,
 	timestamp = now(),
 ): Promise<MaintenanceResult> {
+	const blobStore = createBlobStore(env);
+	if (!blobStore) throw new Error("Attachment storage is not configured");
 	const refreshTokens = affectedRows(
 		await db
 			.deleteFrom("refresh_tokens")
@@ -279,6 +284,7 @@ export async function runMaintenance(
 	const purgedSends = await purgeSends(db, env, timestamp);
 	const purgedOrganizations = await purgeOrganizations(db, timestamp);
 	const purgedUsers = await purgeUsers(db, timestamp);
+	const blobGc = await drainBlobGcQueue(db, blobStore, timestamp);
 	return {
 		refreshTokens,
 		deviceTrustTokens,
@@ -292,6 +298,7 @@ export async function runMaintenance(
 		purgedSends,
 		purgedOrganizations,
 		purgedUsers,
+		blobGc,
 	};
 }
 
