@@ -178,6 +178,7 @@ export interface LoginAttempts {
 export interface Organizations {
 	created_at: number;
 	deletion_requested_at: number | null;
+	deletion_token: string | null;
 	id: string;
 	name: string;
 	owner_id: string;

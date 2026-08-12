@@ -365,15 +365,43 @@ export function registerAdminOrganizationScenarios(
 				),
 		]);
 
-		const deleted = await request(`/api/organizations/${orgId}`, {
-			method: "DELETE",
-			headers: {
-				authorization: `Bearer ${context.accessToken}`,
-				"content-type": "application/json",
-			},
-			body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
-		});
-		assert.equal(deleted.status, 204, await deleted.clone().text());
+		const revisionBefore = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(owner.id)
+			.first<{ revision_date: number }>();
+		assert.ok(revisionBefore);
+		const remove = () =>
+			request(`/api/organizations/${orgId}`, {
+				method: "DELETE",
+				headers: {
+					authorization: `Bearer ${context.accessToken}`,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
+			});
+		const deleted = await Promise.all([remove(), remove()]);
+		assert.ok(deleted.some((response) => response.status === 204));
+		assert.ok(
+			deleted.every((response) => [204, 404].includes(response.status)),
+		);
+		assert.equal(
+			await context.database
+				.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+				.bind(owner.id)
+				.first<{ revision_date: number }>()
+				.then((row) => row?.revision_date),
+			revisionBefore.revision_date + 1,
+		);
+		assert.equal(
+			await context.database
+				.prepare(
+					"SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'organization.delete' AND target_id = ?",
+				)
+				.bind(orgId)
+				.first<{ count: number }>()
+				.then((row) => Number(row?.count)),
+			1,
+		);
 		assert.ok(
 			await context.database
 				.prepare(
