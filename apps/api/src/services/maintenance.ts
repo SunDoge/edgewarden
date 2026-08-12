@@ -228,7 +228,14 @@ async function purgeSends(
 ): Promise<number> {
 	const sends = await db
 		.selectFrom("sends")
-		.select(["id", "type", "data", "storage_key"])
+		.select([
+			"id",
+			"type",
+			"data",
+			"storage_key",
+			"deletion_date",
+			"purge_token",
+		])
 		.where("deletion_date", "<=", timestamp)
 		.orderBy("deletion_date", "asc")
 		.limit(BATCH_LIMIT)
@@ -250,6 +257,16 @@ async function purgeSends(
 	}
 	let purged = 0;
 	for (const send of sends) {
+		const purgeToken = crypto.randomUUID();
+		const claimed = await db
+			.updateTable("sends")
+			.set({ purge_token: purgeToken })
+			.where("id", "=", send.id)
+			.where("deletion_date", "=", send.deletion_date)
+			.where("deletion_date", "<=", timestamp)
+			.where("purge_token", "is", send.purge_token)
+			.executeTakeFirst();
+		if (Number(claimed.numUpdatedRows) !== 1) continue;
 		try {
 			const key = objectKeys.get(send.id);
 			if (key) await deleteBlobObject(env, key);
@@ -264,12 +281,18 @@ async function purgeSends(
 					},
 				],
 				timestamp,
-				"SELECT 1 FROM sends WHERE id = ? AND deletion_date <= ?",
-				[send.id, timestamp],
-				"DELETE FROM sends WHERE id = ? AND deletion_date <= ?",
-				[send.id, timestamp],
+				"SELECT 1 FROM sends WHERE id = ? AND deletion_date = ? AND purge_token = ?",
+				[send.id, send.deletion_date, purgeToken],
+				"DELETE FROM sends WHERE id = ? AND deletion_date = ? AND purge_token = ?",
+				[send.id, send.deletion_date, purgeToken],
 			);
 		} catch (error) {
+			await db
+				.updateTable("sends")
+				.set({ purge_token: send.purge_token })
+				.where("id", "=", send.id)
+				.where("purge_token", "=", purgeToken)
+				.execute();
 			console.error(
 				JSON.stringify({
 					event: "maintenance.send_purge_deferred",

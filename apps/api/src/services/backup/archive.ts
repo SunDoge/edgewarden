@@ -465,7 +465,8 @@ export async function buildBackupArchive(
 		];
 	});
 	const exportedSendRows = sourceSendRows.map(
-		({ storage_key: _storageKey, ...row }) => row as SqlRow,
+		({ storage_key: _storageKey, purge_token: _purgeToken, ...row }) =>
+			row as SqlRow,
 	);
 	const exportedCipherRows = cipherRows.map(
 		({ mutation_token: _mutationToken, ...row }) => row as SqlRow,

@@ -1068,6 +1068,7 @@ export function registerDatabaseMaintenanceScenarios(
 		const initialKey = `sends/${sendId}/${fileId}`;
 		const firstKey = `${initialKey}.first.bin`;
 		const secondKey = `${initialKey}.second.bin`;
+		const blockedKey = `${initialKey}.blocked.bin`;
 		try {
 			await db
 				.insertInto("sends")
@@ -1123,6 +1124,47 @@ export function registerDatabaseMaintenanceScenarios(
 				),
 				true,
 			);
+			const revisionBeforeClaimedPublish = await db
+				.selectFrom("user_revisions")
+				.select("revision_date")
+				.where("user_id", "=", user.id)
+				.executeTakeFirstOrThrow();
+			const purgeToken = crypto.randomUUID();
+			await db
+				.updateTable("sends")
+				.set({ purge_token: purgeToken })
+				.where("id", "=", sendId)
+				.execute();
+			assert.equal(
+				await publishSendFileObject(
+					context.database,
+					{
+						sendId,
+						userId: user.id,
+						fileId,
+						storageKey: blockedKey,
+					},
+					timestamp + 3,
+				),
+				false,
+			);
+			assert.deepEqual(
+				await db
+					.selectFrom("sends")
+					.select(["storage_key", "purge_token"])
+					.where("id", "=", sendId)
+					.executeTakeFirstOrThrow(),
+				{ storage_key: secondKey, purge_token: purgeToken },
+			);
+			assert.equal(
+				await db
+					.selectFrom("user_revisions")
+					.select("revision_date")
+					.where("user_id", "=", user.id)
+					.executeTakeFirstOrThrow()
+					.then((row) => row.revision_date),
+				revisionBeforeClaimedPublish.revision_date,
+			);
 			assert.equal(
 				await db
 					.selectFrom("sends")
@@ -1148,7 +1190,12 @@ export function registerDatabaseMaintenanceScenarios(
 			await db.deleteFrom("sends").where("id", "=", sendId).execute();
 			await db
 				.deleteFrom("blob_gc_queue")
-				.where("object_key", "in", [initialKey, firstKey, secondKey])
+				.where("object_key", "in", [
+					initialKey,
+					firstKey,
+					secondKey,
+					blockedKey,
+				])
 				.execute();
 			await db.destroy();
 		}
@@ -1533,9 +1580,18 @@ export function registerDatabaseMaintenanceScenarios(
 			assert.ok(
 				await db
 					.selectFrom("sends")
-					.select("id")
+					.select(["id", "purge_token"])
 					.where("id", "=", sendId)
 					.executeTakeFirst(),
+			);
+			assert.equal(
+				await db
+					.selectFrom("sends")
+					.select("purge_token")
+					.where("id", "=", sendId)
+					.executeTakeFirstOrThrow()
+					.then((row) => row.purge_token),
+				null,
 			);
 
 			r2.delete = originalDelete;
@@ -1573,6 +1629,15 @@ export function registerDatabaseMaintenanceScenarios(
 					.select("id")
 					.where("id", "=", sendId)
 					.executeTakeFirst(),
+			);
+			assert.equal(
+				await db
+					.selectFrom("sends")
+					.select("purge_token")
+					.where("id", "=", sendId)
+					.executeTakeFirstOrThrow()
+					.then((row) => row.purge_token),
+				null,
 			);
 			await context.database
 				.prepare("DROP TRIGGER test_fail_purge_audit")

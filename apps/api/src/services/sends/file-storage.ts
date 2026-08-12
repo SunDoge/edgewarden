@@ -27,6 +27,7 @@ export async function publishSendFileObject(
 				  AND json_valid(data)
 				  AND json_extract(data, '$.id') = ?
 				  AND deletion_date > ?
+				  AND purge_token IS NULL
 			`)
 			.bind(
 				args.storageKey,
@@ -39,7 +40,8 @@ export async function publishSendFileObject(
 		db
 			.prepare(`
 				INSERT INTO user_revisions (user_id, revision_date)
-				SELECT user_id, ? FROM sends WHERE id = ? AND storage_key = ?
+				SELECT user_id, ? FROM sends
+				WHERE id = ? AND storage_key = ? AND purge_token IS NULL
 				ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
 					user_revisions.revision_date + 1,
 					excluded.revision_date
