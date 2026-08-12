@@ -1,10 +1,12 @@
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
 
 export function bytesToBase64Url(bytes: Uint8Array): string {
-	return isoBase64URL.fromBuffer(bytes as any);
+	return isoBase64URL.fromBuffer(Uint8Array.from(bytes));
 }
 
-export function base64UrlToBytes(input: string): Uint8Array {
+export function base64UrlToBytes(
+	input: string,
+): ReturnType<Uint8Array["slice"]> {
 	return isoBase64URL.toBuffer(input);
 }
 

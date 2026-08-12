@@ -31,6 +31,8 @@ openssl rand -hex 32
 
 To enable Turnstile for both login and registration, also configure the optional `TURNSTILE_SECRET_KEY` secret and the `TURNSTILE_SITE_KEY` Worker variable. Restrict the widget to the deployed hostname.
 
+Optional deployment settings are documented in [apps/api/README.md](apps/api/README.md#optional-worker-configuration). Most deployments should leave the WebAuthn RP settings unset so passkeys derive the RP ID and origin from the request hostname.
+
 ### Accounts without R2
 
 R2 is the recommended storage backend for encrypted attachments and backup files. If the Cloudflare account cannot enable R2, select the same repository from Workers Builds and change only the deploy command to:

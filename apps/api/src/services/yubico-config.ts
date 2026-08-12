@@ -1,6 +1,7 @@
 import type { Kysely } from "kysely";
 import type { DB } from "../types/db";
 import type { YubicoCredentials } from "../utils/yubico";
+import type { WorkerBindings } from "../worker-bindings";
 
 const CONFIG_KEY = "security.yubico.credentials.v1";
 
@@ -51,10 +52,10 @@ export async function saveYubicoCredentials(
 
 export async function loadYubicoCredentials(
 	db: Kysely<DB>,
-	env: CloudflareBindings,
+	env: WorkerBindings,
 ): Promise<YubicoCredentials | null> {
-	const envClientId = String((env as any).YUBICO_CLIENT_ID ?? "").trim();
-	const envSecret = String((env as any).YUBICO_SECRET_KEY ?? "").trim();
+	const envClientId = String(env.YUBICO_CLIENT_ID ?? "").trim();
+	const envSecret = String(env.YUBICO_SECRET_KEY ?? "").trim();
 	if (envClientId && envSecret)
 		return { clientId: envClientId, secretKey: envSecret };
 	const row = await db

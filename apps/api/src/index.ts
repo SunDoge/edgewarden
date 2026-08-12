@@ -70,10 +70,7 @@ baseApp.use(
 				/^(chrome-extension|moz-extension|safari-web-extension):\/\//.test(
 					origin,
 				);
-			const configured = String(
-				(c.env as CloudflareBindings & { CORS_ALLOWED_ORIGINS?: string })
-					.CORS_ALLOWED_ORIGINS ?? "",
-			)
+			const configured = String(c.env.CORS_ALLOWED_ORIGINS ?? "")
 				.split(",")
 				.map((value) => value.trim())
 				.filter(Boolean);

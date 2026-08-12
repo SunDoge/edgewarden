@@ -1,16 +1,10 @@
 import type { Kysely } from "kysely";
 import type { DB } from "../types/db";
+import type { WorkerBindings } from "../worker-bindings";
 import { getConfigValue, setConfigValue } from "./db/config";
 
 const REGISTRATION_CONFIG_KEY = "registration.policy.v1";
 export const BOOTSTRAP_LOCK_KEY = "registration.bootstrap.completed";
-
-type RegistrationBindings = CloudflareBindings & {
-	BOOTSTRAP_SECRET?: string;
-	ADMIN_PASSWORD?: string;
-	SIGNUPS_ALLOWED?: string;
-	INVITATIONS_ALLOWED?: string;
-};
 
 export interface RegistrationPolicy {
 	signupsAllowed: boolean;
@@ -23,18 +17,17 @@ function booleanSetting(value: string | undefined, fallback: boolean): boolean {
 }
 
 export function defaultRegistrationPolicy(
-	env: CloudflareBindings,
+	env: WorkerBindings,
 ): RegistrationPolicy {
-	const bindings = env as RegistrationBindings;
 	return {
-		signupsAllowed: booleanSetting(bindings.SIGNUPS_ALLOWED, false),
-		invitationsAllowed: booleanSetting(bindings.INVITATIONS_ALLOWED, true),
+		signupsAllowed: booleanSetting(env.SIGNUPS_ALLOWED, false),
+		invitationsAllowed: booleanSetting(env.INVITATIONS_ALLOWED, true),
 	};
 }
 
 export async function loadRegistrationPolicy(
 	db: Kysely<DB>,
-	env: CloudflareBindings,
+	env: WorkerBindings,
 ): Promise<RegistrationPolicy> {
 	const fallback = defaultRegistrationPolicy(env);
 	const value = await getConfigValue(db, REGISTRATION_CONFIG_KEY);
@@ -63,11 +56,8 @@ export async function saveRegistrationPolicy(
 	await setConfigValue(db, REGISTRATION_CONFIG_KEY, JSON.stringify(policy));
 }
 
-export function adminPasswordConfigured(env: CloudflareBindings): boolean {
-	const bindings = env as RegistrationBindings;
-	return Boolean(
-		(bindings.BOOTSTRAP_SECRET ?? bindings.ADMIN_PASSWORD)?.trim(),
-	);
+export function adminPasswordConfigured(env: WorkerBindings): boolean {
+	return Boolean((env.BOOTSTRAP_SECRET ?? env.ADMIN_PASSWORD)?.trim());
 }
 
 async function digest(value: string): Promise<Uint8Array> {
@@ -77,11 +67,10 @@ async function digest(value: string): Promise<Uint8Array> {
 }
 
 export async function verifyBootstrapSecret(
-	env: CloudflareBindings,
+	env: WorkerBindings,
 	candidate: string | undefined,
 ): Promise<boolean> {
-	const bindings = env as RegistrationBindings;
-	const configured = bindings.BOOTSTRAP_SECRET ?? bindings.ADMIN_PASSWORD;
+	const configured = env.BOOTSTRAP_SECRET ?? env.ADMIN_PASSWORD;
 	if (!configured?.trim() || !candidate) return false;
 	const [expectedBytes, candidateBytes] = await Promise.all([
 		digest(configured),

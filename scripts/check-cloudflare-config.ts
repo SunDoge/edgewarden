@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { OPTIONAL_WORKER_BINDING_NAMES } from "../apps/api/src/worker-bindings.ts";
 
 type WranglerConfig = Record<string, unknown> & {
 	vars?: Record<string, unknown>;
@@ -32,7 +33,10 @@ function portableD1Config(config: WranglerConfig): unknown {
 	);
 }
 
-function assertPortableD1Bindings(config: WranglerConfig, filename: string): void {
+function assertPortableD1Bindings(
+	config: WranglerConfig,
+	filename: string,
+): void {
 	for (const database of config.d1_databases as Record<string, unknown>[]) {
 		assert.equal(
 			"database_id" in database,
@@ -46,6 +50,10 @@ const [r2, kv] = await Promise.all([
 	readConfig("wrangler.jsonc"),
 	readConfig("wrangler.kv.jsonc"),
 ]);
+const deploymentDocumentation = await Promise.all([
+	readFile(new URL("../README.md", import.meta.url), "utf8"),
+	readFile(new URL("../apps/api/README.md", import.meta.url), "utf8"),
+]).then((documents) => documents.join("\n"));
 
 assertPortableD1Bindings(r2, "wrangler.jsonc");
 assertPortableD1Bindings(kv, "wrangler.kv.jsonc");
@@ -67,5 +75,12 @@ assert.deepEqual(kv.kv_namespaces, [{ binding: "ATTACHMENTS_KV" }]);
 assert.deepEqual(portableD1Config(kv), portableD1Config(r2));
 assert.equal(kv.r2_buckets, undefined);
 assert.equal(kv.vars?.ATTACHMENT_STORAGE, "kv");
+for (const binding of OPTIONAL_WORKER_BINDING_NAMES) {
+	assert.match(
+		deploymentDocumentation,
+		new RegExp(`\\b${binding}\\b`),
+		`Optional Worker binding ${binding} must be documented`,
+	);
+}
 
 console.log("Cloudflare R2 and KV deployment configs are in sync.");

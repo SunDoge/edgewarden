@@ -97,6 +97,19 @@ pnpm exec wrangler secret put TURNSTILE_SECRET_KEY --config ../../wrangler.jsonc
 
 Set `TURNSTILE_SITE_KEY` as a Worker variable in Cloudflare. Turnstile is enforced only when `TURNSTILE_SECRET_KEY` is present; when enabled, the public site key is returned by `/api/config`. Restrict the production widget to the deployed hostname. For local testing, use Cloudflare's documented Turnstile test keys rather than production keys.
 
+# Optional Worker configuration
+
+These settings are intentionally absent from the portable Wrangler configs. Add only the features a deployment needs through Cloudflare Worker variables or secrets:
+
+- `CORS_ALLOWED_ORIGINS`: comma-separated additional HTTPS origins allowed to call the API. Browser-extension origins are handled automatically. Do not add broad or untrusted origins.
+- `WEBAUTHN_RP_ID`: passkey relying-party domain. Leave unset to use the request hostname. Changing it invalidates existing passkeys for that hostname.
+- `WEBAUTHN_RP_NAME`: display name shown by passkey prompts; defaults to `Edgewarden`.
+- `WEBAUTHN_ALLOWED_ORIGINS`: comma-separated canonical HTTPS origins accepted for passkey verification. Local development may use `http://localhost[:port]` or `http://127.0.0.1[:port]`; paths, credentials, and other HTTP origins are rejected.
+- `YUBICO_CLIENT_ID` and `YUBICO_SECRET_KEY`: optional Yubico validation credentials. Configure both together as secrets. They override credentials encrypted in D1 through the admin UI.
+- `ADMIN_PASSWORD`: compatibility-only alias for `BOOTSTRAP_SECRET`. New deployments should not set it.
+
+`TURNSTILE_SECRET_KEY` and `YUBICO_SECRET_KEY` are secrets. The other values are non-secret variables unless the deployment has a stricter operational policy.
+
 # Cryptographic secrets
 
 Configure independent secrets for token signing and persisted configuration encryption:
