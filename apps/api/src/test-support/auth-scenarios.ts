@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import type { WorkerBindings } from "../worker-bindings";
 
 export interface AuthScenarioContext {
-	readonly bindings: CloudflareBindings;
+	readonly bindings: WorkerBindings;
 	readonly database: D1Database;
 	accessToken: string;
 	refreshToken: string;
@@ -17,11 +18,6 @@ export interface AuthScenarioContext {
 	masterPasswordHash: string;
 	adminPassword: string;
 }
-
-type TurnstileTestBindings = CloudflareBindings & {
-	TURNSTILE_SECRET_KEY?: string;
-	TURNSTILE_SITE_KEY?: string;
-};
 
 export function registerAuthScenarios(context: AuthScenarioContext): void {
 	const request = context.request;
@@ -446,7 +442,7 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
 	});
 
 	test("enforces Turnstile on password login when configured", async () => {
-		const turnstileBindings = context.bindings as TurnstileTestBindings;
+		const turnstileBindings = context.bindings;
 		turnstileBindings.TURNSTILE_SECRET_KEY = "turnstile-test-secret";
 		turnstileBindings.TURNSTILE_SITE_KEY = "turnstile-test-site-key";
 		const originalFetch = globalThis.fetch;
@@ -507,7 +503,7 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
 	});
 
 	test("enforces the register Turnstile action on account registration", async () => {
-		const turnstileBindings = context.bindings as TurnstileTestBindings;
+		const turnstileBindings = context.bindings;
 		turnstileBindings.TURNSTILE_SECRET_KEY = "turnstile-test-secret";
 		const originalFetch = globalThis.fetch;
 		const payload = {

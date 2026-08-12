@@ -1,13 +1,16 @@
-import { sign, verify } from "hono/jwt";
 import type {
 	AuthenticationResponseJSON,
 	AuthenticatorTransportFuture,
 	RegistrationResponseJSON,
+	WebAuthnCredential,
 } from "@simplewebauthn/server";
+import { sign, verify } from "hono/jwt";
 import type { Selectable } from "kysely";
+import * as v from "valibot";
 import type { WebauthnCredentials } from "../types/db";
-import { base64UrlToBytes, bytesToBase64Url } from "./passkey";
+import type { WorkerBindings } from "../worker-bindings";
 import { deriveJwtPurposeSecret } from "./jwt";
+import { base64UrlToBytes } from "./passkey";
 
 export type AccountPasskeyChallengeScope =
 	| "Authentication"
@@ -27,17 +30,23 @@ const ACCOUNT_PASSKEY_TOKEN_TYPE = "edgewarden.account-passkey.challenge.v1";
 const ACCOUNT_PASSKEY_TOKEN_TTL_SECONDS = 17 * 60;
 const ACCOUNT_PASSKEY_CREATE_TOKEN_TTL_SECONDS = 7 * 60;
 const DEFAULT_RP_NAME = "Edgewarden";
+const EXTENSION_ORIGIN_PATTERN =
+	/^(chrome-extension|moz-extension|safari-web-extension):\/\//;
 
-export interface AccountPasskeyTokenPayload {
-	typ: typeof ACCOUNT_PASSKEY_TOKEN_TYPE;
-	scope: AccountPasskeyChallengeScope;
-	challenge: string;
-	userId: string | null;
-	rpId: string;
-	purpose: "login" | "twoFactor";
-	iat: number;
-	exp: number;
-}
+const AccountPasskeyTokenPayloadSchema = v.object({
+	typ: v.literal(ACCOUNT_PASSKEY_TOKEN_TYPE),
+	scope: v.picklist(["Authentication", "CreateCredential", "UpdateKeySet"]),
+	challenge: v.pipe(v.string(), v.minLength(1)),
+	userId: v.nullable(v.string()),
+	rpId: v.pipe(v.string(), v.minLength(1)),
+	purpose: v.picklist(["login", "twoFactor"]),
+	iat: v.number(),
+	exp: v.number(),
+});
+
+export type AccountPasskeyTokenPayload = v.InferOutput<
+	typeof AccountPasskeyTokenPayloadSchema
+>;
 
 export function accountPasskeyTokenTtlSeconds(
 	scope: AccountPasskeyChallengeScope,
@@ -72,7 +81,7 @@ export async function createAccountPasskeyToken(
 		exp,
 	};
 	return await sign(
-		payload as any,
+		{ ...payload },
 		await deriveJwtPurposeSecret(jwtSecret, "account-passkey"),
 	);
 }
@@ -84,26 +93,24 @@ export async function verifyAccountPasskeyToken(
 	purpose: "login" | "twoFactor",
 ): Promise<AccountPasskeyTokenPayload | null> {
 	try {
-		const payload = (await verify(
+		const payload = await verify(
 			token,
 			await deriveJwtPurposeSecret(jwtSecret, "account-passkey"),
 			"HS256",
-		)) as unknown as AccountPasskeyTokenPayload;
+		);
+		const parsed = v.safeParse(AccountPasskeyTokenPayloadSchema, payload);
 		if (
-			!payload ||
-			payload.typ !== ACCOUNT_PASSKEY_TOKEN_TYPE ||
-			payload.scope !== scope ||
-			payload.purpose !== purpose ||
-			!payload.challenge ||
-			!payload.rpId ||
-			!Number.isFinite(payload.exp)
+			!parsed.success ||
+			parsed.output.scope !== scope ||
+			parsed.output.purpose !== purpose ||
+			!Number.isFinite(parsed.output.exp)
 		) {
 			return null;
 		}
-		if (payload.exp < Math.floor(Date.now() / 1000)) {
+		if (parsed.output.exp <= Math.floor(Date.now() / 1000)) {
 			return null;
 		}
-		return payload;
+		return parsed.output;
 	} catch {
 		return null;
 	}
@@ -111,25 +118,43 @@ export async function verifyAccountPasskeyToken(
 
 export function getAccountPasskeyRpConfig(
 	request: Request,
-	env: CloudflareBindings,
+	env: WorkerBindings,
 ): { rpId: string; rpName: string; origins: string[] } {
 	const url = new URL(request.url);
-	const configuredRpId = String((env as any).WEBAUTHN_RP_ID || "").trim();
+	const configuredRpId = String(env.WEBAUTHN_RP_ID || "").trim();
 	const rpId = configuredRpId || url.hostname;
-	const rpName =
-		String((env as any).WEBAUTHN_RP_NAME || "").trim() || DEFAULT_RP_NAME;
-	const configuredOrigins = String((env as any).WEBAUTHN_ALLOWED_ORIGINS || "")
+	const rpName = String(env.WEBAUTHN_RP_NAME || "").trim() || DEFAULT_RP_NAME;
+	const configuredOrigins = String(env.WEBAUTHN_ALLOWED_ORIGINS || "")
 		.split(",")
 		.map((origin) => origin.trim())
-		.filter(Boolean);
+		.filter(Boolean)
+		.flatMap((origin) => {
+			try {
+				const parsed = new URL(origin);
+				const localHttp =
+					parsed.protocol === "http:" &&
+					(parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1");
+				if (
+					parsed.origin !== origin ||
+					(parsed.protocol !== "https:" && !localHttp)
+				) {
+					throw new Error("origin must be canonical HTTPS or local HTTP");
+				}
+				return [parsed.origin];
+			} catch (error) {
+				console.warn(
+					JSON.stringify({
+						event: "webauthn.origin.invalid",
+						origin,
+						error: error instanceof Error ? error.message : String(error),
+					}),
+				);
+				return [];
+			}
+		});
 	const origins = new Set<string>([url.origin, ...configuredOrigins]);
 	const requestOrigin = request.headers.get("Origin");
-	if (
-		requestOrigin &&
-		(requestOrigin.startsWith("chrome-extension://") ||
-			requestOrigin.startsWith("moz-extension://") ||
-			requestOrigin.startsWith("safari-web-extension://"))
-	) {
+	if (requestOrigin && EXTENSION_ORIGIN_PATTERN.test(requestOrigin)) {
 		origins.add(requestOrigin);
 	}
 	return { rpId, rpName, origins: Array.from(origins) };
@@ -185,9 +210,12 @@ export function buildWebAuthnPrfOption(
 	credential: Selectable<WebauthnCredentials>,
 ): WebAuthnPrfDecryptionOption | null {
 	if (accountPasskeyPrfStatus(credential) !== 0) return null;
+	const encryptedPrivateKey = credential.encrypted_private_key;
+	const encryptedUserKey = credential.encrypted_user_key;
+	if (!encryptedPrivateKey || !encryptedUserKey) return null;
 	return {
-		EncryptedPrivateKey: credential.encrypted_private_key!,
-		EncryptedUserKey: credential.encrypted_user_key!,
+		EncryptedPrivateKey: encryptedPrivateKey,
+		EncryptedUserKey: encryptedUserKey,
 		CredentialId: credential.credential_id,
 		Transports: parseTransports(credential.transports) || [],
 		Object: "webAuthnPrfDecryptionOption",
@@ -218,23 +246,54 @@ export function accountPasskeyCredentialToResponse(
 
 export function toSimpleWebAuthnCredential(
 	credential: Selectable<WebauthnCredentials>,
-): any {
+): WebAuthnCredential {
+	const transports = parseTransports(credential.transports)?.filter(
+		(value): value is AuthenticatorTransportFuture =>
+			AUTHENTICATOR_TRANSPORTS.has(value as AuthenticatorTransportFuture),
+	);
 	return {
 		id: credential.credential_id,
 		publicKey: base64UrlToBytes(credential.public_key),
 		counter: credential.counter,
-		transports: (parseTransports(credential.transports) || undefined) as any,
+		transports: transports?.length ? transports : undefined,
 	};
+}
+
+const AUTHENTICATOR_TRANSPORTS = new Set<AuthenticatorTransportFuture>([
+	"ble",
+	"cable",
+	"hybrid",
+	"internal",
+	"nfc",
+	"smart-card",
+	"usb",
+]);
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+	return value !== null && typeof value === "object"
+		? (value as Record<string, unknown>)
+		: null;
+}
+
+function authenticatorAttachment(
+	value: unknown,
+): "cross-platform" | "platform" | undefined {
+	return value === "cross-platform" || value === "platform" ? value : undefined;
+}
+
+function clientExtensionResults(
+	value: unknown,
+): RegistrationResponseJSON["clientExtensionResults"] {
+	return objectRecord(value) ?? {};
 }
 
 export function normalizeRegistrationResponse(
 	raw: unknown,
 ): RegistrationResponseJSON | null {
-	const input =
-		raw && typeof raw === "object" ? (raw as Record<string, any>) : null;
+	const input = objectRecord(raw);
 	const response =
 		input?.response && typeof input.response === "object"
-			? (input.response as Record<string, any>)
+			? objectRecord(input.response)
 			: null;
 	if (!input || !response) return null;
 	const clientDataJSON = response.clientDataJSON || response.clientDataJson;
@@ -249,9 +308,12 @@ export function normalizeRegistrationResponse(
 		id: String(input.id),
 		rawId: String(input.rawId),
 		type: "public-key",
-		authenticatorAttachment: input.authenticatorAttachment,
-		clientExtensionResults:
-			input.clientExtensionResults || input.extensions || {},
+		authenticatorAttachment: authenticatorAttachment(
+			input.authenticatorAttachment,
+		),
+		clientExtensionResults: clientExtensionResults(
+			input.clientExtensionResults ?? input.extensions,
+		),
 		response: {
 			attestationObject: String(response.attestationObject),
 			clientDataJSON: String(clientDataJSON),
@@ -259,7 +321,13 @@ export function normalizeRegistrationResponse(
 				? String(response.authenticatorData)
 				: undefined,
 			transports: Array.isArray(response.transports)
-				? (response.transports.map(String) as AuthenticatorTransportFuture[])
+				? response.transports
+						.map(String)
+						.filter((value): value is AuthenticatorTransportFuture =>
+							AUTHENTICATOR_TRANSPORTS.has(
+								value as AuthenticatorTransportFuture,
+							),
+						)
 				: undefined,
 			publicKey: response.publicKey ? String(response.publicKey) : undefined,
 			publicKeyAlgorithm:
@@ -273,11 +341,10 @@ export function normalizeRegistrationResponse(
 export function normalizeAuthenticationResponse(
 	raw: unknown,
 ): AuthenticationResponseJSON | null {
-	const input =
-		raw && typeof raw === "object" ? (raw as Record<string, any>) : null;
+	const input = objectRecord(raw);
 	const response =
 		input?.response && typeof input.response === "object"
-			? (input.response as Record<string, any>)
+			? objectRecord(input.response)
 			: null;
 	if (!input || !response) return null;
 	const clientDataJSON = response.clientDataJSON || response.clientDataJson;
@@ -293,9 +360,12 @@ export function normalizeAuthenticationResponse(
 		id: String(input.id),
 		rawId: String(input.rawId),
 		type: "public-key",
-		authenticatorAttachment: input.authenticatorAttachment,
-		clientExtensionResults:
-			input.clientExtensionResults || input.extensions || {},
+		authenticatorAttachment: authenticatorAttachment(
+			input.authenticatorAttachment,
+		),
+		clientExtensionResults: clientExtensionResults(
+			input.clientExtensionResults ?? input.extensions,
+		),
 		response: {
 			authenticatorData: String(response.authenticatorData),
 			clientDataJSON: String(clientDataJSON),

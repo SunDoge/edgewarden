@@ -187,7 +187,10 @@ export function registerAccountSecurityScenarios(
 			}),
 		});
 		assert.equal(login.status, 400);
-		const challenge = await login.json<any>();
+		const challenge = await login.json<{
+			TwoFactorProviders: string[];
+			TwoFactorProviders2: Record<string, { Challenge: { token: string } }>;
+		}>();
 		assert.ok(challenge.TwoFactorProviders.includes("7"));
 		assert.ok(challenge.TwoFactorProviders2["7"].Challenge.token);
 		const revisionBeforeDelete = await context.database
@@ -314,6 +317,17 @@ export function registerAccountSecurityScenarios(
 				}),
 				{ clientId: "12345", secretKey },
 			);
+			assert.deepEqual(
+				await loadYubicoCredentials(rotatedJwtDb, {
+					...context.bindings,
+					YUBICO_CLIENT_ID: " 67890 ",
+					YUBICO_SECRET_KEY: ` ${btoa("environment-secret")} `,
+				}),
+				{
+					clientId: "67890",
+					secretKey: btoa("environment-secret"),
+				},
+			);
 		} finally {
 			await rotatedJwtDb.destroy();
 		}
@@ -326,7 +340,7 @@ export function registerAccountSecurityScenarios(
 		assert.equal(settings.status, 200, await settings.clone().text());
 		assert.deepEqual(
 			await settings
-				.json<any>()
+				.json<{ configured: boolean; enabled: boolean; nfc: boolean }>()
 				.then((body) => [body.configured, body.enabled, body.nfc]),
 			[true, true, true],
 		);
@@ -341,7 +355,10 @@ export function registerAccountSecurityScenarios(
 			}),
 		});
 		assert.equal(login.status, 400);
-		const body = await login.json<any>();
+		const body = await login.json<{
+			TwoFactorProviders: string[];
+			TwoFactorProviders2: Record<string, { Nfc: boolean }>;
+		}>();
 		assert.ok(body.TwoFactorProviders.includes("3"));
 		assert.equal(body.TwoFactorProviders2["3"].Nfc, true);
 		await context.database

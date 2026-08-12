@@ -1,29 +1,30 @@
+import type { WorkerBindings } from "../worker-bindings";
+
 const SITEVERIFY_URL =
 	"https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 interface TurnstileVerificationResponse {
 	success?: boolean;
 	action?: string;
-	["error-codes"]?: string[];
 }
 
-export function turnstileEnabled(env: CloudflareBindings): boolean {
-	return Boolean(String((env as any).TURNSTILE_SECRET_KEY || "").trim());
+export function turnstileEnabled(env: WorkerBindings): boolean {
+	return Boolean(String(env.TURNSTILE_SECRET_KEY || "").trim());
 }
 
-export function turnstileSiteKey(env: CloudflareBindings): string | null {
-	const key = String((env as any).TURNSTILE_SITE_KEY || "").trim();
+export function turnstileSiteKey(env: WorkerBindings): string | null {
+	const key = String(env.TURNSTILE_SITE_KEY || "").trim();
 	return key || null;
 }
 
 export async function verifyTurnstileToken(
-	env: CloudflareBindings,
+	env: WorkerBindings,
 	token: string,
 	expectedAction: "login" | "register",
 	remoteIp?: string,
 	fetchImpl: typeof fetch = fetch,
 ): Promise<boolean> {
-	const secret = String((env as any).TURNSTILE_SECRET_KEY || "").trim();
+	const secret = String(env.TURNSTILE_SECRET_KEY || "").trim();
 	if (!secret) return true;
 	if (!token || token.length > 2048) return false;
 	const form = new FormData();
