@@ -90,9 +90,7 @@ async function applyPendingMigrations(database: D1Database): Promise<void> {
 		await database.batch([
 			...statements.map((statement) => database.prepare(statement)),
 			database
-				.prepare(
-					`INSERT OR IGNORE INTO ${MIGRATIONS_TABLE} (name) VALUES (?)`,
-				)
+				.prepare(`INSERT OR IGNORE INTO ${MIGRATIONS_TABLE} (name) VALUES (?)`)
 				.bind(migration.name),
 		]);
 	}

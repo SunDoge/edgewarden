@@ -13,7 +13,12 @@ export default defineConfig({
 				directives: {
 					"default-src": ["self"],
 					"base-uri": ["none"],
-					"connect-src": ["self", "wss:", "https://challenges.cloudflare.com", "https://api.pwnedpasswords.com"],
+					"connect-src": [
+						"self",
+						"wss:",
+						"https://challenges.cloudflare.com",
+						"https://api.pwnedpasswords.com",
+					],
 					"font-src": ["self"],
 					"form-action": ["self"],
 					"frame-ancestors": ["none"],

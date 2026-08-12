@@ -321,16 +321,29 @@ export async function createAccountPasskeyCredential(response: {
 	};
 }
 
-export async function createTwoFactorPasskeyCredential(response: { options: unknown; token: string }): Promise<{ token: string; deviceResponse: Record<string, unknown> }> {
+export async function createTwoFactorPasskeyCredential(response: {
+	options: unknown;
+	token: string;
+}): Promise<{ token: string; deviceResponse: Record<string, unknown> }> {
 	const pending = await createAccountPasskeyCredential(response);
 	return { token: pending.token, deviceResponse: pending.request };
 }
 
-export async function assertTwoFactorPasskeyCredential(response: { options: unknown; token: string }): Promise<{ token: string; deviceResponse: Record<string, unknown> }> {
-	if (!window.PublicKeyCredential || !navigator.credentials) throw new Error("您的浏览器不支持 WebAuthn 安全密钥");
-	const credential = await navigator.credentials.get({ publicKey: cloneRequestOptions(response.options) });
-	if (!(credential instanceof PublicKeyCredential)) throw new Error("未选择安全密钥");
-	return { token: response.token, deviceResponse: assertionRequest(credential) };
+export async function assertTwoFactorPasskeyCredential(response: {
+	options: unknown;
+	token: string;
+}): Promise<{ token: string; deviceResponse: Record<string, unknown> }> {
+	if (!window.PublicKeyCredential || !navigator.credentials)
+		throw new Error("您的浏览器不支持 WebAuthn 安全密钥");
+	const credential = await navigator.credentials.get({
+		publicKey: cloneRequestOptions(response.options),
+	});
+	if (!(credential instanceof PublicKeyCredential))
+		throw new Error("未选择安全密钥");
+	return {
+		token: response.token,
+		deviceResponse: assertionRequest(credential),
+	};
 }
 
 function prfCredentialIdsFromAllowCredentials(
@@ -364,7 +377,8 @@ export async function buildAccountPasskeyPrfKeySet(
 ): Promise<AccountPasskeyPrfKeySet> {
 	const rawId = new Uint8Array(pending.deviceResponse.rawId);
 	const credentialId = bytesToBase64Url(rawId);
-	if (!pending.createOptions?.challenge) throw new Error("通行密钥注册挑战已丢失，请重新创建");
+	if (!pending.createOptions?.challenge)
+		throw new Error("通行密钥注册挑战已丢失，请重新创建");
 	const assertionOptions: PublicKeyCredentialRequestOptions = {
 		challenge: pending.createOptions.challenge,
 		rpId: pending.createOptions?.rp?.id,

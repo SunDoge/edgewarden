@@ -368,19 +368,46 @@ export async function rewrapUserKeyForMasterPassword(args: {
 	protectedUserKey: string;
 	nextMasterKey: ArrayBuffer;
 }> {
-	const currentMasterKey = await deriveMasterKey(args.currentPassword, args.email, args.iterations);
-	const currentMasterPasswordHash = await deriveMasterPasswordHash(currentMasterKey, args.currentPassword);
-	const oldEncKey = await hkdfExpand(new Uint8Array(currentMasterKey), "enc", 32);
-	const oldMacKey = await hkdfExpand(new Uint8Array(currentMasterKey), "mac", 32);
+	const currentMasterKey = await deriveMasterKey(
+		args.currentPassword,
+		args.email,
+		args.iterations,
+	);
+	const currentMasterPasswordHash = await deriveMasterPasswordHash(
+		currentMasterKey,
+		args.currentPassword,
+	);
+	const oldEncKey = await hkdfExpand(
+		new Uint8Array(currentMasterKey),
+		"enc",
+		32,
+	);
+	const oldMacKey = await hkdfExpand(
+		new Uint8Array(currentMasterKey),
+		"mac",
+		32,
+	);
 	const userKey = await decryptBw(args.profileKey, oldEncKey, oldMacKey);
 	if (userKey.length !== 64) throw new Error("保险库密钥无效");
 
-	const nextMasterKey = await deriveMasterKey(args.newPassword, args.email, args.iterations);
-	const newMasterPasswordHash = await deriveMasterPasswordHash(nextMasterKey, args.newPassword);
+	const nextMasterKey = await deriveMasterKey(
+		args.newPassword,
+		args.email,
+		args.iterations,
+	);
+	const newMasterPasswordHash = await deriveMasterPasswordHash(
+		nextMasterKey,
+		args.newPassword,
+	);
 	const nextEncKey = await hkdfExpand(new Uint8Array(nextMasterKey), "enc", 32);
 	const nextMacKey = await hkdfExpand(new Uint8Array(nextMasterKey), "mac", 32);
 	const protectedUserKey = await encryptBw(userKey, nextEncKey, nextMacKey);
-	return { currentMasterPasswordHash, newMasterPasswordHash, protectedUserKey, nextMasterKey };
+	return {
+		currentMasterPasswordHash,
+		newMasterPasswordHash,
+		protectedUserKey,
+		nextMasterKey,
+	};
 }
 
 export async function generateProtectedKey(
@@ -656,12 +683,18 @@ async function encryptObject(
 	macKey: Uint8Array,
 ): Promise<unknown> {
 	if (typeof value === "string") {
-		return value ? encryptBw(new TextEncoder().encode(value), encKey, macKey) : null;
+		return value
+			? encryptBw(new TextEncoder().encode(value), encKey, macKey)
+			: null;
 	}
-	if (Array.isArray(value)) return Promise.all(value.map((item) => encryptObject(item, encKey, macKey)));
+	if (Array.isArray(value))
+		return Promise.all(
+			value.map((item) => encryptObject(item, encKey, macKey)),
+		);
 	if (value && typeof value === "object") {
 		const encrypted: Record<string, unknown> = {};
-		for (const [key, child] of Object.entries(value)) encrypted[key] = await encryptObject(child, encKey, macKey);
+		for (const [key, child] of Object.entries(value))
+			encrypted[key] = await encryptObject(child, encKey, macKey);
 		return encrypted;
 	}
 	return value;
@@ -707,21 +740,38 @@ export async function decryptCipher(
 			macKey,
 		);
 	}
-	if (cipher.sshKey) decrypted.sshKey = await decryptObject(cipher.sshKey, encKey, macKey);
-	if (cipher.bankAccount) decrypted.bankAccount = await decryptObject(cipher.bankAccount, encKey, macKey);
-	if (cipher.driversLicense) decrypted.driversLicense = await decryptObject(cipher.driversLicense, encKey, macKey);
-	if (cipher.passport) decrypted.passport = await decryptObject(cipher.passport, encKey, macKey);
+	if (cipher.sshKey)
+		decrypted.sshKey = await decryptObject(cipher.sshKey, encKey, macKey);
+	if (cipher.bankAccount)
+		decrypted.bankAccount = await decryptObject(
+			cipher.bankAccount,
+			encKey,
+			macKey,
+		);
+	if (cipher.driversLicense)
+		decrypted.driversLicense = await decryptObject(
+			cipher.driversLicense,
+			encKey,
+			macKey,
+		);
+	if (cipher.passport)
+		decrypted.passport = await decryptObject(cipher.passport, encKey, macKey);
 	if (cipher.attachments?.length) {
 		decrypted.attachments = [];
 		for (const attachment of cipher.attachments) {
 			if (!attachment.key) throw new Error("Attachment key missing");
 			const rawAttachmentKey = await decryptBw(attachment.key, encKey, macKey);
-			if (rawAttachmentKey.length !== 64) throw new Error("Invalid attachment key");
+			if (rawAttachmentKey.length !== 64)
+				throw new Error("Invalid attachment key");
 			const attachmentEncKey = rawAttachmentKey.slice(0, 32);
 			const attachmentMacKey = rawAttachmentKey.slice(32, 64);
 			decrypted.attachments.push({
 				...attachment,
-				fileName: await decryptStr(attachment.fileName, attachmentEncKey, attachmentMacKey),
+				fileName: await decryptStr(
+					attachment.fileName,
+					attachmentEncKey,
+					attachmentMacKey,
+				),
 				_keys: { enc: attachmentEncKey, mac: attachmentMacKey },
 			});
 		}
@@ -803,18 +853,38 @@ export async function encryptCipher(
 		key: wrappedKey,
 	};
 
-	const typeData = fields.type === 1 ? ["login", fields.login]
-		: fields.type === 2 ? ["secureNote", fields.secureNote ?? {}]
-		: fields.type === 3 ? ["card", fields.card]
-		: fields.type === 4 ? ["identity", fields.identity]
-		: fields.type === 5 ? ["sshKey", fields.sshKey]
-		: fields.type === 6 ? ["bankAccount", fields.bankAccount]
-		: fields.type === 7 ? ["driversLicense", fields.driversLicense]
-		: fields.type === 8 ? ["passport", fields.passport]
-		: null;
-	if (typeData?.[1]) payload[typeData[0] as string] = await encryptObject(typeData[1], encKey, macKey);
-	if (fields.fields?.length) payload.fields = await encryptObject(fields.fields, encKey, macKey);
-	if (fields.passwordHistory?.length) payload.passwordHistory = await encryptObject(fields.passwordHistory, encKey, macKey);
+	const typeData =
+		fields.type === 1
+			? ["login", fields.login]
+			: fields.type === 2
+				? ["secureNote", fields.secureNote ?? {}]
+				: fields.type === 3
+					? ["card", fields.card]
+					: fields.type === 4
+						? ["identity", fields.identity]
+						: fields.type === 5
+							? ["sshKey", fields.sshKey]
+							: fields.type === 6
+								? ["bankAccount", fields.bankAccount]
+								: fields.type === 7
+									? ["driversLicense", fields.driversLicense]
+									: fields.type === 8
+										? ["passport", fields.passport]
+										: null;
+	if (typeData?.[1])
+		payload[typeData[0] as string] = await encryptObject(
+			typeData[1],
+			encKey,
+			macKey,
+		);
+	if (fields.fields?.length)
+		payload.fields = await encryptObject(fields.fields, encKey, macKey);
+	if (fields.passwordHistory?.length)
+		payload.passwordHistory = await encryptObject(
+			fields.passwordHistory,
+			encKey,
+			macKey,
+		);
 
 	return payload;
 }

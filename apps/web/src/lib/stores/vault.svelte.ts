@@ -19,7 +19,10 @@ import type {
 	SyncResponse,
 } from "@edgewarden/shared";
 import { decryptOwnedSend } from "$lib/services/send-crypto";
-import { importAccountPrivateKey, unwrapOrganizationKey } from "$lib/services/organization-crypto";
+import {
+	importAccountPrivateKey,
+	unwrapOrganizationKey,
+} from "$lib/services/organization-crypto";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -63,7 +66,10 @@ if (typeof window !== "undefined" && import.meta.env.DEV) {
 let _masterKey = $state<ArrayBuffer | null>(initialMasterKey);
 let _symEncKey = $state<Uint8Array | null>(initialSymEncKey);
 let _symMacKey = $state<Uint8Array | null>(initialSymMacKey);
-const _organizationKeys = new Map<string, { encKey: Uint8Array; macKey: Uint8Array }>();
+const _organizationKeys = new Map<
+	string,
+	{ encKey: Uint8Array; macKey: Uint8Array }
+>();
 
 function persistDevKeys() {
 	if (typeof window !== "undefined" && import.meta.env.DEV) {
@@ -149,9 +155,13 @@ export const vault = {
 	},
 };
 
-export function getOrganizationKey(organizationId: string): { encKey: Uint8Array; macKey: Uint8Array } | null {
+export function getOrganizationKey(
+	organizationId: string,
+): { encKey: Uint8Array; macKey: Uint8Array } | null {
 	const key = _organizationKeys.get(organizationId);
-	return key ? { encKey: new Uint8Array(key.encKey), macKey: new Uint8Array(key.macKey) } : null;
+	return key
+		? { encKey: new Uint8Array(key.encKey), macKey: new Uint8Array(key.macKey) }
+		: null;
 }
 
 // ── Private Key Setup & Decryption ──────────────────────────────────────────
@@ -178,7 +188,9 @@ async function decryptAllCiphers(
 	let failures = 0;
 	for (const cipher of ciphers) {
 		try {
-			const key = cipher.organizationId ? _organizationKeys.get(cipher.organizationId) : { encKey: _symEncKey, macKey: _symMacKey };
+			const key = cipher.organizationId
+				? _organizationKeys.get(cipher.organizationId)
+				: { encKey: _symEncKey, macKey: _symMacKey };
 			if (!key) throw new Error("Organization key unavailable");
 			const dec = await decryptCipher(cipher, key.encKey, key.macKey);
 			decrypted.push(dec);
@@ -187,47 +199,97 @@ async function decryptAllCiphers(
 			failures++;
 		}
 	}
-	if (failures) _vault.warning = `${failures} 个保险库条目未通过完整性校验，已从当前会话隔离。`;
+	if (failures)
+		_vault.warning = `${failures} 个保险库条目未通过完整性校验，已从当前会话隔离。`;
 	return decrypted;
 }
 
-async function setupOrganizationKeys(profile: SyncResponse["profile"]): Promise<void> {
+async function setupOrganizationKeys(
+	profile: SyncResponse["profile"],
+): Promise<void> {
 	_organizationKeys.clear();
-	const organizations = ((profile as any).organizations ?? []) as Record<string, any>[];
+	const organizations = ((profile as any).organizations ?? []) as Record<
+		string,
+		any
+	>[];
 	if (!organizations.length) return;
-	if (!_symEncKey || !_symMacKey || !profile.privateKey) throw new Error("Account private key unavailable");
-	const privateKey = await importAccountPrivateKey(profile.privateKey, _symEncKey, _symMacKey);
+	if (!_symEncKey || !_symMacKey || !profile.privateKey)
+		throw new Error("Account private key unavailable");
+	const privateKey = await importAccountPrivateKey(
+		profile.privateKey,
+		_symEncKey,
+		_symMacKey,
+	);
 	let failures = 0;
 	for (const organization of organizations) {
 		try {
-			if (!organization.id || !organization.key) throw new Error("Missing member key");
-			_organizationKeys.set(String(organization.id), await unwrapOrganizationKey(String(organization.key), privateKey));
-		} catch (error) { console.error("Failed to unwrap organization key", organization.id, error); failures++; }
+			if (!organization.id || !organization.key)
+				throw new Error("Missing member key");
+			_organizationKeys.set(
+				String(organization.id),
+				await unwrapOrganizationKey(String(organization.key), privateKey),
+			);
+		} catch (error) {
+			console.error(
+				"Failed to unwrap organization key",
+				organization.id,
+				error,
+			);
+			failures++;
+		}
 	}
-	if (failures) _vault.warning = `${failures} 个组织密钥无法解封，相关条目已隔离。`;
+	if (failures)
+		_vault.warning = `${failures} 个组织密钥无法解封，相关条目已隔离。`;
 }
 
-async function decryptCollections(collections: unknown[]): Promise<Record<string, any>[]> {
+async function decryptCollections(
+	collections: unknown[],
+): Promise<Record<string, any>[]> {
 	const output: Record<string, any>[] = [];
 	for (const raw of collections) {
 		const collection = raw as Record<string, any>;
 		try {
-			const key = _organizationKeys.get(String(collection.organizationId ?? ""));
+			const key = _organizationKeys.get(
+				String(collection.organizationId ?? ""),
+			);
 			if (!key) throw new Error("Organization key unavailable");
-			output.push({ ...collection, name: await decryptStr(String(collection.name ?? ""), key.encKey, key.macKey) });
-		} catch (error) { console.error("Failed to decrypt collection", collection.id, error); }
+			output.push({
+				...collection,
+				name: await decryptStr(
+					String(collection.name ?? ""),
+					key.encKey,
+					key.macKey,
+				),
+			});
+		} catch (error) {
+			console.error("Failed to decrypt collection", collection.id, error);
+		}
 	}
 	return output;
 }
 
-export function applyOrganizationAccess(ciphers: CipherResponse[], collections: Record<string, any>[]): CipherResponse[] {
-	const visible = new Map(collections.map((collection) => [String(collection.id), collection]));
+export function applyOrganizationAccess(
+	ciphers: CipherResponse[],
+	collections: Record<string, any>[],
+): CipherResponse[] {
+	const visible = new Map(
+		collections.map((collection) => [String(collection.id), collection]),
+	);
 	return ciphers.map((cipher) => {
 		if (!cipher.organizationId) return cipher;
 		const ids = cipher.collectionIds ?? [];
-		const access = ids.map((id) => visible.get(id)).filter((collection): collection is Record<string, any> => Boolean(collection));
-		const readOnly = !ids.length || access.length !== ids.length || access.some((collection) => Boolean(collection.readOnly));
-		const hidePasswords = access.length > 0 && access.every((collection) => Boolean(collection.hidePasswords));
+		const access = ids
+			.map((id) => visible.get(id))
+			.filter((collection): collection is Record<string, any> =>
+				Boolean(collection),
+			);
+		const readOnly =
+			!ids.length ||
+			access.length !== ids.length ||
+			access.some((collection) => Boolean(collection.readOnly));
+		const hidePasswords =
+			access.length > 0 &&
+			access.every((collection) => Boolean(collection.hidePasswords));
 		return { ...cipher, readOnly, hidePasswords } as CipherResponse;
 	});
 }
@@ -248,19 +310,33 @@ async function decryptAllFolders(
 			failures++;
 		}
 	}
-	if (failures) _vault.warning = `${_vault.warning ? `${_vault.warning} ` : ""}${failures} 个文件夹未通过完整性校验，已从当前会话隔离。`;
+	if (failures)
+		_vault.warning = `${_vault.warning ? `${_vault.warning} ` : ""}${failures} 个文件夹未通过完整性校验，已从当前会话隔离。`;
 	return decrypted;
 }
 
-async function decryptAllSends(sends: unknown[]): Promise<Record<string, any>[]> {
+async function decryptAllSends(
+	sends: unknown[],
+): Promise<Record<string, any>[]> {
 	if (!_symEncKey || !_symMacKey) return [];
 	const decrypted: Record<string, any>[] = [];
 	let failures = 0;
 	for (const send of sends) {
-		try { decrypted.push(await decryptOwnedSend(send as Record<string, any>, _symEncKey, _symMacKey)); }
-		catch (error) { console.error("Failed to decrypt Send:", error); failures++; }
+		try {
+			decrypted.push(
+				await decryptOwnedSend(
+					send as Record<string, any>,
+					_symEncKey,
+					_symMacKey,
+				),
+			);
+		} catch (error) {
+			console.error("Failed to decrypt Send:", error);
+			failures++;
+		}
 	}
-	if (failures) _vault.warning = `${_vault.warning ? `${_vault.warning} ` : ""}${failures} 个 Send 未通过完整性校验，已隔离。`;
+	if (failures)
+		_vault.warning = `${_vault.warning ? `${_vault.warning} ` : ""}${failures} 个 Send 未通过完整性校验，已隔离。`;
 	return decrypted;
 }
 
@@ -295,8 +371,12 @@ export async function syncVaultData(): Promise<void> {
 		const decryptedCiphers = await decryptAllCiphers(data.ciphers);
 		_vault.folders = await decryptAllFolders(data.folders);
 		_vault.collections = await decryptCollections(data.collections);
-		_vault.ciphers = applyOrganizationAccess(decryptedCiphers, _vault.collections);
-		_vault.organizations = ((data.profile as any).organizations ?? []) as Record<string, any>[];
+		_vault.ciphers = applyOrganizationAccess(
+			decryptedCiphers,
+			_vault.collections,
+		);
+		_vault.organizations = ((data.profile as any).organizations ??
+			[]) as Record<string, any>[];
 		_vault.sends = await decryptAllSends(data.sends);
 		_vault.profile = data.profile;
 		_vault.syncedAt = Date.now();
@@ -313,8 +393,12 @@ export async function syncVaultData(): Promise<void> {
 				const decryptedCiphers = await decryptAllCiphers(cached.ciphers);
 				_vault.folders = await decryptAllFolders(cached.folders);
 				_vault.collections = await decryptCollections(cached.collections ?? []);
-				_vault.ciphers = applyOrganizationAccess(decryptedCiphers, _vault.collections);
-				_vault.organizations = (((cached.profile as any).organizations ?? []) as Record<string, any>[]);
+				_vault.ciphers = applyOrganizationAccess(
+					decryptedCiphers,
+					_vault.collections,
+				);
+				_vault.organizations = ((cached.profile as any).organizations ??
+					[]) as Record<string, any>[];
 				_vault.sends = await decryptAllSends(cached.sends ?? []);
 				_vault.profile = cached.profile;
 				_vault.syncedAt = cached.syncedAt;
@@ -351,8 +435,12 @@ export async function unlock(password: string): Promise<void> {
 	const decryptedCiphers = await decryptAllCiphers(cached.ciphers);
 	_vault.folders = await decryptAllFolders(cached.folders);
 	_vault.collections = await decryptCollections(cached.collections ?? []);
-	_vault.ciphers = applyOrganizationAccess(decryptedCiphers, _vault.collections);
-	_vault.organizations = (((cached.profile as any).organizations ?? []) as Record<string, any>[]);
+	_vault.ciphers = applyOrganizationAccess(
+		decryptedCiphers,
+		_vault.collections,
+	);
+	_vault.organizations = ((cached.profile as any).organizations ??
+		[]) as Record<string, any>[];
 	_vault.sends = await decryptAllSends(cached.sends ?? []);
 	_vault.profile = cached.profile;
 	_vault.syncedAt = cached.syncedAt;
@@ -377,7 +465,8 @@ export function setMasterKey(key: ArrayBuffer): void {
 
 /** Set a user key recovered through a WebAuthn PRF credential. */
 export function setSymmetricKeys(encKey: Uint8Array, macKey: Uint8Array): void {
-	if (encKey.length !== 32 || macKey.length !== 32) throw new Error("Invalid vault key");
+	if (encKey.length !== 32 || macKey.length !== 32)
+		throw new Error("Invalid vault key");
 	_symEncKey = new Uint8Array(encKey);
 	_symMacKey = new Uint8Array(macKey);
 	persistDevKeys();

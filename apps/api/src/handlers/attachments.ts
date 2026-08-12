@@ -2,37 +2,88 @@ import { vValidator } from "@hono/valibot-validator";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { CreateAttachmentSchema } from "../schemas/attachments";
-import { deleteBlobObject, getAttachmentObjectKey, getBlobObject, getBlobStorageMaxBytes, putBlobObject } from "../services/blob-store";
+import {
+	deleteBlobObject,
+	getAttachmentObjectKey,
+	getBlobObject,
+	getBlobStorageMaxBytes,
+	putBlobObject,
+} from "../services/blob-store";
 import { executeBatch, revisionQuery } from "../services/db/batch";
 import * as attachmentsDb from "../services/db/attachments";
 import * as ciphersDb from "../services/db/ciphers";
-import { buildDirectUploadUrl, getSafeJwtSecret, parseDirectUploadPayload } from "../utils/direct-upload";
-import { createAttachmentUploadToken, verifyAttachmentUploadToken } from "../utils/jwt";
+import {
+	buildDirectUploadUrl,
+	getSafeJwtSecret,
+	parseDirectUploadPayload,
+} from "../utils/direct-upload";
+import {
+	createAttachmentUploadToken,
+	verifyAttachmentUploadToken,
+} from "../utils/jwt";
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
 
-async function ownerRevisionQueries(db: any, cipher: { user_id: string | null; org_id: string | null }, timestamp: number) {
+async function ownerRevisionQueries(
+	db: any,
+	cipher: { user_id: string | null; org_id: string | null },
+	timestamp: number,
+) {
 	if (cipher.user_id) return [revisionQuery(db, cipher.user_id, timestamp)];
-	const members = await db.selectFrom("org_members").select("user_id").where("org_id", "=", cipher.org_id!).where("status", "=", "confirmed").where("user_id", "is not", null).execute();
-	return members.map((member: any) => revisionQuery(db, member.user_id, timestamp));
+	const members = await db
+		.selectFrom("org_members")
+		.select("user_id")
+		.where("org_id", "=", cipher.org_id!)
+		.where("status", "=", "confirmed")
+		.where("user_id", "is not", null)
+		.execute();
+	return members.map((member: any) =>
+		revisionQuery(db, member.user_id, timestamp),
+	);
 }
 
-async function canUploadAttachment(db: any, cipher: { id: string; user_id: string | null; org_id: string | null }, userId: string) {
+async function canUploadAttachment(
+	db: any,
+	cipher: { id: string; user_id: string | null; org_id: string | null },
+	userId: string,
+) {
 	if (cipher.user_id) return cipher.user_id === userId;
 	if (!cipher.org_id) return false;
-	const member = await db.selectFrom("org_members").selectAll().where("org_id", "=", cipher.org_id).where("user_id", "=", userId).where("status", "=", "confirmed").executeTakeFirst();
+	const member = await db
+		.selectFrom("org_members")
+		.selectAll()
+		.where("org_id", "=", cipher.org_id)
+		.where("user_id", "=", userId)
+		.where("status", "=", "confirmed")
+		.executeTakeFirst();
 	if (!member) return false;
-	if (["manager", "admin", "owner"].includes(member.role) || member.access_all) return true;
-	const links = await db.selectFrom("cipher_collections").select("collection_id").where("cipher_id", "=", cipher.id).execute();
+	if (["manager", "admin", "owner"].includes(member.role) || member.access_all)
+		return true;
+	const links = await db
+		.selectFrom("cipher_collections")
+		.select("collection_id")
+		.where("cipher_id", "=", cipher.id)
+		.execute();
 	if (!links.length) return false;
-	const writable = await db.selectFrom("collection_members").select("collection_id").where("org_member_id", "=", member.id).where("collection_id", "in", links.map((link: any) => link.collection_id)).where("read_only", "=", 0).execute();
+	const writable = await db
+		.selectFrom("collection_members")
+		.select("collection_id")
+		.where("org_member_id", "=", member.id)
+		.where(
+			"collection_id",
+			"in",
+			links.map((link: any) => link.collection_id),
+		)
+		.where("read_only", "=", 0)
+		.execute();
 	return writable.length === links.length;
 }
 
 function sizeName(bytes: number): string {
 	if (bytes < 1024) return `${bytes} Bytes`;
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
-	if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+	if (bytes < 1024 * 1024 * 1024)
+		return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 	return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
@@ -43,18 +94,53 @@ export const createAttachment = factory.createHandlers(
 		const body = c.req.valid("json");
 		const secret = getSafeJwtSecret(c.env);
 		if (!secret) return errorResponse("Server configuration error", 500);
-		const maxBytes = getBlobStorageMaxBytes(c.env, LIMITS.attachment.maxFileSizeBytes);
-		if (body.fileSize > maxBytes) return errorResponse("Attachment storage limit exceeded", 413);
+		const maxBytes = getBlobStorageMaxBytes(
+			c.env,
+			LIMITS.attachment.maxFileSizeBytes,
+		);
+		if (body.fileSize > maxBytes)
+			return errorResponse("Attachment storage limit exceeded", 413);
 
 		const id = crypto.randomUUID();
 		const ts = now();
 		await executeBatch(c.get("dbDialect"), [
-			c.get("db").insertInto("attachments").values({ id, cipher_id: cipher.id, file_name: body.fileName, size: body.fileSize, size_name: sizeName(body.fileSize), key: body.key, created_at: ts }).compile(),
-			c.get("db").updateTable("ciphers").set({ updated_at: ts }).where("id", "=", cipher.id).compile(),
+			c
+				.get("db")
+				.insertInto("attachments")
+				.values({
+					id,
+					cipher_id: cipher.id,
+					file_name: body.fileName,
+					size: body.fileSize,
+					size_name: sizeName(body.fileSize),
+					key: body.key,
+					created_at: ts,
+				})
+				.compile(),
+			c
+				.get("db")
+				.updateTable("ciphers")
+				.set({ updated_at: ts })
+				.where("id", "=", cipher.id)
+				.compile(),
 			...(await ownerRevisionQueries(c.get("db"), cipher, ts)),
 		]);
-		const token = await createAttachmentUploadToken(c.get("user").id, cipher.id, id, secret);
-		return c.json({ object: "attachment-fileUpload", attachmentId: id, fileUploadType: 1, url: buildDirectUploadUrl(c.req.raw, `/api/ciphers/${cipher.id}/attachment/${id}`, token) });
+		const token = await createAttachmentUploadToken(
+			c.get("user").id,
+			cipher.id,
+			id,
+			secret,
+		);
+		return c.json({
+			object: "attachment-fileUpload",
+			attachmentId: id,
+			fileUploadType: 1,
+			url: buildDirectUploadUrl(
+				c.req.raw,
+				`/api/ciphers/${cipher.id}/attachment/${id}`,
+				token,
+			),
+		});
 	},
 );
 
@@ -64,14 +150,48 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
 	const token = c.req.query("token");
 	if (!token) return errorResponse("Upload token required", 401);
 	const claims = await verifyAttachmentUploadToken(token, secret);
-	if (!claims || claims.cipherId !== c.req.param("id") || claims.attachmentId !== c.req.param("attachmentId")) return errorResponse("Invalid or expired upload token", 401);
+	if (
+		!claims ||
+		claims.cipherId !== c.req.param("id") ||
+		claims.attachmentId !== c.req.param("attachmentId")
+	)
+		return errorResponse("Invalid or expired upload token", 401);
 	const cipher = await ciphersDb.getCipherById(c.get("db"), claims.cipherId);
-	const attachment = await attachmentsDb.getById(c.get("db"), claims.attachmentId);
-	if (!cipher || !attachment || attachment.cipher_id !== cipher.id || !(await canUploadAttachment(c.get("db"), cipher, claims.userId))) return errorResponse("Attachment not found", 404);
-	if (await getBlobObject(c.env, getAttachmentObjectKey(cipher.id, attachment.id))) return errorResponse("Attachment already uploaded", 409);
-	const upload = await parseDirectUploadPayload(c.req.raw, { expectedSize: attachment.size, maxFileSize: getBlobStorageMaxBytes(c.env, LIMITS.attachment.maxFileSizeBytes), tooLargeMessage: "Attachment storage limit exceeded", sizeMismatchMessage: "Attachment size does not match metadata" });
+	const attachment = await attachmentsDb.getById(
+		c.get("db"),
+		claims.attachmentId,
+	);
+	if (
+		!cipher ||
+		!attachment ||
+		attachment.cipher_id !== cipher.id ||
+		!(await canUploadAttachment(c.get("db"), cipher, claims.userId))
+	)
+		return errorResponse("Attachment not found", 404);
+	if (
+		await getBlobObject(c.env, getAttachmentObjectKey(cipher.id, attachment.id))
+	)
+		return errorResponse("Attachment already uploaded", 409);
+	const upload = await parseDirectUploadPayload(c.req.raw, {
+		expectedSize: attachment.size,
+		maxFileSize: getBlobStorageMaxBytes(
+			c.env,
+			LIMITS.attachment.maxFileSizeBytes,
+		),
+		tooLargeMessage: "Attachment storage limit exceeded",
+		sizeMismatchMessage: "Attachment size does not match metadata",
+	});
 	if (upload instanceof Response) return upload;
-	await putBlobObject(c.env, getAttachmentObjectKey(cipher.id, attachment.id), upload.body, { size: upload.size, contentType: "application/octet-stream", customMetadata: { cipherId: cipher.id, attachmentId: attachment.id } });
+	await putBlobObject(
+		c.env,
+		getAttachmentObjectKey(cipher.id, attachment.id),
+		upload.body,
+		{
+			size: upload.size,
+			contentType: "application/octet-stream",
+			customMetadata: { cipherId: cipher.id, attachmentId: attachment.id },
+		},
+	);
 	return new Response(null, { status: 201 });
 });
 
@@ -80,10 +200,20 @@ export const downloadAttachment = factory.createHandlers(async (c) => {
 	const attachmentId = c.req.param("attachmentId");
 	if (!attachmentId) return errorResponse("Attachment id required", 400);
 	const attachment = await attachmentsDb.getById(c.get("db"), attachmentId);
-	if (!attachment || attachment.cipher_id !== cipher.id) return errorResponse("Attachment not found", 404);
-	const object = await getBlobObject(c.env, getAttachmentObjectKey(cipher.id, attachment.id));
+	if (!attachment || attachment.cipher_id !== cipher.id)
+		return errorResponse("Attachment not found", 404);
+	const object = await getBlobObject(
+		c.env,
+		getAttachmentObjectKey(cipher.id, attachment.id),
+	);
 	if (!object?.body) return errorResponse("Attachment content not found", 404);
-	return new Response(object.body, { headers: { "Content-Type": "application/octet-stream", "Content-Length": String(object.size), "Cache-Control": "private, no-store" } });
+	return new Response(object.body, {
+		headers: {
+			"Content-Type": "application/octet-stream",
+			"Content-Length": String(object.size),
+			"Cache-Control": "private, no-store",
+		},
+	});
 });
 
 export const deleteAttachment = factory.createHandlers(async (c) => {
@@ -91,11 +221,22 @@ export const deleteAttachment = factory.createHandlers(async (c) => {
 	const id = c.req.param("attachmentId");
 	if (!id) return errorResponse("Attachment id required", 400);
 	const attachment = await attachmentsDb.getById(c.get("db"), id);
-	if (!attachment || attachment.cipher_id !== cipher.id) return errorResponse("Attachment not found", 404);
+	if (!attachment || attachment.cipher_id !== cipher.id)
+		return errorResponse("Attachment not found", 404);
 	const ts = now();
 	await executeBatch(c.get("dbDialect"), [
-		c.get("db").deleteFrom("attachments").where("id", "=", id).where("cipher_id", "=", cipher.id).compile(),
-		c.get("db").updateTable("ciphers").set({ updated_at: ts }).where("id", "=", cipher.id).compile(),
+		c
+			.get("db")
+			.deleteFrom("attachments")
+			.where("id", "=", id)
+			.where("cipher_id", "=", cipher.id)
+			.compile(),
+		c
+			.get("db")
+			.updateTable("ciphers")
+			.set({ updated_at: ts })
+			.where("id", "=", cipher.id)
+			.compile(),
 		...(await ownerRevisionQueries(c.get("db"), cipher, ts)),
 	]);
 	await deleteBlobObject(c.env, getAttachmentObjectKey(cipher.id, id));

@@ -122,9 +122,7 @@ after(async () => {
 describe("Edgewarden API", () => {
 	test("records the generated runtime migration exactly once", async () => {
 		const applied = await testDatabase
-			.prepare(
-				"SELECT name FROM d1_migrations ORDER BY name",
-			)
+			.prepare("SELECT name FROM d1_migrations ORDER BY name")
 			.all<{ name: string }>();
 		assert.deepEqual(applied.results, [{ name: "0001_init.sql" }]);
 	});

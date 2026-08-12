@@ -32,7 +32,10 @@ export const DeviceKeysSchema = v.pipe(
 export const AuthRequestCreateSchema = v.pipe(
 	v.looseObject({
 		email: v.pipe(v.string(), v.email()),
-		type: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2)), 0),
+		type: v.optional(
+			v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2)),
+			0,
+		),
 		deviceIdentifier: v.optional(v.string()),
 		DeviceIdentifier: v.optional(v.string()),
 		deviceType: v.optional(deviceType),
@@ -45,8 +48,7 @@ export const AuthRequestCreateSchema = v.pipe(
 	v.transform((body) => ({
 		email: body.email.toLowerCase(),
 		type: body.type,
-		deviceIdentifier:
-			body.deviceIdentifier ?? body.DeviceIdentifier ?? "",
+		deviceIdentifier: body.deviceIdentifier ?? body.DeviceIdentifier ?? "",
 		deviceType: body.deviceType ?? body.DeviceType ?? 0,
 		accessCode: body.accessCode ?? body.AccessCode ?? "",
 		publicKey: body.publicKey ?? body.PublicKey ?? "",

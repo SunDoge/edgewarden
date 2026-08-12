@@ -8,19 +8,34 @@ export class NetworkStatusMonitor {
 	#running = false;
 	#stopped = true;
 
-	constructor(options: { probe: () => Promise<unknown>; onStatus: (status: NetworkStatus) => void; intervalMs?: number }) {
+	constructor(options: {
+		probe: () => Promise<unknown>;
+		onStatus: (status: NetworkStatus) => void;
+		intervalMs?: number;
+	}) {
 		this.#probe = options.probe;
 		this.#onStatus = options.onStatus;
 		this.#intervalMs = options.intervalMs ?? 30_000;
 	}
 
-	async check(browserOnline = typeof navigator === "undefined" || navigator.onLine !== false): Promise<void> {
+	async check(
+		browserOnline = typeof navigator === "undefined" ||
+			navigator.onLine !== false,
+	): Promise<void> {
 		if (this.#running) return;
-		if (!browserOnline) { this.#onStatus("offline"); return; }
+		if (!browserOnline) {
+			this.#onStatus("offline");
+			return;
+		}
 		this.#running = true;
-		try { await this.#probe(); this.#onStatus("online"); }
-		catch { this.#onStatus("offline"); }
-		finally { this.#running = false; }
+		try {
+			await this.#probe();
+			this.#onStatus("online");
+		} catch {
+			this.#onStatus("offline");
+		} finally {
+			this.#running = false;
+		}
 	}
 
 	start(): void {
@@ -30,7 +45,10 @@ export class NetworkStatusMonitor {
 		void this.check();
 		const schedule = () => {
 			if (this.#stopped) return;
-			this.#timer = setTimeout(async () => { await this.check(); schedule(); }, this.#intervalMs);
+			this.#timer = setTimeout(async () => {
+				await this.check();
+				schedule();
+			}, this.#intervalMs);
 		};
 		schedule();
 	}

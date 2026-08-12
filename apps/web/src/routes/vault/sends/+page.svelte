@@ -11,11 +11,14 @@ import {
 	removeSendPasswordApi,
 } from "$lib/services/api";
 import { vault } from "$lib/stores/vault.svelte";
+import { encryptBw, encryptBwFileData } from "$lib/services/crypto";
 import {
-	encryptBw,
-	encryptBwFileData,
-} from "$lib/services/crypto";
-import { createSendKeys, decryptOwnedSend, encryptSendMetadata, wrapSendKey, type SendKeys } from "$lib/services/send-crypto";
+	createSendKeys,
+	decryptOwnedSend,
+	encryptSendMetadata,
+	wrapSendKey,
+	type SendKeys,
+} from "$lib/services/send-crypto";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import {
@@ -80,13 +83,18 @@ async function loadSends() {
 	loading = true;
 	const cached = vault.sends;
 	if (cached.length) sends = [...cached];
-	if (vault.isOffline) { loading = false; return; }
+	if (vault.isOffline) {
+		loading = false;
+		return;
+	}
 	try {
 		const res = await fetchSendsApi();
 		const decryptedList = [];
 		for (const send of res.data) {
 			try {
-				decryptedList.push(await decryptOwnedSend(send, vault.symEncKey!, vault.symMacKey!));
+				decryptedList.push(
+					await decryptOwnedSend(send, vault.symEncKey!, vault.symMacKey!),
+				);
 			} catch (e) {
 				console.error("Failed to decrypt send:", send.id, e);
 			}
@@ -114,7 +122,9 @@ let filteredSends = $derived(
 		return true;
 	}),
 );
-let selectedIdList = $derived(Object.keys(selectedIds).filter((id) => selectedIds[id]));
+let selectedIdList = $derived(
+	Object.keys(selectedIds).filter((id) => selectedIds[id]),
+);
 
 function startCreate() {
 	isEditing = false;
@@ -142,8 +152,18 @@ function startEdit(send: any) {
 	sendNotes = send.notes ?? "";
 	textContent = send.text?.text ?? "";
 	maxAccessCount = send.maxAccessCount ?? null;
-	expirationDate = send.expirationDate ? new Date(send.expirationDate).toISOString().slice(0, 16) : "";
-	deletionDays = Math.max(1, Math.min(30, Math.ceil((new Date(send.deletionDate).getTime() - Date.now()) / 86_400_000)));
+	expirationDate = send.expirationDate
+		? new Date(send.expirationDate).toISOString().slice(0, 16)
+		: "";
+	deletionDays = Math.max(
+		1,
+		Math.min(
+			30,
+			Math.ceil(
+				(new Date(send.deletionDate).getTime() - Date.now()) / 86_400_000,
+			),
+		),
+	);
 	sendPassword = "";
 	protectWithPassword = Boolean(send.password);
 	hideEmail = Boolean(send.hideEmail);
@@ -156,7 +176,9 @@ function cancelEdit() {
 }
 
 function selectSend(send: any) {
-	selectedSend = send; isCreating = false; isEditing = false;
+	selectedSend = send;
+	isCreating = false;
+	isEditing = false;
 }
 
 function handleFileChange(e: Event) {
@@ -191,9 +213,20 @@ async function handleSaveSend() {
 
 	loading = true;
 	try {
-		const keys: SendKeys = isEditing ? selectedSend._sendKeys : createSendKeys();
-		const encrypted = await encryptSendMetadata({ name: sendName, notes: sendNotes, ...(sendType === 0 ? { text: textContent } : {}) }, keys);
-		const encryptedSendKey = isEditing ? selectedSend.key : await wrapSendKey(keys, vault.symEncKey!, vault.symMacKey!);
+		const keys: SendKeys = isEditing
+			? selectedSend._sendKeys
+			: createSendKeys();
+		const encrypted = await encryptSendMetadata(
+			{
+				name: sendName,
+				notes: sendNotes,
+				...(sendType === 0 ? { text: textContent } : {}),
+			},
+			keys,
+		);
+		const encryptedSendKey = isEditing
+			? selectedSend.key
+			: await wrapSendKey(keys, vault.symEncKey!, vault.symMacKey!);
 
 		// Calculate Deletion Date
 		const deletionDate = new Date(
@@ -269,7 +302,8 @@ async function handleSaveSend() {
 				payload.text = encrypted.text;
 			}
 			await updateSendApi(selectedSend.id, payload);
-			if (selectedSend.password && !protectWithPassword) await removeSendPasswordApi(selectedSend.id);
+			if (selectedSend.password && !protectWithPassword)
+				await removeSendPasswordApi(selectedSend.id);
 		}
 
 		isCreating = false;
@@ -298,11 +332,22 @@ async function handleDeleteSend(sendId: string) {
 }
 
 async function handleBulkDelete() {
-	if (!selectedIdList.length || !confirm(`删除选中的 ${selectedIdList.length} 个 Send？此操作无法恢复。`)) return;
+	if (
+		!selectedIdList.length ||
+		!confirm(`删除选中的 ${selectedIdList.length} 个 Send？此操作无法恢复。`)
+	)
+		return;
 	loading = true;
-	try { await deleteSendsApi(selectedIdList); selectedIds = {}; selectedSend = null; await loadSends(); }
-	catch (e: any) { alert("批量删除失败：" + (e.message || e)); }
-	finally { loading = false; }
+	try {
+		await deleteSendsApi(selectedIdList);
+		selectedIds = {};
+		selectedSend = null;
+		await loadSends();
+	} catch (e: any) {
+		alert("批量删除失败：" + (e.message || e));
+	} finally {
+		loading = false;
+	}
 }
 
 function copyShareLink(send: any) {

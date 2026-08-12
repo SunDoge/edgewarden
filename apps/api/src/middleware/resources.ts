@@ -50,7 +50,8 @@ export const requireCipher = createMiddleware<HonoEnv>(async (c, next) => {
 	}
 	if (cipher.user_id !== c.get("user").id) {
 		if (!cipher.org_id) return errorResponse("Not found", 404);
-		const member = await c.get("db")
+		const member = await c
+			.get("db")
 			.selectFrom("org_members")
 			.selectAll()
 			.where("org_id", "=", cipher.org_id)
@@ -59,9 +60,14 @@ export const requireCipher = createMiddleware<HonoEnv>(async (c, next) => {
 			.executeTakeFirst();
 		if (!member) return errorResponse("Not found", 404);
 		if (!member.access_all) {
-			const visible = await c.get("db")
+			const visible = await c
+				.get("db")
 				.selectFrom("cipher_collections as link")
-				.innerJoin("collection_members as access", "access.collection_id", "link.collection_id")
+				.innerJoin(
+					"collection_members as access",
+					"access.collection_id",
+					"link.collection_id",
+				)
 				.select("link.cipher_id")
 				.where("link.cipher_id", "=", cipher.id)
 				.where("access.org_member_id", "=", member.id)
@@ -81,21 +87,30 @@ export const requireCipherWrite = createMiddleware<HonoEnv>(async (c, next) => {
 		return;
 	}
 	const member = c.get("orgMember");
-	if ((ROLE_LEVEL[member.role] ?? -1) >= ROLE_LEVEL.manager || member.access_all) {
+	if (
+		(ROLE_LEVEL[member.role] ?? -1) >= ROLE_LEVEL.manager ||
+		member.access_all
+	) {
 		await next();
 		return;
 	}
-	const links = await c.get("db")
+	const links = await c
+		.get("db")
 		.selectFrom("cipher_collections")
 		.select("collection_id")
 		.where("cipher_id", "=", cipher.id)
 		.execute();
 	if (!links.length) return errorResponse("Forbidden", 403);
-	const writable = await c.get("db")
+	const writable = await c
+		.get("db")
 		.selectFrom("collection_members")
 		.select("collection_id")
 		.where("org_member_id", "=", member.id)
-		.where("collection_id", "in", links.map((link) => link.collection_id))
+		.where(
+			"collection_id",
+			"in",
+			links.map((link) => link.collection_id),
+		)
 		.where("read_only", "=", 0)
 		.execute();
 	if (writable.length !== links.length) return errorResponse("Forbidden", 403);
@@ -145,12 +160,24 @@ export const requireAccountPasskey = createMiddleware<HonoEnv>(
 	},
 );
 
-const ROLE_LEVEL: Record<string, number> = { member: 0, manager: 1, admin: 2, owner: 3 };
+const ROLE_LEVEL: Record<string, number> = {
+	member: 0,
+	manager: 1,
+	admin: 2,
+	owner: 3,
+};
 
 export const requireOrgMember = createMiddleware<HonoEnv>(async (c, next) => {
 	const orgId = c.req.param("orgId") || c.req.param("id");
 	if (!orgId) return errorResponse("Organization not found", 404);
-	const member = await c.get("db").selectFrom("org_members").selectAll().where("org_id", "=", orgId).where("user_id", "=", c.get("user").id).where("status", "=", "confirmed").executeTakeFirst();
+	const member = await c
+		.get("db")
+		.selectFrom("org_members")
+		.selectAll()
+		.where("org_id", "=", orgId)
+		.where("user_id", "=", c.get("user").id)
+		.where("status", "=", "confirmed")
+		.executeTakeFirst();
 	if (!member) return errorResponse("Organization not found", 404);
 	c.set("orgMember", member);
 	await next();
@@ -158,19 +185,27 @@ export const requireOrgMember = createMiddleware<HonoEnv>(async (c, next) => {
 
 export const requireOrgManager = createMiddleware<HonoEnv>(async (c, next) => {
 	const member = c.get("orgMember");
-	if ((ROLE_LEVEL[member.role] ?? -1) < ROLE_LEVEL.manager) return errorResponse("Forbidden", 403);
+	if ((ROLE_LEVEL[member.role] ?? -1) < ROLE_LEVEL.manager)
+		return errorResponse("Forbidden", 403);
 	await next();
 });
 
 export const requireOrgOwner = createMiddleware<HonoEnv>(async (c, next) => {
-	if (c.get("orgMember").role !== "owner") return errorResponse("Forbidden", 403);
+	if (c.get("orgMember").role !== "owner")
+		return errorResponse("Forbidden", 403);
 	await next();
 });
 
 export const requireCollection = createMiddleware<HonoEnv>(async (c, next) => {
 	const collectionId = c.req.param("collectionId");
 	if (!collectionId) return errorResponse("Collection not found", 404);
-	const collection = await c.get("db").selectFrom("collections").selectAll().where("id", "=", collectionId).where("org_id", "=", c.get("orgMember").org_id).executeTakeFirst();
+	const collection = await c
+		.get("db")
+		.selectFrom("collections")
+		.selectAll()
+		.where("id", "=", collectionId)
+		.where("org_id", "=", c.get("orgMember").org_id)
+		.executeTakeFirst();
 	if (!collection) return errorResponse("Collection not found", 404);
 	c.set("collection", collection);
 	await next();

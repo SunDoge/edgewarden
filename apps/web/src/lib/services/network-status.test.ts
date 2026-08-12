@@ -6,7 +6,10 @@ describe("network status monitor", () => {
 	it("distinguishes browser offline from an unreachable service", async () => {
 		const statuses: string[] = [];
 		const probe = vi.fn().mockRejectedValue(new Error("unreachable"));
-		const monitor = new NetworkStatusMonitor({ probe, onStatus: (status) => statuses.push(status) });
+		const monitor = new NetworkStatusMonitor({
+			probe,
+			onStatus: (status) => statuses.push(status),
+		});
 		await monitor.check(false);
 		expect(probe).not.toHaveBeenCalled();
 		await monitor.check(true);
@@ -16,7 +19,11 @@ describe("network status monitor", () => {
 	it("periodically probes and can be stopped", async () => {
 		vi.useFakeTimers();
 		const statuses: string[] = [];
-		const monitor = new NetworkStatusMonitor({ probe: vi.fn().mockResolvedValue(true), onStatus: (status) => statuses.push(status), intervalMs: 1_000 });
+		const monitor = new NetworkStatusMonitor({
+			probe: vi.fn().mockResolvedValue(true),
+			onStatus: (status) => statuses.push(status),
+			intervalMs: 1_000,
+		});
 		monitor.start();
 		await vi.advanceTimersByTimeAsync(1_000);
 		monitor.stop();

@@ -1,35 +1,59 @@
 <script lang="ts">
-	import { onMount } from "svelte";
-	import { goto } from "$app/navigation";
-	import { Button } from "$lib/components/ui/button/index.js";
-	import { calcTotpNow } from "$lib/services/crypto";
-	import { syncVaultData, vault } from "$lib/stores/vault.svelte";
-	import { ArrowLeft, Check, Copy, KeyRound, RefreshCw } from "@lucide/svelte";
+import { onMount } from "svelte";
+import { goto } from "$app/navigation";
+import { Button } from "$lib/components/ui/button/index.js";
+import { calcTotpNow } from "$lib/services/crypto";
+import { syncVaultData, vault } from "$lib/stores/vault.svelte";
+import { ArrowLeft, Check, Copy, KeyRound, RefreshCw } from "@lucide/svelte";
 
-	let codes = $state<Record<string, { code: string; remain: number; period?: number } | null>>({});
-	let copiedId = $state<string | null>(null);
-	let timer: ReturnType<typeof setInterval> | null = null;
-	let items = $derived(vault.ciphers.filter((cipher) => !cipher.deletedDate && cipher.type === 1 && cipher.login?.totp).sort((a, b) => a.name.localeCompare(b.name)));
+let codes = $state<
+	Record<string, { code: string; remain: number; period?: number } | null>
+>({});
+let copiedId = $state<string | null>(null);
+let timer: ReturnType<typeof setInterval> | null = null;
+let items = $derived(
+	vault.ciphers
+		.filter(
+			(cipher) =>
+				!cipher.deletedDate && cipher.type === 1 && cipher.login?.totp,
+		)
+		.sort((a, b) => a.name.localeCompare(b.name)),
+);
 
-	async function refreshCodes() {
-		const entries = await Promise.all(items.map(async (cipher) => {
-			try { return [cipher.id, await calcTotpNow(String(cipher.login?.totp ?? ""))] as const; }
-			catch { return [cipher.id, null] as const; }
-		}));
-		codes = Object.fromEntries(entries);
-	}
+async function refreshCodes() {
+	const entries = await Promise.all(
+		items.map(async (cipher) => {
+			try {
+				return [
+					cipher.id,
+					await calcTotpNow(String(cipher.login?.totp ?? "")),
+				] as const;
+			} catch {
+				return [cipher.id, null] as const;
+			}
+		}),
+	);
+	codes = Object.fromEntries(entries);
+}
 
-	async function copyCode(id: string, value: string) {
-		await navigator.clipboard.writeText(value);
-		copiedId = id;
-		setTimeout(() => { if (copiedId === id) copiedId = null; }, 1500);
-	}
+async function copyCode(id: string, value: string) {
+	await navigator.clipboard.writeText(value);
+	copiedId = id;
+	setTimeout(() => {
+		if (copiedId === id) copiedId = null;
+	}, 1500);
+}
 
-	onMount(() => {
-		void (async () => { if (!vault.ciphers.length) await syncVaultData(); await refreshCodes(); })();
-		timer = setInterval(() => void refreshCodes(), 1000);
-		return () => { if (timer) clearInterval(timer); };
-	});
+onMount(() => {
+	void (async () => {
+		if (!vault.ciphers.length) await syncVaultData();
+		await refreshCodes();
+	})();
+	timer = setInterval(() => void refreshCodes(), 1000);
+	return () => {
+		if (timer) clearInterval(timer);
+	};
+});
 </script>
 
 <svelte:head><title>验证码 - Edgewarden</title></svelte:head>

@@ -1,32 +1,33 @@
 <script lang="ts">
-	import { goto } from "$app/navigation";
-	import { recoverTwoFactorApi } from "$lib/services/api";
-	import { Button } from "$lib/components/ui/button/index.js";
-	import { Input } from "$lib/components/ui/input/index.js";
-	import { Label } from "$lib/components/ui/label/index.js";
-	import * as Card from "$lib/components/ui/card/index.js";
-	import { KeyRound, ShieldAlert } from "@lucide/svelte";
+import { goto } from "$app/navigation";
+import { recoverTwoFactorApi } from "$lib/services/api";
+import { Button } from "$lib/components/ui/button/index.js";
+import { Input } from "$lib/components/ui/input/index.js";
+import { Label } from "$lib/components/ui/label/index.js";
+import * as Card from "$lib/components/ui/card/index.js";
+import { KeyRound, ShieldAlert } from "@lucide/svelte";
 
-	let email = $state("");
-	let password = $state("");
-	let recoveryCode = $state("");
-	let loading = $state(false);
-	let error = $state("");
+let email = $state("");
+let password = $state("");
+let recoveryCode = $state("");
+let loading = $state(false);
+let error = $state("");
 
-	async function submit(event: SubmitEvent) {
-		event.preventDefault();
-		loading = true;
-		error = "";
-		try {
-			await recoverTwoFactorApi(email, password, recoveryCode);
-			await goto("/login?recovered=1");
-		} catch (value) {
-			error = value instanceof Error ? value.message : "恢复失败，请检查凭据和恢复代码";
-		} finally {
-			password = "";
-			loading = false;
-		}
+async function submit(event: SubmitEvent) {
+	event.preventDefault();
+	loading = true;
+	error = "";
+	try {
+		await recoverTwoFactorApi(email, password, recoveryCode);
+		await goto("/login?recovered=1");
+	} catch (value) {
+		error =
+			value instanceof Error ? value.message : "恢复失败，请检查凭据和恢复代码";
+	} finally {
+		password = "";
+		loading = false;
 	}
+}
 </script>
 
 <svelte:head><title>恢复两步验证 · Edgewarden</title></svelte:head>

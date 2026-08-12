@@ -21,7 +21,11 @@ import {
 	uploadPublicSendFile,
 } from "../handlers/sends";
 import { uploadAttachment } from "../handlers/attachments";
-import { checkDigitalAssetLink, getFillAssistFile, getFillAssistManifest } from "../handlers/fill-assist";
+import {
+	checkDigitalAssetLink,
+	getFillAssistFile,
+	getFillAssistManifest,
+} from "../handlers/fill-assist";
 import { recoverTwoFactor } from "../handlers/two-factor";
 import { connectRealtime } from "../handlers/realtime";
 import { getWebsiteIcon } from "../handlers/icons";
