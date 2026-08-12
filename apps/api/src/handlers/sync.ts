@@ -1,12 +1,12 @@
-import { sql, type Selectable } from "kysely";
+import { type Selectable, sql } from "kysely";
 import { factory } from "../http/factory";
-import * as ciphersDb from "../services/db/ciphers";
 import * as attachmentsDb from "../services/db/attachments";
+import * as ciphersDb from "../services/db/ciphers";
 import * as domainSettingsDb from "../services/db/domain-settings";
 import * as foldersDb from "../services/db/folders";
+import { textColumnInJson } from "../services/db/json-array";
 import * as sendsDb from "../services/db/sends";
 import * as webauthnDb from "../services/db/webauthn";
-import { textColumnInJson } from "../services/db/json-array";
 import {
 	buildDomainsResponse,
 	normalizeCustomEquivalentDomains,
@@ -147,15 +147,6 @@ export const sync = factory.createHandlers(async (c) => {
 	const restrictedMembers = organizationRows.filter(
 		(row) => row.access_all !== 1,
 	);
-	const organizationCollections = organizationIds.length
-		? await db
-				.selectFrom("collections")
-				.selectAll()
-				.where(
-					sql<boolean>`org_id in (select value from json_each(${JSON.stringify(organizationIds)}))`,
-				)
-				.execute()
-		: [];
 	const restrictedCollectionAccess = restrictedMembers.length
 		? await db
 				.selectFrom("collection_members")
@@ -171,37 +162,40 @@ export const sync = factory.createHandlers(async (c) => {
 	const restrictedAccessByCollection = new Map(
 		restrictedCollectionAccess.map((row) => [row.collection_id, row]),
 	);
-	const visibleCollections = organizationCollections.filter(
-		(collection) =>
-			allAccessOrgIds.includes(collection.org_id) ||
-			allowedRestrictedCollectionIds.includes(collection.id),
-	);
-	const allAccessCiphers = allAccessOrgIds.length
+	const visibleCollections = organizationIds.length
+		? await db
+				.selectFrom("collections")
+				.selectAll()
+				.where((expression) =>
+					expression.or([
+						sql<boolean>`org_id in (
+							select value from json_each(${JSON.stringify(allAccessOrgIds)})
+						)`,
+						textColumnInJson("id", allowedRestrictedCollectionIds),
+					]),
+				)
+				.execute()
+		: [];
+	const organizationCiphers = organizationIds.length
 		? await db
 				.selectFrom("ciphers")
 				.selectAll()
-				.where(
-					sql<boolean>`org_id in (select value from json_each(${JSON.stringify(allAccessOrgIds)}))`,
+				.where((expression) =>
+					expression.or([
+						sql<boolean>`org_id in (
+							select value from json_each(${JSON.stringify(allAccessOrgIds)})
+						)`,
+						sql<boolean>`id in (
+							select cipher_id
+							from cipher_collections
+							where collection_id in (
+								select value from json_each(${JSON.stringify(allowedRestrictedCollectionIds)})
+							)
+						)`,
+					]),
 				)
 				.execute()
 		: [];
-	const restrictedCiphers = allowedRestrictedCollectionIds.length
-		? await db
-				.selectFrom("ciphers as cipher")
-				.innerJoin("cipher_collections as link", "link.cipher_id", "cipher.id")
-				.selectAll("cipher")
-				.where(
-					sql<boolean>`link.collection_id in (select value from json_each(${JSON.stringify(allowedRestrictedCollectionIds)}))`,
-				)
-				.execute()
-		: [];
-	const orgCipherMap = new Map(
-		[...allAccessCiphers, ...restrictedCiphers].map((cipher) => [
-			cipher.id,
-			cipher,
-		]),
-	);
-	const organizationCiphers = [...orgCipherMap.values()];
 
 	const webAuthnPrfOptions = accountPasskeys
 		.map(buildWebAuthnPrfOption)

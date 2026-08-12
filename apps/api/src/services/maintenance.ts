@@ -133,17 +133,20 @@ export async function runMaintenance(
 			.where("expires_at", "<=", timestamp)
 			.executeTakeFirst(),
 	);
-	const webauthnChallenges = affectedRows(
+	const expiredWebauthnChallenges = affectedRows(
 		await db
 			.deleteFrom("webauthn_challenges")
-			.where((expression) =>
-				expression.or([
-					expression("expires_at", "<=", timestamp),
-					expression("used_at", "is not", null),
-				]),
-			)
+			.where("expires_at", "<=", timestamp)
 			.executeTakeFirst(),
 	);
+	const usedWebauthnChallenges = affectedRows(
+		await db
+			.deleteFrom("webauthn_challenges")
+			.where("used_at", "is not", null)
+			.executeTakeFirst(),
+	);
+	const webauthnChallenges =
+		expiredWebauthnChallenges + usedWebauthnChallenges;
 	const attachmentDownloadTokens = affectedRows(
 		await db
 			.deleteFrom("attachment_download_tokens")
