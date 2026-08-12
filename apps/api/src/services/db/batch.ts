@@ -80,6 +80,28 @@ export function collectionRevisionQuery(
 	`.compile(db);
 }
 
+export function conditionalCollectionRevisionQuery(
+	db: Kysely<DB>,
+	collectionId: string,
+	mutationToken: string,
+	timestamp = now(),
+) {
+	return sql`
+		INSERT INTO user_revisions (user_id, revision_date)
+		SELECT DISTINCT member.user_id, ${timestamp}
+		FROM collections collection
+		INNER JOIN org_members member ON member.org_id = collection.org_id
+		WHERE collection.id = ${collectionId}
+		  AND collection.mutation_token = ${mutationToken}
+		  AND member.status = 'confirmed'
+		  AND member.user_id IS NOT NULL
+		ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
+			user_revisions.revision_date + 1,
+			excluded.revision_date
+		)
+	`.compile(db);
+}
+
 export function organizationMemberRevisionQuery(
 	db: Kysely<DB>,
 	memberId: string,

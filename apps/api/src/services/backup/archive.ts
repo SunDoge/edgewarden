@@ -474,6 +474,9 @@ export async function buildBackupArchive(
 	const exportedFolderRows = folderRows.map(
 		({ mutation_token: _mutationToken, ...row }) => row as SqlRow,
 	);
+	const exportedCollectionRows = collectionRows.map(
+		({ mutation_token: _mutationToken, ...row }) => row as SqlRow,
+	);
 	const exportedOrganizationRows = organizationRows.map(
 		({ deletion_token: _deletionToken, ...row }) => row as SqlRow,
 	);
@@ -494,7 +497,7 @@ export async function buildBackupArchive(
 			user_revisions: revisionRows.length,
 			organizations: exportedOrganizationRows.length,
 			org_members: orgMemberRows.length,
-			collections: collectionRows.length,
+			collections: exportedCollectionRows.length,
 			collection_members: collectionMemberRows.length,
 			folders: exportedFolderRows.length,
 			ciphers: exportedCipherRows.length,
@@ -535,7 +538,7 @@ export async function buildBackupArchive(
 					user_revisions: revisionRows,
 					organizations: exportedOrganizationRows,
 					org_members: orgMemberRows,
-					collections: collectionRows,
+					collections: exportedCollectionRows,
 					collection_members: collectionMemberRows,
 					folders: exportedFolderRows,
 					ciphers: exportedCipherRows,

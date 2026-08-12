@@ -764,21 +764,58 @@ export function registerAdminOrganizationScenarios(
 			.prepare("UPDATE org_members SET role = 'manager' WHERE id = ?")
 			.bind(restrictedMemberId)
 			.run();
+		const beforeCollectionRevision = await context.database
+			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+			.bind(restrictedUser.id)
+			.first<{ revision_date: number }>();
+		assert.ok(beforeCollectionRevision);
+		const updateCollection = (index: number) =>
+			request(`/api/organizations/${orgId}/collections/${collectionId}`, {
+				method: "POST",
+				headers: {
+					authorization: `Bearer ${context.memberAccessToken}`,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ name: `encrypted-renamed-collection-${index}` }),
+			});
+		const collectionUpdates = await Promise.all(
+			Array.from({ length: 8 }, (_, index) => updateCollection(index)),
+		);
 		assert.equal(
-			(
-				await request(
-					`/api/organizations/${orgId}/collections/${collectionId}`,
-					{
-						method: "POST",
-						headers: {
-							authorization: `Bearer ${context.memberAccessToken}`,
-							"content-type": "application/json",
-						},
-						body: JSON.stringify({ name: "encrypted-renamed-collection" }),
-					},
-				)
-			).status,
-			200,
+			collectionUpdates.filter((response) => response.status === 200).length,
+			1,
+		);
+		assert.equal(
+			collectionUpdates.filter((response) => response.status === 409).length,
+			7,
+		);
+		assert.equal(
+			await context.database
+				.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+				.bind(restrictedUser.id)
+				.first<{ revision_date: number }>()
+				.then((row) => row?.revision_date),
+			beforeCollectionRevision.revision_date + 1,
+		);
+		const protectedDelete = await request(
+			`/api/organizations/${orgId}/collections/${collectionId}`,
+			{
+				method: "DELETE",
+				headers: {
+					authorization: `Bearer ${context.memberAccessToken}`,
+				},
+			},
+		);
+		assert.equal(
+			protectedDelete.status,
+			409,
+			await protectedDelete.clone().text(),
+		);
+		assert.ok(
+			await context.database
+				.prepare("SELECT 1 FROM collections WHERE id = ?")
+				.bind(collectionId)
+				.first(),
 		);
 		const escalation = await request(`/api/organizations/${orgId}/members`, {
 			method: "POST",
