@@ -1621,10 +1621,7 @@ export function registerDatabaseMaintenanceScenarios(
 				}
 				await originalDelete(key);
 			};
-			const deferred = await runMaintenance(db, context.bindings, timestamp);
-			assert.equal(deferred.purgedCiphers, 0);
-			assert.equal(deferred.purgedAttachments, 0);
-			assert.equal(deferred.purgedSends, 0);
+			await runMaintenance(db, context.bindings, timestamp);
 			assert.equal(context.r2Values.has(attachmentKey), true);
 			assert.equal(context.r2Values.has(deletedAttachmentKey), true);
 			assert.equal(context.r2Values.has(sendKey), true);
@@ -1633,6 +1630,13 @@ export function registerDatabaseMaintenanceScenarios(
 					.selectFrom("ciphers")
 					.select("id")
 					.where("id", "=", cipherId)
+					.executeTakeFirst(),
+			);
+			assert.ok(
+				await db
+					.selectFrom("attachments")
+					.select("id")
+					.where("id", "=", deletedAttachmentId)
 					.executeTakeFirst(),
 			);
 			assert.ok(
@@ -1663,14 +1667,7 @@ export function registerDatabaseMaintenanceScenarios(
 					END
 				`)
 				.run();
-			const auditDeferred = await runMaintenance(
-				db,
-				context.bindings,
-				timestamp + 1,
-			);
-			assert.equal(auditDeferred.purgedCiphers, 0);
-			assert.equal(auditDeferred.purgedAttachments, 0);
-			assert.equal(auditDeferred.purgedSends, 0);
+			await runMaintenance(db, context.bindings, timestamp + 1);
 			assert.equal(context.r2Values.has(attachmentKey), false);
 			assert.equal(context.r2Values.has(deletedAttachmentKey), false);
 			assert.equal(context.r2Values.has(sendKey), false);
@@ -1679,6 +1676,13 @@ export function registerDatabaseMaintenanceScenarios(
 					.selectFrom("ciphers")
 					.select("id")
 					.where("id", "=", cipherId)
+					.executeTakeFirst(),
+			);
+			assert.ok(
+				await db
+					.selectFrom("attachments")
+					.select("id")
+					.where("id", "=", deletedAttachmentId)
 					.executeTakeFirst(),
 			);
 			assert.ok(
