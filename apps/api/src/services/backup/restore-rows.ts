@@ -304,6 +304,7 @@ export async function importBackupRows(
 				"data",
 				"created_at",
 				"updated_at",
+				"storage_key",
 			],
 			payload.sends || [],
 		),

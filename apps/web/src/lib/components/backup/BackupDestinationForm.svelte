@@ -56,8 +56,8 @@ let {
 		<div class="md:col-span-2 flex items-center gap-2 pt-1.5">
 			<input type="checkbox" id="attachments" bind:checked={form.includeAttachments} class="rounded text-primary focus:ring-primary" />
 			<label for="attachments" class="text-xs text-slate-700 dark:text-slate-300 select-none cursor-pointer flex items-center gap-1.5">
-				同时备份附件文件 (包含 KV/R2 中的文件)
-				<Info class="size-3.5 text-slate-400" title="勾选后，备份流程将同步读取附件的二进制流文件放入 ZIP 压缩包。" />
+				同时备份附件与文件 Send（包含 KV/R2 中的文件）
+				<Info class="size-3.5 text-slate-400" title="勾选后，备份流程会将附件和文件 Send 的二进制内容写入 ZIP；不勾选时不会导出文件 Send，避免恢复出缺少文件的记录。" />
 			</label>
 		</div>
 	</div>

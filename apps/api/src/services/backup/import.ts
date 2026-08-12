@@ -7,10 +7,7 @@ import {
 	importPreparedBackupRows,
 	prepareImportPayloadForTarget,
 } from "./import-prepare";
-import {
-	ATTACHMENT_RESTORE_FAILED_REASON,
-	type BackupImportSkipSummary,
-} from "./import-types";
+import { mergeBackupImportSkips } from "./import-types";
 import {
 	backupTableCounts,
 	buildImportExecutionResult,
@@ -21,14 +18,15 @@ import {
 import {
 	attachmentRowKey,
 	removeAttachmentRows,
+	removeSendRows,
 	restoreBlobFiles,
+	sendRowKey,
 } from "./import-attachments";
 import {
 	collectCurrentBlobKeys,
 	createShadowTables,
 	ensureImportTargetIsFresh,
 	resetRestoreArtifacts,
-	type SqlRow,
 	swapShadowTablesIntoPlace,
 	validateShadowTableCounts,
 } from "./restore-database";
@@ -113,11 +111,12 @@ export async function importBackupArchiveBytes(
 			stageDetail: "txt_backup_restore_progress_local_files_detail",
 			replaceExisting,
 		});
-		const restored = await restoreBlobFiles(blobStore, db, parsed.files);
-		for (const row of restored.restoredAttachments) {
-			const key = String(row.storage_key || "").trim();
-			if (key) stagedBlobKeys.add(key);
-		}
+		const restored = await restoreBlobFiles(
+			blobStore,
+			db,
+			parsed.files,
+			(key) => stagedBlobKeys.add(key),
+		);
 		const restoredAttachmentKeys = new Set(
 			(restored.restoredAttachments || []).map(attachmentRowKey),
 		);
@@ -127,9 +126,22 @@ export async function importBackupArchiveBytes(
 		await removeAttachmentRows(dbBinding, failedRestoreRows, true).catch(
 			() => undefined,
 		);
+		const restoredSendKeys = new Set(
+			restored.restoredFileSends.map(sendRowKey),
+		);
+		const failedFileSendRows = (db.sends || []).filter(
+			(row) => Number(row.type) === 1 && !restoredSendKeys.has(sendRowKey(row)),
+		);
+		await removeSendRows(dbBinding, failedFileSendRows, true).catch(
+			() => undefined,
+		);
 		await validateShadowTableCounts(
 			dbBinding,
-			backupTableCounts(db, restored.restoredAttachments.length),
+			backupTableCounts(
+				db,
+				restored.restoredAttachments.length,
+				(db.sends || []).length - failedFileSendRows.length,
+			),
 		);
 		await progress?.({
 			source: "local",
@@ -158,7 +170,9 @@ export async function importBackupArchiveBytes(
 			db,
 			actorUserId,
 			restored.restoredAttachments.length,
-			restored.skipped,
+			(db.sends || []).length - failedFileSendRows.length,
+			restored.restoredFileSends.length,
+			mergeBackupImportSkips(prepared.skipped, restored.skipped),
 		);
 	} catch (error) {
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);
@@ -190,44 +204,25 @@ export async function importRemoteBackupArchiveBytes(
 	progress?: BackupRestoreProgressReporter,
 	fileName = "edgewarden_backup.zip",
 ): Promise<BackupImportExecutionResult> {
-	const parsed = parseBackupArchive(archiveBytes);
+	const parsed = parseBackupArchive(archiveBytes, {
+		allowExternalAttachmentBlobs: true,
+	});
 	ensureBackupCompatibilityFields(parsed.payload);
-
-	const storageKind = blobStore?.kind ?? null;
-	const nextAttachments: SqlRow[] = [];
-	const skippedItems: BackupImportSkipSummary["items"] = [];
 
 	for (const row of parsed.payload.db.attachments || []) {
 		const cipherId = String(row.cipher_id || "").trim();
 		const attachmentId = String(row.id || "").trim();
-		const sizeBytes = Number(row.size || 0);
 		const path = `attachments/${cipherId}/${attachmentId}.bin`;
-		if (parsed.files[path]) {
-			nextAttachments.push(row);
-			continue;
+		if (!parsed.files[path]) {
+			const bytes = await source.loadAttachment(path).catch(() => null);
+			if (bytes) parsed.files[path] = bytes;
 		}
-		if (
-			blobStore?.maxObjectBytes !== null &&
-			blobStore?.maxObjectBytes !== undefined &&
-			sizeBytes > blobStore.maxObjectBytes
-		) {
-			skippedItems.push({ kind: "attachment", path, sizeBytes });
-			continue;
-		}
-		if (storageKind === null) {
-			skippedItems.push({ kind: "attachment", path, sizeBytes });
-			continue;
-		}
-		nextAttachments.push(row);
 	}
-
-	const preparedPayload = {
-		...parsed.payload,
-		db: {
-			...parsed.payload.db,
-			attachments: nextAttachments,
-		},
-	};
+	const prepared = prepareImportPayloadForTarget(
+		blobStore,
+		parsed.payload,
+		parsed.files,
+	);
 
 	try {
 		await ensureImportTargetIsFresh(dbBinding);
@@ -265,7 +260,7 @@ export async function importRemoteBackupArchiveBytes(
 		});
 		const db = await importPreparedBackupRows(
 			dbBinding,
-			preparedPayload.db,
+			prepared.payload.db,
 			dataEncryptionSecret,
 		);
 		await validateShadowTableCounts(dbBinding, backupTableCounts(db));
@@ -279,43 +274,15 @@ export async function importRemoteBackupArchiveBytes(
 			replaceExisting,
 		});
 
-		const restoredAttachments: SqlRow[] = [];
-		if (blobStore) {
-			for (const row of db.attachments || []) {
-				const cipherId = String(row.cipher_id || "").trim();
-				const attachmentId = String(row.id || "").trim();
-				const sourceKey = `attachments/${cipherId}/${attachmentId}.bin`;
-				const targetKey = String(row.storage_key || "").trim() || sourceKey;
-				const bytes =
-					parsed.files[sourceKey] ||
-					(await source.loadAttachment(sourceKey).catch(() => null));
-				if (!bytes) {
-					skippedItems.push({
-						kind: "attachment",
-						path: sourceKey,
-						sizeBytes: Number(row.size || 0),
-					});
-					continue;
-				}
-				try {
-					await blobStore.put(targetKey, bytes, {
-						size: bytes.byteLength,
-						contentType: "application/octet-stream",
-					});
-					stagedBlobKeys.add(targetKey);
-					restoredAttachments.push(row);
-				} catch {
-					skippedItems.push({
-						kind: "attachment",
-						path: sourceKey,
-						sizeBytes: bytes.byteLength,
-					});
-				}
-			}
-		}
+		const restored = await restoreBlobFiles(
+			blobStore,
+			db,
+			parsed.files,
+			(key) => stagedBlobKeys.add(key),
+		);
 
 		const restoredAttachmentKeys = new Set(
-			restoredAttachments.map(attachmentRowKey),
+			restored.restoredAttachments.map(attachmentRowKey),
 		);
 		const failedRestoreRows = (db.attachments || []).filter(
 			(row) => !restoredAttachmentKeys.has(attachmentRowKey(row)),
@@ -323,9 +290,22 @@ export async function importRemoteBackupArchiveBytes(
 		await removeAttachmentRows(dbBinding, failedRestoreRows, true).catch(
 			() => undefined,
 		);
+		const restoredSendKeys = new Set(
+			restored.restoredFileSends.map(sendRowKey),
+		);
+		const failedFileSendRows = (db.sends || []).filter(
+			(row) => Number(row.type) === 1 && !restoredSendKeys.has(sendRowKey(row)),
+		);
+		await removeSendRows(dbBinding, failedFileSendRows, true).catch(
+			() => undefined,
+		);
 		await validateShadowTableCounts(
 			dbBinding,
-			backupTableCounts(db, restoredAttachments.length),
+			backupTableCounts(
+				db,
+				restored.restoredAttachments.length,
+				(db.sends || []).length - failedFileSendRows.length,
+			),
 		);
 
 		await progress?.({
@@ -355,12 +335,10 @@ export async function importRemoteBackupArchiveBytes(
 		return buildImportExecutionResult(
 			db,
 			actorUserId,
-			restoredAttachments.length,
-			{
-				reason: skippedItems.length ? ATTACHMENT_RESTORE_FAILED_REASON : null,
-				attachments: skippedItems.length,
-				items: skippedItems,
-			},
+			restored.restoredAttachments.length,
+			(db.sends || []).length - failedFileSendRows.length,
+			restored.restoredFileSends.length,
+			mergeBackupImportSkips(prepared.skipped, restored.skipped),
 		);
 	} catch (error) {
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);

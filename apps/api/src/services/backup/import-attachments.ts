@@ -2,7 +2,7 @@ import type { BlobStore } from "../blob-store";
 import type { BackupPayload } from "./archive";
 import {
 	ATTACHMENT_RESTORE_FAILED_REASON,
-	type AttachmentRestoreResult,
+	type BlobRestoreResult,
 	type BackupImportSkipSummary,
 	BLOB_STORAGE_UNAVAILABLE_SKIP_REASON,
 } from "./import-types";
@@ -14,26 +14,68 @@ export function attachmentRowKey(row: SqlRow): string {
 	return `${cipherId}/${attachmentId}`;
 }
 
+export function sendRowKey(row: SqlRow): string {
+	return String(row.id || "").trim();
+}
+
+function sendFileMetadata(
+	row: SqlRow,
+): { fileId: string; sizeBytes: number } | null {
+	if (Number(row.type) !== 1) return null;
+	try {
+		const data = JSON.parse(String(row.data || "")) as {
+			id?: unknown;
+			size?: unknown;
+		};
+		const fileId = typeof data.id === "string" ? data.id.trim() : "";
+		const sizeBytes = Number(data.size);
+		return fileId && Number.isSafeInteger(sizeBytes) && sizeBytes >= 0
+			? { fileId, sizeBytes }
+			: null;
+	} catch {
+		return null;
+	}
+}
+
 export async function restoreBlobFiles(
 	blobStore: BlobStore | null,
 	db: BackupPayload["db"],
 	files: Record<string, Uint8Array>,
-): Promise<AttachmentRestoreResult> {
+	onStored?: (storageKey: string) => void,
+): Promise<BlobRestoreResult> {
 	const restoredAttachments: SqlRow[] = [];
+	const restoredFileSends: SqlRow[] = [];
 	const skippedItems: BackupImportSkipSummary["items"] = [];
+	const fileSendRows = (db.sends || []).filter((row) => Number(row.type) === 1);
 
 	if (!blobStore) {
 		return {
-			imported: 0,
+			importedAttachments: 0,
+			importedSendFiles: 0,
 			restoredAttachments: [],
+			restoredFileSends: [],
 			skipped: {
 				reason: BLOB_STORAGE_UNAVAILABLE_SKIP_REASON,
 				attachments: (db.attachments || []).length,
-				items: (db.attachments || []).map((row) => ({
-					kind: "attachment",
-					path: `attachments/${row.cipher_id}/${row.id}.bin`,
-					sizeBytes: Number(row.size || 0),
-				})),
+				sendFiles: fileSendRows.length,
+				items: [
+					...(db.attachments || []).map(
+						(row) =>
+							({
+								kind: "attachment",
+								path: `attachments/${row.cipher_id}/${row.id}.bin`,
+								sizeBytes: Number(row.size || 0),
+							}) as const,
+					),
+					...fileSendRows.map((row) => {
+						const metadata = sendFileMetadata(row);
+						return {
+							kind: "sendFile" as const,
+							path: `sends/${row.id}/${metadata?.fileId || "invalid"}`,
+							sizeBytes: metadata?.sizeBytes || 0,
+						};
+					}),
+				],
 			},
 		};
 	}
@@ -45,7 +87,8 @@ export async function restoreBlobFiles(
 		const sourceKey = `attachments/${cipherId}/${attachmentId}.bin`;
 		const targetKey = String(row.storage_key || "").trim() || sourceKey;
 		const bytes = files[sourceKey];
-		if (!bytes) {
+		const expectedSize = Number(row.size || 0) || 0;
+		if (!bytes || bytes.byteLength !== expectedSize) {
 			skippedItems.push({
 				kind: "attachment",
 				path: sourceKey,
@@ -58,25 +101,80 @@ export async function restoreBlobFiles(
 				size: bytes.byteLength,
 				contentType: "application/octet-stream",
 			});
+			onStored?.(targetKey);
 			restoredAttachments.push(row);
-		} catch {
+		} catch (error) {
+			throw new Error(`Failed to restore backup blob: ${sourceKey}`, {
+				cause: error,
+			});
+		}
+	}
+
+	for (const row of fileSendRows) {
+		const sendId = sendRowKey(row);
+		const metadata = sendFileMetadata(row);
+		if (!sendId || !metadata) {
 			skippedItems.push({
-				kind: "attachment",
+				kind: "sendFile",
+				path: `sends/${sendId || "invalid"}/invalid`,
+				sizeBytes: 0,
+			});
+			continue;
+		}
+		const sourceKey = `sends/${sendId}/${metadata.fileId}`;
+		const targetKey = String(row.storage_key || "").trim();
+		const bytes = files[sourceKey];
+		if (!targetKey || !bytes || bytes.byteLength !== metadata.sizeBytes) {
+			skippedItems.push({
+				kind: "sendFile",
 				path: sourceKey,
-				sizeBytes: bytes.byteLength,
+				sizeBytes: metadata.sizeBytes,
+			});
+			continue;
+		}
+		try {
+			await blobStore.put(targetKey, bytes, {
+				size: bytes.byteLength,
+				contentType: "application/octet-stream",
+			});
+			onStored?.(targetKey);
+			restoredFileSends.push(row);
+		} catch (error) {
+			throw new Error(`Failed to restore backup blob: ${sourceKey}`, {
+				cause: error,
 			});
 		}
 	}
 
 	return {
-		imported: restoredAttachments.length,
+		importedAttachments: restoredAttachments.length,
+		importedSendFiles: restoredFileSends.length,
 		restoredAttachments,
+		restoredFileSends,
 		skipped: {
 			reason: skippedItems.length ? ATTACHMENT_RESTORE_FAILED_REASON : null,
-			attachments: skippedItems.length,
+			sendFiles: skippedItems.filter((item) => item.kind === "sendFile").length,
+			attachments: skippedItems.filter((item) => item.kind === "attachment")
+				.length,
 			items: skippedItems,
 		},
 	};
+}
+
+export async function removeSendRows(
+	db: D1Database,
+	sendRows: SqlRow[],
+	useShadowTable = false,
+): Promise<void> {
+	if (!sendRows.length) return;
+	const tableName = useShadowTable ? shadowTableName("sends") : "sends";
+	const statements = sendRows
+		.map((row) => sendRowKey(row))
+		.filter(Boolean)
+		.map((sendId) =>
+			db.prepare(`DELETE FROM ${tableName} WHERE id = ?`).bind(sendId),
+		);
+	if (statements.length) await db.batch(statements);
 }
 
 export async function removeAttachmentRows(

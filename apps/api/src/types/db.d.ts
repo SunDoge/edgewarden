@@ -226,6 +226,7 @@ export interface Sends {
 	password_hash: string | null;
 	password_iterations: number | null;
 	password_salt: string | null;
+	storage_key: string | null;
 	type: number;
 	updated_at: number;
 	user_id: string | null;

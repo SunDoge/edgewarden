@@ -1,7 +1,11 @@
 import { unzipSync, zipSync } from "fflate";
 import { type Kysely, sql } from "kysely";
 import type { DB } from "../../types/db";
-import { getStoredAttachmentObjectKey, type BlobStore } from "../blob-store";
+import {
+	getStoredAttachmentObjectKey,
+	getStoredSendFileObjectKey,
+	type BlobStore,
+} from "../blob-store";
 import { BACKUP_SETTINGS_CONFIG_KEY } from "./config";
 import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 import { exportPortableBackupSettingsEnvelope } from "./settings-crypto";
@@ -19,7 +23,7 @@ export type { BackupFileIntegrityCheckResult } from "./archive-integrity";
 
 type SqlRow = Record<string, string | number | null>;
 
-const BACKUP_FORMAT_VERSION = 1;
+const BACKUP_FORMAT_VERSION = 2;
 const BACKUP_RUNNER_LOCK_CONFIG_KEY = "backup.runner.lock.v1";
 const BACKUP_TEXT_COMPRESSION_LEVEL = 0;
 const BACKUP_JSON_INDENT = 2;
@@ -29,25 +33,35 @@ const MAX_BACKUP_EXTRACTED_BYTES = 64 * 1024 * 1024;
 const MAX_BACKUP_DB_JSON_BYTES = 32 * 1024 * 1024;
 
 export interface BackupManifest {
-	formatVersion: 1;
+	formatVersion: 1 | 2;
 	exportedAt: string;
 	appVersion: string;
 	storageKind: "kv" | "r2" | null;
 	tableCounts: Record<string, number>;
 	includes: {
 		attachments: boolean;
+		fileSends?: boolean;
 	};
 	blobSummary: {
 		attachmentFiles: number;
+		sendFiles?: number;
 		totalBytes: number;
 		largestObjectBytes: number;
 	};
 	attachmentBlobs?: BackupManifestAttachmentBlob[];
+	sendBlobs?: BackupManifestSendBlob[];
 }
 
 export interface BackupManifestAttachmentBlob {
 	cipherId: string;
 	attachmentId: string;
+	blobName: string;
+	sizeBytes: number;
+}
+
+export interface BackupManifestSendBlob {
+	sendId: string;
+	fileId: string;
 	blobName: string;
 	sizeBytes: number;
 }
@@ -135,13 +149,47 @@ function validateArchiveSize(bytes: Uint8Array): void {
 	}
 }
 
-function getRequiredZipEntries(db: BackupPayload["db"]): string[] {
+function parseSendFileMetadata(row: SqlRow): {
+	fileId: string;
+	sizeBytes: number;
+} | null {
+	if (Number(row.type) !== 1) return null;
+	try {
+		const data = JSON.parse(String(row.data || "")) as {
+			id?: unknown;
+			size?: unknown;
+		};
+		const fileId = typeof data.id === "string" ? data.id.trim() : "";
+		const sizeBytes = Number(data.size);
+		return fileId && Number.isSafeInteger(sizeBytes) && sizeBytes >= 0
+			? { fileId, sizeBytes }
+			: null;
+	} catch {
+		return null;
+	}
+}
+
+function getRequiredZipEntries(
+	db: BackupPayload["db"],
+	formatVersion: 1 | 2,
+): string[] {
 	const entries: string[] = [];
 	for (const row of db.attachments) {
 		const cipherId = String(row.cipher_id || "").trim();
 		const attachmentId = String(row.id || "").trim();
 		if (!cipherId || !attachmentId) continue;
 		entries.push(`attachments/${cipherId}/${attachmentId}.bin`);
+	}
+	if (formatVersion >= 2) {
+		for (const row of db.sends || []) {
+			if (Number(row.type) !== 1) continue;
+			const sendId = String(row.id || "").trim();
+			const file = parseSendFileMetadata(row);
+			if (!sendId || !file) {
+				throw new Error("Backup archive contains invalid file Send metadata");
+			}
+			entries.push(`sends/${sendId}/${file.fileId}`);
+		}
 	}
 	return entries;
 }
@@ -213,7 +261,7 @@ export function parseBackupArchive(
 		throw new Error("Backup archive contains invalid JSON metadata");
 	}
 
-	if (manifest?.formatVersion !== BACKUP_FORMAT_VERSION) {
+	if (manifest?.formatVersion !== 1 && manifest?.formatVersion !== 2) {
 		throw new Error("Unsupported backup format version");
 	}
 	if (!db || typeof db !== "object") {
@@ -228,9 +276,10 @@ export function parseBackupArchive(
 				)
 			: [],
 	);
-	const requiredEntries = getRequiredZipEntries(db).filter(
-		(entry) => !externalAttachmentKeys.has(entry),
-	);
+	const requiredEntries = getRequiredZipEntries(
+		db,
+		manifest.formatVersion,
+	).filter((entry) => !externalAttachmentKeys.has(entry));
 	for (const entry of requiredEntries) {
 		if (!zipped[entry]) {
 			throw new Error(`Backup archive is missing required file: ${entry}`);
@@ -250,7 +299,7 @@ export async function buildBackupArchive(
 ): Promise<BackupArchiveBundle> {
 	const includeAttachments = options.includeAttachments !== false;
 	if (includeAttachments && !options.blobStore) {
-		throw new Error("Attachment storage is not configured");
+		throw new Error("File storage is not configured");
 	}
 	await options.progress?.({
 		step: "collect_data",
@@ -434,6 +483,9 @@ export async function buildBackupArchive(
 		userRows as unknown as SqlRow[],
 	);
 	const sourceAttachmentRows = includeAttachments ? attachmentRows : [];
+	const sourceSendRows = sendsRows.filter(
+		(row) => Number(row.type) !== 1 || includeAttachments,
+	);
 	const exportedAttachmentRows = sourceAttachmentRows.map(
 		({ storage_key: _storageKey, deleted_at: _deletedAt, ...row }) =>
 			row as SqlRow,
@@ -451,6 +503,32 @@ export async function buildBackupArchive(
 	});
 	const manifestAttachmentBlobs: BackupManifestAttachmentBlob[] =
 		attachmentBlobs.map(({ storageKey: _storageKey, ...blob }) => blob);
+	const sendBlobs = sourceSendRows.flatMap((row) => {
+		if (Number(row.type) !== 1) return [];
+		const sendId = String(row.id || "").trim();
+		const file = parseSendFileMetadata(row as unknown as SqlRow);
+		if (!sendId || !file) {
+			throw new Error(
+				`Backup file Send metadata is invalid: ${sendId || "unknown"}`,
+			);
+		}
+		return [
+			{
+				sendId,
+				fileId: file.fileId,
+				blobName: `sends/${sendId}/${file.fileId}`,
+				storageKey: getStoredSendFileObjectKey(row, file.fileId),
+				sizeBytes: file.sizeBytes,
+			},
+		];
+	});
+	const exportedSendRows = sourceSendRows.map(
+		({ storage_key: _storageKey, ...row }) => row as SqlRow,
+	);
+	const manifestSendBlobs: BackupManifestSendBlob[] = sendBlobs.map(
+		({ storageKey: _storageKey, ...blob }) => blob,
+	);
+	const allBlobs = [...attachmentBlobs, ...sendBlobs];
 
 	const manifestBase = {
 		formatVersion: BACKUP_FORMAT_VERSION,
@@ -472,23 +550,23 @@ export async function buildBackupArchive(
 			attachments: exportedAttachmentRows.length,
 			webauthn_credentials: webauthnRows.length,
 			device_trust_tokens: deviceTrustRows.length,
-			sends: sendsRows.length,
+			sends: exportedSendRows.length,
 		},
 		includes: {
 			attachments: includeAttachments,
+			fileSends: includeAttachments,
 		},
 		blobSummary: {
 			attachmentFiles: attachmentBlobs.length,
-			totalBytes: attachmentBlobs.reduce(
-				(sum, item) => sum + item.sizeBytes,
-				0,
-			),
-			largestObjectBytes: attachmentBlobs.reduce(
+			sendFiles: sendBlobs.length,
+			totalBytes: allBlobs.reduce((sum, item) => sum + item.sizeBytes, 0),
+			largestObjectBytes: allBlobs.reduce(
 				(max, item) => Math.max(max, item.sizeBytes),
 				0,
 			),
 		},
 		attachmentBlobs: includeAttachments ? manifestAttachmentBlobs : [],
+		sendBlobs: includeAttachments ? manifestSendBlobs : [],
 	} satisfies BackupManifest;
 
 	const files: Record<string, Uint8Array> = {
@@ -512,7 +590,7 @@ export async function buildBackupArchive(
 					attachments: exportedAttachmentRows,
 					webauthn_credentials: webauthnRows,
 					device_trust_tokens: deviceTrustRows,
-					sends: sendsRows,
+					sends: exportedSendRows,
 				},
 				null,
 				BACKUP_JSON_INDENT,
@@ -521,16 +599,16 @@ export async function buildBackupArchive(
 	};
 
 	if (includeAttachments && options.blobStore) {
-		for (const blob of attachmentBlobs) {
+		for (const blob of allBlobs) {
 			const object = await options.blobStore.get(blob.storageKey);
 			if (!object?.body) {
-				throw new Error(`Backup attachment blob not found: ${blob.blobName}`);
+				throw new Error(`Backup blob not found: ${blob.blobName}`);
 			}
 			const bytes = new Uint8Array(
 				await new Response(object.body).arrayBuffer(),
 			);
 			if (bytes.byteLength !== blob.sizeBytes) {
-				throw new Error(`Backup attachment size mismatch: ${blob.blobName}`);
+				throw new Error(`Backup blob size mismatch: ${blob.blobName}`);
 			}
 			files[blob.blobName] = bytes;
 		}
@@ -546,6 +624,7 @@ export async function buildBackupArchive(
 		includeAttachments,
 	});
 	const bytes = zipSync(createZipEntries(files));
+	validateArchiveSize(bytes);
 	const fileHashPrefix = await getBackupArchiveChecksumPrefix(bytes);
 	const backupTimeZone = options.timeZone || "UTC";
 	const fileName = buildBackupFileNameInTimeZone(
