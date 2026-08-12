@@ -225,15 +225,44 @@ export function registerAdminOrganizationScenarios(
 			}),
 		});
 
-		const banned = await request(`/api/admin/users/${member.id}/status`, {
-			method: "PUT",
-			headers: { ...adminAuth, "content-type": "application/json" },
-			body: JSON.stringify({
-				status: "banned",
-				masterPasswordHash: MASTER_PASSWORD_HASH,
-			}),
-		});
+		const statusAuditCountBefore = await context.database
+			.prepare(
+				"SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'admin.user.status' AND target_id = ?",
+			)
+			.bind(member.id)
+			.first<{ count: number }>()
+			.then((row) => Number(row?.count ?? 0));
+		const banRequest = () =>
+			request(`/api/admin/users/${member.id}/status`, {
+				method: "PUT",
+				headers: { ...adminAuth, "content-type": "application/json" },
+				body: JSON.stringify({
+					status: "banned",
+					masterPasswordHash: MASTER_PASSWORD_HASH,
+				}),
+			});
+		const banned = await banRequest();
 		assert.equal(banned.status, 200, await banned.clone().text());
+		const duplicateBan = await banRequest();
+		assert.equal(duplicateBan.status, 200, await duplicateBan.clone().text());
+		assert.equal(
+			await context.database
+				.prepare(
+					"SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'admin.user.status' AND target_id = ?",
+				)
+				.bind(member.id)
+				.first<{ count: number }>()
+				.then((row) => Number(row?.count ?? 0)),
+			statusAuditCountBefore + 1,
+		);
+		assert.equal(
+			(
+				await request("/api/accounts/profile", {
+					headers: { authorization: `Bearer ${context.memberAccessToken}` },
+				})
+			).status,
+			401,
+		);
 		const restored = await request(`/api/admin/users/${member.id}/status`, {
 			method: "PUT",
 			headers: { ...adminAuth, "content-type": "application/json" },
