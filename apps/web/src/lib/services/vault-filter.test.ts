@@ -1,5 +1,5 @@
+import { type CipherResponse, CipherType } from "@edgewarden/shared";
 import { describe, expect, it } from "vitest";
-import { CipherType, type CipherResponse } from "@edgewarden/shared";
 import {
 	filterAndSortVaultItems,
 	findDuplicateCipherIds,
@@ -126,7 +126,7 @@ describe("vault filtering", () => {
 		).toEqual(["newer", "older"]);
 	});
 
-	it("detects duplicate logins by site, credentials, password and exact data", () => {
+	it("detects duplicate logins by account, password and exact data", () => {
 		const first = cipher({
 			id: "first",
 			name: "GitHub",
@@ -146,9 +146,9 @@ describe("vault filtering", () => {
 			name: "Different",
 			login: { username: "other", password: "different", uri: "example.com" },
 		});
-		expect(
-			findDuplicateCipherIds([first, second, third], "login-site"),
-		).toEqual(new Set(["first", "second"]));
+		expect(findDuplicateCipherIds([first, second, third], "login-site")).toEqual(
+			new Set(["first", "second"]),
+		);
 		expect(
 			findDuplicateCipherIds([first, second, third], "login-credentials"),
 		).toEqual(new Set(["first", "second"]));
@@ -158,5 +158,47 @@ describe("vault filtering", () => {
 		expect(
 			findDuplicateCipherIds([first, { ...first, id: "copy" }], "exact"),
 		).toEqual(new Set(["first", "copy"]));
+	});
+
+	it("does not treat different accounts on the same site as duplicates", () => {
+		const alice = cipher({
+			id: "alice",
+			name: "GitHub Alice",
+			login: { username: "alice", password: "one", uri: "github.com" },
+		});
+		const bob = cipher({
+			id: "bob",
+			name: "GitHub Bob",
+			login: {
+				username: "bob",
+				password: "two",
+				uri: "https://github.com/login",
+			},
+		});
+
+		expect(findDuplicateCipherIds([alice, bob], "login-credentials")).toEqual(
+			new Set(),
+		);
+		expect(findDuplicateCipherIds([alice, bob], "login-site")).toEqual(
+			new Set(),
+		);
+	});
+
+	it("requires both username and password to match for an account duplicate", () => {
+		const oldPassword = cipher({
+			id: "old",
+			login: { username: "alice", password: "old", uri: "example.com" },
+		});
+		const newPassword = cipher({
+			id: "new",
+			login: { username: "alice", password: "new", uri: "example.com" },
+		});
+
+		expect(
+			findDuplicateCipherIds([oldPassword, newPassword], "login-credentials"),
+		).toEqual(new Set());
+		expect(
+			findDuplicateCipherIds([oldPassword, newPassword], "login-site"),
+		).toEqual(new Set());
 	});
 });

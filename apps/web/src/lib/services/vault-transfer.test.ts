@@ -88,6 +88,43 @@ describe("vault import and export", () => {
 		expect(result.document.folders).toEqual(incoming.folders);
 	});
 
+	it("keeps different accounts on the same website during import", () => {
+		const existing = {
+			folders: [],
+			warnings: [],
+			items: [
+				{
+					type: CipherType.Login,
+					name: "GitHub",
+					login: {
+						username: "alice",
+						password: "shared-password",
+						uris: [{ uri: "https://github.com" }],
+					},
+				},
+			],
+		};
+		const incoming = {
+			folders: [],
+			warnings: [],
+			items: [
+				{
+					type: CipherType.Login,
+					name: "GitHub",
+					login: {
+						username: "bob",
+						password: "shared-password",
+						uris: [{ uri: "https://github.com/login" }],
+					},
+				},
+			],
+		};
+
+		const result = deduplicateTransferDocument(incoming, existing);
+		expect(result.duplicateItems).toBe(0);
+		expect(result.document.items).toEqual(incoming.items);
+	});
+
 	it("deduplicates repeated items inside a single import", () => {
 		const item = {
 			type: CipherType.SecureNote,
