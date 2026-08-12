@@ -79,6 +79,66 @@ interface AttachmentRestoreResult {
 	skipped: BackupImportSkipSummary;
 }
 
+function backupTableCounts(
+	db: BackupPayload["db"],
+	attachmentCount = (db.attachments || []).length,
+): Partial<Record<BackupTableName, number>> {
+	return {
+		config: (db.config || []).length,
+		users: (db.users || []).length,
+		domain_settings: (db.domain_settings || []).length,
+		user_revisions: (db.user_revisions || []).length,
+		organizations: (db.organizations || []).length,
+		org_members: (db.org_members || []).length,
+		collections: (db.collections || []).length,
+		collection_members: (db.collection_members || []).length,
+		device_trust_tokens: (db.device_trust_tokens || []).length,
+		webauthn_credentials: (db.webauthn_credentials || []).length,
+		folders: (db.folders || []).length,
+		ciphers: (db.ciphers || []).length,
+		cipher_collections: (db.cipher_collections || []).length,
+		attachments: attachmentCount,
+		sends: (db.sends || []).length,
+	};
+}
+
+function buildImportExecutionResult(
+	db: BackupPayload["db"],
+	actorUserId: string,
+	restoredAttachmentCount: number,
+	skipped: BackupImportSkipSummary,
+): BackupImportExecutionResult {
+	return {
+		auditActorUserId: (db.users || []).some(
+			(row) => String(row.id || "").trim() === actorUserId,
+		)
+			? actorUserId
+			: null,
+		result: {
+			object: "instance-backup-import",
+			imported: {
+				config: (db.config || []).length,
+				users: (db.users || []).length,
+				domainSettings: (db.domain_settings || []).length,
+				userRevisions: (db.user_revisions || []).length,
+				organizations: (db.organizations || []).length,
+				organizationMembers: (db.org_members || []).length,
+				collections: (db.collections || []).length,
+				collectionMembers: (db.collection_members || []).length,
+				folders: (db.folders || []).length,
+				ciphers: (db.ciphers || []).length,
+				cipherCollections: (db.cipher_collections || []).length,
+				attachments: restoredAttachmentCount,
+				webauthnCredentials: (db.webauthn_credentials || []).length,
+				deviceTrustTokens: (db.device_trust_tokens || []).length,
+				sends: (db.sends || []).length,
+				attachmentFiles: restoredAttachmentCount,
+			},
+			skipped,
+		},
+	};
+}
+
 export interface BackupRestoreProgressEvent {
 	source: "local" | "remote";
 	step: string;
@@ -734,23 +794,7 @@ export async function importBackupArchiveBytes(
 			prepared.payload.db,
 			dataEncryptionSecret,
 		);
-		await validateShadowTableCounts(dbBinding, {
-			config: (db.config || []).length,
-			users: (db.users || []).length,
-			domain_settings: (db.domain_settings || []).length,
-			user_revisions: (db.user_revisions || []).length,
-			organizations: (db.organizations || []).length,
-			org_members: (db.org_members || []).length,
-			collections: (db.collections || []).length,
-			collection_members: (db.collection_members || []).length,
-			device_trust_tokens: (db.device_trust_tokens || []).length,
-			webauthn_credentials: (db.webauthn_credentials || []).length,
-			folders: (db.folders || []).length,
-			ciphers: (db.ciphers || []).length,
-			cipher_collections: (db.cipher_collections || []).length,
-			attachments: (db.attachments || []).length,
-			sends: (db.sends || []).length,
-		});
+		await validateShadowTableCounts(dbBinding, backupTableCounts(db));
 
 		await progress?.({
 			source: "local",
@@ -770,23 +814,10 @@ export async function importBackupArchiveBytes(
 		await removeAttachmentRows(dbBinding, failedRestoreRows, true).catch(
 			() => undefined,
 		);
-		await validateShadowTableCounts(dbBinding, {
-			config: (db.config || []).length,
-			users: (db.users || []).length,
-			domain_settings: (db.domain_settings || []).length,
-			user_revisions: (db.user_revisions || []).length,
-			organizations: (db.organizations || []).length,
-			org_members: (db.org_members || []).length,
-			collections: (db.collections || []).length,
-			collection_members: (db.collection_members || []).length,
-			device_trust_tokens: (db.device_trust_tokens || []).length,
-			webauthn_credentials: (db.webauthn_credentials || []).length,
-			folders: (db.folders || []).length,
-			ciphers: (db.ciphers || []).length,
-			cipher_collections: (db.cipher_collections || []).length,
-			attachments: restored.restoredAttachments.length,
-			sends: (db.sends || []).length,
-		});
+		await validateShadowTableCounts(
+			dbBinding,
+			backupTableCounts(db, restored.restoredAttachments.length),
+		);
 		await progress?.({
 			source: "local",
 			step: "local_finalize",
@@ -820,35 +851,12 @@ export async function importBackupArchiveBytes(
 			done: true,
 			ok: true,
 		});
-		return {
-			auditActorUserId: (db.users || []).some(
-				(row) => String(row.id || "").trim() === actorUserId,
-			)
-				? actorUserId
-				: null,
-			result: {
-				object: "instance-backup-import",
-				imported: {
-					config: (db.config || []).length,
-					users: (db.users || []).length,
-					domainSettings: (db.domain_settings || []).length,
-					userRevisions: (db.user_revisions || []).length,
-					organizations: (db.organizations || []).length,
-					organizationMembers: (db.org_members || []).length,
-					collections: (db.collections || []).length,
-					collectionMembers: (db.collection_members || []).length,
-					folders: (db.folders || []).length,
-					ciphers: (db.ciphers || []).length,
-					cipherCollections: (db.cipher_collections || []).length,
-					attachments: restored.restoredAttachments.length,
-					webauthnCredentials: (db.webauthn_credentials || []).length,
-					deviceTrustTokens: (db.device_trust_tokens || []).length,
-					sends: (db.sends || []).length,
-					attachmentFiles: restored.restoredAttachments.length,
-				},
-				skipped: restored.skipped,
-			},
-		};
+		return buildImportExecutionResult(
+			db,
+			actorUserId,
+			restored.restoredAttachments.length,
+			restored.skipped,
+		);
 	} catch (error) {
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);
 		await progress?.({
@@ -962,23 +970,7 @@ export async function importRemoteBackupArchiveBytes(
 			preparedPayload.db,
 			dataEncryptionSecret,
 		);
-		await validateShadowTableCounts(dbBinding, {
-			config: (db.config || []).length,
-			users: (db.users || []).length,
-			domain_settings: (db.domain_settings || []).length,
-			user_revisions: (db.user_revisions || []).length,
-			organizations: (db.organizations || []).length,
-			org_members: (db.org_members || []).length,
-			collections: (db.collections || []).length,
-			collection_members: (db.collection_members || []).length,
-			device_trust_tokens: (db.device_trust_tokens || []).length,
-			webauthn_credentials: (db.webauthn_credentials || []).length,
-			folders: (db.folders || []).length,
-			ciphers: (db.ciphers || []).length,
-			cipher_collections: (db.cipher_collections || []).length,
-			attachments: (db.attachments || []).length,
-			sends: (db.sends || []).length,
-		});
+		await validateShadowTableCounts(dbBinding, backupTableCounts(db));
 
 		await progress?.({
 			source: "remote",
@@ -1031,23 +1023,10 @@ export async function importRemoteBackupArchiveBytes(
 		await removeAttachmentRows(dbBinding, failedRestoreRows, true).catch(
 			() => undefined,
 		);
-		await validateShadowTableCounts(dbBinding, {
-			config: (db.config || []).length,
-			users: (db.users || []).length,
-			domain_settings: (db.domain_settings || []).length,
-			user_revisions: (db.user_revisions || []).length,
-			organizations: (db.organizations || []).length,
-			org_members: (db.org_members || []).length,
-			collections: (db.collections || []).length,
-			collection_members: (db.collection_members || []).length,
-			device_trust_tokens: (db.device_trust_tokens || []).length,
-			webauthn_credentials: (db.webauthn_credentials || []).length,
-			folders: (db.folders || []).length,
-			ciphers: (db.ciphers || []).length,
-			cipher_collections: (db.cipher_collections || []).length,
-			attachments: restoredAttachments.length,
-			sends: (db.sends || []).length,
-		});
+		await validateShadowTableCounts(
+			dbBinding,
+			backupTableCounts(db, restoredAttachments.length),
+		);
 
 		await progress?.({
 			source: "remote",
@@ -1083,39 +1062,16 @@ export async function importRemoteBackupArchiveBytes(
 			ok: true,
 		});
 
-		return {
-			auditActorUserId: (db.users || []).some(
-				(row) => String(row.id || "").trim() === actorUserId,
-			)
-				? actorUserId
-				: null,
-			result: {
-				object: "instance-backup-import",
-				imported: {
-					config: (db.config || []).length,
-					users: (db.users || []).length,
-					domainSettings: (db.domain_settings || []).length,
-					userRevisions: (db.user_revisions || []).length,
-					organizations: (db.organizations || []).length,
-					organizationMembers: (db.org_members || []).length,
-					collections: (db.collections || []).length,
-					collectionMembers: (db.collection_members || []).length,
-					folders: (db.folders || []).length,
-					ciphers: (db.ciphers || []).length,
-					cipherCollections: (db.cipher_collections || []).length,
-					attachments: restoredAttachments.length,
-					webauthnCredentials: (db.webauthn_credentials || []).length,
-					deviceTrustTokens: (db.device_trust_tokens || []).length,
-					sends: (db.sends || []).length,
-					attachmentFiles: restoredAttachments.length,
-				},
-				skipped: {
-					reason: skippedItems.length ? ATTACHMENT_RESTORE_FAILED_REASON : null,
-					attachments: skippedItems.length,
-					items: skippedItems,
-				},
+		return buildImportExecutionResult(
+			db,
+			actorUserId,
+			restoredAttachments.length,
+			{
+				reason: skippedItems.length ? ATTACHMENT_RESTORE_FAILED_REASON : null,
+				attachments: skippedItems.length,
+				items: skippedItems,
 			},
-		};
+		);
 	} catch (error) {
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);
 		await progress?.({
