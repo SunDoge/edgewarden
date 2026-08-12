@@ -457,10 +457,14 @@ export async function assertTwoFactorPasskey(
 	});
 	if (!verification.verified || !verification.authenticationInfo.userVerified)
 		throw new Error("Two-factor passkey verification failed");
-	await webauthnDb.updateAccountPasskeyCounter(
-		db,
-		userId,
-		credential.credential_id,
-		verification.authenticationInfo.newCounter,
-	);
+	if (
+		!(await webauthnDb.updateAccountPasskeyCounter(
+			db,
+			userId,
+			credential.credential_id,
+			credential.counter,
+			verification.authenticationInfo.newCounter,
+		))
+	)
+		throw new Error("Two-factor passkey counter was already advanced");
 }

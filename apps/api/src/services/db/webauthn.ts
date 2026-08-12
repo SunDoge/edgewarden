@@ -1,8 +1,8 @@
-import type { Kysely, Selectable, Insertable } from "kysely";
+import type { Insertable, Kysely, Selectable } from "kysely";
 import type {
 	DB,
-	WebauthnCredentials,
 	WebauthnChallenges,
+	WebauthnCredentials,
 } from "../../types/db";
 import { now } from "../../utils/time";
 
@@ -123,9 +123,17 @@ export async function updateAccountPasskeyCounter(
 	db: Kysely<DB>,
 	userId: string,
 	credentialId: string,
+	expectedCounter: number,
 	counter: number,
-): Promise<void> {
-	await db
+): Promise<boolean> {
+	// Authenticators without a signature counter report zero forever. Keep the
+	// conditional write even then so deletion racing an assertion is detected.
+	if (
+		counter < expectedCounter ||
+		(counter === expectedCounter && counter !== 0)
+	)
+		return false;
+	const result = await db
 		.updateTable("webauthn_credentials")
 		.set({
 			counter,
@@ -133,7 +141,9 @@ export async function updateAccountPasskeyCounter(
 		})
 		.where("user_id", "=", userId)
 		.where("credential_id", "=", credentialId)
-		.execute();
+		.where("counter", "=", expectedCounter)
+		.executeTakeFirst();
+	return result.numUpdatedRows === 1n;
 }
 
 export async function updateAccountPasskeyEncryption(
