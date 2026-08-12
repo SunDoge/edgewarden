@@ -13,10 +13,23 @@ async function readConfig(path: string): Promise<WranglerConfig> {
 
 function commonConfig(config: WranglerConfig): WranglerConfig {
 	const normalized = structuredClone(config);
+	delete normalized.$schema;
 	delete normalized.kv_namespaces;
 	delete normalized.r2_buckets;
+	if (Array.isArray(normalized.d1_databases)) {
+		for (const database of normalized.d1_databases) {
+			if (database && typeof database === "object")
+				delete (database as Record<string, unknown>).database_id;
+		}
+	}
 	if (normalized.vars) delete normalized.vars.ATTACHMENT_STORAGE;
 	return normalized;
+}
+
+function portableD1Config(config: WranglerConfig): unknown {
+	return (config.d1_databases as Record<string, unknown>[]).map(
+		({ database_id: _databaseId, ...database }) => database,
+	);
 }
 
 const [r2, kv] = await Promise.all([
@@ -25,7 +38,7 @@ const [r2, kv] = await Promise.all([
 ]);
 
 assert.deepEqual(commonConfig(kv), commonConfig(r2));
-assert.deepEqual(r2.d1_databases, [
+assert.deepEqual(portableD1Config(r2), [
 	{
 		binding: "DB",
 		database_name: "edgewarden-db",
@@ -38,7 +51,7 @@ assert.deepEqual(r2.r2_buckets, [
 assert.equal(r2.kv_namespaces, undefined);
 assert.equal(r2.vars?.ATTACHMENT_STORAGE, "r2");
 assert.deepEqual(kv.kv_namespaces, [{ binding: "ATTACHMENTS_KV" }]);
-assert.deepEqual(kv.d1_databases, r2.d1_databases);
+assert.deepEqual(portableD1Config(kv), portableD1Config(r2));
 assert.equal(kv.r2_buckets, undefined);
 assert.equal(kv.vars?.ATTACHMENT_STORAGE, "kv");
 
