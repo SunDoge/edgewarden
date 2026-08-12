@@ -1,101 +1,101 @@
 <script lang="ts">
-import { onMount } from "svelte";
-import { goto } from "$app/navigation";
-import { page } from "$app/state";
 import { CipherType } from "@edgewarden/shared";
 import {
-	isLoggedIn,
-	createCipherApi,
-	updateCipherApi,
-	deleteCipherApi,
-	restoreCipherApi,
+	Archive,
+	ArchiveRestore,
+	ArrowLeft,
+	BookUser,
+	Building2,
+	Check,
+	Copy,
+	CreditCard,
+	Database,
+	Download,
+	Edit,
+	ExternalLink,
+	Eye,
+	EyeOff,
+	FileText,
+	Folder,
+	Globe,
+	IdCard,
+	KeyRound,
+	Landmark,
+	Lock,
+	LogOut,
+	Paperclip,
+	Plus,
+	RefreshCw,
+	RotateCcw,
+	ScanLine,
+	ScrollText,
+	Search,
+	Settings,
+	Share2,
+	ShieldAlert,
+	ShieldCheck,
+	Star,
+	Trash2,
+	Upload,
+	User,
+	UserRoundCog,
+	WandSparkles,
+	WifiOff,
+} from "@lucide/svelte";
+import { onMount } from "svelte";
+import { match } from "ts-pattern";
+import { goto } from "$app/navigation";
+import { page } from "$app/state";
+import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
+import { Button } from "$lib/components/ui/button/index.js";
+import * as Dialog from "$lib/components/ui/dialog/index.js";
+import { Input } from "$lib/components/ui/input/index.js";
+import { Textarea } from "$lib/components/ui/textarea/index.js";
+import {
 	archiveCipherApi,
-	unarchiveCipherApi,
-	hardDeleteCipherApi,
-	deleteCiphersApi,
-	restoreCiphersApi,
 	archiveCiphersApi,
-	unarchiveCiphersApi,
-	hardDeleteCiphersApi,
+	createAttachmentApi,
+	createCipherApi,
 	createFolderApi,
-	updateFolderApi,
+	deleteAttachmentApi,
+	deleteCipherApi,
+	deleteCiphersApi,
 	deleteFolderApi,
 	deleteFoldersApi,
-	createAttachmentApi,
-	uploadAttachmentApi,
 	downloadAttachmentApi,
-	deleteAttachmentApi,
+	hardDeleteCipherApi,
+	hardDeleteCiphersApi,
+	isLoggedIn,
+	restoreCipherApi,
+	restoreCiphersApi,
+	unarchiveCipherApi,
+	unarchiveCiphersApi,
+	updateCipherApi,
+	updateFolderApi,
+	uploadAttachmentApi,
 } from "$lib/services/api";
 import {
-	vault,
-	syncVaultData,
-	logout,
-	getOrganizationKey,
-} from "$lib/stores/vault.svelte";
-import { encryptCipher, calcTotpNow, encryptStr } from "$lib/services/crypto";
-import {
-	filterAndSortVaultItems,
-	findDuplicateCipherIds,
-	type DuplicateMode,
-	type VaultCategory,
-	type VaultSort,
-} from "$lib/services/vault-filter";
-import { buildCipherPayload } from "$lib/services/cipher-draft";
-import {
+	type AttachmentKeys,
 	decryptAttachmentFile,
 	prepareAttachment,
 	safeAttachmentFileName,
-	type AttachmentKeys,
 } from "$lib/services/attachment-crypto";
+import { buildCipherPayload } from "$lib/services/cipher-draft";
+import { calcTotpNow, encryptCipher, encryptStr } from "$lib/services/crypto";
 import { scanTotpQrFile } from "$lib/services/totp-qr";
-import { match } from "ts-pattern";
-import { Button } from "$lib/components/ui/button/index.js";
-import { Input } from "$lib/components/ui/input/index.js";
-import { Textarea } from "$lib/components/ui/textarea/index.js";
-import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-import * as Dialog from "$lib/components/ui/dialog/index.js";
 import {
-	Search,
-	Plus,
-	Folder,
-	LogOut,
-	Star,
-	KeyRound,
-	CreditCard,
-	User,
-	FileText,
-	Lock,
-	ExternalLink,
-	Copy,
-	Check,
-	ShieldCheck,
-	WifiOff,
-	RefreshCw,
-	Globe,
-	Edit,
-	Trash2,
-	ArrowLeft,
-	Share2,
-	Database,
-	Upload,
-	Eye,
-	EyeOff,
-	Settings,
-	WandSparkles,
-	RotateCcw,
-	Landmark,
-	IdCard,
-	BookUser,
-	Paperclip,
-	Download,
-	ShieldAlert,
-	Archive,
-	ArchiveRestore,
-	UserRoundCog,
-	ScrollText,
-	Building2,
-	ScanLine,
-} from "@lucide/svelte";
+	type DuplicateMode,
+	filterAndSortVaultItems,
+	findDuplicateCipherIds,
+	type VaultCategory,
+	type VaultSort,
+} from "$lib/services/vault-filter";
+import {
+	getOrganizationKey,
+	logout,
+	syncVaultData,
+	vault,
+} from "$lib/stores/vault.svelte";
 
 // UI state
 let searchQuery = $state("");
@@ -450,7 +450,7 @@ function getDomain(item: any): string | null {
 		const host = url.hostname.toLowerCase();
 		return host.startsWith("www.") ? host.slice(4) : host;
 	} catch {
-		const match = uriStr.match(/^(?:https?:\/\/)?(?:www\.)?([^\/\?#:]+)/i);
+		const match = uriStr.match(/^(?:https?:\/\/)?(?:www\.)?([^/?#:]+)/i);
 		return match ? match[1].toLowerCase() : null;
 	}
 }
@@ -1125,7 +1125,7 @@ $effect(() => {
 				<div class="flex gap-2"><div class="relative flex-1">
 					<Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
 					<Input type="search" placeholder="搜索您的保险库项..." class="pl-10" bind:value={searchQuery} />
-				</div>{#if activeCategory === "duplicates"}<select bind:value={duplicateMode} aria-label="重复检测方式" class="h-9 rounded-md border bg-background px-2 text-sm"><option value="exact">完全相同</option><option value="login-site">同一站点</option><option value="login-credentials">同站点和用户名</option><option value="password">相同密码</option></select>{/if}<select bind:value={sortMode} aria-label="排序方式" class="h-9 rounded-md border bg-background px-2 text-sm"><option value="edited">最近修改</option><option value="created">最近创建</option><option value="name">名称</option></select></div>
+				</div>{#if activeCategory === "duplicates"}<select bind:value={duplicateMode} aria-label="重复检测方式" class="h-9 rounded-md border bg-background px-2 text-sm"><option value="exact">完全相同</option><option value="login-site">网站、账号和密码</option><option value="login-credentials">账号和密码</option><option value="password">密码复用</option></select>{/if}<select bind:value={sortMode} aria-label="排序方式" class="h-9 rounded-md border bg-background px-2 text-sm"><option value="edited">最近修改</option><option value="created">最近创建</option><option value="name">名称</option></select></div>
 				{#if selectedIdList.length}<div class="flex flex-wrap items-center gap-2 text-sm"><span>已选择 {selectedIdList.length} 项</span>{#if activeCategory === "trash"}<Button size="sm" variant="outline" onclick={() => runBulkAction("restore")}><RotateCcw />恢复</Button><Button size="sm" variant="destructive" onclick={() => runBulkAction("permanent")}><Trash2 />永久删除</Button>{:else if activeCategory === "archive"}<Button size="sm" variant="outline" onclick={() => runBulkAction("unarchive")}><ArchiveRestore />取消归档</Button><Button size="sm" variant="destructive" onclick={() => runBulkAction("delete")}><Trash2 />移到回收站</Button>{:else}<Button size="sm" variant="outline" onclick={() => runBulkAction("archive")}><Archive />归档</Button><Button size="sm" variant="outline" onclick={() => { moveFolderId = null; moveDialogOpen = true; }}><Folder />移动</Button><Button size="sm" variant="destructive" onclick={() => runBulkAction("delete")}><Trash2 />移到回收站</Button>{/if}<Button size="sm" variant="ghost" onclick={clearSelection}>取消选择</Button></div>{/if}
 			</div>
 

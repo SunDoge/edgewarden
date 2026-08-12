@@ -1,4 +1,4 @@
-import { CipherType, type CipherResponse } from "@edgewarden/shared";
+import { type CipherResponse, CipherType } from "@edgewarden/shared";
 import { match } from "ts-pattern";
 
 export type VaultCategory =
@@ -26,17 +26,26 @@ export interface VaultFilterOptions {
 	duplicateMode?: DuplicateMode;
 }
 
-function loginHost(item: CipherResponse): string {
+function loginHosts(item: CipherResponse): string[] {
 	const login = item.login as any;
-	const raw = login?.uris?.[0]?.uri ?? login?.uri ?? "";
-	if (!raw) return "";
-	try {
-		return new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`).hostname
-			.toLowerCase()
-			.replace(/^www\./, "");
-	} catch {
-		return String(raw).toLowerCase();
+	const rawUris = Array.isArray(login?.uris)
+		? login.uris.map((entry: any) => entry?.uri)
+		: [login?.uri];
+	const hosts = new Set<string>();
+	for (const value of rawUris) {
+		const raw = String(value ?? "").trim();
+		if (!raw) continue;
+		try {
+			hosts.add(
+				new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`).hostname
+					.toLowerCase()
+					.replace(/^www\./, ""),
+			);
+		} catch {
+			hosts.add(raw.toLowerCase());
+		}
 	}
+	return [...hosts].filter(Boolean).sort();
 }
 
 export function findDuplicateCipherIds(
@@ -47,9 +56,11 @@ export function findDuplicateCipherIds(
 	for (const item of items) {
 		if (isDeletedCipher(item) || item.archivedDate) continue;
 		const login = item.login as any;
-		const key = match(mode)
+		const username = String(login?.username ?? "").trim().toLocaleLowerCase();
+		const password = String(login?.password ?? "");
+		const keys = match(mode)
 			.with("exact", () =>
-				JSON.stringify([
+				[JSON.stringify([
 					item.type,
 					item.name.toLocaleLowerCase(),
 					item.notes,
@@ -57,22 +68,28 @@ export function findDuplicateCipherIds(
 					item.card,
 					item.identity,
 					item.sshKey,
-				]),
+				])],
 			)
 			.with("login-site", () =>
-				item.type === CipherType.Login ? loginHost(item) : "",
+				item.type === CipherType.Login && username && password
+					? loginHosts(item).map((site) =>
+							JSON.stringify(["login-site", site, username, password]),
+						)
+					: [],
 			)
 			.with("login-credentials", () =>
-				item.type === CipherType.Login
-					? `${loginHost(item)}\n${String(login?.username ?? "").toLocaleLowerCase()}`
-					: "",
+				item.type === CipherType.Login && username && password
+					? [JSON.stringify(["login-credentials", username, password])]
+					: [],
 			)
 			.with("password", () =>
-				item.type === CipherType.Login ? String(login?.password ?? "") : "",
+				item.type === CipherType.Login && password
+					? [JSON.stringify(["password", password])]
+					: [],
 			)
 			.exhaustive();
-		if (!key) continue;
-		groups.set(key, [...(groups.get(key) ?? []), item.id]);
+		for (const key of keys)
+			groups.set(key, [...(groups.get(key) ?? []), item.id]);
 	}
 	return new Set(
 		Array.from(groups.values())
