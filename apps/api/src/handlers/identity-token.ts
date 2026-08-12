@@ -6,7 +6,7 @@ import {
 	checkIpRateLimit,
 } from "../middleware/rate-limit";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
-import { generateAccessToken, verifyPassword } from "../services/auth";
+import { verifyPassword } from "../services/auth";
 import {
 	constantTimeCredentialEqual,
 	decryptCredential,
@@ -15,6 +15,7 @@ import {
 import * as authRequestsDb from "../services/db/auth-requests";
 import * as usersDb from "../services/db/users";
 import * as webauthnDb from "../services/db/webauthn";
+import { authenticateApiKey } from "../services/identity-api-key";
 import { refreshIdentitySession } from "../services/identity-refresh";
 import { issueIdentitySession } from "../services/identity-session";
 import {
@@ -437,34 +438,28 @@ export const connectToken = factory.createHandlers(async (c) => {
 
 		// ── client_credentials grant ────────────────────────────────────────────
 	} else if (grantType === "client_credentials") {
-		const clientId = (body.client_id ?? "").trim();
-		const clientSecret = (body.client_secret ?? "").trim();
-		// user.{userId} format
-		const match = clientId.match(/^user\.(.+)$/);
-		if (!match) {
+		const authenticated = await authenticateApiKey({
+			db,
+			clientId: body.client_id ?? "",
+			clientSecret: body.client_secret ?? "",
+			jwtSecret: secret,
+		});
+		if (!authenticated.ok && authenticated.reason === "invalid_client_id") {
 			return identityErrorResponse(
 				"Invalid client_id format",
 				"invalid_request",
 				400,
 			);
 		}
-		const user = await usersDb.getUserById(db, match[1]);
-		const suppliedHash = clientSecret ? await hashCredential(clientSecret) : "";
-		if (
-			!user ||
-			user.status !== "active" ||
-			!user.api_key_hash ||
-			!constantTimeCredentialEqual(user.api_key_hash, suppliedHash)
-		) {
+		if (!authenticated.ok) {
 			return identityErrorResponse(
 				"Invalid client credentials",
 				"invalid_client",
 				400,
 			);
 		}
-		const accessToken = await generateAccessToken(user, null, secret);
 		return c.json({
-			access_token: accessToken,
+			access_token: authenticated.accessToken,
 			expires_in: LIMITS.auth.accessTokenTtlSeconds,
 			token_type: "Bearer",
 			scope: "api",
