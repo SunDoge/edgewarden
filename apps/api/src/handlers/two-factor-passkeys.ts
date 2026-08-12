@@ -5,7 +5,6 @@ import {
 	verifyAuthenticationResponse,
 	verifyRegistrationResponse,
 } from "@simplewebauthn/server";
-import { sql } from "kysely";
 import { factory } from "../http/factory";
 import {
 	PasskeySecretSchema,
@@ -18,6 +17,8 @@ import { encryptCredential } from "../services/credential-protection";
 import {
 	conditionalRefreshTokenDeletionQuery,
 	conditionalTwoFactorPasskeyClaimQuery,
+	conditionalTwoFactorPasskeyDeletionClaimQuery,
+	conditionalTwoFactorPasskeyDeletionQuery,
 	conditionalTwoFactorPasskeyInsertQuery,
 	conditionalUserRevisionQuery,
 } from "../services/db/batch";
@@ -313,27 +314,40 @@ export const deleteTwoFactorPasskey = factory.createHandlers(
 		if (!(await verifySecret(user, body)))
 			return errorResponse("Master password verification failed", 400);
 		const db = c.get("db");
+		const existing = await db
+			.selectFrom("webauthn_credentials")
+			.select("id")
+			.where("id", "=", body.id)
+			.where("user_id", "=", user.id)
+			.where("purpose", "=", "twoFactor")
+			.executeTakeFirst();
+		if (!existing) return errorResponse("Two-factor passkey not found", 404);
 		const ts = now();
-		const [, deleted] = await c.get("dbDialect").batch([
-			sql`
-				INSERT INTO user_revisions (user_id, revision_date)
-				SELECT user_id, ${ts} FROM webauthn_credentials
-				WHERE id = ${body.id} AND user_id = ${user.id}
-				  AND purpose = 'twoFactor'
-				ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
-					user_revisions.revision_date + 1,
-					excluded.revision_date
-				)
-			`.compile(db),
-			db
-				.deleteFrom("webauthn_credentials")
-				.where("id", "=", body.id)
-				.where("user_id", "=", user.id)
-				.where("purpose", "=", "twoFactor")
-				.compile(),
-		]);
+		const securityStamp = crypto.randomUUID();
+		const [claimed, deleted] = await c
+			.get("dbDialect")
+			.batch([
+				conditionalTwoFactorPasskeyDeletionClaimQuery(
+					db,
+					user.id,
+					body.id,
+					user.security_stamp,
+					securityStamp,
+					ts,
+				),
+				conditionalTwoFactorPasskeyDeletionQuery(
+					db,
+					user.id,
+					body.id,
+					securityStamp,
+				),
+				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+				conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
+			]);
+		if (claimed.numAffectedRows !== 1n)
+			return errorResponse("Passkey settings changed by another request", 409);
 		if (deleted.numAffectedRows !== 1n)
-			return errorResponse("Two-factor passkey not found", 404);
+			return errorResponse("Passkey deletion could not be persisted", 500);
 		invalidateUserCache(user.id);
 		await safeWriteAuditEvent(db, {
 			actorUserId: user.id,
