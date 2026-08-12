@@ -11,6 +11,8 @@ import {
 	releaseDataOperationLease,
 	renewDataOperationLease,
 } from "../services/backup/operation-lease";
+import { drainBlobGcQueue } from "../services/blob-gc";
+import type { BlobStore } from "../services/blob-store";
 import { executeBatch } from "../services/db/batch";
 import {
 	deleteConfigValue,
@@ -31,6 +33,74 @@ export function registerDatabaseMaintenanceScenarios(
 	context: DatabaseMaintenanceScenarioContext,
 ): void {
 	const EMAIL = context.email;
+	test("claims blob GC rows before deleting external objects", async () => {
+		const firstConnection = await createDatabase(context.database);
+		const secondConnection = await createDatabase(context.database);
+		const objectKey = `gc-concurrency-${crypto.randomUUID()}`;
+		const timestamp = Math.floor(Date.now() / 1000);
+		let releaseDelete: (() => void) | undefined;
+		let notifyDeleteStarted: (() => void) | undefined;
+		const deleteStarted = new Promise<void>((resolve) => {
+			notifyDeleteStarted = resolve;
+		});
+		const deleteReleased = new Promise<void>((resolve) => {
+			releaseDelete = resolve;
+		});
+		let deleteCalls = 0;
+		const blobStore: BlobStore = {
+			kind: "r2",
+			maxObjectBytes: null,
+			get: async () => null,
+			put: async () => undefined,
+			delete: async () => {
+				deleteCalls += 1;
+				notifyDeleteStarted?.();
+				await deleteReleased;
+			},
+		};
+
+		try {
+			await firstConnection.db
+				.insertInto("blob_gc_queue")
+				.values({
+					object_key: objectKey,
+					attempts: 0,
+					next_attempt_at: timestamp,
+					last_error: null,
+					created_at: timestamp,
+				})
+				.execute();
+			const firstDrain = drainBlobGcQueue(
+				firstConnection.db,
+				blobStore,
+				timestamp,
+			);
+			await deleteStarted;
+			const secondResult = await drainBlobGcQueue(
+				secondConnection.db,
+				blobStore,
+				timestamp,
+			);
+			assert.deepEqual(secondResult, {
+				deleted: 0,
+				referenced: 0,
+				deferred: 0,
+				contended: 0,
+			});
+			releaseDelete?.();
+			assert.equal((await firstDrain).deleted, 1);
+			assert.equal(deleteCalls, 1);
+		} finally {
+			releaseDelete?.();
+			await firstConnection.db
+				.deleteFrom("blob_gc_queue")
+				.where("object_key", "=", objectKey)
+				.execute();
+			await firstConnection.db.destroy();
+			await secondConnection.db.destroy();
+		}
+	});
+
 	test("serializes data operations with an expiring owned lease", async () => {
 		const timestamp = Math.floor(Date.now() / 1000);
 		const first = await acquireDataOperationLease(

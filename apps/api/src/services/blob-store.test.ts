@@ -104,4 +104,27 @@ describe("attachment blob storage", () => {
 		assert.equal(kvValues.has("attachment"), false);
 		assert.equal(r2Values.has("attachment"), false);
 	});
+
+	test("rejects a truncated KV stream before storing it", async () => {
+		const { env, kvValues } = storageBindings("kv");
+		const stream = new Response(new Uint8Array([1, 2])).body;
+		assert.ok(stream);
+
+		await assert.rejects(
+			putBlobObject(env, "truncated", stream, { size: 3 }),
+			/does not match declared size/,
+		);
+		assert.equal(kvValues.has("truncated"), false);
+	});
+
+	test("reports the actual KV object length instead of trusting metadata", async () => {
+		const { env, kvValues } = storageBindings("kv");
+		kvValues.set("legacy-truncated", {
+			value: new Uint8Array([1, 2]).buffer,
+			metadata: { size: 3, contentType: "application/test" },
+		});
+
+		const object = await getBlobObject(env, "legacy-truncated");
+		assert.equal(object?.size, 2);
+	});
 });

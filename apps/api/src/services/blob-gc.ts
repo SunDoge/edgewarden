@@ -5,11 +5,13 @@ import type { BlobStore } from "./blob-store";
 import { deleteBlobObject } from "./blob-store";
 
 const BATCH_LIMIT = 100;
+const CLAIM_SECONDS = 15 * 60;
 
 export interface BlobGcResult {
 	deleted: number;
 	referenced: number;
 	deferred: number;
+	contended: number;
 }
 
 export async function enqueueBlobGcKeys(
@@ -87,27 +89,51 @@ export async function drainBlobGcQueue(
 		.orderBy("created_at", "asc")
 		.limit(BATCH_LIMIT)
 		.execute();
-	const result: BlobGcResult = { deleted: 0, referenced: 0, deferred: 0 };
+	const result: BlobGcResult = {
+		deleted: 0,
+		referenced: 0,
+		deferred: 0,
+		contended: 0,
+	};
 
 	for (const row of rows) {
+		const claimUntil = timestamp + CLAIM_SECONDS;
+		const claim = await db
+			.updateTable("blob_gc_queue")
+			.set({ next_attempt_at: claimUntil })
+			.where("object_key", "=", row.object_key)
+			.where("attempts", "=", row.attempts)
+			.where("next_attempt_at", "=", row.next_attempt_at)
+			.executeTakeFirst();
+		if (Number(claim.numUpdatedRows) !== 1) {
+			result.contended += 1;
+			continue;
+		}
+
 		if (await isReferenced(db, row.object_key)) {
-			await db
+			const removed = await db
 				.deleteFrom("blob_gc_queue")
 				.where("object_key", "=", row.object_key)
-				.execute();
-			result.referenced += 1;
+				.where("attempts", "=", row.attempts)
+				.where("next_attempt_at", "=", claimUntil)
+				.executeTakeFirst();
+			if (Number(removed.numDeletedRows) === 1) result.referenced += 1;
+			else result.contended += 1;
 			continue;
 		}
 		try {
 			await blobStore.delete(row.object_key);
-			await db
+			const removed = await db
 				.deleteFrom("blob_gc_queue")
 				.where("object_key", "=", row.object_key)
-				.execute();
-			result.deleted += 1;
+				.where("attempts", "=", row.attempts)
+				.where("next_attempt_at", "=", claimUntil)
+				.executeTakeFirst();
+			if (Number(removed.numDeletedRows) === 1) result.deleted += 1;
+			else result.contended += 1;
 		} catch (error) {
 			const attempts = row.attempts + 1;
-			await db
+			const deferred = await db
 				.updateTable("blob_gc_queue")
 				.set({
 					attempts,
@@ -118,8 +144,11 @@ export async function drainBlobGcQueue(
 					).slice(0, 500),
 				})
 				.where("object_key", "=", row.object_key)
-				.execute();
-			result.deferred += 1;
+				.where("attempts", "=", row.attempts)
+				.where("next_attempt_at", "=", claimUntil)
+				.executeTakeFirst();
+			if (Number(deferred.numUpdatedRows) === 1) result.deferred += 1;
+			else result.contended += 1;
 		}
 	}
 	return result;

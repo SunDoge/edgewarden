@@ -38,6 +38,30 @@ export interface BlobStore {
 	delete(key: string): Promise<void>;
 }
 
+function byteLength(
+	value: string | ArrayBuffer | ArrayBufferView,
+): number {
+	if (typeof value === "string") return new TextEncoder().encode(value).byteLength;
+	return value.byteLength;
+}
+
+async function readAndVerifyBytes(
+	value: string | ArrayBuffer | ArrayBufferView | ReadableStream,
+	expectedSize: number,
+): Promise<string | ArrayBuffer | ArrayBufferView> {
+	if (!Number.isSafeInteger(expectedSize) || expectedSize < 0) {
+		throw new Error("Invalid blob size");
+	}
+	const materialized =
+		value instanceof ReadableStream
+			? await new Response(value).arrayBuffer()
+			: value;
+	if (byteLength(materialized) !== expectedSize) {
+		throw new Error("Blob size does not match declared size");
+	}
+	return materialized;
+}
+
 function hasR2Storage(
 	env: CloudflareBindings,
 ): env is CloudflareBindings & { ATTACHMENTS_R2: R2Bucket } {
@@ -162,11 +186,15 @@ export async function putBlobObject(
 					getR2Storage(env).put(key, fixedLength.readable, putOptions),
 				]);
 			} else {
-				const bytes = await new Response(value).arrayBuffer();
+				const bytes = await readAndVerifyBytes(value, options.size);
 				await getR2Storage(env).put(key, bytes, putOptions);
 			}
 		} else {
-			await getR2Storage(env).put(key, value, putOptions);
+			await getR2Storage(env).put(
+				key,
+				await readAndVerifyBytes(value, options.size),
+				putOptions,
+			);
 		}
 		return;
 	}
@@ -180,7 +208,10 @@ export async function putBlobObject(
 			contentType,
 			customMetadata: options.customMetadata || null,
 		};
-		await env.ATTACHMENTS_KV.put(key, value, { metadata });
+		// KV accepts streams but does not expose the stored length on reads. Buffering
+		// here lets us reject truncated uploads before publishing their D1 row.
+		const bytes = await readAndVerifyBytes(value, options.size);
+		await env.ATTACHMENTS_KV.put(key, bytes, { metadata });
 		return;
 	}
 
@@ -210,13 +241,11 @@ export async function getBlobObject(
 		);
 		if (!result.value) return null;
 
-		const sizeFromMeta = Number(result.metadata?.size || 0);
-		const size = sizeFromMeta > 0 ? sizeFromMeta : result.value.byteLength;
 		const body = new Response(result.value).body;
 
 		return {
 			body,
-			size,
+			size: result.value.byteLength,
 			contentType: result.metadata?.contentType || DEFAULT_CONTENT_TYPE,
 		};
 	};
