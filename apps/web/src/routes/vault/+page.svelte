@@ -52,6 +52,7 @@ import * as Dialog from "$lib/components/ui/dialog/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import { Textarea } from "$lib/components/ui/textarea/index.js";
 import { Separator } from "$lib/components/ui/separator/index.js";
+import VaultSidebar from "$lib/components/vault/VaultSidebar.svelte";
 import {
 	archiveCipherApi,
 	archiveCiphersApi,
@@ -84,6 +85,13 @@ import {
 import { buildCipherPayload } from "$lib/services/cipher-draft";
 import { calcTotpNow, encryptCipher, encryptStr } from "$lib/services/crypto";
 import { scanTotpQrFile } from "$lib/services/totp-qr";
+import {
+	cipherDomain as getDomain,
+	cipherExtraData as getExtraData,
+	cipherTypeIcon as getItemIcon,
+	cipherTypeName as getTypeName,
+	formatVaultSyncTime as formatSyncTime,
+} from "$lib/services/vault-item-display";
 import {
 	type DuplicateMode,
 	filterAndSortVaultItems,
@@ -428,75 +436,6 @@ function copyToClipboard(text: string, fieldName: string) {
 	setTimeout(() => {
 		if (copiedField === fieldName) copiedField = null;
 	}, 2000);
-}
-
-function getDomain(item: any): string | null {
-	if (item.type !== CipherType.Login) return null;
-	const login = item.login;
-	if (!login) return null;
-
-	let uriStr = login.uri;
-	if (!uriStr && Array.isArray(login.uris) && login.uris.length > 0) {
-		uriStr = login.uris[0]?.uri;
-	}
-
-	if (!uriStr || typeof uriStr !== "string") return null;
-
-	try {
-		let cleanUri = uriStr.trim();
-		if (!/^https?:\/\//i.test(cleanUri)) {
-			cleanUri = "https://" + cleanUri;
-		}
-		const url = new URL(cleanUri);
-		const host = url.hostname.toLowerCase();
-		return host.startsWith("www.") ? host.slice(4) : host;
-	} catch {
-		const match = uriStr.match(/^(?:https?:\/\/)?(?:www\.)?([^/?#:]+)/i);
-		return match ? match[1].toLowerCase() : null;
-	}
-}
-
-function getItemIcon(type: number) {
-	return match(type)
-		.with(CipherType.Login, () => KeyRound)
-		.with(CipherType.SecureNote, () => FileText)
-		.with(CipherType.Card, () => CreditCard)
-		.with(CipherType.Identity, () => User)
-		.with(CipherType.SshKey, () => KeyRound)
-		.with(CipherType.BankAccount, () => Landmark)
-		.with(CipherType.DriversLicense, () => IdCard)
-		.with(CipherType.Passport, () => BookUser)
-		.otherwise(() => Lock);
-}
-
-function getTypeName(type: number) {
-	return match(type)
-		.with(CipherType.Login, () => "登录凭据")
-		.with(CipherType.SecureNote, () => "安全便签")
-		.with(CipherType.Card, () => "支付卡片")
-		.with(CipherType.Identity, () => "个人身份")
-		.with(CipherType.SshKey, () => "SSH 密钥")
-		.with(CipherType.BankAccount, () => "银行账户")
-		.with(CipherType.DriversLicense, () => "驾驶证")
-		.with(CipherType.Passport, () => "护照")
-		.otherwise(() => "保险库项");
-}
-
-function getExtraData(item: any): Record<string, unknown> | null {
-	return match(item.type)
-		.with(CipherType.SshKey, () => item.sshKey ?? null)
-		.with(CipherType.BankAccount, () => item.bankAccount ?? null)
-		.with(CipherType.DriversLicense, () => item.driversLicense ?? null)
-		.with(CipherType.Passport, () => item.passport ?? null)
-		.otherwise(() => null);
-}
-
-function formatSyncTime(ts: number | null): string {
-	if (!ts) return "";
-	return new Date(ts).toLocaleTimeString("zh-CN", {
-		hour: "2-digit",
-		minute: "2-digit",
-	});
 }
 
 // Action helpers
@@ -930,198 +869,16 @@ $effect(() => {
 
 	<div class="flex-1 flex overflow-hidden">
 		<!-- Sidebar -->
-		<aside class="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col p-4 shrink-0 overflow-y-auto">
-			<Button class="w-full mb-6 gap-2" onclick={startCreate}>
-				<Plus class="size-4" />
-				添加新条目
-			</Button>
-
-			<div class="space-y-1.5">
-				<p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">类型过滤</p>
-
-				{#each [
-					{ id: "all" as VaultCategory, label: "全部条目", icon: Lock, count: vault.ciphers.filter(i => !i.deletedDate && !i.archivedDate).length },
-					{ id: "favorites" as VaultCategory, label: "我的收藏", icon: Star, count: vault.ciphers.filter(i => i.favorite && !i.deletedDate && !i.archivedDate).length },
-					{ id: "archive" as VaultCategory, label: "归档", icon: Archive, count: vault.ciphers.filter(i => i.archivedDate && !i.deletedDate).length },
-					{ id: "trash" as VaultCategory, label: "回收站", icon: Trash2, count: vault.ciphers.filter(i => i.deletedDate).length },
-					{ id: "duplicates" as VaultCategory, label: "重复项", icon: Copy, count: duplicateCount },
-				] as cat}
-					<button
-						class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left
-							{activeCategory === cat.id && !activeFolder ? 'bg-primary/10 text-primary' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}"
-						onclick={() => { activeCategory = cat.id; activeFolder = null; }}
-					>
-						<cat.icon class="size-4" />
-						<span>{cat.label}</span>
-						<span class="ml-auto text-xs px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500">{cat.count}</span>
-					</button>
-				{/each}
-
-				<hr class="border-slate-200 dark:border-slate-800 my-2" />
-
-				{#each [
-					{ id: "login" as VaultCategory, label: "登录凭据", icon: KeyRound },
-					{ id: "card" as VaultCategory, label: "支付卡片", icon: CreditCard },
-					{ id: "identity" as VaultCategory, label: "个人身份", icon: User },
-					{ id: "securenote" as VaultCategory, label: "安全便签", icon: FileText },
-				] as cat}
-					<button
-						class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left
-							{activeCategory === cat.id ? 'bg-primary/10 text-primary' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}"
-						onclick={() => { activeCategory = cat.id; activeFolder = null; }}
-					>
-						<cat.icon class="size-4" />
-						<span>{cat.label}</span>
-					</button>
-				{/each}
-
-				<hr class="border-slate-200 dark:border-slate-800 my-2" />
-				<p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">工具与设置</p>
-
-				<button
-					class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-					onclick={() => goto("/vault/totp")}
-				>
-					<KeyRound class="size-4 text-slate-500" />
-					<span>验证码</span>
-				</button>
-
-				<button
-					class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-					onclick={() => goto("/vault/password-health")}
-				>
-					<ShieldAlert class="size-4 text-slate-500" />
-					<span>密码健康</span>
-				</button>
-
-				<button
-					class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-					onclick={() => goto("/vault/domains")}
-				>
-					<Globe class="size-4 text-slate-500" />
-					<span>域名等效规则</span>
-				</button>
-
-				<button
-					class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-					onclick={() => goto("/vault/sends")}
-				>
-					<Share2 class="size-4 text-slate-500" />
-					<span>Send 传输中心</span>
-				</button>
-
-				<button
-					class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-					onclick={() => goto("/vault/import-export")}
-				>
-					<Upload class="size-4 text-slate-500" />
-					<span>导入与导出</span>
-				</button>
-
-				<button
-					class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-					onclick={() => goto("/vault/organizations")}
-				>
-					<Building2 class="size-4 text-slate-500" />
-					<span>组织共享</span>
-				</button>
-
-				<button
-					class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-					onclick={() => goto("/vault/settings")}
-				>
-					<Settings class="size-4 text-slate-500" />
-					<span>账户与安全</span>
-				</button>
-
-				<button
-					class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-					onclick={() => goto("/vault/generator")}
-				>
-					<WandSparkles class="size-4 text-slate-500" />
-					<span>密码生成器</span>
-				</button>
-
-				{#if vault.profile?.role === "admin"}
-					<Separator class="my-2" />
-					<p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">管理</p>
-					<button
-						class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-						onclick={() => goto("/vault/admin")}
-					>
-						<UserRoundCog class="size-4 text-slate-500" />
-						<span>用户与邀请</span>
-					</button>
-					<button
-						class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-						onclick={() => goto("/vault/logs")}
-					>
-						<ScrollText class="size-4 text-slate-500" />
-						<span>审计日志</span>
-					</button>
-					<button
-						class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-						onclick={() => goto("/vault/backups")}
-					>
-						<Database class="size-4 text-slate-500" />
-						<span>云备份中心</span>
-					</button>
-				{/if}
-			</div>
-
-			<!-- Folders section with CRUD actions -->
-			<div class="mt-6 space-y-1">
-				<div class="flex items-center justify-between px-3 mb-2">
-					<p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">文件夹</p>
-					<div class="flex items-center gap-1">{#if vault.folders.length}<button
-						class="text-slate-400 hover:text-red-600 transition-colors p-0.5 rounded"
-						onclick={() => deleteAllFoldersDialogOpen = true}
-						title="删除全部文件夹"
-					><Trash2 class="size-3.5" /></button>{/if}<button
-						class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-0.5 rounded"
-						onclick={openCreateFolder}
-						title="新建文件夹"
-					>
-						<Plus class="size-3.5" />
-					</button></div>
-				</div>
-				{#each vault.folders as folder}
-					<div class="w-full flex items-center justify-between group rounded-lg text-sm font-medium transition-colors text-left
-						{activeFolder === folder.id ? 'bg-primary/10 text-primary' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}"
-					>
-						<button
-							class="flex-1 flex items-center gap-3 px-3 py-2 text-left min-w-0 font-medium"
-							onclick={() => { activeFolder = folder.id; activeCategory = "all"; }}
-						>
-							<Folder class="size-4 shrink-0" />
-							<span class="truncate">{folder.name}</span>
-						</button>
-						<div class="flex items-center gap-1.5 pr-2 shrink-0">
-							<span class="text-xs px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 group-hover:hidden">
-								{vault.ciphers.filter(i => i.folderId === folder.id).length}
-							</span>
-							<button
-								class="hidden group-hover:inline-flex text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded"
-								onclick={(e) => { e.stopPropagation(); openRenameFolder(folder); }}
-								title="重命名"
-							>
-								<Edit class="size-3.5" />
-							</button>
-							<button
-								class="hidden group-hover:inline-flex text-slate-400 hover:text-red-600 dark:hover:text-red-400 p-0.5 rounded"
-								onclick={(e) => { e.stopPropagation(); openDeleteFolder(folder); }}
-								title="删除"
-							>
-								<Trash2 class="size-3.5" />
-							</button>
-						</div>
-					</div>
-				{/each}
-				{#if vault.folders.length === 0}
-					<p class="px-3 text-xs text-slate-400/80 italic">暂无文件夹</p>
-				{/if}
-			</div>
-		</aside>
+		<VaultSidebar
+			bind:activeCategory
+			bind:activeFolder
+			{duplicateCount}
+			onCreate={startCreate}
+			onCreateFolder={openCreateFolder}
+			onRenameFolder={openRenameFolder}
+			onDeleteFolder={openDeleteFolder}
+			onDeleteAllFolders={() => (deleteAllFoldersDialogOpen = true)}
+		/>
 
 		<!-- Items List -->
 		<section class="flex-1 flex flex-col bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 overflow-hidden">
