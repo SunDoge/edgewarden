@@ -63,8 +63,9 @@ import {
 	prepareAttachment,
 	safeAttachmentFileName,
 } from "$lib/services/attachment-crypto";
+import { encryptCipher } from "$lib/services/cipher-crypto";
 import { buildCipherPayload } from "$lib/services/cipher-draft";
-import { calcTotpNow, encryptCipher, encryptStr } from "$lib/services/crypto";
+import { calcTotpNow, encryptStr } from "$lib/services/crypto";
 import {
 	createVaultEditorForm,
 	vaultCipherToEditorForm,

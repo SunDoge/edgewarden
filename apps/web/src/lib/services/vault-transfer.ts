@@ -1,14 +1,15 @@
 import {
-	CipherType,
 	type CipherImportInput,
 	type CipherResponse,
+	CipherType,
 	type FolderResponse,
 } from "@edgewarden/shared";
-import { encryptCipher, encryptStr } from "./crypto";
 import {
 	decryptPasswordProtectedExport,
 	isPasswordProtectedExport,
 } from "./bitwarden-encrypted-export";
+import { encryptCipher } from "./cipher-crypto";
+import { encryptStr } from "./crypto";
 
 export interface TransferDocument {
 	folders: Array<{ id?: string; name: string }>;
