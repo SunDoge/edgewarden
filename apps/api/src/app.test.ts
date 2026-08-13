@@ -282,7 +282,7 @@ describe("Edgewarden API", () => {
 		const timestamp = Math.floor(Date.now() / 1000);
 		await testDatabase
 			.prepare(
-				"INSERT INTO attachments (id,cipher_id,file_name,size,size_name,key,storage_key,created_at) VALUES (?,?,?,?,?,?,?,?)",
+				"INSERT INTO attachments (id,cipher_id,file_name,size,size_name,key,storage_key,created_at,deleted_at) VALUES (?,?,?,?,?,?,?,?,?)",
 			)
 			.bind(
 				attachmentId,
@@ -292,6 +292,7 @@ describe("Edgewarden API", () => {
 				`${attachmentBytes.byteLength} Bytes`,
 				"encrypted-restore-key",
 				originalStorageKey,
+				timestamp,
 				timestamp,
 			)
 			.run();
@@ -381,6 +382,12 @@ describe("Edgewarden API", () => {
 				],
 			),
 			/^[0-9a-f]{64}$/,
+		);
+		assert.equal(
+			parsedArchive.payload.db.attachments.find(
+				(row) => row.id === attachmentId,
+			)?.deleted_at,
+			timestamp,
 		);
 		assert.ok(
 			(parsedArchive.payload.db.ciphers || []).every(
@@ -706,18 +713,29 @@ describe("Edgewarden API", () => {
 				.first(),
 		);
 		await releaseDataOperationLease(testDatabase, restoreLease);
-		assert.equal(restored.result.imported.attachments, 1);
-		assert.equal(restored.result.imported.sendFiles, 1);
+		assert.equal(
+			restored.result.imported.attachments,
+			parsedArchive.payload.db.attachments.length,
+		);
+		assert.equal(
+			restored.result.imported.sendFiles,
+			(parsedArchive.payload.db.sends || []).filter(
+				(row) => Number(row.type) === 1,
+			).length,
+		);
 		assert.ok(restored.result.imported.auditLogs >= 1);
 		assert.equal(restored.result.imported.deviceTrustTokens, 0);
-		const restoredStorageKey = await testDatabase
-			.prepare("SELECT storage_key FROM attachments WHERE id = ?")
+		const restoredAttachment = await testDatabase
+			.prepare("SELECT storage_key, deleted_at FROM attachments WHERE id = ?")
 			.bind(attachmentId)
-			.first<{ storage_key: string }>()
-			.then((row) => row?.storage_key);
-		assert.ok(restoredStorageKey);
-		assert.notEqual(restoredStorageKey, originalStorageKey);
-		assert.deepEqual(r2Values.get(restoredStorageKey), attachmentBytes);
+			.first<{ storage_key: string; deleted_at: number | null }>();
+		assert.ok(restoredAttachment?.storage_key);
+		assert.equal(restoredAttachment.deleted_at, timestamp);
+		assert.notEqual(restoredAttachment.storage_key, originalStorageKey);
+		assert.deepEqual(
+			r2Values.get(restoredAttachment.storage_key),
+			attachmentBytes,
+		);
 		const restoredSendStorageKey = await testDatabase
 			.prepare("SELECT storage_key FROM sends WHERE id = ?")
 			.bind(fileSendId)

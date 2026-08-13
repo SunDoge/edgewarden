@@ -221,8 +221,8 @@ export default {
 		ctx: ExecutionContext,
 	) {
 		ctx.waitUntil(
-			// Keep backup snapshots consistent with scheduled deletion. The
-			// orchestrator still runs maintenance when backup configuration fails.
+			// Run backup before housekeeping. The orchestrator still runs maintenance
+			// when backup configuration fails.
 			runScheduledTasks(env),
 		);
 	},

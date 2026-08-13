@@ -534,37 +534,27 @@ export function registerAccountSecurityScenarios(
 			).status,
 			401,
 		);
-		const originalDelete = r2.delete.bind(r2);
-		r2.delete = async (key: string | string[]) => {
-			const keys = Array.isArray(key) ? key : [key];
-			if (keys.includes(deletingAttachmentKey)) {
-				throw new Error("simulated account-deletion R2 outage");
-			}
-			await originalDelete(key);
-		};
 		const { db } = await createDatabase(context.database);
 		try {
-			const deferred = await runMaintenance(
+			const firstRun = await runMaintenance(
 				db,
 				context.bindings,
 				Math.floor(Date.now() / 1000) + 1,
 			);
-			assert.equal(deferred.purgedUsers, 0);
+			assert.equal(firstRun.purgedUsers, 0);
 			assert.ok(
 				await context.database
 					.prepare("SELECT 1 FROM users WHERE id = ?")
 					.bind(deletingUser.id)
 					.first(),
 			);
-			r2.delete = originalDelete;
-			const recovered = await runMaintenance(
+			const secondRun = await runMaintenance(
 				db,
 				context.bindings,
 				Math.floor(Date.now() / 1000) + 2,
 			);
-			assert.ok(recovered.purgedUsers >= 1);
+			assert.equal(secondRun.purgedUsers, 0);
 		} finally {
-			r2.delete = originalDelete;
 			await db.destroy();
 		}
 		assert.equal(
@@ -573,16 +563,24 @@ export function registerAccountSecurityScenarios(
 				.bind(email)
 				.first<{ count: number }>()
 				.then((row) => Number(row?.count)),
-			0,
+			1,
 		);
-		assert.ok(
+		assert.equal(
 			await context.database
 				.prepare(
 					"SELECT 1 FROM audit_logs WHERE action = 'account.purged' AND target_type = 'user' AND target_id = ?",
 				)
 				.bind(deletingUser.id)
 				.first(),
+			null,
 		);
+		assert.ok(await r2.get(deletingAttachmentKey));
+		// Test isolation: production maintenance never performs this physical delete.
+		await context.database
+			.prepare("DELETE FROM users WHERE id = ?")
+			.bind(deletingUser.id)
+			.run();
+		await r2.delete(deletingAttachmentKey);
 	});
 
 	test("requires password verification and invalidates every session when removing all devices", async () => {

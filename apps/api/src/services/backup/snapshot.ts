@@ -26,98 +26,27 @@ function rows(result: D1Result | undefined): BackupSnapshotRow[] {
 
 export async function readBackupDatabaseSnapshot(
 	db: D1Database,
-	snapshotTimestamp: number,
+	_snapshotTimestamp: number,
 ): Promise<BackupDatabaseSnapshot> {
-	const activeUsers =
-		"SELECT id FROM users WHERE deletion_requested_at IS NULL";
-	const activeOrganizations =
-		"SELECT id FROM organizations WHERE deletion_requested_at IS NULL";
-	const activeCiphers = `
-		SELECT id FROM ciphers
-		WHERE (purge_after IS NULL OR purge_after > ?)
-		  AND (
-			user_id IN (${activeUsers})
-			OR org_id IN (${activeOrganizations})
-		  )
-	`;
+	// A server backup is an audit/disaster-recovery snapshot, not a client sync
+	// response. Include logically deleted entities and their relationships so a
+	// restore cannot silently erase retained history.
 	const results = await db.batch([
 		db.prepare("SELECT * FROM config ORDER BY key ASC"),
-		db.prepare(
-			"SELECT * FROM users WHERE deletion_requested_at IS NULL ORDER BY created_at ASC",
-		),
-		db.prepare(
-			`SELECT * FROM domain_settings WHERE user_id IN (${activeUsers}) ORDER BY user_id ASC`,
-		),
-		db.prepare(
-			`SELECT * FROM user_revisions WHERE user_id IN (${activeUsers}) ORDER BY user_id ASC`,
-		),
-		db.prepare(`
-			SELECT * FROM organizations
-			WHERE deletion_requested_at IS NULL
-			  AND owner_id IN (${activeUsers})
-			ORDER BY created_at ASC
-		`),
-		db.prepare(`
-			SELECT * FROM org_members
-			WHERE org_id IN (${activeOrganizations})
-			  AND (user_id IS NULL OR user_id IN (${activeUsers}))
-			ORDER BY created_at ASC
-		`),
-		db.prepare(
-			`SELECT * FROM collections WHERE org_id IN (${activeOrganizations}) ORDER BY created_at ASC`,
-		),
-		db.prepare(`
-			SELECT * FROM collection_members
-			WHERE org_member_id IN (
-				SELECT member.id FROM org_members member
-				INNER JOIN organizations org ON org.id = member.org_id
-				WHERE org.deletion_requested_at IS NULL
-				  AND (member.user_id IS NULL OR member.user_id IN (${activeUsers}))
-			)
-			ORDER BY collection_id ASC
-		`),
-		db.prepare(
-			`SELECT * FROM folders WHERE user_id IN (${activeUsers}) ORDER BY created_at ASC`,
-		),
-		db
-			.prepare(`
-				SELECT * FROM ciphers
-				WHERE (purge_after IS NULL OR purge_after > ?)
-				  AND (
-					user_id IN (${activeUsers})
-					OR org_id IN (${activeOrganizations})
-				  )
-				ORDER BY created_at ASC
-			`)
-			.bind(snapshotTimestamp),
-		db
-			.prepare(
-				`SELECT * FROM cipher_collections WHERE cipher_id IN (${activeCiphers}) ORDER BY cipher_id ASC`,
-			)
-			.bind(snapshotTimestamp),
-		db
-			.prepare(`
-				SELECT * FROM attachments
-				WHERE deleted_at IS NULL
-				  AND cipher_id IN (${activeCiphers})
-				ORDER BY id ASC
-			`)
-			.bind(snapshotTimestamp),
-		db.prepare(
-			`SELECT * FROM webauthn_credentials WHERE user_id IN (${activeUsers}) ORDER BY created_at ASC`,
-		),
+		db.prepare("SELECT * FROM users ORDER BY created_at ASC"),
+		db.prepare("SELECT * FROM domain_settings ORDER BY user_id ASC"),
+		db.prepare("SELECT * FROM user_revisions ORDER BY user_id ASC"),
+		db.prepare("SELECT * FROM organizations ORDER BY created_at ASC"),
+		db.prepare("SELECT * FROM org_members ORDER BY created_at ASC"),
+		db.prepare("SELECT * FROM collections ORDER BY created_at ASC"),
+		db.prepare("SELECT * FROM collection_members ORDER BY collection_id ASC"),
+		db.prepare("SELECT * FROM folders ORDER BY created_at ASC"),
+		db.prepare("SELECT * FROM ciphers ORDER BY created_at ASC"),
+		db.prepare("SELECT * FROM cipher_collections ORDER BY cipher_id ASC"),
+		db.prepare("SELECT * FROM attachments ORDER BY id ASC"),
+		db.prepare("SELECT * FROM webauthn_credentials ORDER BY created_at ASC"),
 		db.prepare("SELECT * FROM audit_logs ORDER BY created_at ASC, id ASC"),
-		db
-			.prepare(`
-				SELECT * FROM sends
-				WHERE deletion_date > ?
-				  AND (
-					user_id IN (${activeUsers})
-					OR org_id IN (${activeOrganizations})
-				  )
-				ORDER BY created_at ASC
-			`)
-			.bind(snapshotTimestamp),
+		db.prepare("SELECT * FROM sends ORDER BY created_at ASC"),
 	]);
 
 	return {
