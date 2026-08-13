@@ -7,6 +7,7 @@ import { Input } from "$lib/components/ui/input/index.js";
 import { Label } from "$lib/components/ui/label/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
 import TurnstileWidget from "$lib/components/turnstile-widget.svelte";
+import ThemeToggle from "$lib/components/theme-toggle.svelte";
 import {
 	Eye,
 	EyeOff,
@@ -132,6 +133,7 @@ async function handleSubmit(e: SubmitEvent) {
 </svelte:head>
 
 <div class="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+	<div class="absolute right-4 top-4"><ThemeToggle /></div>
 	<Card.Root class="w-full max-w-lg shadow-lg border-slate-100 dark:border-slate-800">
 		<Card.Header class="space-y-2 text-center">
 			<div class="mx-auto w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-2">

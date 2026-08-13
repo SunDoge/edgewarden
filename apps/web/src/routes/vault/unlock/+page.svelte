@@ -8,6 +8,7 @@ import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import { Label } from "$lib/components/ui/label/index.js";
 import { ShieldCheck, KeyRound, Eye, EyeOff, WifiOff } from "@lucide/svelte";
+import ThemeToggle from "$lib/components/theme-toggle.svelte";
 
 let email = $state("");
 let showPassword = $state(false);
@@ -57,6 +58,7 @@ async function handleUnlock(e: SubmitEvent) {
 </svelte:head>
 
 <div class="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+	<div class="absolute right-4 top-4"><ThemeToggle /></div>
 	<div class="w-full max-w-sm space-y-6">
 		<!-- Logo -->
 		<div class="text-center space-y-2">

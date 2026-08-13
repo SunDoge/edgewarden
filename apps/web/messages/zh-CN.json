@@ -4,6 +4,8 @@
 	"network_online": "在线",
 	"network_offline": "离线",
 	"network_checking": "检查连接",
+	"theme_use_dark": "切换到深色主题",
+	"theme_use_light": "切换到浅色主题",
 	"vault_open_navigation": "打开保险库导航",
 	"vault_offline_cache": "离线缓存",
 	"vault_zero_knowledge_protected": "零知识加密保护中",
