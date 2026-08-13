@@ -1340,6 +1340,136 @@ export function registerDatabaseMaintenanceScenarios(
 		}
 	});
 
+	test("drops queued deletion requests for referenced attachment and Send blobs", async () => {
+		const { db } = await createDatabase(context.database);
+		const timestamp = Math.floor(Date.now() / 1000);
+		const user = await db
+			.selectFrom("users")
+			.select("id")
+			.where("email", "=", EMAIL)
+			.executeTakeFirstOrThrow();
+		const cipherId = crypto.randomUUID();
+		const attachmentId = crypto.randomUUID();
+		const sendId = crypto.randomUUID();
+		const fileId = crypto.randomUUID();
+		const attachmentKey = `attachments/${cipherId}/${attachmentId}.published.bin`;
+		const sendKey = `sends/${sendId}/${fileId}.published.bin`;
+		let deleteCalls = 0;
+		const blobStore: BlobStore = {
+			kind: "r2",
+			maxObjectBytes: null,
+			get: async () => null,
+			put: async () => undefined,
+			delete: async () => {
+				deleteCalls += 1;
+			},
+		};
+		try {
+			await db
+				.insertInto("ciphers")
+				.values({
+					id: cipherId,
+					user_id: user.id,
+					org_id: null,
+					type: 1,
+					folder_id: null,
+					name: "referenced-blob-cipher",
+					notes: null,
+					fields: null,
+					password_history: null,
+					favorite: 0,
+					data: "{}",
+					reprompt: 0,
+					key: null,
+					created_at: timestamp,
+					updated_at: timestamp,
+					archived_at: null,
+					deleted_at: timestamp,
+					purge_after: timestamp,
+				})
+				.execute();
+			await db
+				.insertInto("attachments")
+				.values({
+					id: attachmentId,
+					cipher_id: cipherId,
+					file_name: "encrypted-name",
+					size: 1,
+					size_name: "1 Byte",
+					key: null,
+					storage_key: attachmentKey,
+					created_at: timestamp,
+					deleted_at: timestamp,
+				})
+				.execute();
+			await db
+				.insertInto("sends")
+				.values({
+					id: sendId,
+					user_id: user.id,
+					org_id: null,
+					type: 1,
+					name: "referenced-blob-send",
+					notes: null,
+					data: JSON.stringify({ id: fileId, size: 1 }),
+					key: "encrypted-key",
+					password_hash: null,
+					password_salt: null,
+					password_iterations: null,
+					password_algorithm: null,
+					auth_type: 2,
+					emails: null,
+					max_access_count: null,
+					access_count: 0,
+					disabled: 0,
+					hide_email: null,
+					created_at: timestamp,
+					updated_at: timestamp,
+					expiration_date: null,
+					deletion_date: timestamp,
+					storage_key: sendKey,
+				})
+				.execute();
+			await db
+				.insertInto("blob_gc_queue")
+				.values(
+					[attachmentKey, sendKey].map((objectKey) => ({
+						object_key: objectKey,
+						attempts: 0,
+						next_attempt_at: timestamp,
+						last_error: null,
+						created_at: timestamp,
+					})),
+				)
+				.execute();
+
+			assert.deepEqual(await drainBlobGcQueue(db, blobStore, timestamp), {
+				deleted: 0,
+				referenced: 2,
+				deferred: 0,
+				contended: 0,
+			});
+			assert.equal(deleteCalls, 0);
+			assert.equal(
+				await db
+					.selectFrom("blob_gc_queue")
+					.select(({ fn }) => fn.countAll<number>().as("count"))
+					.where("object_key", "in", [attachmentKey, sendKey])
+					.executeTakeFirstOrThrow()
+					.then((row) => Number(row.count)),
+				0,
+			);
+		} finally {
+			await db.deleteFrom("sends").where("id", "=", sendId).execute();
+			await db.deleteFrom("ciphers").where("id", "=", cipherId).execute();
+			await db
+				.deleteFrom("blob_gc_queue")
+				.where("object_key", "in", [attachmentKey, sendKey])
+				.execute();
+			await db.destroy();
+		}
+	});
+
 	test("serializes data operations with an expiring owned lease", async () => {
 		const timestamp = Math.floor(Date.now() / 1000);
 		const first = await acquireDataOperationLease(
