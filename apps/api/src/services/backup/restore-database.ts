@@ -164,6 +164,15 @@ function buildResetImportTargetStatements(
 ): D1PreparedStatement[] {
 	return [
 		"DELETE FROM audit_logs WHERE is_tombstone = 0",
+		// Authentication and authorization state is deliberately not portable.
+		// Clear it explicitly instead of relying on user-table cascades so anonymous
+		// challenges and future foreign-key changes cannot preserve old sessions.
+		"DELETE FROM webauthn_challenges",
+		"DELETE FROM auth_requests",
+		"DELETE FROM refresh_tokens",
+		"DELETE FROM device_trust_tokens",
+		"DELETE FROM devices",
+		"DELETE FROM invites",
 		"DELETE FROM sends",
 		"DELETE FROM attachments",
 		"DELETE FROM cipher_collections",
@@ -174,7 +183,6 @@ function buildResetImportTargetStatements(
 		"DELETE FROM org_members",
 		"DELETE FROM organizations",
 		"DELETE FROM webauthn_credentials",
-		"DELETE FROM device_trust_tokens",
 		"DELETE FROM domain_settings",
 		"DELETE FROM user_revisions",
 		"DELETE FROM users",

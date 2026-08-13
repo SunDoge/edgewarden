@@ -273,6 +273,9 @@ describe("Edgewarden API", () => {
 		const postBackupTargetId = crypto.randomUUID();
 		const postBackupActorId = crypto.randomUUID();
 		const deviceTrustToken = `backup-must-not-export-${crypto.randomUUID()}`;
+		const anonymousChallenge = `restore-challenge-${crypto.randomUUID()}`;
+		const preRestoreRefreshToken = refreshToken;
+		assert.ok(preRestoreRefreshToken);
 		const timestamp = Math.floor(Date.now() / 1000);
 		await testDatabase
 			.prepare(
@@ -329,6 +332,12 @@ describe("Edgewarden API", () => {
 				1,
 				timestamp,
 			)
+			.run();
+		await testDatabase
+			.prepare(
+				"INSERT INTO webauthn_challenges (challenge_hash,scope,user_id,expires_at,used_at,created_at) VALUES (?,'register',NULL,?,NULL,?)",
+			)
+			.bind(anonymousChallenge, timestamp + 3600, timestamp)
 			.run();
 		await testDatabase
 			.prepare(
@@ -533,6 +542,12 @@ describe("Edgewarden API", () => {
 		);
 		assert.ok(
 			await testDatabase
+				.prepare("SELECT 1 FROM webauthn_challenges WHERE challenge_hash = ?")
+				.bind(anonymousChallenge)
+				.first(),
+		);
+		assert.ok(
+			await testDatabase
 				.prepare("SELECT 1 FROM audit_logs WHERE id = ?")
 				.bind(postBackupOrdinaryAuditId)
 				.first(),
@@ -717,6 +732,22 @@ describe("Edgewarden API", () => {
 				.first(),
 			null,
 		);
+		assert.equal(
+			await testDatabase
+				.prepare("SELECT 1 FROM webauthn_challenges WHERE challenge_hash = ?")
+				.bind(anonymousChallenge)
+				.first(),
+			null,
+		);
+		const staleRefresh = await request("/identity/connect/token", {
+			method: "POST",
+			headers: { "content-type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				grant_type: "refresh_token",
+				refresh_token: preRestoreRefreshToken,
+			}),
+		});
+		assert.equal(staleRefresh.status, 400);
 		assert.equal(
 			await testDatabase
 				.prepare("SELECT 1 FROM device_trust_tokens WHERE token = ?")
