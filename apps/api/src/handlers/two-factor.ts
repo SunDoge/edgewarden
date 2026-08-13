@@ -252,7 +252,7 @@ export const recoverTwoFactor = factory.createHandlers(
 		const body = c.req.valid("json");
 		const email = body.email.trim().toLowerCase();
 		if (
-			!(await checkIpRateLimit(c)) ||
+			!(await checkIpRateLimit(c, "two-factor")) ||
 			!(await checkAccountRateLimit(c, email))
 		) {
 			return errorResponse("Too many recovery attempts. Try again later.", 429);
