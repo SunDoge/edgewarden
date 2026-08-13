@@ -89,11 +89,24 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		const sync = await request("/api/sync", { headers: auth });
 		assert.equal(sync.status, 200);
 		const syncBody = await sync.json<{
-			folders: unknown[];
+			profile: Record<string, unknown>;
+			folders: Array<Record<string, unknown>>;
 			ciphers: unknown[];
+			policiesNew: unknown[];
+			userDecryption: Record<string, unknown>;
 		}>();
 		assert.equal(syncBody.folders.length, 1);
 		assert.equal(syncBody.ciphers.length, 1);
+		assert.equal(typeof syncBody.profile.creationDate, "string");
+		assert.equal(syncBody.profile.verifyDevices, false);
+		assert.ok("accountKeys" in syncBody.profile);
+		assert.deepEqual(
+			syncBody.profile.organizationsNew,
+			syncBody.profile.organizations,
+		);
+		assert.equal(typeof syncBody.folders[0].creationDate, "string");
+		assert.deepEqual(syncBody.policiesNew, []);
+		assert.ok(syncBody.userDecryption.masterPasswordUnlock);
 
 		const updatePayload = {
 			type: 1,

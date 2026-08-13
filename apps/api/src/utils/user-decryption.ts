@@ -21,8 +21,13 @@ export function buildAccountKeys(
 		publicKeyEncryptionKeyPair: {
 			wrappedPrivateKey: user.private_key,
 			publicKey: user.public_key ?? "",
+			signedPublicKey: null,
+			object: "publicKeyEncryptionKeyPair",
 			Object: "publicKeyEncryptionKeyPair",
 		},
+		securityState: null,
+		signatureKeyPair: null,
+		object: "privateKeys",
 		Object: "privateKeys",
 	};
 }
@@ -49,5 +54,24 @@ export function buildUserDecryptionOptions(
 		TrustedDeviceOption: null,
 		KeyConnectorOption: null,
 		WebAuthnPrfOption: webAuthnPrfOption,
+	};
+}
+
+/** Android's Kotlin sync model uses a separate camelCase wire contract. */
+export function buildUserDecryptionCompat(
+	user: UserLike,
+): Record<string, unknown> {
+	return {
+		masterPasswordUnlock: {
+			kdf: {
+				kdfType: user.kdf_type,
+				iterations: user.kdf_iterations,
+				memory: user.kdf_memory ?? null,
+				parallelism: user.kdf_parallelism ?? null,
+			},
+			masterKeyWrappedUserKey: user.key,
+			masterKeyEncryptedUserKey: user.key,
+			salt: user.email.toLowerCase(),
+		},
 	};
 }
