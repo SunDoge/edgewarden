@@ -29,6 +29,7 @@ import {
 	Fingerprint,
 } from "@lucide/svelte";
 import TurnstileWidget from "$lib/components/turnstile-widget.svelte";
+import { readDevLoginCredentials } from "$lib/services/dev-login";
 
 let email = $state("");
 let password = $state("");
@@ -56,23 +57,39 @@ let turnstileLoading = $state(true);
 let turnstileWidget = $state<{ reset(): void } | null>(null);
 
 onMount(() => {
-	void getTurnstileConfigApi()
-		.then((config) => {
-			turnstileEnabled = config.enabled;
-			turnstileSiteKey = config.siteKey;
-			if (config.enabled && !config.siteKey)
-				error = "Turnstile 已启用，但服务器没有配置站点密钥。";
-		})
-		.catch(() => {
-			error = "无法加载登录安全配置。";
-		})
-		.finally(() => {
-			turnstileLoading = false;
-		});
+	void initializeLogin();
 });
+
+async function initializeLogin() {
+	try {
+		const config = await getTurnstileConfigApi();
+		turnstileEnabled = config.enabled;
+		turnstileSiteKey = config.siteKey;
+		if (config.enabled && !config.siteKey)
+			error = "Turnstile 已启用，但服务器没有配置站点密钥。";
+	} catch {
+		error = "无法加载登录安全配置。";
+		return;
+	} finally {
+		turnstileLoading = false;
+	}
+
+	const credentials = import.meta.env.DEV
+		? readDevLoginCredentials(true, import.meta.env)
+		: null;
+	if (credentials && !turnstileEnabled) {
+		email = credentials.email;
+		password = credentials.password;
+		await submitPasswordLogin();
+	}
+}
 
 async function handleSubmit(e: SubmitEvent) {
 	e.preventDefault();
+	await submitPasswordLogin();
+}
+
+async function submitPasswordLogin() {
 	if (!email || !password) {
 		error = "请输入电子邮件和主密码。";
 		return;
