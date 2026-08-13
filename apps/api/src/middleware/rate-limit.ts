@@ -3,13 +3,20 @@ import type { HonoEnv } from "../env";
 
 type HonoContext = Context<HonoEnv>;
 
+export type IpRateLimitScope = "identity" | "register" | "two-factor";
+
 /** IP-level rate limit — for login and other sensitive endpoints */
-export async function checkIpRateLimit(c: HonoContext): Promise<boolean> {
+export async function checkIpRateLimit(
+	c: HonoContext,
+	scope: IpRateLimitScope,
+): Promise<boolean> {
 	const ip =
 		c.req.header("CF-Connecting-IP") ??
 		c.req.header("X-Forwarded-For")?.split(",")[0]?.trim() ??
 		"unknown";
-	const { success } = await c.env.RL_IP.limit({ key: ip });
+	// One shared binding is sufficient, but each security flow needs an
+	// independent key so login/2FA traffic cannot exhaust registration quota.
+	const { success } = await c.env.RL_IP.limit({ key: `${scope}:${ip}` });
 	return success;
 }
 

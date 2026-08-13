@@ -30,7 +30,7 @@ import { getSafeJwtSecret } from "../utils/direct-upload";
 export const registerAccount = factory.createHandlers(
 	vValidator("json", RegisterSchema),
 	async (c) => {
-		if (!(await checkIpRateLimit(c))) {
+		if (!(await checkIpRateLimit(c, "register"))) {
 			return errorResponse("Too many registration attempts", 429);
 		}
 		const body = c.req.valid("json");

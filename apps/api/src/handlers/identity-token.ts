@@ -25,7 +25,7 @@ export const connectToken = factory.createHandlers(async (c) => {
 	const db = c.get("db");
 	const secret = c.env.JWT_SECRET;
 
-	if (!(await checkIpRateLimit(c))) {
+	if (!(await checkIpRateLimit(c, "identity"))) {
 		return identityErrorResponse(
 			"Too many requests. Try again later.",
 			"TooManyRequests",
