@@ -103,7 +103,7 @@ export async function handlePasswordGrant(
 	let validatedAuthRequestId: string | null = null;
 	if (authRequestId) {
 		const request = await authRequestsDb.getAuthRequestById(db, authRequestId);
-		valid = !!(
+		if (
 			request &&
 			request.user_id === user.id &&
 			request.type === 0 &&
@@ -115,8 +115,10 @@ export async function handlePasswordGrant(
 				request.access_code_hash,
 				await hashCredential(passwordHash),
 			)
-		);
-		if (valid) validatedAuthRequestId = request!.id;
+		) {
+			valid = true;
+			validatedAuthRequestId = request.id;
+		}
 	} else {
 		valid = await verifyPassword(
 			passwordHash,
