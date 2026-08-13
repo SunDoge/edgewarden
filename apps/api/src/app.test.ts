@@ -613,6 +613,11 @@ describe("Edgewarden API", () => {
 				DATA_ENCRYPTION_SECRET,
 				owner.id,
 				true,
+				async (event) => {
+					if (event.step === "local_complete") {
+						throw new Error("simulated post-commit progress outage");
+					}
+				},
 			);
 		} finally {
 			r2.delete = originalDelete;
