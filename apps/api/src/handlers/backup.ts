@@ -325,15 +325,6 @@ export const importBackup = factory.createHandlers(
 				async () => requireDataOperationLeaseRenewal(c.env.DB, lease),
 				fileName || "edgewarden_backup.zip",
 			);
-			await safeWriteAuditEvent(c.get("db"), {
-				actorUserId: imported.auditActorUserId,
-				action: "backup.restored",
-				category: "system",
-				level: "warning",
-				targetType: "backup",
-				targetId: fileName || null,
-				metadata: { fileName: fileName || null, status: "success" },
-			});
 			return c.json(imported.result);
 		} catch (error: unknown) {
 			const message = backupErrorMessage(error, "Backup import failed");

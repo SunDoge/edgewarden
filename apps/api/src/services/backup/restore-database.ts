@@ -1,4 +1,12 @@
+import { serializeAuditMetadata } from "../audit";
+
 export type SqlRow = Record<string, string | number | null>;
+
+export interface RestoreAuditEvent {
+	actorUserId: string;
+	action: "backup.restored" | "backup.restored_remote";
+	fileName: string;
+}
 
 export type BackupTableName =
 	| "config"
@@ -200,6 +208,7 @@ function preserveAuditTombstonesStatement(db: D1Database): D1PreparedStatement {
 export async function swapShadowTablesIntoPlace(
 	db: D1Database,
 	previousBlobKeys: Iterable<string> = [],
+	restoreAudit?: RestoreAuditEvent,
 ): Promise<void> {
 	// A restore may roll business data back, but it must not erase deletion
 	// evidence created after the backup. Merge tombstones into the shadow table
@@ -250,6 +259,35 @@ export async function swapShadowTablesIntoPlace(
 			db.prepare(
 				`INSERT INTO ${table} SELECT * FROM ${shadowTableName(table)}`,
 			),
+		);
+	}
+	if (restoreAudit) {
+		const auditFileName = Array.from(restoreAudit.fileName).slice(0, 1024).join("");
+		const metadata = serializeAuditMetadata({
+			fileName: auditFileName,
+			status: "success",
+		});
+		statements.push(
+			db
+				.prepare(`
+					INSERT INTO audit_logs (
+						id, actor_user_id, action, category, level,
+						target_type, target_id, metadata, is_tombstone, created_at
+					) VALUES (
+						?,
+						CASE WHEN EXISTS (SELECT 1 FROM users WHERE id = ?) THEN ? ELSE NULL END,
+						?, 'system', 'warning', 'backup', ?, ?, 0, ?
+					)
+				`)
+				.bind(
+					crypto.randomUUID(),
+					restoreAudit.actorUserId,
+					restoreAudit.actorUserId,
+					restoreAudit.action,
+					auditFileName || null,
+					metadata,
+					Math.floor(Date.now() / 1000),
+				),
 		);
 	}
 	await db.batch(statements);

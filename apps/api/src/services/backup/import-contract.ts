@@ -30,7 +30,6 @@ export interface BackupImportResultBody {
 
 export interface BackupImportExecutionResult {
 	result: BackupImportResultBody;
-	auditActorUserId: string | null;
 }
 
 export interface BackupRestoreProgressEvent {
@@ -88,18 +87,12 @@ export function backupTableCounts(
 
 export function buildImportExecutionResult(
 	db: BackupPayload["db"],
-	actorUserId: string,
 	restoredAttachmentCount: number,
 	restoredSendCount: number,
 	restoredSendFileCount: number,
 	skipped: BackupImportSkipSummary,
 ): BackupImportExecutionResult {
 	return {
-		auditActorUserId: (db.users || []).some(
-			(row) => String(row.id || "").trim() === actorUserId,
-		)
-			? actorUserId
-			: null,
 		result: {
 			object: "instance-backup-import",
 			imported: {
