@@ -185,7 +185,14 @@ describe("frontend crypto utils", () => {
 					username: "me",
 					password: "secret",
 					totp: "JBSWY3DPEHPK3PXP",
+					passwordRevisionDate: "2025-02-01T00:00:00.000Z",
 					uris: [{ uri: "https://example.com", match: 1 }],
+					fido2Credentials: [
+						{
+							credentialId: "credential-secret",
+							creationDate: "2025-02-02T00:00:00.000Z",
+						},
+					],
 				},
 				fields: [{ name: "PIN", value: "1234", type: 1 }],
 				passwordHistory: [
@@ -198,6 +205,17 @@ describe("frontend crypto utils", () => {
 		);
 		expect(JSON.stringify(encrypted)).not.toContain("secret");
 		expect(JSON.stringify(encrypted)).not.toContain("1234");
+		expect(encrypted.login.passwordRevisionDate).toBe(
+			"2025-02-01T00:00:00.000Z",
+		);
+		expect(encrypted.login.fido2Credentials[0].creationDate).toBe(
+			"2025-02-02T00:00:00.000Z",
+		);
+		expect(encrypted.login.fido2Credentials[0].credentialId).toMatch(/^2\./);
+		expect(encrypted.passwordHistory[0].lastUsedDate).toBe(
+			"2025-01-01T00:00:00Z",
+		);
+		expect(encrypted.passwordHistory[0].password).toMatch(/^2\./);
 		const decrypted = await decryptCipher(
 			{ ...encrypted, id: "test" } as any,
 			userEnc,

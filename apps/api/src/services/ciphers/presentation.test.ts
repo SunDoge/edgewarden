@@ -65,9 +65,65 @@ describe("cipherToResponse", () => {
 		});
 	});
 
+	it("normalizes client enums that must remain numeric", () => {
+		const login = cipherToResponse(
+			loginCipher({
+				uris: [
+					{ uri: "2.first", match: "1" },
+					{ uri: "2.second", match: "2.encrypted-enum" },
+				],
+			}),
+		);
+		expect(login.login).toMatchObject({
+			uris: [{ match: 1 }, { match: null }],
+		});
+
+		const secureNote = loginCipher({});
+		secureNote.type = 2;
+		secureNote.data = JSON.stringify({ secureNote: { type: "2.encrypted" } });
+		secureNote.fields = JSON.stringify([
+			{ name: "2.name", value: "2.value", type: "2.encrypted" },
+		]);
+		const response = cipherToResponse(secureNote);
+		expect(response.secureNote).toEqual({ type: 0 });
+		expect(response.fields).toEqual([
+			{ name: "2.name", value: "2.value", type: 1 },
+		]);
+	});
+
 	it("returns an empty login object with a null uri alias", () => {
 		const response = cipherToResponse(loginCipher({ uris: [] }));
 
-		expect(response.login).toEqual({ uris: [], uri: null });
+		expect(response.login).toEqual({
+			uris: [],
+			uri: null,
+			passwordRevisionDate: null,
+		});
+	});
+
+	it("repairs metadata dates encrypted by legacy web imports", () => {
+		const cipher = loginCipher({
+			passwordRevisionDate: "2.encrypted-date",
+			fido2Credentials: [
+				{ credentialId: "2.credential", creationDate: "2.encrypted-date" },
+			],
+		});
+		cipher.password_history = JSON.stringify([
+			{ password: "2.old-password", lastUsedDate: "2.encrypted-date" },
+		]);
+
+		const response = cipherToResponse(cipher);
+
+		expect(response.login).toMatchObject({
+			passwordRevisionDate: null,
+			fido2Credentials: [
+				{ credentialId: "2.credential", creationDate: EPOCH_ISO_FOR_TEST },
+			],
+		});
+		expect(response.passwordHistory).toEqual([
+			{ password: "2.old-password", lastUsedDate: EPOCH_ISO_FOR_TEST },
+		]);
 	});
 });
+
+const EPOCH_ISO_FOR_TEST = "1970-01-01T00:00:00.000Z";
