@@ -60,6 +60,7 @@ export function buildUserDecryptionOptions(
 /** Android's Kotlin sync model uses a separate camelCase wire contract. */
 export function buildUserDecryptionCompat(
 	user: UserLike,
+	webAuthnPrfOptions: readonly unknown[] = [],
 ): Record<string, unknown> {
 	return {
 		masterPasswordUnlock: {
@@ -73,5 +74,6 @@ export function buildUserDecryptionCompat(
 			masterKeyEncryptedUserKey: user.key,
 			salt: user.email.toLowerCase(),
 		},
+		...(webAuthnPrfOptions.length ? { webAuthnPrfOptions } : {}),
 	};
 }

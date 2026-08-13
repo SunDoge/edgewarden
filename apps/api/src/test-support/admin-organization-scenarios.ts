@@ -1046,15 +1046,44 @@ export function registerAdminOrganizationScenarios(
 			200,
 			await restrictedSync.clone().text(),
 		);
-		const syncedCipherRows = (
-			await restrictedSync.json<{
-				ciphers: Array<{ id: string; collectionIds: string[] }>;
-			}>()
-		).ciphers.filter((item) => item.id === cipher.id);
+		const restrictedSyncBody = await restrictedSync.json<{
+			ciphers: Array<{ id: string; collectionIds: string[] }>;
+			collections: Array<{
+				id: string;
+				externalId: string | null;
+				type: number;
+				defaultUserCollectionEmail: string | null;
+				manage: boolean;
+				object: string;
+			}>;
+		}>();
+		const syncedCipherRows = restrictedSyncBody.ciphers.filter(
+			(item) => item.id === cipher.id,
+		);
 		assert.equal(syncedCipherRows.length, 1);
 		assert.deepEqual(
 			new Set(syncedCipherRows[0].collectionIds),
 			new Set([collectionId, secondCollectionId]),
+		);
+		assert.deepEqual(
+			restrictedSyncBody.collections
+				.filter((collection) => collection.id === secondCollectionId)
+				.map((collection) => ({
+					externalId: collection.externalId,
+					type: collection.type,
+					defaultUserCollectionEmail: collection.defaultUserCollectionEmail,
+					manage: collection.manage,
+					object: collection.object,
+				})),
+			[
+				{
+					externalId: null,
+					type: 0,
+					defaultUserCollectionEmail: null,
+					manage: false,
+					object: "collectionDetails",
+				},
+			],
 		);
 		await context.database.batch([
 			context.database
