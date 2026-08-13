@@ -15,7 +15,7 @@
 		"db:apply:local": "wrangler d1 migrations apply DB --config ../../wrangler.jsonc --local",
 		"db:apply:remote": "wrangler d1 migrations apply DB --config ../../wrangler.jsonc --remote",
 		"db:apply:remote:kv": "wrangler d1 migrations apply DB --config ../../wrangler.kv.jsonc --remote",
-		"db:codegen": "node scripts/codegen.mjs",
+		"db:codegen": "node scripts/codegen.ts",
 		"rpc:types": "tsc --project tsconfig.rpc.json",
 		"check": "tsc --noEmit",
 		"test": "vitest run"
