@@ -23,13 +23,18 @@ import { sendToResponse } from "../services/sends/presentation";
 import type { Folders } from "../types/db";
 import { buildWebAuthnPrfOption } from "../utils/account-passkeys";
 import { now, toIso } from "../utils/time";
-import { buildUserDecryptionOptions } from "../utils/user-decryption";
+import {
+	buildAccountKeys,
+	buildUserDecryptionCompat,
+	buildUserDecryptionOptions,
+} from "../utils/user-decryption";
 import { userYubicoPublicIds } from "../utils/yubico";
 
 function folderToResponse(folder: Selectable<Folders>) {
 	return {
 		id: folder.id,
 		name: folder.name,
+		creationDate: toIso(folder.created_at),
 		revisionDate: toIso(folder.updated_at),
 		object: "folder",
 	};
@@ -178,6 +183,19 @@ async function buildSyncPayload(c: Context<HonoEnv>) {
 		(link) => link.cipher_id,
 	);
 
+	const profileOrganizations = organizationRows.map((row) => ({
+		id: row.org_id,
+		name: row.name,
+		key: row.key,
+		publicKey: row.public_key,
+		privateKey: row.private_key,
+		role: row.role,
+		status: row.status,
+		accessAll: Boolean(row.access_all),
+		creationDate: toIso(row.created_at),
+		revisionDate: toIso(row.updated_at),
+		object: "profileOrganization",
+	}));
 	const profile = {
 		id: user.id,
 		name: user.name,
@@ -194,28 +212,20 @@ async function buildSyncPayload(c: Context<HonoEnv>) {
 		key: user.key,
 		privateKey: user.private_key,
 		publicKey: user.public_key,
+		accountKeys: buildAccountKeys(user),
 		securityStamp: user.security_stamp,
 		forcePasswordReset: false,
 		usesKeyConnector: false,
 		avatarColor: null,
+		creationDate: toIso(user.created_at),
+		verifyDevices: false,
 		kdf: user.kdf_type,
 		kdfIterations: user.kdf_iterations,
 		kdfMemory: user.kdf_memory ?? null,
 		kdfParallelism: user.kdf_parallelism ?? null,
 		role: user.role,
-		organizations: organizationRows.map((row) => ({
-			id: row.org_id,
-			name: row.name,
-			key: row.key,
-			publicKey: row.public_key,
-			privateKey: row.private_key,
-			role: row.role,
-			status: row.status,
-			accessAll: Boolean(row.access_all),
-			creationDate: toIso(row.created_at),
-			revisionDate: toIso(row.updated_at),
-			object: "profileOrganization",
-		})),
+		organizations: profileOrganizations,
+		organizationsNew: profileOrganizations,
 		providers: [],
 		providerOrganizations: [],
 		object: "profile",
@@ -281,6 +291,7 @@ async function buildSyncPayload(c: Context<HonoEnv>) {
 		}),
 		domains,
 		policies: [],
+		policiesNew: [],
 
 		sends: sends.map(sendToResponse),
 		unofficialServer: true,
@@ -290,10 +301,12 @@ async function buildSyncPayload(c: Context<HonoEnv>) {
 			KeyConnectorOption: null,
 			WebAuthnPrfOption: firstPrfOption,
 			WebAuthnPrfOptions: webAuthnPrfOptions,
+			V2UpgradeToken: null,
 			Object: "userDecryption",
 		},
 		UserDecryptionOptions: userDecryptionOptions,
 		userDecryptionOptions,
+		userDecryption: buildUserDecryptionCompat(user),
 		object: "sync",
 	};
 }
