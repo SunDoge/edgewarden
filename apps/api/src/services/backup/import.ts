@@ -14,6 +14,7 @@ import {
 	buildImportExecutionResult,
 	ensureBackupCompatibilityFields,
 	type BackupImportExecutionResult,
+	type BackupRestoreProgressEvent,
 	type BackupRestoreProgressReporter,
 } from "./import-contract";
 import {
@@ -42,6 +43,24 @@ async function drainRestoreBlobGc(
 		await drainBlobGcQueue(db, blobStore);
 	} finally {
 		await db.destroy();
+	}
+}
+
+async function reportRestoreProgressBestEffort(
+	progress: BackupRestoreProgressReporter | undefined,
+	event: BackupRestoreProgressEvent,
+): Promise<void> {
+	if (!progress) return;
+	try {
+		await progress(event);
+	} catch (error) {
+		console.error(
+			JSON.stringify({
+				event: "backup.restore.progress_report_failed",
+				step: event.step,
+				error: error instanceof Error ? error.message : String(error),
+			}),
+		);
 	}
 }
 
@@ -81,6 +100,7 @@ export async function importBackupArchiveBytes(
 	const stagedBlobKeys = new Set<string>();
 	const activeOperationLeaseValue =
 		await readActiveDataOperationLeaseValue(dbBinding);
+	let committedResult: BackupImportExecutionResult | null = null;
 	try {
 		await progress?.({
 			source: "local",
@@ -155,16 +175,24 @@ export async function importBackupArchiveBytes(
 			stageDetail: "txt_backup_restore_progress_local_finalize_detail",
 			replaceExisting,
 		});
+		const result = buildImportExecutionResult(
+			db,
+			restored.restoredAttachments.length,
+			(db.sends || []).length - failedFileSendRows.length,
+			restored.restoredFileSends.length,
+			mergeBackupImportSkips(prepared.skipped, restored.skipped),
+		);
 		await swapShadowTablesIntoPlace(dbBinding, previousBlobKeys, {
 			actorUserId,
 			action: "backup.restored",
 			fileName,
 		});
+		committedResult = result;
 		invalidateAllAuthCaches();
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);
 		await drainRestoreBlobGc(dbBinding, blobStore).catch(() => undefined);
 
-		await progress?.({
+		await reportRestoreProgressBestEffort(progress, {
 			source: "local",
 			step: "local_complete",
 			fileName,
@@ -174,18 +202,22 @@ export async function importBackupArchiveBytes(
 			done: true,
 			ok: true,
 		});
-		return buildImportExecutionResult(
-			db,
-			restored.restoredAttachments.length,
-			(db.sends || []).length - failedFileSendRows.length,
-			restored.restoredFileSends.length,
-			mergeBackupImportSkips(prepared.skipped, restored.skipped),
-		);
+		return result;
 	} catch (error) {
+		if (committedResult) {
+			console.error(
+				JSON.stringify({
+					event: "backup.restore.post_commit_failed",
+					source: "local",
+					error: error instanceof Error ? error.message : String(error),
+				}),
+			);
+			return committedResult;
+		}
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);
 		await enqueueBlobGcKeys(dbBinding, stagedBlobKeys).catch(() => undefined);
 		await drainRestoreBlobGc(dbBinding, blobStore).catch(() => undefined);
-		await progress?.({
+		await reportRestoreProgressBestEffort(progress, {
 			source: "local",
 			step: "local_failed",
 			fileName,
@@ -248,6 +280,7 @@ export async function importRemoteBackupArchiveBytes(
 	const stagedBlobKeys = new Set<string>();
 	const activeOperationLeaseValue =
 		await readActiveDataOperationLeaseValue(dbBinding);
+	let committedResult: BackupImportExecutionResult | null = null;
 
 	try {
 		await progress?.({
@@ -326,16 +359,24 @@ export async function importRemoteBackupArchiveBytes(
 			stageDetail: "txt_backup_restore_progress_remote_finalize_detail",
 			replaceExisting,
 		});
+		const result = buildImportExecutionResult(
+			db,
+			restored.restoredAttachments.length,
+			(db.sends || []).length - failedFileSendRows.length,
+			restored.restoredFileSends.length,
+			mergeBackupImportSkips(prepared.skipped, restored.skipped),
+		);
 		await swapShadowTablesIntoPlace(dbBinding, previousBlobKeys, {
 			actorUserId,
 			action: "backup.restored_remote",
 			fileName,
 		});
+		committedResult = result;
 		invalidateAllAuthCaches();
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);
 		await drainRestoreBlobGc(dbBinding, blobStore).catch(() => undefined);
 
-		await progress?.({
+		await reportRestoreProgressBestEffort(progress, {
 			source: "remote",
 			step: "remote_complete",
 			fileName,
@@ -346,18 +387,22 @@ export async function importRemoteBackupArchiveBytes(
 			ok: true,
 		});
 
-		return buildImportExecutionResult(
-			db,
-			restored.restoredAttachments.length,
-			(db.sends || []).length - failedFileSendRows.length,
-			restored.restoredFileSends.length,
-			mergeBackupImportSkips(prepared.skipped, restored.skipped),
-		);
+		return result;
 	} catch (error) {
+		if (committedResult) {
+			console.error(
+				JSON.stringify({
+					event: "backup.restore.post_commit_failed",
+					source: "remote",
+					error: error instanceof Error ? error.message : String(error),
+				}),
+			);
+			return committedResult;
+		}
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);
 		await enqueueBlobGcKeys(dbBinding, stagedBlobKeys).catch(() => undefined);
 		await drainRestoreBlobGc(dbBinding, blobStore).catch(() => undefined);
-		await progress?.({
+		await reportRestoreProgressBestEffort(progress, {
 			source: "remote",
 			step: "remote_failed",
 			fileName,
