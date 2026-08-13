@@ -106,6 +106,60 @@ describe("backup archive integrity", () => {
 		);
 	});
 
+	it("rejects same-length blob corruption recorded by format v4", async () => {
+		const encoder = new TextEncoder();
+		const path = "attachments/cipher-id/attachment-id.bin";
+		const archive = zipSync({
+			"manifest.json": encoder.encode(
+				JSON.stringify({
+					formatVersion: 4,
+					exportedAt: "2026-08-12T03:04:05.000Z",
+					appVersion: "test",
+					storageKind: "r2",
+					tableCounts: {
+						config: 0,
+						users: 0,
+						domain_settings: 0,
+						user_revisions: 0,
+						folders: 0,
+						ciphers: 0,
+						attachments: 1,
+					},
+					includes: { attachments: true, fileSends: true },
+					blobSummary: {
+						attachmentFiles: 1,
+						sendFiles: 0,
+						totalBytes: 1,
+						largestObjectBytes: 1,
+					},
+					blobHashes: { [path]: "0".repeat(64) },
+				}),
+			),
+			"db.json": encoder.encode(
+				JSON.stringify({
+					config: [],
+					users: [],
+					domain_settings: [],
+					user_revisions: [],
+					folders: [],
+					ciphers: [],
+					attachments: [
+						{ id: "attachment-id", cipher_id: "cipher-id", size: 1 },
+					],
+				}),
+			),
+			[path]: new Uint8Array([1]),
+		});
+		const prefix = await getBackupArchiveChecksumPrefix(archive);
+
+		await expect(
+			assertBackupArchiveIntegrity(
+				archive,
+				`edgewarden_backup_20260812_030405_${prefix}.zip`,
+			),
+		).rejects.toThrow(`Backup blob checksum mismatch: ${path}`);
+	});
+
 	it("rejects a syntactically valid database payload with truncated rows", async () => {
 		const encoder = new TextEncoder();
 		const archive = zipSync({

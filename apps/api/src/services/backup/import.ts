@@ -2,7 +2,7 @@ import type { BlobStore } from "../blob-store";
 import { invalidateAllAuthCaches } from "../auth";
 import { drainBlobGcQueue, enqueueBlobGcKeys } from "../blob-gc";
 import { createDatabase } from "../../middleware/db";
-import { parseBackupArchive } from "./archive";
+import { assertBackupBlobIntegrity, parseBackupArchive } from "./archive";
 import { readActiveDataOperationLeaseValue } from "./operation-lease";
 import {
 	importPreparedBackupRows,
@@ -76,6 +76,7 @@ export async function importBackupArchiveBytes(
 ): Promise<BackupImportExecutionResult> {
 	const parsed = parseBackupArchive(archiveBytes);
 	ensureBackupCompatibilityFields(parsed.payload);
+	await assertBackupBlobIntegrity(parsed.payload, parsed.files);
 
 	const prepared = prepareImportPayloadForTarget(
 		blobStore,
@@ -262,6 +263,7 @@ export async function importRemoteBackupArchiveBytes(
 			}
 		}
 	}
+	await assertBackupBlobIntegrity(parsed.payload, parsed.files);
 	const prepared = prepareImportPayloadForTarget(
 		blobStore,
 		parsed.payload,

@@ -8,6 +8,7 @@ import {
 import {
 	buildBackupFileNameInTimeZone,
 	getBackupArchiveChecksumPrefix,
+	sha256Hex,
 	verifyBackupArchiveFileNameChecksum,
 } from "./archive-integrity";
 import { BACKUP_SETTINGS_CONFIG_KEY } from "./config";
@@ -25,7 +26,7 @@ export {
 
 type SqlRow = Record<string, string | number | null>;
 
-const BACKUP_FORMAT_VERSION = 3;
+const BACKUP_FORMAT_VERSION = 4;
 const BACKUP_TEXT_COMPRESSION_LEVEL = 0;
 const BACKUP_JSON_INDENT = 2;
 const MAX_BACKUP_ARCHIVE_ENTRY_COUNT = 10000;
@@ -33,7 +34,7 @@ const MAX_BACKUP_EXTRACTED_BYTES = 64 * 1024 * 1024;
 const MAX_BACKUP_DB_JSON_BYTES = 32 * 1024 * 1024;
 
 export interface BackupManifest {
-	formatVersion: 1 | 2 | 3;
+	formatVersion: 1 | 2 | 3 | 4;
 	exportedAt: string;
 	appVersion: string;
 	storageKind: "kv" | "r2" | null;
@@ -50,6 +51,7 @@ export interface BackupManifest {
 	};
 	attachmentBlobs?: BackupManifestAttachmentBlob[];
 	sendBlobs?: BackupManifestSendBlob[];
+	blobHashes?: Record<string, string>;
 }
 
 export interface BackupManifestAttachmentBlob {
@@ -229,7 +231,7 @@ function parseSendFileMetadata(row: SqlRow): {
 
 function getRequiredZipEntries(
 	db: BackupPayload["db"],
-	formatVersion: 1 | 2 | 3,
+	formatVersion: 1 | 2 | 3 | 4,
 ): string[] {
 	const entries: string[] = [];
 	for (const row of db.attachments) {
@@ -322,11 +324,20 @@ export function parseBackupArchive(
 	if (
 		manifest?.formatVersion !== 1 &&
 		manifest?.formatVersion !== 2 &&
-		manifest?.formatVersion !== 3
+		manifest?.formatVersion !== 3 &&
+		manifest?.formatVersion !== 4
 	) {
 		throw new Error("Unsupported backup format version");
 	}
 	validateBackupDatabasePayload(manifest, db);
+	if (
+		manifest.formatVersion >= 4 &&
+		(!manifest.blobHashes ||
+			typeof manifest.blobHashes !== "object" ||
+			Array.isArray(manifest.blobHashes))
+	) {
+		throw new Error("Backup archive blob hashes are invalid");
+	}
 
 	const externalAttachmentKeys = new Set<string>(
 		options.allowExternalAttachmentBlobs
@@ -343,6 +354,13 @@ export function parseBackupArchive(
 	for (const entry of requiredEntries) {
 		if (!zipped[entry]) {
 			throw new Error(`Backup archive is missing required file: ${entry}`);
+		}
+	}
+	if (manifest.formatVersion >= 4) {
+		for (const entry of getRequiredZipEntries(db, manifest.formatVersion)) {
+			if (!/^[0-9a-f]{64}$/i.test(String(manifest.blobHashes?.[entry] || ""))) {
+				throw new Error(`Backup archive blob checksum is invalid: ${entry}`);
+			}
 		}
 	}
 
@@ -530,6 +548,7 @@ export async function buildBackupArchive(
 		},
 		attachmentBlobs: includeAttachments ? manifestAttachmentBlobs : [],
 		sendBlobs: includeAttachments ? manifestSendBlobs : [],
+		blobHashes: {} as Record<string, string>,
 	} satisfies BackupManifest;
 
 	const files: Record<string, Uint8Array> = {
@@ -576,8 +595,12 @@ export async function buildBackupArchive(
 				throw new Error(`Backup blob size mismatch: ${blob.blobName}`);
 			}
 			files[blob.blobName] = bytes;
+			manifestBase.blobHashes[blob.blobName] = await sha256Hex(bytes);
 		}
 	}
+	files["manifest.json"] = encoder.encode(
+		JSON.stringify(manifestBase, null, BACKUP_JSON_INDENT),
+	);
 
 	await options.checkpoint?.();
 	await options.progress?.({
@@ -627,5 +650,25 @@ export async function assertBackupArchiveIntegrity(
 	if (!(await verifyBackupArchiveFileNameChecksum(bytes, fileName))) {
 		throw new Error("Backup archive checksum does not match its filename");
 	}
-	return parseBackupArchive(bytes).payload;
+	const parsed = parseBackupArchive(bytes);
+	await assertBackupBlobIntegrity(parsed.payload, parsed.files);
+	return parsed.payload;
+}
+
+export async function assertBackupBlobIntegrity(
+	payload: BackupPayload,
+	files: Record<string, Uint8Array>,
+): Promise<void> {
+	if (payload.manifest.formatVersion < 4) return;
+	for (const path of getRequiredZipEntries(
+		payload.db,
+		payload.manifest.formatVersion,
+	)) {
+		const bytes = files[path];
+		if (!bytes) throw new Error(`Backup archive is missing required file: ${path}`);
+		const expected = String(payload.manifest.blobHashes?.[path] || "").toLowerCase();
+		if ((await sha256Hex(bytes)) !== expected) {
+			throw new Error(`Backup blob checksum mismatch: ${path}`);
+		}
+	}
 }

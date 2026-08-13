@@ -373,7 +373,15 @@ describe("Edgewarden API", () => {
 			false,
 		);
 		const parsedArchive = parseBackupArchive(archive.bytes);
-		assert.equal(parsedArchive.payload.manifest.formatVersion, 3);
+		assert.equal(parsedArchive.payload.manifest.formatVersion, 4);
+		assert.match(
+			String(
+				parsedArchive.payload.manifest.blobHashes?.[
+					`attachments/${cipherId}/${attachmentId}.bin`
+				],
+			),
+			/^[0-9a-f]{64}$/,
+		);
 		assert.ok(
 			(parsedArchive.payload.db.ciphers || []).every(
 				(row) => !("mutation_token" in row) && !("purge_token" in row),
@@ -454,6 +462,24 @@ describe("Edgewarden API", () => {
 			),
 			new RegExp(
 				`Unable to load remote backup attachment: attachments/${cipherId}/${attachmentId}\\.bin`,
+			),
+		);
+		const corruptedAttachmentBytes = attachmentBytes.slice();
+		corruptedAttachmentBytes[0] ^= 0xff;
+		await assert.rejects(
+			importRemoteBackupArchiveBytes(
+				zipSync(externalAttachmentFiles),
+				testDatabase,
+				blobStore,
+				DATA_ENCRYPTION_SECRET,
+				owner.id,
+				true,
+				{
+					loadAttachment: async () => corruptedAttachmentBytes,
+				},
+			),
+			new RegExp(
+				`Backup blob checksum mismatch: attachments/${cipherId}/${attachmentId}\\.bin`,
 			),
 		);
 		assert.equal(
