@@ -8,6 +8,7 @@ import VaultDetailPanel from "$lib/components/vault/VaultDetailPanel.svelte";
 import VaultHeader from "$lib/components/vault/VaultHeader.svelte";
 import VaultItemList from "$lib/components/vault/VaultItemList.svelte";
 import VaultSidebar from "$lib/components/vault/VaultSidebar.svelte";
+import VaultFolderSidebar from "$lib/components/vault/VaultFolderSidebar.svelte";
 import { formatTime } from "$lib/i18n/format";
 import { m } from "$lib/paraglide/messages.js";
 import {
@@ -540,7 +541,7 @@ async function toggleFavorite(item: any) {
 	<div class="relative flex flex-1 overflow-hidden">
 		<!-- Sidebar -->
 		{#if mobileSidebarOpen}<button class="absolute inset-0 z-20 bg-black/40 md:hidden" onclick={() => mobileSidebarOpen = false} aria-label="关闭保险库导航"></button>{/if}
-		<div class="absolute inset-y-0 left-0 z-30 transition-transform md:static md:z-auto md:translate-x-0 {mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}">
+		<div class="absolute inset-y-0 left-0 z-30 flex transition-transform md:static md:z-auto md:translate-x-0 {mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}">
 			<VaultSidebar
 				bind:activeCategory
 				bind:activeFolder
@@ -551,6 +552,14 @@ async function toggleFavorite(item: any) {
 				onDeleteFolder={openDeleteFolder}
 				onDeleteAllFolders={() => (deleteAllFoldersDialogOpen = true)}
 				onNavigate={() => mobileSidebarOpen = false}
+			/>
+			<VaultFolderSidebar
+				bind:activeCategory
+				bind:activeFolder
+				onCreateFolder={openCreateFolder}
+				onRenameFolder={openRenameFolder}
+				onDeleteFolder={openDeleteFolder}
+				onDeleteAllFolders={() => (deleteAllFoldersDialogOpen = true)}
 			/>
 		</div>
 
