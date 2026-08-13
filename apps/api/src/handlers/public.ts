@@ -205,15 +205,23 @@ function configPayload(
 		gitHash: null,
 		server: { name: "edgewarden", url: origin },
 		environment: {
-			cloudRegion: null,
+			cloudRegion: "self-hosted",
 			vault: origin,
 			api: `${origin}/api`,
 			identity: `${origin}/identity`,
-			notifications: null,
+			notifications: `${origin}/notifications`,
 			icons: origin,
 			fillAssistRules: `${origin}/fill-assist/`,
-			sso: null,
-			keyConnector: null,
+			sso: "",
+		},
+		push: {
+			pushTechnology: 0,
+			vapidPublicKey: null,
+		},
+		communication: null,
+		settings: {
+			disableUserRegistration: !registration.signupsAllowed,
+			suppressOnboardingInterstitials: false,
 		},
 		featureStates: {
 			"cipher-key-encryption":

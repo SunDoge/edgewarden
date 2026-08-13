@@ -31,7 +31,9 @@ export const LIMITS = {
 		preflightMaxAgeSeconds: 86400,
 	},
 	compatibility: {
-		bitwardenServerVersion: "2026.4.1",
+		// Clients use this value to select backward-compatibility serializers.
+		// Keep it aligned with the newest Bitwarden protocol level we implement.
+		bitwardenServerVersion: "2026.6.0",
 		cipherKeyEncryptionFeatureEnabled: true,
 	},
 	performance: {
