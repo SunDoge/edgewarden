@@ -1,6 +1,8 @@
 import type { BackupDestinationRecord } from "@edgewarden/shared";
 
-export const BACKUP_SCHEDULER_WINDOW_MINUTES = 5;
+// The Worker runs once per hour. Backup schedules therefore select a local
+// hour, not an exact minute; the configured slot remains due for that hour.
+export const BACKUP_SCHEDULER_WINDOW_MINUTES = 60;
 
 export function normalizeBackupStartTime(
 	value: unknown,
@@ -14,7 +16,7 @@ export function normalizeBackupStartTime(
 	if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
 		throw new Error("Backup start time must be in HH:mm format");
 	}
-	return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+	return `${String(hour).padStart(2, "0")}:00`;
 }
 
 function getDateTimeParts(
