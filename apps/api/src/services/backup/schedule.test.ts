@@ -4,6 +4,7 @@ import {
 	getBackupLocalDateKey,
 	hasBackupSlotBetween,
 	isBackupDueNow,
+	normalizeBackupStartTime,
 } from "./schedule";
 
 function destination(
@@ -51,8 +52,8 @@ describe("backup schedules", () => {
 		).toBe("2026-08-12");
 	});
 
-	it("runs inside the scheduler window only once per slot", () => {
-		const now = new Date("2026-08-11T19:03:00.000Z");
+	it("runs during the selected local hour only once per slot", () => {
+		const now = new Date("2026-08-11T19:17:00.000Z");
 		expect(isBackupDueNow(destination(), now)).toBe(true);
 		expect(
 			isBackupDueNow(
@@ -60,6 +61,16 @@ describe("backup schedules", () => {
 				now,
 			),
 		).toBe(false);
+		expect(
+			isBackupDueNow(destination(), new Date("2026-08-11T19:59:00.000Z")),
+		).toBe(true);
+		expect(
+			isBackupDueNow(destination(), new Date("2026-08-11T20:00:00.000Z")),
+		).toBe(false);
+	});
+
+	it("normalizes legacy minute precision to an hourly schedule", () => {
+		expect(normalizeBackupStartTime("03:45")).toBe("03:00");
 	});
 
 	it("finds a missed slot in a larger catch-up interval", () => {

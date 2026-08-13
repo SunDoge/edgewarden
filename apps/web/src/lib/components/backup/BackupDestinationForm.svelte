@@ -142,8 +142,13 @@ let {
 			</div>
 
 			<div class="space-y-1.5">
-				<label for="schedule-time" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">每日首发启动时间</label>
-				<Input id="schedule-time" type="text" bind:value={form.scheduleStartTime} placeholder="03:00" disabled={!form.scheduleEnabled} />
+				<label for="schedule-time" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">每日首个备份小时</label>
+				<select id="schedule-time" bind:value={form.scheduleStartTime} disabled={!form.scheduleEnabled} class="h-9 w-full rounded-md border bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50">
+					{#each Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`) as hour}
+						<option value={hour}>{hour}</option>
+					{/each}
+				</select>
+				<p class="text-[10px] text-slate-400">任务每小时检查一次，会在所选小时内执行，不保证精确到分钟。</p>
 			</div>
 
 			<div class="space-y-1.5">
