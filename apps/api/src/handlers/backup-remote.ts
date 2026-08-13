@@ -1,6 +1,5 @@
 import { vValidator } from "@hono/valibot-validator";
 import { factory } from "../http/factory";
-import { safeWriteAuditEvent } from "../services/audit";
 import {
 	BackupRemoteFileQuerySchema,
 	BackupRemoteQuerySchema,
@@ -188,15 +187,6 @@ export const restoreRemoteBackup = factory.createHandlers(
 				async () => requireDataOperationLeaseRenewal(c.env.DB, lease),
 				file.fileName,
 			);
-			await safeWriteAuditEvent(c.get("db"), {
-				actorUserId: imported.auditActorUserId,
-				action: "backup.restored_remote",
-				category: "system",
-				level: "warning",
-				targetType: "backup",
-				targetId: file.fileName,
-				metadata: { fileName: file.fileName, status: "success" },
-			});
 			return c.json(imported.result);
 		} catch (error: any) {
 			return errorResponse(

@@ -545,6 +545,48 @@ describe("Edgewarden API", () => {
 				.bind(postBackupAuditId, postBackupActorId, postBackupTargetId)
 				.first(),
 		);
+		await testDatabase
+			.prepare(`
+				CREATE TRIGGER test_fail_restore_audit
+				BEFORE INSERT ON audit_logs
+				WHEN NEW.action = 'backup.restored'
+				BEGIN
+					SELECT RAISE(ABORT, 'forced restore audit failure');
+				END
+			`)
+			.run();
+		try {
+			await assert.rejects(
+				importBackupArchiveBytes(
+					archive.bytes,
+					testDatabase,
+					blobStore,
+					DATA_ENCRYPTION_SECRET,
+					owner.id,
+					true,
+				),
+				/forced restore audit failure/,
+			);
+		} finally {
+			await testDatabase
+				.prepare("DROP TRIGGER IF EXISTS test_fail_restore_audit")
+				.run();
+		}
+		assert.deepEqual(new Set(r2Values.keys()), originalObjectKeys);
+		assert.ok(
+			await testDatabase
+				.prepare("SELECT 1 FROM audit_logs WHERE id = ?")
+				.bind(postBackupOrdinaryAuditId)
+				.first(),
+		);
+		assert.ok(
+			await testDatabase
+				.prepare(
+					"SELECT 1 FROM audit_logs WHERE id = ? AND actor_user_id = ? AND target_id = ? AND is_tombstone = 1",
+				)
+				.bind(postBackupAuditId, postBackupActorId, postBackupTargetId)
+				.first(),
+		);
 		const r2 = bindings.ATTACHMENTS_R2 as R2Bucket;
 		const originalDelete = r2.delete.bind(r2);
 		r2.delete = async (key: string | string[]) => {
@@ -649,6 +691,18 @@ describe("Edgewarden API", () => {
 					"SELECT 1 FROM audit_logs WHERE id = ? AND actor_user_id IS NULL AND target_id = ? AND is_tombstone = 1",
 				)
 				.bind(postBackupAuditId, postBackupTargetId)
+				.first(),
+		);
+		assert.ok(
+			await testDatabase
+				.prepare(`
+					SELECT 1 FROM audit_logs
+					WHERE action = 'backup.restored'
+					  AND actor_user_id = ?
+					  AND target_id = 'edgewarden_backup.zip'
+					  AND json_extract(metadata, '$.status') = 'success'
+				`)
+				.bind(owner.id)
 				.first(),
 		);
 		assert.equal(

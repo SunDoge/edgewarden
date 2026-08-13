@@ -155,7 +155,11 @@ export async function importBackupArchiveBytes(
 			stageDetail: "txt_backup_restore_progress_local_finalize_detail",
 			replaceExisting,
 		});
-		await swapShadowTablesIntoPlace(dbBinding, previousBlobKeys);
+		await swapShadowTablesIntoPlace(dbBinding, previousBlobKeys, {
+			actorUserId,
+			action: "backup.restored",
+			fileName,
+		});
 		invalidateAllAuthCaches();
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);
 		await drainRestoreBlobGc(dbBinding, blobStore).catch(() => undefined);
@@ -172,7 +176,6 @@ export async function importBackupArchiveBytes(
 		});
 		return buildImportExecutionResult(
 			db,
-			actorUserId,
 			restored.restoredAttachments.length,
 			(db.sends || []).length - failedFileSendRows.length,
 			restored.restoredFileSends.length,
@@ -323,7 +326,11 @@ export async function importRemoteBackupArchiveBytes(
 			stageDetail: "txt_backup_restore_progress_remote_finalize_detail",
 			replaceExisting,
 		});
-		await swapShadowTablesIntoPlace(dbBinding, previousBlobKeys);
+		await swapShadowTablesIntoPlace(dbBinding, previousBlobKeys, {
+			actorUserId,
+			action: "backup.restored_remote",
+			fileName,
+		});
 		invalidateAllAuthCaches();
 		await resetRestoreArtifacts(dbBinding).catch(() => undefined);
 		await drainRestoreBlobGc(dbBinding, blobStore).catch(() => undefined);
@@ -341,7 +348,6 @@ export async function importRemoteBackupArchiveBytes(
 
 		return buildImportExecutionResult(
 			db,
-			actorUserId,
 			restored.restoredAttachments.length,
 			(db.sends || []).length - failedFileSendRows.length,
 			restored.restoredFileSends.length,
