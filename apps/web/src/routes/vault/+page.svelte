@@ -3,12 +3,12 @@ import { CipherType } from "@edgewarden/shared";
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
-import VaultDialogs from "$lib/components/vault/VaultDialogs.svelte";
 import VaultDetailPanel from "$lib/components/vault/VaultDetailPanel.svelte";
+import VaultDialogs from "$lib/components/vault/VaultDialogs.svelte";
+import VaultFolderSidebar from "$lib/components/vault/VaultFolderSidebar.svelte";
 import VaultHeader from "$lib/components/vault/VaultHeader.svelte";
 import VaultItemList from "$lib/components/vault/VaultItemList.svelte";
 import VaultSidebar from "$lib/components/vault/VaultSidebar.svelte";
-import VaultFolderSidebar from "$lib/components/vault/VaultFolderSidebar.svelte";
 import { formatTime } from "$lib/i18n/format";
 import { m } from "$lib/paraglide/messages.js";
 import {
@@ -20,11 +20,11 @@ import {
 	restoreCipherApi,
 	unarchiveCipherApi,
 } from "$lib/services/api";
+import { calcTotpNow } from "$lib/services/crypto";
 import {
 	downloadVaultAttachment,
 	uploadVaultAttachment,
 } from "$lib/services/vault-attachments";
-import { calcTotpNow } from "$lib/services/crypto";
 import {
 	applyVaultBulkAction,
 	saveVaultCipher,
@@ -36,18 +36,20 @@ import {
 	vaultCipherToEditorForm,
 } from "$lib/services/vault-editor";
 import {
+	type DuplicateMode,
+	filterAndSortVaultItems,
+	findDuplicateCipherGroups,
+	findDuplicateCipherIds,
+	findRedundantDuplicateCipherIds,
+	type VaultCategory,
+	type VaultSort,
+} from "$lib/services/vault-filter";
+import {
 	type FolderEditorMode,
 	removeAllVaultFolders,
 	removeVaultFolder,
 	saveVaultFolder,
 } from "$lib/services/vault-folder-actions";
-import {
-	type DuplicateMode,
-	filterAndSortVaultItems,
-	findDuplicateCipherIds,
-	type VaultCategory,
-	type VaultSort,
-} from "$lib/services/vault-filter";
 import {
 	getOrganizationKey,
 	logout,
@@ -222,6 +224,9 @@ let selectedIdList = $derived(
 );
 let duplicateCount = $derived(
 	findDuplicateCipherIds(vault.ciphers, duplicateMode).size,
+);
+let duplicateGroupCount = $derived(
+	findDuplicateCipherGroups(vault.ciphers, duplicateMode).length,
 );
 
 async function handleLogout() {
@@ -448,6 +453,14 @@ function clearSelection() {
 	selectedIds = {};
 }
 
+function selectRedundantDuplicates() {
+	selectedIds = Object.fromEntries(
+		[...findRedundantDuplicateCipherIds(vault.ciphers, duplicateMode)].map(
+			(id) => [id, true],
+		),
+	);
+}
+
 async function runBulkAction(action: VaultBulkAction) {
 	if (!selectedIdList.length) return;
 	const items = selectedIdList
@@ -569,6 +582,7 @@ async function toggleFavorite(item: any) {
 			isSyncing={vault.isSyncing}
 			error={vault.error}
 			{activeCategory}
+			{duplicateGroupCount}
 			bind:searchQuery
 			bind:duplicateMode
 			bind:sortMode
@@ -578,6 +592,7 @@ async function toggleFavorite(item: any) {
 			onToggleSelection={toggleSelection}
 			onBulkAction={runBulkAction}
 			onClearSelection={clearSelection}
+			onSelectRedundant={selectRedundantDuplicates}
 			onMove={() => { moveFolderId = null; moveDialogOpen = true; }}
 			onSelectItem={() => mobileDetailOpen = true}
 		/>

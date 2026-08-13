@@ -13,6 +13,7 @@ import {
 import * as Alert from "$lib/components/ui/alert/index.js";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
+import { m } from "$lib/paraglide/messages.js";
 import type {
 	DuplicateMode,
 	VaultCategory,
@@ -23,13 +24,13 @@ import {
 	cipherTypeIcon,
 	cipherTypeName,
 } from "$lib/services/vault-item-display";
-import { m } from "$lib/paraglide/messages.js";
 
 let {
 	items,
 	isSyncing,
 	error,
 	activeCategory,
+	duplicateGroupCount,
 	searchQuery = $bindable(),
 	duplicateMode = $bindable(),
 	sortMode = $bindable(),
@@ -39,6 +40,7 @@ let {
 	onToggleSelection,
 	onBulkAction,
 	onClearSelection,
+	onSelectRedundant,
 	onMove,
 	onSelectItem,
 }: {
@@ -46,6 +48,7 @@ let {
 	isSyncing: boolean;
 	error: string | null;
 	activeCategory: VaultCategory;
+	duplicateGroupCount: number;
 	searchQuery: string;
 	duplicateMode: DuplicateMode;
 	sortMode: VaultSort;
@@ -57,6 +60,7 @@ let {
 		action: "restore" | "permanent" | "unarchive" | "delete" | "archive",
 	) => void;
 	onClearSelection: () => void;
+	onSelectRedundant: () => void;
 	onMove: () => void;
 	onSelectItem?: (item: any) => void;
 } = $props();
@@ -105,6 +109,14 @@ function hideBrokenIcon(event: Event) {
 			{#if activeCategory === "duplicates"}<select bind:value={duplicateMode} aria-label="重复检测方式" class="h-9 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm sm:flex-none"><option value="exact">完全相同</option><option value="login-site">网站、账号和密码</option><option value="login-credentials">账号和密码</option><option value="password">密码复用</option></select>{/if}
 			<select bind:value={sortMode} aria-label="排序方式" class="h-9 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm sm:flex-none"><option value="edited">最近修改</option><option value="created">最近创建</option><option value="name">名称</option></select>
 		</div>
+		{#if activeCategory === "duplicates" && duplicateGroupCount > 0}
+			<div class="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+				<span>共 {duplicateGroupCount} 组、{items.length} 项；每组应至少保留一项。</span>
+				{#if duplicateMode === "exact"}
+					<Button size="sm" variant="outline" onclick={onSelectRedundant}>选择每组除最新外的项目</Button>
+				{/if}
+			</div>
+		{/if}
 		{#if selectedCount}
 			<div class="flex flex-wrap items-center gap-2 text-sm">
 				<span>已选择 {selectedCount} 项</span>

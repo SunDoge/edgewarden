@@ -1,7 +1,15 @@
 <script lang="ts">
+import {
+	ArrowLeft,
+	CheckCircle,
+	Download,
+	FileCode,
+	ShieldAlert,
+	Upload,
+} from "@lucide/svelte";
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
-import { vault, syncVaultData } from "$lib/stores/vault.svelte";
+import { Button } from "$lib/components/ui/button/index.js";
 import { importCiphersApi } from "$lib/services/api";
 import {
 	buildBitwardenCsv,
@@ -9,20 +17,13 @@ import {
 	buildPlainExportDocument,
 	deduplicateTransferDocument,
 	encryptTransferDocument,
+	type ImportDeduplicationResult,
 	inspectEncryptedVaultImport,
 	parseVaultImport,
 	parseVaultImportFile,
 	type TransferDocument,
 } from "$lib/services/vault-transfer";
-import { Button } from "$lib/components/ui/button/index.js";
-import {
-	ArrowLeft,
-	Download,
-	Upload,
-	ShieldAlert,
-	FileCode,
-	CheckCircle,
-} from "@lucide/svelte";
+import { syncVaultData, vault } from "$lib/stores/vault.svelte";
 
 let errorMsg = $state("");
 let successMsg = $state("");
@@ -33,6 +34,10 @@ let files = $state<FileList | null>(null);
 let importFormat = $state<"json" | "csv">("json");
 let exportFormat = $state<"json" | "csv">("json");
 let pendingImport = $state<TransferDocument | null>(null);
+let deduplicationReview = $state<{
+	original: TransferDocument;
+	result: ImportDeduplicationResult;
+} | null>(null);
 let encryptedImport = $state(false);
 let importPassword = $state("");
 const MAX_IMPORT_BYTES = 32 * 1024 * 1024;
@@ -82,6 +87,7 @@ function handleExport() {
 async function prepareImport() {
 	errorMsg = "";
 	pendingImport = null;
+	deduplicationReview = null;
 	encryptedImport = false;
 	importPassword = "";
 	if (!files?.[0]) return;
@@ -111,13 +117,14 @@ async function prepareImport() {
 function resetImportSelection() {
 	files = null;
 	pendingImport = null;
+	deduplicationReview = null;
 	encryptedImport = false;
 	importPassword = "";
 	errorMsg = "";
 }
 
 // Client-side import function
-async function handleImport() {
+async function handleImport(strategy?: "skip" | "all") {
 	errorMsg = "";
 	successMsg = "";
 
@@ -131,6 +138,7 @@ async function handleImport() {
 	importProgressLabel = "正在读取并解密导出文件…";
 	try {
 		const importedData =
+			deduplicationReview?.original ??
 			pendingImport ??
 			(await parseVaultImportFile(
 				await files[0].text(),
@@ -151,30 +159,20 @@ async function handleImport() {
 		);
 		importProgress = 12;
 		importProgressLabel = "正在检测重复条目…";
-		const deduplicated = deduplicateTransferDocument(
-			importedData,
-			existingData,
-		);
-		let documentToImport = importedData;
-		if (deduplicated.duplicateItems > 0 || deduplicated.duplicateFolders > 0) {
-			const details = [
-				deduplicated.duplicateItems > 0
-					? `${deduplicated.duplicateItems} 个重复密码项`
-					: "",
-				deduplicated.duplicateFolders > 0
-					? `${deduplicated.duplicateFolders} 个重复空文件夹`
-					: "",
-			]
-				.filter(Boolean)
-				.join("和");
-			if (
-				confirm(
-					`检测到${details}。\n\n点击“确定”跳过重复内容；点击“取消”仍然全部导入。`,
-				)
-			) {
-				documentToImport = deduplicated.document;
-			}
+		const deduplicated =
+			deduplicationReview?.result ??
+			deduplicateTransferDocument(importedData, existingData);
+		if (
+			strategy == null &&
+			(deduplicated.duplicateItems > 0 || deduplicated.duplicateFolders > 0)
+		) {
+			deduplicationReview = { original: importedData, result: deduplicated };
+			importProgress = 12;
+			importProgressLabel = "重复项检测完成，等待选择";
+			return;
 		}
+		const documentToImport =
+			strategy === "all" ? importedData : deduplicated.document;
 
 		if (
 			documentToImport.folders.length === 0 &&
@@ -183,6 +181,7 @@ async function handleImport() {
 			successMsg = `没有导入数据：${deduplicated.duplicateItems} 个密码项均已存在。`;
 			files = null;
 			pendingImport = null;
+			deduplicationReview = null;
 			encryptedImport = false;
 			importPassword = "";
 			return;
@@ -213,6 +212,7 @@ async function handleImport() {
 		successMsg = `导入成功！已成功导入 ${encryptedPayload.folders.length} 个文件夹和 ${encryptedPayload.ciphers.length} 个密码项。`;
 		files = null;
 		pendingImport = null;
+		deduplicationReview = null;
 		encryptedImport = false;
 		importPassword = "";
 	} catch (e: any) {
@@ -302,13 +302,23 @@ async function handleImport() {
 						/>
 					</div>
 
-						{#if pendingImport}<div class="rounded-md border bg-muted p-3 text-xs"><p class="font-medium">导入预览</p><p>{pendingImport.folders.length} 个文件夹，{pendingImport.items.length} 个条目</p>{#if pendingImport.warnings.length}<p class="mt-1 text-amber-600">{pendingImport.warnings.length} 条格式警告</p>{/if}</div>{/if}
+					{#if pendingImport}<div class="rounded-md border bg-muted p-3 text-xs"><p class="font-medium">导入预览</p><p>{pendingImport.folders.length} 个文件夹，{pendingImport.items.length} 个条目</p>{#if pendingImport.warnings.length}<p class="mt-1 text-amber-600">{pendingImport.warnings.length} 条格式警告</p>{/if}</div>{/if}
 						{#if encryptedImport}<div class="space-y-1.5"><label for="import-password" class="text-xs font-semibold text-slate-400">加密导出密码</label><input id="import-password" type="password" autocomplete="off" bind:value={importPassword} class="h-9 w-full rounded-md border bg-background px-3 text-sm" placeholder="仅在浏览器内用于解密" /><p class="text-[10px] text-slate-400">密码和解密后的内容不会发送到服务器。</p></div>{/if}
+					{#if deduplicationReview}
+						<div class="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100" role="alert">
+							<p class="font-semibold">写入前检测到重复内容</p>
+							<p>已有或文件内重复密码项 {deduplicationReview.result.duplicateItems} 个，重复空文件夹 {deduplicationReview.result.duplicateFolders} 个。请选择本次导入方式：</p>
+							<div class="flex flex-col gap-2 sm:flex-row">
+								<Button size="sm" disabled={importing} onclick={() => handleImport("skip")}>跳过重复项并导入</Button>
+								<Button size="sm" variant="outline" disabled={importing} onclick={() => handleImport("all")}>仍然全部导入</Button>
+							</div>
+						</div>
+					{/if}
 
 					<Button
 						class="w-full bg-primary font-semibold py-2"
-						disabled={importing || (!pendingImport && !(encryptedImport && importPassword))}
-						onclick={handleImport}
+						disabled={importing || !!deduplicationReview || (!pendingImport && !(encryptedImport && importPassword))}
+						onclick={() => handleImport()}
 					>
 						{#if importing}
 							<div class="size-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2"></div>

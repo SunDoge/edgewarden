@@ -135,6 +135,52 @@ describe("vault import and export", () => {
 		expect(result.document.items).toEqual([item]);
 	});
 
+	it("treats Bitwarden empty defaults as the same item after a sync round trip", () => {
+		const result = deduplicateTransferDocument(
+			{
+				folders: [],
+				warnings: [],
+				items: [
+					{
+						type: CipherType.Login,
+						name: "Example",
+						notes: "",
+						fields: [],
+						passwordHistory: [],
+						login: {
+							username: "alice",
+							password: "secret",
+							totp: null,
+							uris: [{ uri: "https://example.com", match: null }],
+							fido2Credentials: [],
+						},
+					},
+				],
+			},
+			{
+				folders: [],
+				warnings: [],
+				items: [
+					{
+						type: CipherType.Login,
+						name: "Example",
+						notes: null,
+						fields: null,
+						passwordHistory: null,
+						login: {
+							username: "alice",
+							password: "secret",
+							uris: [{ uri: "https://example.com" }],
+						},
+					},
+				],
+			},
+		);
+
+		expect(result.duplicateItems).toBe(1);
+		expect(result.document.items).toEqual([]);
+	});
+
 	it("exports all type data without wrapped encryption keys or trashed items", () => {
 		const items = [
 			{
@@ -354,7 +400,8 @@ describe("vault import and export", () => {
 	it("encrypts every sensitive import value before building the API payload", async () => {
 		const encKey = crypto.getRandomValues(new Uint8Array(32));
 		const macKey = crypto.getRandomValues(new Uint8Array(32));
-		const progress: Array<{ processed: number; total: number; kind: string }> = [];
+		const progress: Array<{ processed: number; total: number; kind: string }> =
+			[];
 		const payload = await encryptTransferDocument(
 			{
 				folders: [{ id: "folder-1", name: "Secret folder" }],
