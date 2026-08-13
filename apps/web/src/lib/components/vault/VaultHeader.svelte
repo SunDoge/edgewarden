@@ -4,6 +4,7 @@ import { Button } from "$lib/components/ui/button/index.js";
 import { formatTime } from "$lib/i18n/format";
 import { m } from "$lib/paraglide/messages.js";
 import { syncVaultData, vault } from "$lib/stores/vault.svelte";
+import ThemeToggle from "$lib/components/theme-toggle.svelte";
 
 let {
 	onOpenNavigation,
@@ -28,6 +29,7 @@ let {
 	<div class="flex items-center gap-2">
 		{#if vault.syncedAt}<span class="hidden text-xs text-slate-400 sm:block">{vault.isOffline ? m.vault_cached_at({ time: formatTime(vault.syncedAt) }) : m.vault_synced_at({ time: formatTime(vault.syncedAt) })}</span>{/if}
 		<Button variant="ghost" size="sm" onclick={() => syncVaultData()} disabled={vault.isSyncing} class="text-slate-500" aria-label={m.vault_sync()}><RefreshCw class="size-4 {vault.isSyncing ? 'animate-spin' : ''}" /></Button>
+		<ThemeToggle />
 		<Button variant="ghost" size="sm" onclick={onLogout} class="text-muted-foreground" aria-label={m.vault_lock_and_logout()}><LogOut /><span class="hidden sm:inline">{m.vault_lock_and_logout()}</span></Button>
 	</div>
 </header>

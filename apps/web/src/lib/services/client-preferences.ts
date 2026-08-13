@@ -54,6 +54,13 @@ export function resolveDarkTheme(
 	return preference === "dark" || (preference === "system" && systemDark);
 }
 
+export function toggledThemePreference(
+	preference: ThemePreference,
+	systemDark: boolean,
+): Exclude<ThemePreference, "system"> {
+	return resolveDarkTheme(preference, systemDark) ? "light" : "dark";
+}
+
 export function applyThemePreference(
 	preference: ThemePreference,
 	root: HTMLElement = document.documentElement,

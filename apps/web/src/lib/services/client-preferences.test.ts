@@ -4,6 +4,7 @@ import {
 	loadClientPreferences,
 	resolveDarkTheme,
 	saveClientPreferences,
+	toggledThemePreference,
 } from "./client-preferences";
 
 describe("client preferences", () => {
@@ -39,5 +40,12 @@ describe("client preferences", () => {
 		expect(resolveDarkTheme("system", false)).toBe(false);
 		expect(resolveDarkTheme("light", true)).toBe(false);
 		expect(resolveDarkTheme("dark", false)).toBe(true);
+	});
+
+	it("toggles from the currently rendered theme", () => {
+		expect(toggledThemePreference("system", true)).toBe("light");
+		expect(toggledThemePreference("system", false)).toBe("dark");
+		expect(toggledThemePreference("light", true)).toBe("dark");
+		expect(toggledThemePreference("dark", false)).toBe("light");
 	});
 });
