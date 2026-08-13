@@ -122,10 +122,16 @@ export async function unarchiveCiphersApi(ids: string[]): Promise<void> {
 	rpcVoid(await rpc.api.ciphers.unarchive.$put({ json: { ids } }));
 }
 
+export async function moveCiphersApi(
+	ids: string[],
+	folderId: string | null,
+): Promise<void> {
+	if (!ids.length) return;
+	rpcVoid(await rpc.api.ciphers.move.$put({ json: { ids, folderId } }));
+}
+
 export async function hardDeleteCiphersApi(ids: string[]): Promise<void> {
-	rpcVoid(
-		await rpc.api.ciphers["delete-permanent"].$post({ json: { ids } }),
-	);
+	rpcVoid(await rpc.api.ciphers["delete-permanent"].$post({ json: { ids } }));
 }
 
 export async function createAttachmentApi(

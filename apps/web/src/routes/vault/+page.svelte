@@ -46,6 +46,8 @@ import {
 } from "$lib/services/vault-filter";
 import {
 	type FolderEditorMode,
+	findDuplicateFolderGroups,
+	mergeDuplicateVaultFolders,
 	removeAllVaultFolders,
 	removeVaultFolder,
 	saveVaultFolder,
@@ -87,6 +89,7 @@ let targetFolder = $state<any | null>(null);
 let deleteFolderDialogOpen = $state(false);
 let deleteFolderLoading = $state(false);
 let deleteAllFoldersDialogOpen = $state(false);
+let mergingDuplicateFolders = $state(false);
 
 function openCreateFolder() {
 	folderDialogMode = "create";
@@ -228,6 +231,40 @@ let duplicateCount = $derived(
 let duplicateGroupCount = $derived(
 	findDuplicateCipherGroups(vault.ciphers, duplicateMode).length,
 );
+let duplicateFolderCount = $derived(
+	findDuplicateFolderGroups(vault.folders).reduce(
+		(count, group) => count + group.length - 1,
+		0,
+	),
+);
+
+async function mergeDuplicateFolders() {
+	if (
+		!duplicateFolderCount ||
+		!confirm(
+			`合并 ${duplicateFolderCount} 个同名重复文件夹？其中的密码项会移动到最近修改的同名文件夹，不会删除密码项。`,
+		)
+	)
+		return;
+	mergingDuplicateFolders = true;
+	try {
+		const result = await mergeDuplicateVaultFolders(
+			vault.folders,
+			vault.ciphers,
+		);
+		activeFolder = null;
+		await syncVaultData();
+		alert(
+			`已合并 ${result.mergedFolders} 个重复文件夹，移动 ${result.movedItems} 个密码项。`,
+		);
+	} catch (error) {
+		alert(
+			`合并重复文件夹失败：${error instanceof Error ? error.message : error}`,
+		);
+	} finally {
+		mergingDuplicateFolders = false;
+	}
+}
 
 async function handleLogout() {
 	await logout();
@@ -564,6 +601,9 @@ async function toggleFavorite(item: any) {
 				onRenameFolder={openRenameFolder}
 				onDeleteFolder={openDeleteFolder}
 				onDeleteAllFolders={() => (deleteAllFoldersDialogOpen = true)}
+				onMergeDuplicateFolders={mergeDuplicateFolders}
+				{duplicateFolderCount}
+				{mergingDuplicateFolders}
 				onNavigate={() => mobileSidebarOpen = false}
 			/>
 			<VaultFolderSidebar
@@ -573,6 +613,9 @@ async function toggleFavorite(item: any) {
 				onRenameFolder={openRenameFolder}
 				onDeleteFolder={openDeleteFolder}
 				onDeleteAllFolders={() => (deleteAllFoldersDialogOpen = true)}
+				onMergeDuplicateFolders={mergeDuplicateFolders}
+				{duplicateFolderCount}
+				{mergingDuplicateFolders}
 			/>
 		</div>
 

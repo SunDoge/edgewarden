@@ -42,7 +42,12 @@ export const MoveCiphersSchema = v.object({
 
 export const CipherImportSchema = v.object({
 	folders: v.optional(
-		v.array(v.object({ name: v.pipe(v.string(), v.minLength(1)) })),
+		v.array(
+			v.object({
+				id: v.optional(v.pipe(v.string(), v.minLength(1))),
+				name: v.pipe(v.string(), v.minLength(1)),
+			}),
+		),
 		[],
 	),
 	ciphers: v.optional(

@@ -1,8 +1,9 @@
 <script lang="ts">
 import type { FolderResponse } from "@edgewarden/shared";
-import { Edit, Folder, Plus, Trash2 } from "@lucide/svelte";
-import { vault } from "$lib/stores/vault.svelte";
+import { Combine, Edit, Folder, Plus, Trash2 } from "@lucide/svelte";
+import { Button } from "$lib/components/ui/button/index.js";
 import type { VaultCategory } from "$lib/services/vault-filter";
+import { vault } from "$lib/stores/vault.svelte";
 import { cn } from "$lib/utils";
 
 let {
@@ -12,6 +13,9 @@ let {
 	onRenameFolder,
 	onDeleteFolder,
 	onDeleteAllFolders,
+	onMergeDuplicateFolders,
+	duplicateFolderCount,
+	mergingDuplicateFolders,
 }: {
 	activeCategory: VaultCategory;
 	activeFolder: string | null;
@@ -19,6 +23,9 @@ let {
 	onRenameFolder: (folder: FolderResponse) => void;
 	onDeleteFolder: (folder: FolderResponse) => void;
 	onDeleteAllFolders: () => void;
+	onMergeDuplicateFolders: () => void;
+	duplicateFolderCount: number;
+	mergingDuplicateFolders: boolean;
 } = $props();
 
 function selectFolder(folderId: string | null) {
@@ -31,6 +38,9 @@ function selectFolder(folderId: string | null) {
 	<header class="flex h-14 items-center justify-between border-b px-4">
 		<h2 class="text-sm font-semibold">文件夹</h2>
 		<div class="flex items-center gap-1">
+			{#if duplicateFolderCount}
+				<Button variant="ghost" size="icon-sm" onclick={onMergeDuplicateFolders} disabled={mergingDuplicateFolders} title={`合并 ${duplicateFolderCount} 个同名重复文件夹`} aria-label="合并同名重复文件夹"><Combine /></Button>
+			{/if}
 			{#if vault.folders.length}
 				<button class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive" onclick={onDeleteAllFolders} title="删除全部文件夹" aria-label="删除全部文件夹"><Trash2 class="size-4" /></button>
 			{/if}

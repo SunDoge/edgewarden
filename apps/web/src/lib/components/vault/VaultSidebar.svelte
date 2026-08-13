@@ -3,6 +3,7 @@ import type { FolderResponse } from "@edgewarden/shared";
 import {
 	Archive,
 	Building2,
+	Combine,
 	Copy,
 	CreditCard,
 	Database,
@@ -39,6 +40,9 @@ let {
 	onRenameFolder,
 	onDeleteFolder,
 	onDeleteAllFolders,
+	onMergeDuplicateFolders,
+	duplicateFolderCount,
+	mergingDuplicateFolders,
 	onNavigate,
 }: {
 	activeCategory: VaultCategory;
@@ -49,6 +53,9 @@ let {
 	onRenameFolder: (folder: FolderResponse) => void;
 	onDeleteFolder: (folder: FolderResponse) => void;
 	onDeleteAllFolders: () => void;
+	onMergeDuplicateFolders: () => void;
+	duplicateFolderCount: number;
+	mergingDuplicateFolders: boolean;
 	onNavigate?: () => void;
 } = $props();
 
@@ -182,6 +189,9 @@ function navigateTo(href: string) {
 		<div class="mb-2 flex items-center justify-between px-3">
 			<p id="folders-heading" class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">文件夹</p>
 			<div class="flex items-center gap-1">
+				{#if duplicateFolderCount}
+					<Button variant="ghost" size="icon-xs" onclick={onMergeDuplicateFolders} disabled={mergingDuplicateFolders} title={`合并 ${duplicateFolderCount} 个同名重复文件夹`} aria-label="合并同名重复文件夹"><Combine /></Button>
+				{/if}
 				{#if vault.folders.length}
 					<button class="rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive" onclick={onDeleteAllFolders} title="删除全部文件夹"><Trash2 class="size-3.5" /></button>
 				{/if}
