@@ -260,8 +260,12 @@ async function buildSyncPayload(c: Context<HonoEnv>) {
 				id: collection.id,
 				organizationId: collection.org_id,
 				name: collection.name,
+				externalId: null,
+				type: 0,
+				defaultUserCollectionEmail: null,
 				readOnly: Boolean(access?.read_only),
 				hidePasswords: Boolean(access?.hide_passwords),
+				manage: false,
 				creationDate: toIso(collection.created_at),
 				revisionDate: toIso(collection.updated_at),
 				object: "collectionDetails",
@@ -295,6 +299,8 @@ async function buildSyncPayload(c: Context<HonoEnv>) {
 
 		sends: sends.map(sendToResponse),
 		unofficialServer: true,
+		// Legacy aliases are retained for older self-hosted clients. The official
+		// SyncResponseModel contract below is the camelCase `userDecryption` field.
 		UserDecryption: {
 			MasterPasswordUnlock: userDecryptionOptions.MasterPasswordUnlock,
 			TrustedDeviceOption: null,
@@ -306,7 +312,7 @@ async function buildSyncPayload(c: Context<HonoEnv>) {
 		},
 		UserDecryptionOptions: userDecryptionOptions,
 		userDecryptionOptions,
-		userDecryption: buildUserDecryptionCompat(user),
+		userDecryption: buildUserDecryptionCompat(user, webAuthnPrfOptions),
 		object: "sync",
 	};
 }
