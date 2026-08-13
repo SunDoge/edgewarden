@@ -1,13 +1,23 @@
 <script lang="ts">
+import {
+	ArrowLeft,
+	Copy,
+	RefreshCw,
+	Search,
+	ShieldAlert,
+	Trash2,
+	UserRoundCog,
+} from "@lucide/svelte";
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
-import { Badge } from "$lib/components/ui/badge/index.js";
 import * as Alert from "$lib/components/ui/alert/index.js";
+import { Badge } from "$lib/components/ui/badge/index.js";
 import { Button } from "$lib/components/ui/button/index.js";
 import * as Field from "$lib/components/ui/field/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import { Switch } from "$lib/components/ui/switch/index.js";
 import * as Table from "$lib/components/ui/table/index.js";
+import { searchAdminUsers } from "$lib/services/admin-search";
 import {
 	createAdminInviteApi,
 	deleteAdminInviteApi,
@@ -20,14 +30,6 @@ import {
 	updateAdminRegistrationPolicyApi,
 } from "$lib/services/api";
 import { vault } from "$lib/stores/vault.svelte";
-import {
-	ArrowLeft,
-	Copy,
-	RefreshCw,
-	ShieldAlert,
-	Trash2,
-	UserRoundCog,
-} from "@lucide/svelte";
 
 let users = $state<any[]>([]);
 let invites = $state<any[]>([]);
@@ -38,6 +40,8 @@ let busy = $state<string | null>(null);
 let error = $state<string | null>(null);
 let signupsAllowed = $state(false);
 let invitationsAllowed = $state(true);
+let userSearchQuery = $state("");
+const filteredUsers = $derived(searchAdminUsers(users, userSearchQuery));
 
 async function refresh() {
 	busy = "refresh";
@@ -113,7 +117,7 @@ onMount(() => {
 
 	<section class="rounded-lg border bg-card p-4"><div class="flex flex-col gap-4"><div><h2 class="font-semibold">注册策略</h2><p class="text-xs text-muted-foreground">修改后立即写入 D1，并覆盖部署变量提供的默认值。</p></div><Field.Group><Field.Field orientation="horizontal"><Field.Content><Field.Label for="public-signups">允许公开注册</Field.Label><Field.Description>无需邀请码即可创建普通账户。</Field.Description></Field.Content><Switch id="public-signups" bind:checked={signupsAllowed} disabled={busy !== null} /></Field.Field><Field.Field orientation="horizontal"><Field.Content><Field.Label for="invite-signups">允许邀请码注册</Field.Label><Field.Description>关闭后，已有邀请码也不能用于注册。</Field.Description></Field.Content><Switch id="invite-signups" bind:checked={invitationsAllowed} disabled={busy !== null} /></Field.Field></Field.Group><Button class="self-start" onclick={saveRegistrationPolicy} disabled={busy !== null || !masterPassword}>保存注册策略</Button></div></section>
 
-	<section class="min-w-0 rounded-lg border bg-card"><header class="flex items-center justify-between gap-3 border-b p-4"><div><h2 class="font-semibold">用户</h2><p class="text-xs text-muted-foreground">{users.length} 个账户</p></div><UserRoundCog /></header><div class="overflow-x-auto"><Table.Root><Table.Header><Table.Row><Table.Head>账户</Table.Head><Table.Head>角色</Table.Head><Table.Head>状态</Table.Head><Table.Head>两步验证</Table.Head><Table.Head class="text-end">操作</Table.Head></Table.Row></Table.Header><Table.Body>{#each users as user (user.id)}<Table.Row><Table.Cell><p class="font-medium">{user.name || "未命名"}</p><p class="text-xs text-muted-foreground">{user.email}</p></Table.Cell><Table.Cell><Badge variant="outline">{user.role}</Badge></Table.Cell><Table.Cell><Badge variant={user.status === "active" ? "secondary" : "destructive"}>{user.status}</Badge></Table.Cell><Table.Cell>{user.twoFactorEnabled ? "已启用" : "未启用"}</Table.Cell><Table.Cell class="text-end"><div class="flex justify-end gap-2"><Button size="sm" variant="outline" disabled={busy !== null || user.id === vault.profile?.id} onclick={() => run(`status-${user.id}`, (hash) => setAdminUserStatusApi(user.id, user.status === "active" ? "banned" : "active", hash))}>{user.status === "active" ? "封禁" : "启用"}</Button><Button size="sm" variant="destructive" disabled={busy !== null || user.id === vault.profile?.id} onclick={() => confirm(`永久删除 ${user.email} 及其全部数据？`) && run(`delete-${user.id}`, (hash) => deleteAdminUserApi(user.id, hash))}><Trash2 data-icon="inline-start" />删除</Button></div></Table.Cell></Table.Row>{/each}</Table.Body></Table.Root></div></section>
+	<section class="min-w-0 rounded-lg border bg-card"><header class="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 class="font-semibold">用户</h2><p class="text-xs text-muted-foreground">{userSearchQuery.trim() ? `${filteredUsers.length} / ${users.length}` : users.length} 个账户</p></div><div class="flex items-center gap-2"><div class="relative min-w-0 sm:w-72"><Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input type="search" class="pl-9" bind:value={userSearchQuery} placeholder="搜索姓名、邮箱、角色或状态" aria-label="搜索用户" /></div><UserRoundCog class="hidden shrink-0 sm:block" /></div></header><div class="overflow-x-auto"><Table.Root><Table.Header><Table.Row><Table.Head>账户</Table.Head><Table.Head>角色</Table.Head><Table.Head>状态</Table.Head><Table.Head>两步验证</Table.Head><Table.Head class="text-end">操作</Table.Head></Table.Row></Table.Header><Table.Body>{#each filteredUsers as user (user.id)}<Table.Row><Table.Cell><p class="font-medium">{user.name || "未命名"}</p><p class="text-xs text-muted-foreground">{user.email}</p></Table.Cell><Table.Cell><Badge variant="outline">{user.role}</Badge></Table.Cell><Table.Cell><Badge variant={user.status === "active" ? "secondary" : "destructive"}>{user.status}</Badge></Table.Cell><Table.Cell>{user.twoFactorEnabled ? "已启用" : "未启用"}</Table.Cell><Table.Cell class="text-end"><div class="flex justify-end gap-2"><Button size="sm" variant="outline" disabled={busy !== null || user.id === vault.profile?.id} onclick={() => run(`status-${user.id}`, (hash) => setAdminUserStatusApi(user.id, user.status === "active" ? "banned" : "active", hash))}>{user.status === "active" ? "封禁" : "启用"}</Button><Button size="sm" variant="destructive" disabled={busy !== null || user.id === vault.profile?.id} onclick={() => confirm(`永久删除 ${user.email} 及其全部数据？`) && run(`delete-${user.id}`, (hash) => deleteAdminUserApi(user.id, hash))}><Trash2 data-icon="inline-start" />删除</Button></div></Table.Cell></Table.Row>{:else}<Table.Row><Table.Cell colspan={5} class="h-24 text-center text-muted-foreground">没有匹配的用户</Table.Cell></Table.Row>{/each}</Table.Body></Table.Root></div></section>
 
 	<section class="min-w-0 rounded-lg border bg-card"><header class="flex flex-col items-stretch justify-between gap-3 border-b p-4 lg:flex-row lg:items-end"><div><h2 class="font-semibold">邀请码</h2><p class="text-xs text-muted-foreground">邀请码只能由指定邮箱注册，创建后会自动复制注册链接。</p></div><div class="grid items-end gap-2 sm:grid-cols-[1fr_7rem_auto]"><Field.Field><Field.Label for="invite-email">受邀邮箱</Field.Label><Input id="invite-email" type="email" bind:value={inviteEmail} placeholder="name@example.com" required /></Field.Field><Field.Field><Field.Label for="invite-hours">有效小时数</Field.Label><Input id="invite-hours" type="number" min="1" max="720" bind:value={expiresInHours} /></Field.Field><Button onclick={createInvite} disabled={busy !== null || !masterPassword || !inviteEmail.trim()}>创建并复制</Button></div></header><div class="overflow-x-auto"><Table.Root><Table.Header><Table.Row><Table.Head>邮箱</Table.Head><Table.Head>状态</Table.Head><Table.Head>到期时间</Table.Head><Table.Head>注册链接</Table.Head><Table.Head class="text-end">操作</Table.Head></Table.Row></Table.Header><Table.Body>{#each invites as invite (invite.code)}<Table.Row><Table.Cell>{invite.email}</Table.Cell><Table.Cell><Badge variant={invite.status === "active" ? "secondary" : "outline"}>{invite.status}</Badge></Table.Cell><Table.Cell>{new Date(invite.expiresAt).toLocaleString("zh-CN")}</Table.Cell><Table.Cell><Button size="sm" variant="ghost" onclick={() => navigator.clipboard.writeText(invite.inviteLink)}><Copy data-icon="inline-start" />复制</Button></Table.Cell><Table.Cell class="text-end"><Button size="sm" variant="destructive" disabled={busy !== null} onclick={() => run(`invite-${invite.code}`, (hash) => deleteAdminInviteApi(invite.code, hash))}><Trash2 data-icon="inline-start" />删除</Button></Table.Cell></Table.Row>{/each}</Table.Body></Table.Root></div></section>
 </div></main>
