@@ -116,7 +116,17 @@ export const createCipher = factory.createHandlers(
 		]);
 
 		const created = await ciphersDb.getCipherById(db, id);
-		return c.json(cipherToResponse(created!, [], collectionIds), 200);
+		if (!created) {
+			console.error(
+				JSON.stringify({
+					event: "cipher.create_readback_missing",
+					cipherId: id,
+					userId: user.id,
+				}),
+			);
+			return errorResponse("Cipher could not be read after creation", 500);
+		}
+		return c.json(cipherToResponse(created, [], collectionIds), 200);
 	},
 );
 
@@ -251,10 +261,20 @@ export const updateCipher = factory.createHandlers(
 			);
 		}
 		const updated = await ciphersDb.getCipherById(db, cipher.id);
+		if (!updated) {
+			console.error(
+				JSON.stringify({
+					event: "cipher.update_readback_missing",
+					cipherId: cipher.id,
+					userId: user.id,
+				}),
+			);
+			return errorResponse("Cipher changed while updating", 409);
+		}
 		return c.json(
 			cipherToResponse(
-				updated!,
-				await attachmentsDb.listByCipherIds(db, [updated!.id]),
+				updated,
+				await attachmentsDb.listByCipherIds(db, [updated.id]),
 				collectionIds,
 			),
 		);
