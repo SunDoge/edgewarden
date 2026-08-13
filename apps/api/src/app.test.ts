@@ -6,7 +6,10 @@ import {
 	buildBackupArchive,
 	parseBackupArchive,
 } from "./services/backup/archive";
-import { importBackupArchiveBytes } from "./services/backup/import";
+import {
+	importBackupArchiveBytes,
+	importRemoteBackupArchiveBytes,
+} from "./services/backup/import";
 import {
 	acquireDataOperationLease,
 	releaseDataOperationLease,
@@ -431,6 +434,37 @@ describe("Edgewarden API", () => {
 				.formatVersion,
 			1,
 		);
+		const externalAttachmentFiles = unzipSync(archive.bytes);
+		delete externalAttachmentFiles[
+			`attachments/${cipherId}/${attachmentId}.bin`
+		];
+		await assert.rejects(
+			importRemoteBackupArchiveBytes(
+				zipSync(externalAttachmentFiles),
+				testDatabase,
+				blobStore,
+				DATA_ENCRYPTION_SECRET,
+				owner.id,
+				true,
+				{
+					loadAttachment: async () => {
+						throw new Error("simulated remote attachment outage");
+					},
+				},
+			),
+			new RegExp(
+				`Unable to load remote backup attachment: attachments/${cipherId}/${attachmentId}\\.bin`,
+			),
+		);
+		assert.equal(
+			await testDatabase
+				.prepare("SELECT storage_key FROM attachments WHERE id = ?")
+				.bind(attachmentId)
+				.first<{ storage_key: string }>()
+				.then((row) => row?.storage_key),
+			originalStorageKey,
+		);
+		assert.deepEqual(r2Values.get(originalStorageKey), attachmentBytes);
 		await testDatabase
 			.prepare(
 				"INSERT INTO users (id,email,master_password_hash,key,kdf_type,kdf_iterations,security_stamp,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",

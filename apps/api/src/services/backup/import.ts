@@ -239,7 +239,7 @@ export async function importRemoteBackupArchiveBytes(
 	dataEncryptionSecret: string,
 	actorUserId: string,
 	replaceExisting: boolean,
-	source: { loadAttachment: (blobName: string) => Promise<Uint8Array | null> },
+	source: { loadAttachment: (blobName: string) => Promise<Uint8Array> },
 	progress?: BackupRestoreProgressReporter,
 	fileName = "edgewarden_backup.zip",
 ): Promise<BackupImportExecutionResult> {
@@ -253,8 +253,13 @@ export async function importRemoteBackupArchiveBytes(
 		const attachmentId = String(row.id || "").trim();
 		const path = `attachments/${cipherId}/${attachmentId}.bin`;
 		if (!parsed.files[path]) {
-			const bytes = await source.loadAttachment(path).catch(() => null);
-			if (bytes) parsed.files[path] = bytes;
+			try {
+				parsed.files[path] = await source.loadAttachment(path);
+			} catch (error) {
+				throw new Error(`Unable to load remote backup attachment: ${path}`, {
+					cause: error,
+				});
+			}
 		}
 	}
 	const prepared = prepareImportPayloadForTarget(
