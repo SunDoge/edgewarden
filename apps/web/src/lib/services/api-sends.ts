@@ -1,5 +1,5 @@
 import type { InferRequestType } from "hono/client";
-import { rpc, rpcJson } from "./rpc";
+import { rpc, rpcJson, rpcVoid } from "./rpc";
 
 type CreateSendPayload = InferRequestType<typeof rpc.api.sends.$post>["json"];
 type CreateFileSendPayload = InferRequestType<
@@ -48,11 +48,11 @@ export async function updateSendApi(
  * 14. Delete a send
  */
 export async function deleteSendApi(id: string): Promise<void> {
-	await rpc.api.sends[":id"].$delete({ param: { id } });
+	rpcVoid(await rpc.api.sends[":id"].$delete({ param: { id } }));
 }
 
 export async function deleteSendsApi(ids: string[]): Promise<void> {
-	await rpcJson(await rpc.api.sends.delete.$post({ json: { ids } }));
+	rpcVoid(await rpc.api.sends.delete.$post({ json: { ids } }));
 }
 
 /**

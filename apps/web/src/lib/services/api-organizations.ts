@@ -1,4 +1,4 @@
-import { rpc, rpcJson } from "./rpc";
+import { rpc, rpcJson, rpcVoid } from "./rpc";
 
 export async function listOrganizationsApi(): Promise<any> {
 	return rpcJson(await rpc.api.organizations.$get());
@@ -30,7 +30,7 @@ export async function deleteOrganizationApi(
 	orgId: string,
 	masterPasswordHash: string,
 ): Promise<void> {
-	await rpcJson(
+	rpcVoid(
 		await rpc.api.organizations[":orgId"].$delete({
 			param: { orgId },
 			json: { masterPasswordHash },
@@ -103,7 +103,7 @@ export async function removeOrganizationMemberApi(
 	orgId: string,
 	memberId: string,
 ): Promise<void> {
-	await rpcJson(
+	rpcVoid(
 		await rpc.api.organizations[":orgId"].members[":memberId"].$delete({
 			param: { orgId, memberId },
 		}),
@@ -149,7 +149,7 @@ export async function deleteOrganizationCollectionApi(
 	orgId: string,
 	collectionId: string,
 ): Promise<void> {
-	await rpcJson(
+	rpcVoid(
 		await rpc.api.organizations[":orgId"].collections[":collectionId"].$delete({
 			param: { orgId, collectionId },
 		}),
