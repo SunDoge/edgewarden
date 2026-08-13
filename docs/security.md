@@ -5,6 +5,7 @@ Edgewarden is zero-knowledge only when clients encrypt sensitive vault fields be
 ## Required practices
 
 - Generate `JWT_SECRET`, `DATA_ENCRYPTION_SECRET`, and `BOOTSTRAP_SECRET` independently. Do not hash them before configuring Worker secrets.
+- Treat the optional `PUSH_INSTALLATION_ID` and `PUSH_INSTALLATION_KEY` as secrets. Use one pair per deployment and never commit them; mobile Push Relay remains disabled unless both are configured.
 - Keep public registration disabled unless needed. Prefer email-bound, single-use invitations and enable Turnstile on login and registration.
 - Use HTTPS only. Refresh credentials for the Web Vault are HttpOnly, Secure on HTTPS, SameSite=Strict cookies; official clients receive protocol-compatible tokens.
 - Treat every backup as sensitive even though vault fields are encrypted. Store it separately from `DATA_ENCRYPTION_SECRET` and test restoration periodically.

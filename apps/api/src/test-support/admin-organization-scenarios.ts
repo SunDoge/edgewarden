@@ -135,6 +135,22 @@ export function registerAdminOrganizationScenarios(
 		).data;
 		const member = userRows.find((user) => user.email === MEMBER_EMAIL);
 		assert.ok(member);
+		const pushRelayStatus = await request("/api/admin/push-relay", {
+			headers: adminAuth,
+		});
+		assert.equal(
+			pushRelayStatus.status,
+			200,
+			await pushRelayStatus.clone().text(),
+		);
+		assert.deepEqual(await pushRelayStatus.json(), {
+			enabled: false,
+			region: "US",
+			installationIdConfigured: false,
+			installationKeyConfigured: false,
+			reason: "missing_credentials",
+			object: "pushRelayStatus",
+		});
 
 		const wrongPassword = await request("/api/admin/invites", {
 			method: "POST",

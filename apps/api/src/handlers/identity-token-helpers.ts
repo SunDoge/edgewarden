@@ -81,7 +81,10 @@ export function readDeviceInfo(body: Record<string, unknown>) {
 		128,
 	);
 	const type = Number(body.deviceType ?? body.DeviceType ?? 0);
-	return { identifier, name, type };
+	const pushToken = String(
+		body.devicePushToken ?? body.DevicePushToken ?? "",
+	).trim();
+	return { identifier, name, type, pushToken: pushToken || null };
 }
 
 export function buildTokenResponse(

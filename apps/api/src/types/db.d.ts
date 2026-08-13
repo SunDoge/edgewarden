@@ -132,6 +132,8 @@ export interface Devices {
 	last_seen_at: number | null;
 	mutation_token: string | null;
 	name: string;
+	push_token: string | null;
+	push_uuid: string | null;
 	session_stamp: string | null;
 	type: number;
 	updated_at: number;

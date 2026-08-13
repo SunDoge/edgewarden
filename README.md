@@ -31,6 +31,8 @@ openssl rand -hex 32
 
 To enable Turnstile for both login and registration, also configure the optional `TURNSTILE_SECRET_KEY` secret and the `TURNSTILE_SITE_KEY` Worker variable. Restrict the widget to the deployed hostname.
 
+To enable background sync notifications in the official Bitwarden Android and iOS apps, request a unique Installation ID and Key from [bitwarden.com/host](https://bitwarden.com/host/), then set `PUSH_INSTALLATION_ID` and `PUSH_INSTALLATION_KEY` as Worker secrets. US is the default; EU installations should also set `PUSH_REGION=EU` as a Worker secret so Git deployments preserve it. Push Relay stays disabled when either credential is absent; its status is visible in the administration page.
+
 Optional deployment settings are documented in [apps/api/README.md](apps/api/README.md#optional-worker-configuration). Most deployments should leave the WebAuthn RP settings unset so passkeys derive the RP ID and origin from the request hostname.
 
 ### Accounts without R2

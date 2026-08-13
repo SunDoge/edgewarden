@@ -25,6 +25,7 @@ import {
 	deleteAdminInvite,
 	deleteAdminInvites,
 	deleteAdminUser,
+	getAdminPushRelayStatus,
 	getAdminRegistrationPolicy,
 	getAuditSettings,
 	listAdminInvites,
@@ -55,6 +56,7 @@ import {
 } from "../handlers/backup";
 import { getEmptyCompatibilityList } from "../handlers/compatibility";
 import {
+	clearDevicePushToken,
 	deleteAllDevices,
 	deleteDevice,
 	deleteDevices,
@@ -63,6 +65,7 @@ import {
 	listDevices,
 	updateDeviceKeys,
 	updateDeviceName,
+	updateDevicePushToken,
 } from "../handlers/devices";
 import { getDomains, updateDomains } from "../handlers/domains";
 import {
@@ -189,6 +192,26 @@ const folderAndDeviceRoutes = new Hono<HonoEnv>()
 	.get("/api/devices/knowndevice", ...getKnownDevice)
 	.get("/api/devices/identifier/:id", requireDevice, ...getDevice)
 	.get("/api/devices/:id", requireDevice, ...getDevice)
+	.post(
+		"/api/devices/identifier/:id/token",
+		requireDevice,
+		...updateDevicePushToken,
+	)
+	.put(
+		"/api/devices/identifier/:id/token",
+		requireDevice,
+		...updateDevicePushToken,
+	)
+	.post(
+		"/api/devices/identifier/:id/clear-token",
+		requireDevice,
+		...clearDevicePushToken,
+	)
+	.put(
+		"/api/devices/identifier/:id/clear-token",
+		requireDevice,
+		...clearDevicePushToken,
+	)
 	.delete("/api/devices/:id", requireDevice, ...deleteDevice)
 	.put("/api/devices/:id/name", requireDevice, ...updateDeviceName)
 	.put("/api/devices/:id/keys", requireDevice, ...updateDeviceKeys)
@@ -224,6 +247,7 @@ const adminRoutes = new Hono<HonoEnv>()
 	.use("/api/admin/*", requireAdmin)
 	.get("/api/admin/users", ...listAdminUsers)
 	.get("/api/admin/registration", ...getAdminRegistrationPolicy)
+	.get("/api/admin/push-relay", ...getAdminPushRelayStatus)
 	.put("/api/admin/registration", ...updateAdminRegistrationPolicy)
 	.put("/api/admin/users/:id/status", ...setAdminUserStatus)
 	.delete("/api/admin/users/:id", ...deleteAdminUser)

@@ -18,6 +18,7 @@ import {
 	hashCredential,
 } from "../services/credential-protection";
 import { conditionalRefreshTokenDeletionQuery } from "../services/db/batch";
+import { getPushRelayStatus } from "../services/push-relay";
 import {
 	loadRegistrationPolicy,
 	REGISTRATION_CONFIG_KEY,
@@ -110,6 +111,10 @@ export const getAdminRegistrationPolicy = factory.createHandlers(async (c) =>
 		...(await loadRegistrationPolicy(c.get("db"), c.env)),
 		object: "registrationPolicy",
 	}),
+);
+
+export const getAdminPushRelayStatus = factory.createHandlers(async (c) =>
+	c.json({ ...getPushRelayStatus(c.env), object: "pushRelayStatus" }),
 );
 
 export const updateAdminRegistrationPolicy = factory.createHandlers(

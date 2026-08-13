@@ -21,6 +21,11 @@ import {
 	loginAttemptIdentifierHash,
 	recordLoginFailure,
 } from "../services/login-attempts";
+import {
+	getPushRelayStatus,
+	logPushRelayFailure,
+	pushDeviceRegistrationFromDatabase,
+} from "../services/push-relay";
 import { turnstileEnabled, verifyTurnstileToken } from "../services/turnstile";
 import { loadYubicoCredentials } from "../services/yubico-config";
 import { identityErrorResponse } from "../utils/response";
@@ -55,6 +60,7 @@ export async function handlePasswordGrant(
 	const twoFactorProvider =
 		body.twoFactorProvider ?? body.TwoFactorProvider ?? "";
 	const deviceInfo = readDeviceInfo(body);
+	if (!getPushRelayStatus(c.env).enabled) deviceInfo.pushToken = null;
 
 	if (turnstileEnabled(c.env)) {
 		const captchaResponse = body.captchaResponse ?? body.CaptchaResponse ?? "";
@@ -301,6 +307,17 @@ export async function handlePasswordGrant(
 		);
 	}
 	const { accessToken, refreshToken } = session;
+	if (deviceInfo.pushToken && session.deviceSession) {
+		c.executionCtx.waitUntil(
+			pushDeviceRegistrationFromDatabase(
+				c.env,
+				user.id,
+				session.deviceSession.identifier,
+			).catch((error) =>
+				logPushRelayFailure("push.device.login-register.failed", error),
+			),
+		);
+	}
 	if (isWebClient(body)) setWebRefreshCookie(c, refreshToken);
 	return c.json(
 		buildTokenResponse(

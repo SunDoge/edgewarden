@@ -7,6 +7,20 @@ export const DeviceNameSchema = v.object({
 	name: v.pipe(nonEmptyString, v.maxLength(128)),
 });
 
+export const DevicePushTokenSchema = v.pipe(
+	v.looseObject({
+		pushToken: v.optional(v.string()),
+		PushToken: v.optional(v.string()),
+	}),
+	v.transform((body) => ({
+		pushToken: String(body.pushToken ?? body.PushToken ?? "").trim(),
+	})),
+	v.check(
+		(body) => body.pushToken.length > 0 && body.pushToken.length <= 4096,
+		"Push token is required",
+	),
+);
+
 export const DeviceKeysSchema = v.pipe(
 	v.looseObject({
 		encryptedUserKey: v.optional(v.string()),

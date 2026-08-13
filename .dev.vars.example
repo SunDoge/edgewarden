@@ -5,5 +5,10 @@ DATA_ENCRYPTION_SECRET=
 # Enter this value once when creating the first administrator account.
 BOOTSTRAP_SECRET=
 
+# Optional Bitwarden mobile Push Relay. Both credentials are required.
+# PUSH_INSTALLATION_ID=
+# PUSH_INSTALLATION_KEY=
+# PUSH_REGION=US
+
 # Optional Cloudflare Turnstile protection for login and registration.
 # TURNSTILE_SECRET_KEY=

@@ -6,6 +6,11 @@ import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import { authenticateApiKey } from "../services/identity-api-key";
 import { refreshIdentitySession } from "../services/identity-refresh";
 import { issueIdentitySession } from "../services/identity-session";
+import {
+	getPushRelayStatus,
+	logPushRelayFailure,
+	pushDeviceRegistrationFromDatabase,
+} from "../services/push-relay";
 import { identityErrorResponse } from "../utils/response";
 import {
 	assertAccountPasskeyCredential,
@@ -99,6 +104,7 @@ export const connectToken = factory.createHandlers(async (c) => {
 		}
 
 		const deviceInfo = readDeviceInfo(body);
+		if (!getPushRelayStatus(c.env).enabled) deviceInfo.pushToken = null;
 		const session = await issueIdentitySession({
 			db,
 			dialect: c.get("dbDialect"),
@@ -115,6 +121,17 @@ export const connectToken = factory.createHandlers(async (c) => {
 		const { accessToken, refreshToken, deviceSession } = session;
 		const webAuthnPrfOption =
 			buildAccountPasskeyTokenUserDecryptionOption(credential);
+		if (deviceInfo.pushToken && deviceSession) {
+			c.executionCtx.waitUntil(
+				pushDeviceRegistrationFromDatabase(
+					c.env,
+					user.id,
+					deviceSession.identifier,
+				).catch((error) =>
+					logPushRelayFailure("push.device.login-register.failed", error),
+				),
+			);
+		}
 
 		await safeWriteAuditEvent(db, {
 			actorUserId: user.id,

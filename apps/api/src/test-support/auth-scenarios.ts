@@ -117,6 +117,7 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
 			deviceIdentifier: "api-test-device",
 			deviceName: "API Test Device",
 			deviceType: "0",
+			DevicePushToken: "must-not-be-stored-while-relay-is-disabled",
 		});
 		const login = await request("/identity/connect/token", {
 			method: "POST",
@@ -132,6 +133,36 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
 		assert.equal(tokenBody.token_type, "Bearer");
 		context.accessToken = tokenBody.access_token;
 		context.refreshToken = tokenBody.refresh_token;
+		assert.deepEqual(
+			await context.database
+				.prepare(
+					"SELECT push_token, push_uuid FROM devices WHERE device_identifier = ?",
+				)
+				.bind("api-test-device")
+				.first(),
+			{ push_token: null, push_uuid: null },
+		);
+		const disabledPushUpdate = await request(
+			"/api/devices/identifier/api-test-device/token",
+			{
+				method: "PUT",
+				headers: {
+					authorization: `Bearer ${context.accessToken}`,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ pushToken: "also-must-not-be-stored" }),
+			},
+		);
+		assert.equal(disabledPushUpdate.status, 200);
+		assert.deepEqual(
+			await context.database
+				.prepare(
+					"SELECT push_token, push_uuid FROM devices WHERE device_identifier = ?",
+				)
+				.bind("api-test-device")
+				.first(),
+			{ push_token: null, push_uuid: null },
+		);
 	});
 
 	test("registers a non-admin account for authorization tests", async () => {
