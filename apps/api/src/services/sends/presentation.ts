@@ -55,7 +55,15 @@ export function parseStoredSendData(
 	send: Pick<StoredSend, "data">,
 ): Record<string, unknown> {
 	try {
-		return JSON.parse(send.data);
+		const data = JSON.parse(send.data) as Record<string, unknown>;
+		if (data.id === undefined && data.Id !== undefined) data.id = data.Id;
+		if (data.size === undefined && data.Size !== undefined)
+			data.size = data.Size;
+		if (data.sizeName === undefined && data.SizeName !== undefined)
+			data.sizeName = data.SizeName;
+		if (data.fileName === undefined && data.FileName !== undefined)
+			data.fileName = data.FileName;
+		return data;
 	} catch {
 		return {};
 	}

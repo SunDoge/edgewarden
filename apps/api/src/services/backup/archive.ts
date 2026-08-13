@@ -5,6 +5,7 @@ import {
 	getStoredAttachmentObjectKey,
 	getStoredSendFileObjectKey,
 } from "../blob-store";
+import { parseStoredSendFileMetadata } from "../sends/file-metadata";
 import {
 	buildBackupFileNameInTimeZone,
 	getBackupArchiveChecksumPrefix,
@@ -209,26 +210,6 @@ function validateArchiveSize(bytes: Uint8Array): void {
 	}
 }
 
-function parseSendFileMetadata(row: SqlRow): {
-	fileId: string;
-	sizeBytes: number;
-} | null {
-	if (Number(row.type) !== 1) return null;
-	try {
-		const data = JSON.parse(String(row.data || "")) as {
-			id?: unknown;
-			size?: unknown;
-		};
-		const fileId = typeof data.id === "string" ? data.id.trim() : "";
-		const sizeBytes = Number(data.size);
-		return fileId && Number.isSafeInteger(sizeBytes) && sizeBytes >= 0
-			? { fileId, sizeBytes }
-			: null;
-	} catch {
-		return null;
-	}
-}
-
 function getRequiredZipEntries(
 	db: BackupPayload["db"],
 	formatVersion: 1 | 2 | 3 | 4,
@@ -244,7 +225,7 @@ function getRequiredZipEntries(
 		for (const row of db.sends || []) {
 			if (Number(row.type) !== 1) continue;
 			const sendId = String(row.id || "").trim();
-			const file = parseSendFileMetadata(row);
+			const file = parseStoredSendFileMetadata(row.data);
 			if (!sendId || !file) {
 				throw new Error("Backup archive contains invalid file Send metadata");
 			}
@@ -281,7 +262,7 @@ function getStrictBlobEntries(db: BackupPayload["db"]): Array<{
 	for (const row of db.sends || []) {
 		if (Number(row.type) !== 1) continue;
 		const sendId = String(row.id || "").trim();
-		const file = parseSendFileMetadata(row);
+		const file = parseStoredSendFileMetadata(row.data);
 		if (!sendId || !file) {
 			throw new Error("Backup archive contains invalid file Send metadata");
 		}
@@ -494,7 +475,7 @@ export async function buildBackupArchive(
 	const sendBlobs = sourceSendRows.flatMap((row) => {
 		if (Number(row.type) !== 1) return [];
 		const sendId = String(row.id || "").trim();
-		const file = parseSendFileMetadata(row as unknown as SqlRow);
+		const file = parseStoredSendFileMetadata(row.data);
 		if (!sendId || !file) {
 			throw new Error(
 				`Backup file Send metadata is invalid: ${sendId || "unknown"}`,

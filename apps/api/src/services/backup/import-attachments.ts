@@ -1,4 +1,5 @@
 import type { BlobStore } from "../blob-store";
+import { parseStoredSendFileMetadata } from "../sends/file-metadata";
 import type { BackupPayload } from "./archive";
 import {
 	ATTACHMENT_RESTORE_FAILED_REASON,
@@ -16,25 +17,6 @@ export function attachmentRowKey(row: SqlRow): string {
 
 export function sendRowKey(row: SqlRow): string {
 	return String(row.id || "").trim();
-}
-
-function sendFileMetadata(
-	row: SqlRow,
-): { fileId: string; sizeBytes: number } | null {
-	if (Number(row.type) !== 1) return null;
-	try {
-		const data = JSON.parse(String(row.data || "")) as {
-			id?: unknown;
-			size?: unknown;
-		};
-		const fileId = typeof data.id === "string" ? data.id.trim() : "";
-		const sizeBytes = Number(data.size);
-		return fileId && Number.isSafeInteger(sizeBytes) && sizeBytes >= 0
-			? { fileId, sizeBytes }
-			: null;
-	} catch {
-		return null;
-	}
 }
 
 export async function restoreBlobFiles(
@@ -68,7 +50,7 @@ export async function restoreBlobFiles(
 							}) as const,
 					),
 					...fileSendRows.map((row) => {
-						const metadata = sendFileMetadata(row);
+						const metadata = parseStoredSendFileMetadata(row.data);
 						return {
 							kind: "sendFile" as const,
 							path: `sends/${row.id}/${metadata?.fileId || "invalid"}`,
@@ -112,7 +94,7 @@ export async function restoreBlobFiles(
 
 	for (const row of fileSendRows) {
 		const sendId = sendRowKey(row);
-		const metadata = sendFileMetadata(row);
+		const metadata = parseStoredSendFileMetadata(row.data);
 		if (!sendId || !metadata) {
 			skippedItems.push({
 				kind: "sendFile",

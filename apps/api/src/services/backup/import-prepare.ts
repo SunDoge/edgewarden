@@ -3,6 +3,7 @@ import {
 	createRestoredSendFileObjectKey,
 	type BlobStore,
 } from "../blob-store";
+import { parseStoredSendFileMetadata } from "../sends/file-metadata";
 import type { BackupPayload } from "./archive";
 import {
 	BACKUP_SETTINGS_CONFIG_KEY,
@@ -26,20 +27,14 @@ function getFileSendPath(
 	row: SqlRow,
 ): { path: string; sizeBytes: number } | null {
 	if (Number(row.type) !== 1) return null;
-	try {
-		const data = JSON.parse(String(row.data || "")) as {
-			id?: unknown;
-			size?: unknown;
-		};
-		const sendId = String(row.id || "").trim();
-		const fileId = typeof data.id === "string" ? data.id.trim() : "";
-		const sizeBytes = Number(data.size);
-		return sendId && fileId && Number.isSafeInteger(sizeBytes) && sizeBytes >= 0
-			? { path: `sends/${sendId}/${fileId}`, sizeBytes }
-			: null;
-	} catch {
-		return null;
-	}
+	const sendId = String(row.id || "").trim();
+	const metadata = parseStoredSendFileMetadata(row.data);
+	return sendId && metadata
+		? {
+				path: `sends/${sendId}/${metadata.fileId}`,
+				sizeBytes: metadata.sizeBytes,
+			}
+		: null;
 }
 
 function upsertConfigRow(rows: SqlRow[], key: string, value: string): SqlRow[] {
@@ -138,19 +133,14 @@ export async function importPreparedBackupRows(
 		}),
 		sends: cloneRows(payload.sends || []).map((row) => {
 			if (Number(row.type) !== 1) return { ...row, storage_key: null };
-			try {
-				const data = JSON.parse(String(row.data || "")) as { id?: unknown };
-				const fileId = typeof data.id === "string" ? data.id.trim() : "";
-				return {
-					...row,
-					storage_key:
-						fileId && row.id
-							? createRestoredSendFileObjectKey(String(row.id), fileId)
-							: null,
-				};
-			} catch {
-				return { ...row, storage_key: null };
-			}
+			const metadata = parseStoredSendFileMetadata(row.data);
+			return {
+				...row,
+				storage_key:
+					metadata?.fileId && row.id
+						? createRestoredSendFileObjectKey(String(row.id), metadata.fileId)
+						: null,
+			};
 		}),
 	};
 	await importBackupRows(db, preparedDb, true);

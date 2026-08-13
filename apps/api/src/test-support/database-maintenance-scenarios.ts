@@ -1353,7 +1353,7 @@ export function registerDatabaseMaintenanceScenarios(
 		const sendId = crypto.randomUUID();
 		const fileId = crypto.randomUUID();
 		const attachmentKey = `attachments/${cipherId}/${attachmentId}.published.bin`;
-		const sendKey = `sends/${sendId}/${fileId}.published.bin`;
+		const sendKey = `sends/${sendId}/${fileId}`;
 		let deleteCalls = 0;
 		const blobStore: BlobStore = {
 			kind: "r2",
@@ -1411,7 +1411,7 @@ export function registerDatabaseMaintenanceScenarios(
 					type: 1,
 					name: "referenced-blob-send",
 					notes: null,
-					data: JSON.stringify({ id: fileId, size: 1 }),
+					data: JSON.stringify({ Id: fileId, Size: 1 }),
 					key: "encrypted-key",
 					password_hash: null,
 					password_salt: null,
@@ -1427,7 +1427,7 @@ export function registerDatabaseMaintenanceScenarios(
 					updated_at: timestamp,
 					expiration_date: null,
 					deletion_date: timestamp,
-					storage_key: sendKey,
+					storage_key: null,
 				})
 				.execute();
 			await db
