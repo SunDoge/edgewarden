@@ -38,10 +38,9 @@ export interface BlobStore {
 	delete(key: string): Promise<void>;
 }
 
-function byteLength(
-	value: string | ArrayBuffer | ArrayBufferView,
-): number {
-	if (typeof value === "string") return new TextEncoder().encode(value).byteLength;
+function byteLength(value: string | ArrayBuffer | ArrayBufferView): number {
+	if (typeof value === "string")
+		return new TextEncoder().encode(value).byteLength;
 	return value.byteLength;
 }
 
@@ -260,10 +259,34 @@ export async function deleteBlobObject(
 	env: CloudflareBindings,
 	key: string,
 ): Promise<void> {
-	await Promise.all([
-		hasR2Storage(env) ? getR2Storage(env).delete(key) : Promise.resolve(),
-		hasKvStorage(env) ? env.ATTACHMENTS_KV.delete(key) : Promise.resolve(),
-	]);
+	const deletions: Array<{ backend: "r2" | "kv"; run: () => Promise<void> }> =
+		[];
+	if (hasR2Storage(env))
+		deletions.push({
+			backend: "r2",
+			run: () => getR2Storage(env).delete(key),
+		});
+	if (hasKvStorage(env))
+		deletions.push({
+			backend: "kv",
+			run: () => env.ATTACHMENTS_KV.delete(key),
+		});
+	const results = await Promise.allSettled(
+		deletions.map(({ run }) => Promise.resolve().then(run)),
+	);
+	const failures = results.flatMap((result, index) =>
+		result.status === "rejected"
+			? [
+					new Error(
+						`Failed to delete ${deletions[index]?.backend || "unknown"} blob: ${key}`,
+						{ cause: result.reason },
+					),
+				]
+			: [],
+	);
+	if (failures.length) {
+		throw new AggregateError(failures, `Failed to delete blob: ${key}`);
+	}
 }
 
 export function createBlobStore(env: CloudflareBindings): BlobStore | null {

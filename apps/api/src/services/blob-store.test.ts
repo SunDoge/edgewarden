@@ -105,6 +105,40 @@ describe("attachment blob storage", () => {
 		assert.equal(r2Values.has("attachment"), false);
 	});
 
+	test("attempts every backend when one blob deletion fails", async () => {
+		const { env, kvValues, r2Values } = storageBindings("r2");
+		const mutableEnv = env as unknown as {
+			ATTACHMENT_STORAGE: string;
+			ATTACHMENTS_R2: { delete: (key: string) => Promise<void> };
+		};
+		const key = "partially-failed-delete";
+		const body = new Uint8Array([1]).buffer;
+		await putBlobObject(env, key, body, { size: body.byteLength });
+		mutableEnv.ATTACHMENT_STORAGE = "kv";
+		await putBlobObject(env, key, body, { size: body.byteLength });
+		const r2 = mutableEnv.ATTACHMENTS_R2;
+		const originalDelete = r2.delete;
+		r2.delete = () => {
+			throw new Error("simulated R2 delete outage");
+		};
+
+		await assert.rejects(deleteBlobObject(env, key), (error: unknown) => {
+			assert.ok(error instanceof AggregateError);
+			assert.match(error.message, /Failed to delete blob/);
+			assert.match(
+				String(error.errors[0]?.cause),
+				/simulated R2 delete outage/,
+			);
+			return true;
+		});
+		assert.equal(r2Values.has(key), true);
+		assert.equal(kvValues.has(key), false);
+
+		r2.delete = originalDelete;
+		await deleteBlobObject(env, key);
+		assert.equal(r2Values.has(key), false);
+	});
+
 	test("rejects a truncated KV stream before storing it", async () => {
 		const { env, kvValues } = storageBindings("kv");
 		const stream = new Response(new Uint8Array([1, 2])).body;
