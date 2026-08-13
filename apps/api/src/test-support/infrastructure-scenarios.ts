@@ -45,6 +45,41 @@ export function registerInfrastructureScenarios(
 		assert.equal(body.featureStates["fill-assist-targeting-rules"], true);
 	});
 
+	test("advertises the current self-hosted client compatibility contract", async () => {
+		const response = await request("https://vault.example.test/config");
+		assert.equal(response.status, 200);
+		const body = await response.json<{
+			version: string;
+			environment: { cloudRegion: string; notifications: string };
+			push: { pushTechnology: number; vapidPublicKey: null };
+			communication: null;
+			settings: {
+				disableUserRegistration: boolean;
+				suppressOnboardingInterstitials: boolean;
+			};
+		}>();
+		assert.equal(body.version, "2026.6.0");
+		assert.deepEqual(body.environment, {
+			cloudRegion: "self-hosted",
+			notifications: "https://vault.example.test/notifications",
+			vault: "https://vault.example.test",
+			api: "https://vault.example.test/api",
+			identity: "https://vault.example.test/identity",
+			icons: "https://vault.example.test",
+			fillAssistRules: "https://vault.example.test/fill-assist/",
+			sso: "",
+		});
+		assert.deepEqual(body.push, {
+			pushTechnology: 0,
+			vapidPublicKey: null,
+		});
+		assert.equal(body.communication, null);
+		assert.deepEqual(body.settings, {
+			disableUserRegistration: false,
+			suppressOnboardingInterstitials: false,
+		});
+	});
+
 	test("reports readiness only when database and blob storage are available", async () => {
 		const ready = await request("/api/health");
 		assert.equal(ready.status, 200, await ready.clone().text());
