@@ -155,7 +155,7 @@ function buildResetImportTargetStatements(
 	db: D1Database,
 ): D1PreparedStatement[] {
 	return [
-		"DELETE FROM audit_logs",
+		"DELETE FROM audit_logs WHERE is_tombstone = 0",
 		"DELETE FROM sends",
 		"DELETE FROM attachments",
 		"DELETE FROM cipher_collections",
@@ -222,6 +222,30 @@ export async function swapShadowTablesIntoPlace(
 		);
 	}
 	for (const table of BACKUP_TABLES) {
+		if (table === "audit_logs") {
+			statements.push(
+				db.prepare(
+					`INSERT OR IGNORE INTO audit_logs SELECT * FROM ${shadowTableName("audit_logs")}`,
+				),
+				db.prepare(`
+					UPDATE audit_logs
+					SET actor_user_id = (
+						SELECT restored.actor_user_id
+						FROM ${shadowTableName("audit_logs")} restored
+						WHERE restored.id = audit_logs.id
+					)
+					WHERE audit_logs.is_tombstone = 1
+					  AND audit_logs.actor_user_id IS NULL
+					  AND EXISTS (
+						SELECT 1
+						FROM ${shadowTableName("audit_logs")} restored
+						WHERE restored.id = audit_logs.id
+						  AND restored.actor_user_id IS NOT NULL
+					  )
+				`),
+			);
+			continue;
+		}
 		statements.push(
 			db.prepare(
 				`INSERT INTO ${table} SELECT * FROM ${shadowTableName(table)}`,

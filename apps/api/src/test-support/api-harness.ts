@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Miniflare } from "miniflare";
+import { unstable_splitSqlQuery } from "wrangler";
 import { app } from "../index";
 
 export interface ApiTestHarness {
@@ -21,22 +22,25 @@ async function applyMigrations(database: D1Database): Promise<void> {
 		dirname(fileURLToPath(import.meta.url)),
 		"../../migrations",
 	);
-	const statements = readdirSync(directory)
+	const migrations = readdirSync(directory)
 		.filter((file) => /^\d+.*\.sql$/.test(file))
 		.sort()
-		.map((file) => readFileSync(resolve(directory, file), "utf8"))
-		.join("\n")
-		.replace(/--.*$/gm, "")
-		.split(";")
-		.map((statement) => statement.trim())
-		.filter(
-			(statement) => statement && !statement.startsWith("PRAGMA foreign_keys"),
-		);
-	for (const [index, statement] of statements.entries()) {
+		.map((file) => ({
+			file,
+			sql: readFileSync(resolve(directory, file), "utf8")
+				.replace(/--.*$/gm, "")
+				.trim(),
+		}));
+	for (const migration of migrations) {
 		try {
-			await database.prepare(statement).run();
+			// Reuse Wrangler's migration parser so trigger bodies and quoted
+			// semicolons behave exactly like they do during deployment.
+			for (const statement of unstable_splitSqlQuery(migration.sql)) {
+				if (statement.startsWith("PRAGMA foreign_keys")) continue;
+				await database.prepare(statement).run();
+			}
 		} catch (error) {
-			throw new Error(`Migration statement ${index + 1} failed: ${statement}`, {
+			throw new Error(`Migration ${migration.file} failed`, {
 				cause: error,
 			});
 		}

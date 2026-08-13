@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { createDatabase } from "../middleware/db";
 import { applyAuditLogRetention, safeWriteAuditEvent } from "../services/audit";
+import {
+	acquireDataOperationLease,
+	releaseDataOperationLease,
+} from "../services/backup/operation-lease";
 import { runMaintenance } from "../services/maintenance";
 
 export interface MaintenanceReliabilityScenarioContext {
@@ -121,6 +125,7 @@ export function registerMaintenanceReliabilityScenarios(
 			await db
 				.deleteFrom("audit_logs")
 				.where("target_id", "in", [cipherId, attachmentId])
+				.where("is_tombstone", "=", 0)
 				.execute();
 			context.r2Values.delete(storageKey);
 			await db.destroy();
@@ -163,6 +168,7 @@ export function registerMaintenanceReliabilityScenarios(
 			await first.db
 				.deleteFrom("audit_logs")
 				.where("target_id", "=", cipherId)
+				.where("is_tombstone", "=", 0)
 				.execute();
 			await first.db.destroy();
 			await second.db.destroy();
@@ -210,6 +216,7 @@ export function registerMaintenanceReliabilityScenarios(
 			await db
 				.deleteFrom("audit_logs")
 				.where("target_id", "=", cipherId)
+				.where("is_tombstone", "=", 0)
 				.execute();
 			await db.destroy();
 		}
@@ -219,6 +226,7 @@ export function registerMaintenanceReliabilityScenarios(
 		const { db } = await createDatabase(context.database);
 		const ordinaryTarget = crypto.randomUUID();
 		const deletedTarget = crypto.randomUUID();
+		const deletedAuditId = crypto.randomUUID();
 		try {
 			await safeWriteAuditEvent(db, {
 				action: "vault.read",
@@ -226,17 +234,81 @@ export function registerMaintenanceReliabilityScenarios(
 				targetType: "cipher",
 				targetId: ordinaryTarget,
 			});
-			await safeWriteAuditEvent(db, {
-				action: "cipher.delete.permanent",
-				category: "vault",
-				targetType: "cipher",
-				targetId: deletedTarget,
-			});
+			await db
+				.insertInto("audit_logs")
+				.values({
+					id: deletedAuditId,
+					actor_user_id: null,
+					action: "cipher.delete.permanent",
+					category: "vault",
+					level: "info",
+					target_type: "cipher",
+					target_id: deletedTarget,
+					metadata: "{}",
+					is_tombstone: 1,
+					created_at: 1,
+				})
+				.execute();
 			await db
 				.updateTable("audit_logs")
 				.set({ created_at: 1 })
-				.where("target_id", "in", [ordinaryTarget, deletedTarget])
+				.where("target_id", "=", ordinaryTarget)
 				.execute();
+
+			await assert.rejects(
+				db
+					.updateTable("audit_logs")
+					.set({ target_id: crypto.randomUUID() })
+					.where("target_id", "=", deletedTarget)
+					.execute(),
+			);
+
+			const restoreLease = await acquireDataOperationLease(
+				context.database,
+				"backup.restore_legacy_test",
+			);
+			assert.ok(restoreLease);
+			try {
+				await context.database.batch([
+					context.database
+						.prepare("DELETE FROM audit_logs WHERE id = ?")
+						.bind(deletedAuditId),
+					context.database
+						.prepare(`
+							INSERT INTO audit_logs (
+								id, actor_user_id, action, category, level,
+								target_type, target_id, metadata, is_tombstone, created_at
+							) VALUES (?, NULL, 'cipher.delete.permanent', 'vault', 'info',
+								'cipher', ?, '{}', 1, 1)
+						`)
+						.bind(deletedAuditId, deletedTarget),
+				]);
+			} finally {
+				await releaseDataOperationLease(context.database, restoreLease);
+			}
+			await assert.rejects(
+				db
+					.deleteFrom("audit_logs")
+					.where("target_id", "=", deletedTarget)
+					.execute(),
+			);
+			await assert.rejects(
+				db
+					.insertInto("audit_logs")
+					.values({
+						id: crypto.randomUUID(),
+						actor_user_id: null,
+						action: "cipher.delete",
+						category: "vault",
+						level: "info",
+						target_type: "cipher",
+						target_id: crypto.randomUUID(),
+						metadata: "{}",
+						is_tombstone: 0,
+						created_at: 1,
+					})
+					.execute(),
+			);
 
 			await applyAuditLogRetention(db, {
 				retentionDays: 7,
@@ -262,7 +334,7 @@ export function registerMaintenanceReliabilityScenarios(
 		} finally {
 			await db
 				.deleteFrom("audit_logs")
-				.where("target_id", "in", [ordinaryTarget, deletedTarget])
+				.where("target_id", "=", ordinaryTarget)
 				.execute();
 			await db.destroy();
 		}
