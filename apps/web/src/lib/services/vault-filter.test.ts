@@ -2,7 +2,9 @@ import { type CipherResponse, CipherType } from "@edgewarden/shared";
 import { describe, expect, it } from "vitest";
 import {
 	filterAndSortVaultItems,
+	findDuplicateCipherGroups,
 	findDuplicateCipherIds,
+	findRedundantDuplicateCipherIds,
 } from "./vault-filter";
 
 function cipher(overrides: Partial<CipherResponse>): CipherResponse {
@@ -146,9 +148,9 @@ describe("vault filtering", () => {
 			name: "Different",
 			login: { username: "other", password: "different", uri: "example.com" },
 		});
-		expect(findDuplicateCipherIds([first, second, third], "login-site")).toEqual(
-			new Set(["first", "second"]),
-		);
+		expect(
+			findDuplicateCipherIds([first, second, third], "login-site"),
+		).toEqual(new Set(["first", "second"]));
 		expect(
 			findDuplicateCipherIds([first, second, third], "login-credentials"),
 		).toEqual(new Set(["first", "second"]));
@@ -200,5 +202,36 @@ describe("vault filtering", () => {
 		expect(
 			findDuplicateCipherIds([oldPassword, newPassword], "login-site"),
 		).toEqual(new Set());
+	});
+
+	it("groups equivalent empty defaults and keeps the newest duplicate", () => {
+		const older = cipher({
+			id: "older",
+			revisionDate: "2026-01-01T00:00:00Z",
+			login: {
+				username: "alice",
+				password: "secret",
+				uris: [{ uri: "https://example.com", match: null }],
+				fido2Credentials: [],
+			},
+			fields: [],
+		});
+		const newer = cipher({
+			id: "newer",
+			revisionDate: "2026-02-01T00:00:00Z",
+			login: {
+				username: "alice",
+				password: "secret",
+				uris: [{ uri: "https://example.com" }],
+			},
+			fields: null,
+		});
+
+		expect(findDuplicateCipherGroups([older, newer], "exact")).toEqual([
+			["older", "newer"],
+		]);
+		expect(findRedundantDuplicateCipherIds([older, newer], "exact")).toEqual(
+			new Set(["older"]),
+		);
 	});
 });

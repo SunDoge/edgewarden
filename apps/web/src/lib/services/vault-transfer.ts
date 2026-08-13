@@ -10,7 +10,9 @@ import {
 } from "./bitwarden-encrypted-export";
 import { encryptCipher } from "./cipher-crypto";
 import { encryptStr } from "./crypto";
+import { cipherContentFingerprint } from "./vault-deduplication";
 import { parseBitwardenCsv } from "./vault-transfer-csv";
+
 export { buildBitwardenCsv } from "./vault-transfer-csv";
 
 export interface TransferDocument {
@@ -48,43 +50,6 @@ const TYPE_KEYS: Record<number, string> = {
 	[CipherType.Passport]: "passport",
 };
 
-function canonicalize(value: unknown): unknown {
-	if (Array.isArray(value)) return value.map(canonicalize);
-	if (value && typeof value === "object") {
-		return Object.fromEntries(
-			Object.entries(value as Record<string, unknown>)
-				.filter(([, entry]) => entry !== undefined)
-				.sort(([left], [right]) => left.localeCompare(right))
-				.map(([key, entry]) => [key, canonicalize(entry)]),
-		);
-	}
-	return value;
-}
-
-function itemFingerprint(
-	item: Record<string, any>,
-	folderNames: Map<string, string>,
-): string {
-	const type = Number(item.type) || CipherType.Login;
-	const typeKey = TYPE_KEYS[type];
-	return JSON.stringify(
-		canonicalize({
-			folder:
-				item.folderId == null
-					? null
-					: (folderNames.get(String(item.folderId)) ?? null),
-			type,
-			name: String(item.name ?? ""),
-			notes: item.notes ?? null,
-			favorite: Boolean(item.favorite),
-			reprompt: Number(item.reprompt) === 1 ? 1 : 0,
-			fields: item.fields ?? null,
-			passwordHistory: item.passwordHistory ?? null,
-			data: typeKey ? (item[typeKey] ?? null) : null,
-		}),
-	);
-}
-
 /**
  * Compares decrypted vault contents in memory. No plaintext or fingerprint leaves
  * the browser. IDs and timestamps are intentionally ignored, while folder names
@@ -105,13 +70,25 @@ export function deduplicateTransferDocument(
 			.map((folder) => [String(folder.id), folder.name]),
 	);
 	const fingerprints = new Set(
-		existing.items.map((item) => itemFingerprint(item, existingFolderNames)),
+		existing.items.map((item) =>
+			cipherContentFingerprint(
+				item,
+				item.folderId == null
+					? null
+					: existingFolderNames.get(String(item.folderId)),
+			),
+		),
 	);
 	const items: Array<Record<string, any>> = [];
 	let duplicateItems = 0;
 
 	for (const item of incoming.items) {
-		const fingerprint = itemFingerprint(item, incomingFolderNames);
+		const fingerprint = cipherContentFingerprint(
+			item,
+			item.folderId == null
+				? null
+				: incomingFolderNames.get(String(item.folderId)),
+		);
 		if (fingerprints.has(fingerprint)) {
 			duplicateItems++;
 			continue;

@@ -1,5 +1,6 @@
 import { type CipherResponse, CipherType } from "@edgewarden/shared";
 import { match } from "ts-pattern";
+import { cipherContentFingerprint } from "./vault-deduplication";
 
 export type VaultCategory =
 	| "all"
@@ -48,28 +49,20 @@ function loginHosts(item: CipherResponse): string[] {
 	return [...hosts].filter(Boolean).sort();
 }
 
-export function findDuplicateCipherIds(
+export function findDuplicateCipherGroups(
 	items: CipherResponse[],
 	mode: DuplicateMode,
-): Set<string> {
+): string[][] {
 	const groups = new Map<string, string[]>();
 	for (const item of items) {
 		if (isDeletedCipher(item) || item.archivedDate) continue;
 		const login = item.login as any;
-		const username = String(login?.username ?? "").trim().toLocaleLowerCase();
+		const username = String(login?.username ?? "")
+			.trim()
+			.toLocaleLowerCase();
 		const password = String(login?.password ?? "");
 		const keys = match(mode)
-			.with("exact", () =>
-				[JSON.stringify([
-					item.type,
-					item.name.toLocaleLowerCase(),
-					item.notes,
-					item.login,
-					item.card,
-					item.identity,
-					item.sshKey,
-				])],
-			)
+			.with("exact", () => [cipherContentFingerprint(item as any)])
 			.with("login-site", () =>
 				item.type === CipherType.Login && username && password
 					? loginHosts(item).map((site) =>
@@ -91,10 +84,60 @@ export function findDuplicateCipherIds(
 		for (const key of keys)
 			groups.set(key, [...(groups.get(key) ?? []), item.id]);
 	}
+	const duplicateGroups = Array.from(groups.values()).filter(
+		(ids) => ids.length > 1,
+	);
+	const neighbours = new Map<string, Set<string>>();
+	for (const ids of duplicateGroups) {
+		for (const id of ids) {
+			const adjacent = neighbours.get(id) ?? new Set<string>();
+			for (const other of ids) if (other !== id) adjacent.add(other);
+			neighbours.set(id, adjacent);
+		}
+	}
+	const visited = new Set<string>();
+	const components: string[][] = [];
+	for (const id of neighbours.keys()) {
+		if (visited.has(id)) continue;
+		const component: string[] = [];
+		const pending = [id];
+		while (pending.length) {
+			const current = pending.pop();
+			if (!current || visited.has(current)) continue;
+			visited.add(current);
+			component.push(current);
+			pending.push(...(neighbours.get(current) ?? []));
+		}
+		components.push(component);
+	}
+	return components;
+}
+
+export function findDuplicateCipherIds(
+	items: CipherResponse[],
+	mode: DuplicateMode,
+): Set<string> {
+	return new Set(findDuplicateCipherGroups(items, mode).flat());
+}
+
+/** Selects every redundant copy while keeping the most recently edited item. */
+export function findRedundantDuplicateCipherIds(
+	items: CipherResponse[],
+	mode: DuplicateMode,
+): Set<string> {
+	const byId = new Map(items.map((item) => [item.id, item]));
 	return new Set(
-		Array.from(groups.values())
-			.filter((ids) => ids.length > 1)
-			.flat(),
+		findDuplicateCipherGroups(items, mode).flatMap((ids) =>
+			ids
+				.toSorted((left, right) => {
+					const leftDate = Date.parse(byId.get(left)?.revisionDate ?? "") || 0;
+					const rightDate =
+						Date.parse(byId.get(right)?.revisionDate ?? "") || 0;
+					return rightDate - leftDate || left.localeCompare(right);
+				})
+				.slice(1)
+				.filter((id) => !byId.get(id)?.readOnly),
+		),
 	);
 }
 
