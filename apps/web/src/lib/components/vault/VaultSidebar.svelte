@@ -178,7 +178,7 @@ function navigateTo(href: string) {
 		{/if}
 	</nav>
 
-	<section class="mt-6 flex flex-col gap-1" aria-labelledby="folders-heading">
+	<section class="mt-6 flex flex-col gap-1 md:hidden" aria-labelledby="folders-heading">
 		<div class="mb-2 flex items-center justify-between px-3">
 			<p id="folders-heading" class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">文件夹</p>
 			<div class="flex items-center gap-1">

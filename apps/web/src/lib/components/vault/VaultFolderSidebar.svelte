@@ -1,0 +1,62 @@
+<script lang="ts">
+import type { FolderResponse } from "@edgewarden/shared";
+import { Edit, Folder, Plus, Trash2 } from "@lucide/svelte";
+import { vault } from "$lib/stores/vault.svelte";
+import type { VaultCategory } from "$lib/services/vault-filter";
+import { cn } from "$lib/utils";
+
+let {
+	activeCategory = $bindable(),
+	activeFolder = $bindable(),
+	onCreateFolder,
+	onRenameFolder,
+	onDeleteFolder,
+	onDeleteAllFolders,
+}: {
+	activeCategory: VaultCategory;
+	activeFolder: string | null;
+	onCreateFolder: () => void;
+	onRenameFolder: (folder: FolderResponse) => void;
+	onDeleteFolder: (folder: FolderResponse) => void;
+	onDeleteAllFolders: () => void;
+} = $props();
+
+function selectFolder(folderId: string | null) {
+	activeFolder = folderId;
+	activeCategory = "all";
+}
+</script>
+
+<aside class="hidden h-full w-56 shrink-0 flex-col border-r bg-background md:flex" aria-label="文件夹">
+	<header class="flex h-14 items-center justify-between border-b px-4">
+		<h2 class="text-sm font-semibold">文件夹</h2>
+		<div class="flex items-center gap-1">
+			{#if vault.folders.length}
+				<button class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive" onclick={onDeleteAllFolders} title="删除全部文件夹" aria-label="删除全部文件夹"><Trash2 class="size-4" /></button>
+			{/if}
+			<button class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onclick={onCreateFolder} title="新建文件夹" aria-label="新建文件夹"><Plus class="size-4" /></button>
+		</div>
+	</header>
+
+	<nav class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
+		<button class={cn("flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors", activeFolder === null && activeCategory === "all" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted")} onclick={() => selectFolder(null)}>
+			<Folder class="size-4 shrink-0" />
+			<span class="truncate">所有文件夹</span>
+		</button>
+		{#each vault.folders as folder (folder.id)}
+			<div class={cn("group flex items-center rounded-lg transition-colors", activeFolder === folder.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted")}>
+				<button class="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm font-medium" onclick={() => selectFolder(folder.id)}>
+					<Folder class="size-4 shrink-0" />
+					<span class="truncate">{folder.name}</span>
+				</button>
+				<span class="mr-2 text-xs tabular-nums text-muted-foreground group-hover:hidden">{vault.ciphers.filter((item) => item.folderId === folder.id).length}</span>
+				<div class="mr-1 hidden items-center gap-0.5 group-hover:flex">
+					<button class="rounded p-1 text-muted-foreground hover:text-foreground" onclick={() => onRenameFolder(folder)} title="重命名" aria-label={`重命名 ${folder.name}`}><Edit class="size-3.5" /></button>
+					<button class="rounded p-1 text-muted-foreground hover:text-destructive" onclick={() => onDeleteFolder(folder)} title="删除" aria-label={`删除 ${folder.name}`}><Trash2 class="size-3.5" /></button>
+				</div>
+			</div>
+		{:else}
+			<p class="px-3 py-2 text-xs text-muted-foreground">暂无文件夹</p>
+		{/each}
+	</nav>
+</aside>
