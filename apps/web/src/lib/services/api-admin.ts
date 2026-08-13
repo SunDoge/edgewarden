@@ -1,4 +1,4 @@
-import { rpc, rpcJson } from "./rpc";
+import { rpc, rpcJson, rpcVoid } from "./rpc";
 
 export interface AdminRegistrationPolicy {
 	signupsAllowed: boolean;
@@ -51,7 +51,7 @@ export async function deleteAdminInviteApi(
 	code: string,
 	masterPasswordHash: string,
 ): Promise<void> {
-	await rpcJson(
+	rpcVoid(
 		await rpc.api.admin.invites[":code"].$delete({
 			param: { code },
 			json: { masterPasswordHash },
@@ -76,7 +76,7 @@ export async function setAdminUserStatusApi(
 	status: "active" | "banned",
 	masterPasswordHash: string,
 ): Promise<void> {
-	await rpcJson(
+	rpcVoid(
 		await rpc.api.admin.users[":id"].status.$put({
 			param: { id },
 			json: { status, masterPasswordHash },
@@ -88,7 +88,7 @@ export async function deleteAdminUserApi(
 	id: string,
 	masterPasswordHash: string,
 ): Promise<void> {
-	await rpcJson(
+	rpcVoid(
 		await rpc.api.admin.users[":id"].$delete({
 			param: { id },
 			json: { masterPasswordHash },

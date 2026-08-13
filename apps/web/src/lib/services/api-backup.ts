@@ -1,4 +1,4 @@
-import { rpc, rpcJson } from "./rpc";
+import { rpc, rpcJson, rpcVoid } from "./rpc";
 
 export async function fetchBackupSettingsApi(): Promise<any> {
 	return rpcJson(await rpc.api.admin.backup.settings.$get());
@@ -55,9 +55,9 @@ export async function deleteRemoteBackupApi(
 	destinationId: string,
 	path: string,
 ): Promise<void> {
-	await rpc.api.admin.backup.remote.file.$delete({
+	rpcVoid(await rpc.api.admin.backup.remote.file.$delete({
 		query: { destinationId, path },
-	});
+	}));
 }
 
 export async function restoreRemoteBackupApi(
