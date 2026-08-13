@@ -269,7 +269,9 @@ function getStrictBlobEntries(db: BackupPayload["db"]): Array<{
 			!Number.isSafeInteger(sizeBytes) ||
 			sizeBytes < 0
 		) {
-			throw new Error("Backup archive contains invalid attachment blob metadata");
+			throw new Error(
+				"Backup archive contains invalid attachment blob metadata",
+			);
 		}
 		entries.push({
 			path: `attachments/${cipherId}/${attachmentId}.bin`,
@@ -468,12 +470,8 @@ export async function buildBackupArchive(
 		(row) => Number(row.type) !== 1 || includeAttachments,
 	);
 	const exportedAttachmentRows = sourceAttachmentRows.map(
-		({
-			storage_key: _storageKey,
-			deleted_at: _deletedAt,
-			deletion_token: _deletionToken,
-			...row
-		}) => row as SqlRow,
+		({ storage_key: _storageKey, deletion_token: _deletionToken, ...row }) =>
+			row as SqlRow,
 	);
 	const attachmentBlobs = sourceAttachmentRows.map((row) => {
 		const cipherId = String(row.cipher_id || "").trim();
@@ -699,11 +697,14 @@ export async function assertBackupBlobIntegrity(
 	if (payload.manifest.formatVersion < 4) return;
 	for (const { path, sizeBytes } of getStrictBlobEntries(payload.db)) {
 		const bytes = files[path];
-		if (!bytes) throw new Error(`Backup archive is missing required file: ${path}`);
+		if (!bytes)
+			throw new Error(`Backup archive is missing required file: ${path}`);
 		if (bytes.byteLength !== sizeBytes) {
 			throw new Error(`Backup blob size mismatch: ${path}`);
 		}
-		const expected = String(payload.manifest.blobHashes?.[path] || "").toLowerCase();
+		const expected = String(
+			payload.manifest.blobHashes?.[path] || "",
+		).toLowerCase();
 		if ((await sha256Hex(bytes)) !== expected) {
 			throw new Error(`Backup blob checksum mismatch: ${path}`);
 		}

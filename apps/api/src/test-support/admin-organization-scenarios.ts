@@ -526,7 +526,7 @@ export function registerAdminOrganizationScenarios(
 		assert.equal(response.status, 404);
 	});
 
-	test("tombstones organizations before scheduled cascade deletion", async () => {
+	test("retains organization tombstones across scheduled maintenance", async () => {
 		const owner = await context.database
 			.prepare("SELECT id FROM users WHERE email = ?")
 			.bind(EMAIL)
@@ -649,25 +649,30 @@ export function registerAdminOrganizationScenarios(
 		const { db } = await createDatabase(context.database);
 		try {
 			const result = await runMaintenance(db, context.bindings, timestamp + 1);
-			assert.ok(result.purgedOrganizations >= 1);
+			assert.equal(result.purgedOrganizations, 0);
 		} finally {
 			await db.destroy();
 		}
-		assert.equal(
+		assert.ok(
 			await context.database
 				.prepare("SELECT 1 FROM organizations WHERE id = ?")
 				.bind(orgId)
 				.first(),
-			null,
 		);
-		assert.ok(
+		assert.equal(
 			await context.database
 				.prepare(
-					"SELECT 1 FROM audit_logs WHERE action = 'organization.purged' AND target_type = 'organization' AND target_id = ?",
+					"SELECT 1 FROM audit_logs WHERE action = 'organization.purged' AND target_id = ?",
 				)
 				.bind(orgId)
 				.first(),
+			null,
 		);
+		// Test isolation: production maintenance never performs this physical delete.
+		await context.database
+			.prepare("DELETE FROM organizations WHERE id = ?")
+			.bind(orgId)
+			.run();
 	});
 
 	test("admits only one concurrent organization member invitation", async () => {

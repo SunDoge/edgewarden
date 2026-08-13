@@ -51,7 +51,7 @@ export function registerMaintenanceReliabilityScenarios(
 			.execute();
 	}
 
-	test("fences cipher restore before deleting attachment objects", async () => {
+	test("never touches retained cipher attachment objects", async () => {
 		const { db } = await createDatabase(context.database);
 		const user = await db
 			.selectFrom("users")
@@ -99,25 +99,24 @@ export function registerMaintenanceReliabilityScenarios(
 			};
 
 			await runMaintenance(db, context.bindings, timestamp);
-			assert.equal(restoreChanges, 0);
-			assert.equal(context.r2Values.has(storageKey), false);
-			assert.equal(
+			assert.equal(restoreChanges, -1);
+			assert.equal(context.r2Values.has(storageKey), true);
+			assert.ok(
 				await db
 					.selectFrom("ciphers")
 					.select("id")
 					.where("id", "=", cipherId)
 					.executeTakeFirst(),
-				undefined,
 			);
 			assert.equal(
 				await db
 					.selectFrom("audit_logs")
-					.select("is_tombstone")
+					.select(({ fn }) => fn.countAll<number>().as("count"))
 					.where("action", "=", "cipher.purged")
 					.where("target_id", "=", cipherId)
 					.executeTakeFirstOrThrow()
-					.then((row) => row.is_tombstone),
-				1,
+					.then((row) => Number(row.count)),
+				0,
 			);
 		} finally {
 			r2.delete = originalDelete;
@@ -132,7 +131,7 @@ export function registerMaintenanceReliabilityScenarios(
 		}
 	});
 
-	test("emits one purge tombstone across overlapping maintenance runs", async () => {
+	test("retains a cipher across overlapping maintenance runs", async () => {
 		const first = await createDatabase(context.database);
 		const second = await createDatabase(context.database);
 		const user = await first.db
@@ -154,14 +153,13 @@ export function registerMaintenanceReliabilityScenarios(
 				.where("action", "=", "cipher.purged")
 				.where("target_id", "=", cipherId)
 				.executeTakeFirstOrThrow();
-			assert.equal(Number(audits.count), 1);
-			assert.equal(
+			assert.equal(Number(audits.count), 0);
+			assert.ok(
 				await first.db
 					.selectFrom("ciphers")
 					.select("id")
 					.where("id", "=", cipherId)
 					.executeTakeFirst(),
-				undefined,
 			);
 		} finally {
 			await first.db.deleteFrom("ciphers").where("id", "=", cipherId).execute();
@@ -175,7 +173,7 @@ export function registerMaintenanceReliabilityScenarios(
 		}
 	});
 
-	test("takes over a purge claim left by an interrupted worker", async () => {
+	test("leaves legacy purge claims and their rows untouched", async () => {
 		const { db } = await createDatabase(context.database);
 		const user = await db
 			.selectFrom("users")
@@ -194,22 +192,21 @@ export function registerMaintenanceReliabilityScenarios(
 				abandonedClaim,
 			);
 			const result = await runMaintenance(db, context.bindings, timestamp);
-			assert.ok(result.purgedCiphers >= 1);
-			assert.equal(
+			assert.equal(result.purgedCiphers, 0);
+			assert.ok(
 				await db
 					.selectFrom("ciphers")
 					.select("id")
 					.where("id", "=", cipherId)
 					.executeTakeFirst(),
-				undefined,
 			);
-			assert.ok(
+			assert.equal(
 				await db
 					.selectFrom("audit_logs")
 					.select("id")
 					.where("action", "=", "cipher.purged")
-					.where("target_id", "=", cipherId)
 					.executeTakeFirst(),
+				undefined,
 			);
 		} finally {
 			await db.deleteFrom("ciphers").where("id", "=", cipherId).execute();

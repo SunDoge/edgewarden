@@ -1702,7 +1702,7 @@ export function registerDatabaseMaintenanceScenarios(
 		}
 	});
 
-	test("scheduled maintenance removes expired rows and blob objects", async () => {
+	test("scheduled maintenance removes ephemeral state but retains vault data", async () => {
 		const { db } = await createDatabase(context.database);
 		const timestamp = Math.floor(Date.now() / 1000);
 		const user = await db
@@ -1820,13 +1820,13 @@ export function registerDatabaseMaintenanceScenarios(
 			const result = await runMaintenance(db, context.bindings, timestamp);
 			assert.ok(result.refreshTokens >= 1);
 			assert.ok(result.webauthnChallenges >= 2);
-			assert.ok(result.purgedCiphers >= 1);
-			assert.ok(result.purgedSends >= 1);
+			assert.equal(result.purgedCiphers, 0);
+			assert.equal(result.purgedSends, 0);
 			assert.equal(
 				context.r2Values.has(`attachments/${cipherId}/${attachmentId}.bin`),
-				false,
+				true,
 			);
-			assert.equal(context.r2Values.has(`sends/${sendId}/${fileId}`), false);
+			assert.equal(context.r2Values.has(`sends/${sendId}/${fileId}`), true);
 			assert.deepEqual(
 				await db
 					.selectFrom("webauthn_challenges")
@@ -1843,44 +1843,36 @@ export function registerDatabaseMaintenanceScenarios(
 					.executeTakeFirst(),
 				undefined,
 			);
-			assert.equal(
+			assert.ok(
 				await db
 					.selectFrom("ciphers")
 					.select("id")
 					.where("id", "=", cipherId)
 					.executeTakeFirst(),
-				undefined,
 			);
-			assert.equal(
+			assert.ok(
 				await db
 					.selectFrom("sends")
 					.select("id")
 					.where("id", "=", sendId)
 					.executeTakeFirst(),
-				undefined,
 			);
 			const purgeAuditTargets = await db
 				.selectFrom("audit_logs")
 				.select(["action", "target_id"])
 				.where("target_id", "in", [cipherId, attachmentId, sendId])
 				.execute();
-			assert.equal(purgeAuditTargets.length, 3);
-			assert.deepEqual(
-				new Set(
-					purgeAuditTargets.map((row) => `${row.action}:${row.target_id}`),
-				),
-				new Set([
-					`cipher.purged:${cipherId}`,
-					`attachment.purged:${attachmentId}`,
-					`send.purged:${sendId}`,
-				]),
-			);
+			assert.equal(purgeAuditTargets.length, 0);
 		} finally {
+			await db.deleteFrom("sends").where("id", "=", sendId).execute();
+			await db.deleteFrom("ciphers").where("id", "=", cipherId).execute();
+			context.r2Values.delete(`attachments/${cipherId}/${attachmentId}.bin`);
+			context.r2Values.delete(`sends/${sendId}/${fileId}`);
 			await db.destroy();
 		}
 	});
 
-	test("scheduled GC keeps tombstones when blob deletion fails and retries later", async () => {
+	test("scheduled maintenance never submits retained vault blobs for deletion", async () => {
 		const { db } = await createDatabase(context.database);
 		const timestamp = Math.floor(Date.now() / 1000);
 		const user = await db
@@ -1899,6 +1891,7 @@ export function registerDatabaseMaintenanceScenarios(
 		const sendKey = `sends/${sendId}/${fileId}`;
 		const r2 = context.bindings.ATTACHMENTS_R2 as R2Bucket;
 		const originalDelete = r2.delete.bind(r2);
+		let deleteCalls = 0;
 		try {
 			await db
 				.insertInto("ciphers")
@@ -2009,6 +2002,7 @@ export function registerDatabaseMaintenanceScenarios(
 				sendKey,
 			]);
 			r2.delete = async (key: string | string[]) => {
+				deleteCalls += 1;
 				const keys = Array.isArray(key) ? key : [key];
 				if (keys.some((candidate) => failingKeys.has(candidate))) {
 					throw new Error("simulated R2 outage");
@@ -2016,6 +2010,7 @@ export function registerDatabaseMaintenanceScenarios(
 				await originalDelete(key);
 			};
 			await runMaintenance(db, context.bindings, timestamp);
+			assert.equal(deleteCalls, 0);
 			assert.equal(context.r2Values.has(attachmentKey), true);
 			assert.equal(context.r2Values.has(deletedAttachmentKey), true);
 			assert.equal(context.r2Values.has(sendKey), true);
@@ -2062,9 +2057,10 @@ export function registerDatabaseMaintenanceScenarios(
 				`)
 				.run();
 			await runMaintenance(db, context.bindings, timestamp + 1);
-			assert.equal(context.r2Values.has(attachmentKey), false);
-			assert.equal(context.r2Values.has(deletedAttachmentKey), false);
-			assert.equal(context.r2Values.has(sendKey), false);
+			assert.equal(deleteCalls, 0);
+			assert.equal(context.r2Values.has(attachmentKey), true);
+			assert.equal(context.r2Values.has(deletedAttachmentKey), true);
+			assert.equal(context.r2Values.has(sendKey), true);
 			assert.ok(
 				await db
 					.selectFrom("ciphers")
@@ -2098,24 +2094,23 @@ export function registerDatabaseMaintenanceScenarios(
 			await context.database
 				.prepare("DROP TRIGGER test_fail_purge_audit")
 				.run();
-			const recovered = await runMaintenance(
+			const retained = await runMaintenance(
 				db,
 				context.bindings,
 				timestamp + 2,
 			);
-			assert.ok(recovered.purgedCiphers >= 1);
-			assert.ok(recovered.purgedAttachments >= 1);
-			assert.ok(recovered.purgedSends >= 1);
-			assert.equal(context.r2Values.has(attachmentKey), false);
-			assert.equal(context.r2Values.has(deletedAttachmentKey), false);
-			assert.equal(context.r2Values.has(sendKey), false);
-			assert.equal(
+			assert.equal(retained.purgedCiphers, 0);
+			assert.equal(retained.purgedAttachments, 0);
+			assert.equal(retained.purgedSends, 0);
+			assert.equal(context.r2Values.has(attachmentKey), true);
+			assert.equal(context.r2Values.has(deletedAttachmentKey), true);
+			assert.equal(context.r2Values.has(sendKey), true);
+			assert.ok(
 				await db
 					.selectFrom("attachments")
 					.select("id")
 					.where("id", "=", deletedAttachmentId)
 					.executeTakeFirst(),
-				undefined,
 			);
 			assert.ok(
 				await db
@@ -2124,21 +2119,19 @@ export function registerDatabaseMaintenanceScenarios(
 					.where("id", "=", activeCipherId)
 					.executeTakeFirst(),
 			);
-			assert.equal(
+			assert.ok(
 				await db
 					.selectFrom("ciphers")
 					.select("id")
 					.where("id", "=", cipherId)
 					.executeTakeFirst(),
-				undefined,
 			);
-			assert.equal(
+			assert.ok(
 				await db
 					.selectFrom("sends")
 					.select("id")
 					.where("id", "=", sendId)
 					.executeTakeFirst(),
-				undefined,
 			);
 		} finally {
 			r2.delete = originalDelete;
