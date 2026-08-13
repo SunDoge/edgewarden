@@ -77,6 +77,13 @@ pnpm test:compat:bw   # requires BW_SERVER, BW_EMAIL, BW_PASSWORD
 pnpm domains:sync     # refresh generated Bitwarden global domain rules
 ```
 
+For local UI work, you can keep using the real authentication flow without
+re-entering credentials on every restart. Register the local account once,
+copy `apps/web/.env.example` to `apps/web/.env.local`, set
+`VITE_DEV_AUTO_LOGIN=true`, and fill in `VITE_DEV_EMAIL` and
+`VITE_DEV_PASSWORD`. Auto-login only runs under Vite's development mode and is
+disabled when Turnstile is enabled; `.env.local` is ignored by Git.
+
 The release number is shared by the API, Web Vault, and backup manifests through `packages/shared/version.ts`. Bitwarden's advertised compatibility version is deliberately separate because official clients use it for capability negotiation.
 
 - [Client compatibility and test matrix](docs/compatibility.md)
