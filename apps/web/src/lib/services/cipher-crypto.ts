@@ -32,23 +32,45 @@ async function encryptObject(
 	value: unknown,
 	encKey: Uint8Array,
 	macKey: Uint8Array,
+	keepPlaintext: (path: readonly (string | number)[]) => boolean = () => false,
+	path: readonly (string | number)[] = [],
 ): Promise<unknown> {
 	if (typeof value === "string") {
+		if (keepPlaintext(path)) return value || null;
 		return value
 			? encryptBw(new TextEncoder().encode(value), encKey, macKey)
 			: null;
 	}
 	if (Array.isArray(value))
 		return Promise.all(
-			value.map((item) => encryptObject(item, encKey, macKey)),
+			value.map((item, index) =>
+				encryptObject(item, encKey, macKey, keepPlaintext, [...path, index]),
+			),
 		);
 	if (value && typeof value === "object") {
 		const encrypted: Record<string, unknown> = {};
 		for (const [key, child] of Object.entries(value))
-			encrypted[key] = await encryptObject(child, encKey, macKey);
+			encrypted[key] = await encryptObject(
+				child,
+				encKey,
+				macKey,
+				keepPlaintext,
+				[...path, key],
+			);
 		return encrypted;
 	}
 	return value;
+}
+
+function isPlaintextLoginMetadata(path: readonly (string | number)[]): boolean {
+	const field = path.at(-1);
+	return field === "passwordRevisionDate" || field === "creationDate";
+}
+
+function isPlaintextPasswordHistoryMetadata(
+	path: readonly (string | number)[],
+): boolean {
+	return path.at(-1) === "lastUsedDate";
 }
 
 export async function decryptCipher(
@@ -227,6 +249,7 @@ export async function encryptCipher(
 			typeData[1],
 			encKey,
 			macKey,
+			typeData[0] === "login" ? isPlaintextLoginMetadata : undefined,
 		);
 	if (fields.fields?.length)
 		payload.fields = await encryptObject(fields.fields, encKey, macKey);
@@ -235,6 +258,7 @@ export async function encryptCipher(
 			fields.passwordHistory,
 			encKey,
 			macKey,
+			isPlaintextPasswordHistoryMetadata,
 		);
 
 	return payload;
