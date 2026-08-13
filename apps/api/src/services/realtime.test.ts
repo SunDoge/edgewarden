@@ -22,8 +22,14 @@ test("publishes one vault revision event per distinct user", async () => {
 		{ delivered: 2, failed: 0 },
 	);
 	assert.deepEqual(deliveries, [
-		{ userId: "user-a", body: { type: "vault-revision", revisionDate: 1234 } },
-		{ userId: "user-b", body: { type: "vault-revision", revisionDate: 1234 } },
+		{
+			userId: "user-a",
+			body: { type: "vault-revision", revisionDate: 1234, userId: "user-a" },
+		},
+		{
+			userId: "user-b",
+			body: { type: "vault-revision", revisionDate: 1234, userId: "user-b" },
+		},
 	]);
 });
 

@@ -1,12 +1,33 @@
+import {
+	encodeSignalRInvocation,
+	parseSignalRHandshake,
+	SIGNALR_HANDSHAKE_ACK,
+	SIGNALR_RECORD_SEPARATOR,
+	SIGNALR_SYNC_VAULT,
+	type SignalRProtocol,
+} from "../services/signalr";
+
 type VaultChangeMessage = {
 	type: "vault-revision";
 	revisionDate: number;
+	userId?: string;
 };
+
+type SocketAttachment =
+	| { client: "edgewarden" }
+	| {
+			client: "signalr";
+			handshakeComplete: boolean;
+			protocol: SignalRProtocol;
+	  };
 
 export class VaultRealtime {
 	constructor(private readonly state: DurableObjectState) {
 		this.state.setWebSocketAutoResponse(
-			new WebSocketRequestResponsePair("ping", "pong"),
+			new WebSocketRequestResponsePair(
+				`{"type":6}${SIGNALR_RECORD_SEPARATOR}`,
+				`{"type":6}${SIGNALR_RECORD_SEPARATOR}`,
+			),
 		);
 	}
 
@@ -21,9 +42,22 @@ export class VaultRealtime {
 				return new Response("Invalid realtime message", { status: 400 });
 			}
 			const encoded = JSON.stringify(message);
+			const revisionDate = new Date(message.revisionDate * 1000).toISOString();
 			for (const socket of this.state.getWebSockets()) {
+				const attachment =
+					(socket.deserializeAttachment() as SocketAttachment | null) ?? null;
 				try {
-					socket.send(encoded);
+					if (attachment?.client === "signalr") {
+						if (!attachment.handshakeComplete) continue;
+						socket.send(
+							encodeSignalRInvocation(attachment.protocol, SIGNALR_SYNC_VAULT, {
+								UserId: message.userId ?? "",
+								Date: revisionDate,
+							}),
+						);
+					} else {
+						socket.send(encoded);
+					}
 				} catch {
 					socket.close(1011, "Broadcast failed");
 				}
@@ -37,11 +71,39 @@ export class VaultRealtime {
 		const pair = new WebSocketPair();
 		const [client, server] = Object.values(pair);
 		this.state.acceptWebSocket(server);
+		const signalR = url.searchParams.get("edgewarden_protocol") === "signalr";
+		server.serializeAttachment(
+			signalR
+				? ({
+						client: "signalr",
+						handshakeComplete: false,
+						protocol: "messagepack",
+					} satisfies SocketAttachment)
+				: ({ client: "edgewarden" } satisfies SocketAttachment),
+		);
 		return new Response(null, { status: 101, webSocket: client });
 	}
 
-	webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {
-		if (message === "ping") socket.send("pong");
+	webSocketMessage(
+		socket: WebSocket,
+		message: string | ArrayBuffer | ArrayBufferView,
+	): void {
+		const attachment =
+			(socket.deserializeAttachment() as SocketAttachment | null) ?? null;
+		if (attachment?.client !== "signalr") {
+			if (message === "ping") socket.send("pong");
+			return;
+		}
+		if (attachment.handshakeComplete) return;
+		const protocol = parseSignalRHandshake(message);
+		if (!protocol) {
+			socket.close(1002, "Invalid SignalR handshake");
+			return;
+		}
+		attachment.protocol = protocol;
+		attachment.handshakeComplete = true;
+		socket.serializeAttachment(attachment);
+		socket.send(SIGNALR_HANDSHAKE_ACK);
 	}
 
 	webSocketClose(socket: WebSocket, code: number, reason: string): void {

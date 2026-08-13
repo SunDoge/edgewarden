@@ -1,5 +1,12 @@
 import { Hono } from "hono";
 import type { HonoEnv } from "../env";
+import { uploadAttachment } from "../handlers/attachments";
+import {
+	checkDigitalAssetLink,
+	getFillAssistFile,
+	getFillAssistManifest,
+} from "../handlers/fill-assist";
+import { getWebsiteIcon } from "../handlers/icons";
 import {
 	connectToken,
 	getPasskeyAssertionOptions,
@@ -13,6 +20,7 @@ import {
 	publicPasswordHint,
 	registerAccount,
 } from "../handlers/public";
+import { connectRealtime, negotiateRealtime } from "../handlers/realtime";
 import {
 	accessPublicSend,
 	accessPublicSendFile,
@@ -21,21 +29,14 @@ import {
 	downloadSendFile,
 	uploadPublicSendFile,
 } from "../handlers/sends";
-import { uploadAttachment } from "../handlers/attachments";
-import {
-	checkDigitalAssetLink,
-	getFillAssistFile,
-	getFillAssistManifest,
-} from "../handlers/fill-assist";
 import { recoverTwoFactor } from "../handlers/two-factor";
-import { connectRealtime } from "../handlers/realtime";
-import { getWebsiteIcon } from "../handlers/icons";
 import {
 	revocationRequestValidator,
 	tokenRequestValidator,
 } from "../middleware/validation";
 
 export const publicRouter = new Hono<HonoEnv>()
+	.post("/notifications/hub/negotiate", ...negotiateRealtime)
 	.get("/notifications/hub", ...connectRealtime)
 	.get("/api/notifications/hub", ...connectRealtime)
 	.post("/identity/accounts/prelogin", ...prelogin)

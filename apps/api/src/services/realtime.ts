@@ -3,6 +3,7 @@ import { createDatabase } from "../middleware/db";
 export interface VaultChangeMessage {
 	type: "vault-revision";
 	revisionDate: number;
+	userId: string;
 }
 
 export interface RealtimePublishResult {
@@ -15,10 +16,14 @@ export async function publishVaultChange(
 	userIds: Iterable<string>,
 	revisionDate = Math.floor(Date.now() / 1000),
 ): Promise<RealtimePublishResult> {
-	const message: VaultChangeMessage = { type: "vault-revision", revisionDate };
 	const recipients = [...new Set(userIds)];
 	const deliveries = await Promise.allSettled(
 		recipients.map(async (userId) => {
+			const message: VaultChangeMessage = {
+				type: "vault-revision",
+				revisionDate,
+				userId,
+			};
 			const response = await env.REALTIME.getByName(userId).fetch(
 				"https://realtime.internal/broadcast",
 				{
