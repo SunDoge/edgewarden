@@ -12,6 +12,8 @@
 	"vault_cached_at": "缓存于 {time}",
 	"vault_synced_at": "同步于 {time}",
 	"vault_sync": "同步保险库",
+	"vault_sync_warning_title": "同步时遇到问题",
+	"vault_load_error_title": "无法载入保险库",
 	"vault_lock_and_logout": "锁定并退出",
 	"vault_saved_to_server": "已保存到服务器 · {time}",
 	"vault_saved_refresh_failed": "已保存到服务器，但本地列表刷新失败；请稍后手动同步"

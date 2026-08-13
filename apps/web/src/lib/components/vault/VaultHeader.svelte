@@ -1,6 +1,14 @@
 <script lang="ts">
-import { LogOut, Menu, RefreshCw, ShieldCheck, WifiOff } from "@lucide/svelte";
+import {
+	LogOut,
+	Menu,
+	RefreshCw,
+	ShieldCheck,
+	TriangleAlert,
+	WifiOff,
+} from "@lucide/svelte";
 import { Button } from "$lib/components/ui/button/index.js";
+import * as Alert from "$lib/components/ui/alert/index.js";
 import { formatTime } from "$lib/i18n/format";
 import { m } from "$lib/paraglide/messages.js";
 import { syncVaultData, vault } from "$lib/stores/vault.svelte";
@@ -34,4 +42,12 @@ let {
 	</div>
 </header>
 
-{#if vault.warning}<div class="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">{vault.warning}</div>{/if}
+{#if vault.warning}
+	<div class="border-b bg-muted/30 p-2 sm:px-4">
+		<Alert.Root>
+			<TriangleAlert />
+			<Alert.Title>{m.vault_sync_warning_title()}</Alert.Title>
+			<Alert.Description>{vault.warning}</Alert.Description>
+		</Alert.Root>
+	</div>
+{/if}

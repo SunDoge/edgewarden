@@ -8,8 +8,9 @@ import {
 	Search,
 	Star,
 	Trash2,
-	WifiOff,
+	TriangleAlert,
 } from "@lucide/svelte";
+import * as Alert from "$lib/components/ui/alert/index.js";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import type {
@@ -22,6 +23,7 @@ import {
 	cipherTypeIcon,
 	cipherTypeName,
 } from "$lib/services/vault-item-display";
+import { m } from "$lib/paraglide/messages.js";
 
 let {
 	items,
@@ -122,7 +124,13 @@ function hideBrokenIcon(event: Event) {
 		{#if isSyncing}
 			<div class="divide-y divide-slate-100 dark:divide-slate-800/50">{#each Array(6) as _}<div class="flex w-full animate-pulse items-center gap-3.5 p-4"><div class="size-10 shrink-0 rounded-xl bg-slate-200 dark:bg-slate-800"></div><div class="min-w-0 flex-1 space-y-2 py-1"><div class="h-3.5 w-1/3 rounded bg-slate-200 dark:bg-slate-800"></div><div class="h-2.5 w-1/2 rounded bg-slate-200/60 dark:bg-slate-800/60"></div></div></div>{/each}</div>
 		{:else if error}
-			<div class="space-y-3 p-8 text-center text-slate-500"><WifiOff class="mx-auto size-10 text-slate-300 dark:text-slate-700" /><p class="text-sm">{error}</p></div>
+			<div class="p-4">
+				<Alert.Root variant="destructive">
+					<TriangleAlert />
+					<Alert.Title>{m.vault_load_error_title()}</Alert.Title>
+					<Alert.Description>{error}</Alert.Description>
+				</Alert.Root>
+			</div>
 		{:else if items.length === 0}
 			<div class="p-12 text-center text-slate-400"><Lock class="mx-auto mb-3 size-12 text-slate-300 dark:text-slate-700" /><p class="text-sm font-medium">找不到符合要求的条目</p><p class="mt-1 text-xs text-slate-500">点击左侧“添加新条目”来创建一个。</p></div>
 		{:else}
