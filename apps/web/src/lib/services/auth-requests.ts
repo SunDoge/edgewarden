@@ -1,4 +1,4 @@
-import { rpc, rpcJson } from "./rpc";
+import { rpc, rpcJson, rpcVoid } from "./rpc";
 import {
 	bytesToBase64,
 	base64ToBytes,
@@ -98,7 +98,7 @@ export async function respondToAuthRequestApi(
 	approved: boolean,
 	key?: string,
 ): Promise<void> {
-	await rpcJson(
+	rpcVoid(
 		await rpc.api["auth-requests"][":id"].$put({
 			param: { id },
 			json: { approved, key: approved ? key : null, masterPasswordHash: null },

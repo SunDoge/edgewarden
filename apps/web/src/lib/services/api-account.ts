@@ -1,6 +1,6 @@
 import type { InferRequestType } from "hono/client";
 import { rewrapUserKeyForMasterPassword } from "./crypto";
-import { rpc, rpcJson } from "./rpc";
+import { rpc, rpcJson, rpcVoid } from "./rpc";
 
 type UpdateProfilePayload = InferRequestType<
 	typeof rpc.api.accounts.profile.$put
@@ -24,7 +24,7 @@ export async function updateProfileApi(
 export async function changePasswordApi(
 	payload: ChangePasswordPayload,
 ): Promise<void> {
-	await rpcJson(await rpc.api.accounts.password.$post({ json: payload }));
+	rpcVoid(await rpc.api.accounts.password.$post({ json: payload }));
 }
 
 export async function changeMasterPasswordApi(args: {
@@ -68,17 +68,17 @@ export async function renameDeviceApi(id: string, name: string): Promise<any> {
 }
 
 export async function deleteDeviceApi(id: string): Promise<void> {
-	await rpcJson(await rpc.api.devices[":id"].$delete({ param: { id } }));
+	rpcVoid(await rpc.api.devices[":id"].$delete({ param: { id } }));
 }
 
 export async function deleteDevicesApi(ids: string[]): Promise<void> {
-	await rpcJson(await rpc.api.devices.delete.$post({ json: { ids } }));
+	rpcVoid(await rpc.api.devices.delete.$post({ json: { ids } }));
 }
 
 export async function deleteAllDevicesApi(
 	masterPasswordHash: string,
 ): Promise<void> {
-	await rpcJson(
+	rpcVoid(
 		await rpc.api.devices.$delete({ json: { masterPasswordHash } }),
 	);
 }
@@ -86,7 +86,7 @@ export async function deleteAllDevicesApi(
 export async function deleteAccountApi(
 	masterPasswordHash: string,
 ): Promise<void> {
-	await rpcJson(
+	rpcVoid(
 		await rpc.api.accounts.delete.$post({ json: { masterPasswordHash } }),
 	);
 }
@@ -116,7 +116,7 @@ export async function enableAuthenticatorApi(
 export async function disableTwoFactorApi(
 	masterPasswordHash: string,
 ): Promise<void> {
-	await rpcJson(
+	rpcVoid(
 		await rpc.api["two-factor"].disable.$post({
 			json: { masterPasswordHash },
 		}),
@@ -180,7 +180,7 @@ export async function deleteAccountPasskeyApi(
 	id: string,
 	masterPasswordHash: string,
 ): Promise<void> {
-	await rpcJson(
+	rpcVoid(
 		await rpc.api.webauthn[":id"].delete.$post({
 			param: { id },
 			json: { masterPasswordHash },

@@ -79,7 +79,7 @@ export async function recoverTwoFactorApi(
 	recoveryCode: string,
 ): Promise<void> {
 	const masterPasswordHash = await deriveAccountPasswordHash(email, password);
-	await rpcJson(
+	rpcVoid(
 		await rpc.identity.accounts["recover-2fa"].$post({
 			json: {
 				email: email.trim().toLowerCase(),

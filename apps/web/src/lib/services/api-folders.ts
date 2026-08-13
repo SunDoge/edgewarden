@@ -11,7 +11,7 @@ type ImportCiphersPayload = InferRequestType<
 export async function importCiphersApi(
 	payload: ImportCiphersPayload,
 ): Promise<void> {
-	await rpc.api.ciphers.import.$post({ json: payload });
+	rpcVoid(await rpc.api.ciphers.import.$post({ json: payload }));
 }
 
 /**
