@@ -181,6 +181,51 @@ describe("vault import and export", () => {
 		expect(result.document.items).toEqual([]);
 	});
 
+	it("ignores server metadata but keeps user-visible secret differences", () => {
+		const existingItem = {
+			type: CipherType.Login,
+			name: "Example",
+			login: {
+				username: "alice",
+				password: "secret",
+				uris: [
+					{
+						uri: "https://example.com",
+						match: null,
+						uriChecksum: "server-generated",
+					},
+				],
+				passwordRevisionDate: "2026-08-13T00:00:00Z",
+				futureServerDefault: true,
+			},
+		};
+		const sameImport = {
+			type: CipherType.Login,
+			name: "Example",
+			login: {
+				username: "alice",
+				password: "secret",
+				uris: [{ uri: "https://example.com" }],
+			},
+		};
+		const changedImport = {
+			...sameImport,
+			login: { ...sameImport.login, password: "changed" },
+		};
+
+		const same = deduplicateTransferDocument(
+			{ folders: [], warnings: [], items: [sameImport] },
+			{ folders: [], warnings: [], items: [existingItem] },
+		);
+		const changed = deduplicateTransferDocument(
+			{ folders: [], warnings: [], items: [changedImport] },
+			{ folders: [], warnings: [], items: [existingItem] },
+		);
+
+		expect(same.duplicateItems).toBe(1);
+		expect(changed.duplicateItems).toBe(0);
+	});
+
 	it("exports all type data without wrapped encryption keys or trashed items", () => {
 		const items = [
 			{
