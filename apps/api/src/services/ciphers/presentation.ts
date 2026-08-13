@@ -54,6 +54,34 @@ export function buildCipherData(body: CipherBody): string {
 	return JSON.stringify(data);
 }
 
+function presentLoginData(value: unknown): unknown {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+
+	const login = { ...(value as Record<string, unknown>) };
+	const uris = Array.isArray(login.uris)
+		? login.uris.map((value) => {
+			if (!value || typeof value !== "object" || Array.isArray(value))
+				return value;
+			const uri = { ...(value as Record<string, unknown>) };
+			if (typeof uri.match === "string" && /^\d+$/.test(uri.match))
+				uri.match = Number(uri.match);
+			return uri;
+		})
+		: null;
+
+	if (uris) login.uris = uris;
+	// Bitwarden's API always includes this legacy alias. Some native/mobile
+	// clients still require it even though `uris` is the canonical field.
+	login.uri =
+		uris?.length &&
+		uris[0] &&
+		typeof uris[0] === "object" &&
+		!Array.isArray(uris[0])
+			? ((uris[0] as Record<string, unknown>).uri ?? null)
+			: null;
+	return login;
+}
+
 export function cipherToResponse(
 	cipher: Selectable<Ciphers>,
 	attachments: Selectable<Attachments>[] = [],
@@ -72,7 +100,7 @@ export function cipherToResponse(
 		notes: cipher.notes ?? null,
 		fields: cipher.fields ? JSON.parse(cipher.fields) : (data.fields ?? null),
 		data: null,
-		login: cipher.type === 1 ? (data.login ?? null) : null,
+		login: cipher.type === 1 ? presentLoginData(data.login ?? {}) : null,
 		secureNote: cipher.type === 2 ? (data.secureNote ?? null) : null,
 		card: cipher.type === 3 ? (data.card ?? null) : null,
 		identity: cipher.type === 4 ? (data.identity ?? null) : null,

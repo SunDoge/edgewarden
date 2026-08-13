@@ -27,6 +27,8 @@ import {
 let errorMsg = $state("");
 let successMsg = $state("");
 let importing = $state(false);
+let importProgress = $state(0);
+let importProgressLabel = $state("");
 let files = $state<FileList | null>(null);
 let importFormat = $state<"json" | "csv">("json");
 let exportFormat = $state<"json" | "csv">("json");
@@ -125,6 +127,8 @@ async function handleImport() {
 	}
 
 	importing = true;
+	importProgress = 5;
+	importProgressLabel = "正在读取并解密导出文件…";
 	try {
 		const importedData =
 			pendingImport ??
@@ -145,6 +149,8 @@ async function handleImport() {
 			vault.folders,
 			vault.ciphers.filter((cipher) => !cipher.organizationId),
 		);
+		importProgress = 12;
+		importProgressLabel = "正在检测重复条目…";
 		const deduplicated = deduplicateTransferDocument(
 			importedData,
 			existingData,
@@ -182,15 +188,27 @@ async function handleImport() {
 			return;
 		}
 
+		importProgress = 15;
+		importProgressLabel = "正在加密导入数据…";
 		const encryptedPayload = await encryptTransferDocument(
 			documentToImport,
 			vault.symEncKey,
 			vault.symMacKey,
+			({ processed, total, kind }) => {
+				importProgress = total ? 15 + Math.round((processed / total) * 70) : 85;
+				importProgressLabel = `正在加密${kind === "folder" ? "文件夹" : "密码项"} ${processed}/${total}…`;
+			},
 		);
+		importProgress = 88;
+		importProgressLabel = "正在上传加密数据…";
 		await importCiphersApi(encryptedPayload);
 
 		// 4. Reload local vault data
+		importProgress = 96;
+		importProgressLabel = "正在同步保险库…";
 		await syncVaultData();
+		importProgress = 100;
+		importProgressLabel = "导入完成";
 
 		successMsg = `导入成功！已成功导入 ${encryptedPayload.folders.length} 个文件夹和 ${encryptedPayload.ciphers.length} 个密码项。`;
 		files = null;
@@ -300,6 +318,21 @@ async function handleImport() {
 							导入数据
 						{/if}
 					</Button>
+					{#if importing}
+						<div class="space-y-1.5" aria-live="polite">
+							<div class="flex justify-between text-[11px] text-slate-500">
+								<span>{importProgressLabel}</span>
+								<span>{importProgress}%</span>
+							</div>
+							<progress
+								class="h-2 w-full overflow-hidden rounded-full accent-primary"
+								max="100"
+								value={importProgress}
+							>
+								{importProgress}%
+							</progress>
+						</div>
+					{/if}
 				</div>
 			</section>
 

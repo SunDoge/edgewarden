@@ -354,6 +354,7 @@ describe("vault import and export", () => {
 	it("encrypts every sensitive import value before building the API payload", async () => {
 		const encKey = crypto.getRandomValues(new Uint8Array(32));
 		const macKey = crypto.getRandomValues(new Uint8Array(32));
+		const progress: Array<{ processed: number; total: number; kind: string }> = [];
 		const payload = await encryptTransferDocument(
 			{
 				folders: [{ id: "folder-1", name: "Secret folder" }],
@@ -392,6 +393,7 @@ describe("vault import and export", () => {
 			},
 			encKey,
 			macKey,
+			(update) => progress.push(update),
 		);
 		const serialized = JSON.stringify(payload);
 		for (const secret of [
@@ -431,5 +433,9 @@ describe("vault import and export", () => {
 			},
 		});
 		expect(payload.folderRelationships).toEqual([{ key: 0, value: 0 }]);
+		expect(progress).toEqual([
+			{ processed: 1, total: 2, kind: "folder" },
+			{ processed: 2, total: 2, kind: "item" },
+		]);
 	});
 });

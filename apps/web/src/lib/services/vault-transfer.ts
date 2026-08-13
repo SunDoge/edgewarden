@@ -25,6 +25,12 @@ export interface EncryptedImportPayload {
 	folderRelationships: Array<{ key: number; value: number }>;
 }
 
+export interface TransferEncryptionProgress {
+	processed: number;
+	total: number;
+	kind: "folder" | "item";
+}
+
 export interface ImportDeduplicationResult {
 	document: TransferDocument;
 	duplicateItems: number;
@@ -266,7 +272,10 @@ export async function encryptTransferDocument(
 	document: TransferDocument,
 	encKey: Uint8Array,
 	macKey: Uint8Array,
+	onProgress?: (progress: TransferEncryptionProgress) => void,
 ): Promise<EncryptedImportPayload> {
+	const total = document.folders.length + document.items.length;
+	let processed = 0;
 	const folderIndexMap = new Map<string, number>();
 	const folders: Array<{ name: string }> = [];
 	for (const [index, folder] of document.folders.entries()) {
@@ -274,6 +283,7 @@ export async function encryptTransferDocument(
 		folders.push({
 			name: await encryptStr(folder.name || "Folder", encKey, macKey),
 		});
+		onProgress?.({ processed: ++processed, total, kind: "folder" });
 	}
 
 	const ciphers: NonNullable<CipherImportInput["ciphers"]> = [];
@@ -296,6 +306,7 @@ export async function encryptTransferDocument(
 			folderId: null,
 		};
 		ciphers.push(await encryptCipher(normalized, encKey, macKey));
+		onProgress?.({ processed: ++processed, total, kind: "item" });
 		if (folderId != null) {
 			const folderIndex = folderIndexMap.get(String(folderId));
 			if (folderIndex !== undefined)
