@@ -11,6 +11,7 @@ export interface LoginDeviceInfo {
 	identifier: string;
 	name: string;
 	type: number;
+	pushToken?: string | null;
 }
 
 export interface LoginDeviceSession {
@@ -75,11 +76,13 @@ export function loginDeviceUpsertQuery(
 	return sql`
 		INSERT INTO devices (
 			user_id, device_identifier, name, type, session_stamp,
-			created_at, updated_at
+			push_token, push_uuid, created_at, updated_at
 		)
 		SELECT
 			current_user.id, ${args.device.identifier}, ${args.device.name},
 			${args.device.type}, ${args.deviceSession.sessionStamp},
+			${args.device.pushToken ?? null},
+			${args.device.pushToken ? crypto.randomUUID() : null},
 			${args.sessionTime}, ${args.sessionTime}
 		FROM users current_user
 		WHERE ${userEligibility(args.userId, args.expectedSecurityStamp)}
@@ -96,6 +99,11 @@ export function loginDeviceUpsertQuery(
 		ON CONFLICT(user_id, device_identifier) DO UPDATE SET
 			name = excluded.name,
 			type = excluded.type,
+			push_token = COALESCE(excluded.push_token, devices.push_token),
+			push_uuid = CASE
+				WHEN excluded.push_token IS NULL THEN devices.push_uuid
+				ELSE COALESCE(devices.push_uuid, excluded.push_uuid)
+			END,
 			session_stamp = COALESCE(devices.session_stamp, excluded.session_stamp),
 			last_seen_at = excluded.updated_at,
 			updated_at = excluded.updated_at

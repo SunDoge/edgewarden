@@ -23,6 +23,7 @@ import {
 	deleteAdminInviteApi,
 	deleteAdminUserApi,
 	deriveAccountPasswordHash,
+	getAdminPushRelayStatusApi,
 	getAdminRegistrationPolicyApi,
 	listAdminInvitesApi,
 	listAdminUsersApi,
@@ -40,6 +41,13 @@ let busy = $state<string | null>(null);
 let error = $state<string | null>(null);
 let signupsAllowed = $state(false);
 let invitationsAllowed = $state(true);
+let pushRelay = $state<{
+	enabled: boolean;
+	region: "US" | "EU";
+	installationIdConfigured: boolean;
+	installationKeyConfigured: boolean;
+	reason: "ready" | "missing_credentials" | "invalid_region";
+} | null>(null);
 let userSearchQuery = $state("");
 const filteredUsers = $derived(searchAdminUsers(users, userSearchQuery));
 
@@ -47,15 +55,17 @@ async function refresh() {
 	busy = "refresh";
 	error = null;
 	try {
-		const [nextUsers, nextInvites, policy] = await Promise.all([
+		const [nextUsers, nextInvites, policy, nextPushRelay] = await Promise.all([
 			listAdminUsersApi().then((r) => r.data),
 			listAdminInvitesApi().then((r) => r.data),
 			getAdminRegistrationPolicyApi(),
+			getAdminPushRelayStatusApi(),
 		]);
 		users = nextUsers;
 		invites = nextInvites;
 		signupsAllowed = policy.signupsAllowed;
 		invitationsAllowed = policy.invitationsAllowed;
+		pushRelay = nextPushRelay;
 	} catch (reason) {
 		error = reason instanceof Error ? reason.message : String(reason);
 	} finally {
@@ -116,6 +126,8 @@ onMount(() => {
 	<Field.Group><Field.Field><Field.Label for="admin-password">当前主密码</Field.Label><Input id="admin-password" type="password" bind:value={masterPassword} autocomplete="current-password" /><Field.Description>仅用于在浏览器中派生验证摘要，不会保存。</Field.Description></Field.Field></Field.Group>
 
 	<section class="rounded-lg border bg-card p-4"><div class="flex flex-col gap-4"><div><h2 class="font-semibold">注册策略</h2><p class="text-xs text-muted-foreground">修改后立即写入 D1，并覆盖部署变量提供的默认值。</p></div><Field.Group><Field.Field orientation="horizontal"><Field.Content><Field.Label for="public-signups">允许公开注册</Field.Label><Field.Description>无需邀请码即可创建普通账户。</Field.Description></Field.Content><Switch id="public-signups" bind:checked={signupsAllowed} disabled={busy !== null} /></Field.Field><Field.Field orientation="horizontal"><Field.Content><Field.Label for="invite-signups">允许邀请码注册</Field.Label><Field.Description>关闭后，已有邀请码也不能用于注册。</Field.Description></Field.Content><Switch id="invite-signups" bind:checked={invitationsAllowed} disabled={busy !== null} /></Field.Field></Field.Group><Button class="self-start" onclick={saveRegistrationPolicy} disabled={busy !== null || !masterPassword}>保存注册策略</Button></div></section>
+
+	<section class="rounded-lg border bg-card p-4"><div class="flex flex-col gap-3"><div class="flex items-center justify-between gap-3"><div><h2 class="font-semibold">移动端 Push Relay</h2><p class="text-xs text-muted-foreground">用于在后台唤醒 Bitwarden Android 和 iOS 客户端。</p></div><Badge variant={pushRelay?.enabled ? "secondary" : "outline"}>{pushRelay?.enabled ? "已开启" : "未开启"}</Badge></div>{#if pushRelay}<div class="grid gap-2 text-sm sm:grid-cols-3"><div class="rounded-md bg-muted p-3"><p class="text-xs text-muted-foreground">区域</p><p class="font-medium">{pushRelay.region}</p></div><div class="rounded-md bg-muted p-3"><p class="text-xs text-muted-foreground">Installation ID</p><p class="font-medium">{pushRelay.installationIdConfigured ? "已配置" : "缺失"}</p></div><div class="rounded-md bg-muted p-3"><p class="text-xs text-muted-foreground">Installation Key</p><p class="font-medium">{pushRelay.installationKeyConfigured ? "已配置" : "缺失"}</p></div></div>{#if pushRelay.reason === "invalid_region"}<p class="text-sm text-destructive">PUSH_REGION 必须为 US 或 EU。</p>{:else if !pushRelay.enabled}<p class="text-sm text-muted-foreground">同时配置 PUSH_INSTALLATION_ID 和 PUSH_INSTALLATION_KEY 后自动启用。</p>{/if}{:else}<p class="text-sm text-muted-foreground">正在读取 Push Relay 状态…</p>{/if}</div></section>
 
 	<section class="min-w-0 rounded-lg border bg-card"><header class="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 class="font-semibold">用户</h2><p class="text-xs text-muted-foreground">{userSearchQuery.trim() ? `${filteredUsers.length} / ${users.length}` : users.length} 个账户</p></div><div class="flex items-center gap-2"><div class="relative min-w-0 sm:w-72"><Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input type="search" class="pl-9" bind:value={userSearchQuery} placeholder="搜索姓名、邮箱、角色或状态" aria-label="搜索用户" /></div><UserRoundCog class="hidden shrink-0 sm:block" /></div></header><div class="overflow-x-auto"><Table.Root><Table.Header><Table.Row><Table.Head>账户</Table.Head><Table.Head>角色</Table.Head><Table.Head>状态</Table.Head><Table.Head>两步验证</Table.Head><Table.Head class="text-end">操作</Table.Head></Table.Row></Table.Header><Table.Body>{#each filteredUsers as user (user.id)}<Table.Row><Table.Cell><p class="font-medium">{user.name || "未命名"}</p><p class="text-xs text-muted-foreground">{user.email}</p></Table.Cell><Table.Cell><Badge variant="outline">{user.role}</Badge></Table.Cell><Table.Cell><Badge variant={user.status === "active" ? "secondary" : "destructive"}>{user.status}</Badge></Table.Cell><Table.Cell>{user.twoFactorEnabled ? "已启用" : "未启用"}</Table.Cell><Table.Cell class="text-end"><div class="flex justify-end gap-2"><Button size="sm" variant="outline" disabled={busy !== null || user.id === vault.profile?.id} onclick={() => run(`status-${user.id}`, (hash) => setAdminUserStatusApi(user.id, user.status === "active" ? "banned" : "active", hash))}>{user.status === "active" ? "封禁" : "启用"}</Button><Button size="sm" variant="destructive" disabled={busy !== null || user.id === vault.profile?.id} onclick={() => confirm(`永久删除 ${user.email} 及其全部数据？`) && run(`delete-${user.id}`, (hash) => deleteAdminUserApi(user.id, hash))}><Trash2 data-icon="inline-start" />删除</Button></div></Table.Cell></Table.Row>{:else}<Table.Row><Table.Cell colspan={5} class="h-24 text-center text-muted-foreground">没有匹配的用户</Table.Cell></Table.Row>{/each}</Table.Body></Table.Root></div></section>
 

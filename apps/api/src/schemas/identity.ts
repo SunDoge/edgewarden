@@ -30,6 +30,8 @@ export const TokenFormSchema = v.object({
 	DeviceName: v.optional(v.string()),
 	deviceType: v.optional(v.string()),
 	DeviceType: v.optional(v.string()),
+	devicePushToken: v.optional(v.pipe(v.string(), v.maxLength(4096))),
+	DevicePushToken: v.optional(v.pipe(v.string(), v.maxLength(4096))),
 	// Auth request
 	authRequest: v.optional(v.string()),
 	AuthRequest: v.optional(v.string()),

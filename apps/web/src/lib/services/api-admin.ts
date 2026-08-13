@@ -5,12 +5,24 @@ export interface AdminRegistrationPolicy {
 	invitationsAllowed: boolean;
 }
 
+export interface AdminPushRelayStatus {
+	enabled: boolean;
+	region: "US" | "EU";
+	installationIdConfigured: boolean;
+	installationKeyConfigured: boolean;
+	reason: "ready" | "missing_credentials" | "invalid_region";
+}
+
 export async function listAdminUsersApi(): Promise<{ data: any[] }> {
 	return rpcJson(await rpc.api.admin.users.$get()) as Promise<{ data: any[] }>;
 }
 
 export async function getAdminRegistrationPolicyApi(): Promise<AdminRegistrationPolicy> {
 	return rpcJson(await rpc.api.admin.registration.$get());
+}
+
+export async function getAdminPushRelayStatusApi(): Promise<AdminPushRelayStatus> {
+	return rpcJson(await rpc.api.admin["push-relay"].$get());
 }
 
 export async function updateAdminRegistrationPolicyApi(

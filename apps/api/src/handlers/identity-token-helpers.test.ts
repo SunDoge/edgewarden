@@ -12,8 +12,14 @@ describe("identity token helpers", () => {
 				DeviceIdentifier: " device-id ",
 				DeviceName: "Browser",
 				DeviceType: "3",
+				DevicePushToken: " mobile-push-token ",
 			}),
-		).toEqual({ identifier: "device-id", name: "Browser", type: 3 });
+		).toEqual({
+			identifier: "device-id",
+			name: "Browser",
+			type: 3,
+			pushToken: "mobile-push-token",
+		});
 	});
 
 	it("uses host-only refresh cookies for HTTPS", () => {

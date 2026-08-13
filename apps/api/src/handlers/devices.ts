@@ -1,9 +1,15 @@
 import { vValidator } from "@hono/valibot-validator";
+import type { Context } from "hono";
 import { type Selectable, sql } from "kysely";
+import type { HonoEnv } from "../env";
 import { factory } from "../http/factory";
 import { VerifyPasswordSchema } from "../schemas/accounts";
 import { BulkIdsSchema } from "../schemas/ciphers";
-import { DeviceKeysSchema, DeviceNameSchema } from "../schemas/requests";
+import {
+	DeviceKeysSchema,
+	DeviceNameSchema,
+	DevicePushTokenSchema,
+} from "../schemas/requests";
 import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import { invalidateUserCache, verifyPassword } from "../services/auth";
 import {
@@ -14,9 +20,15 @@ import {
 } from "../services/db/batch";
 import * as devicesDb from "../services/db/devices";
 import { textColumnInJson } from "../services/db/json-array";
+import {
+	getPushRelayStatus,
+	logPushRelayFailure,
+	pushDeviceRegistrationFromDatabase,
+	unregisterPushDevice,
+} from "../services/push-relay";
 import type { Devices } from "../types/db";
 import { errorResponse } from "../utils/response";
-import { toIso } from "../utils/time";
+import { now, toIso } from "../utils/time";
 
 function deviceToResponse(device: Selectable<Devices>) {
 	return {
@@ -37,6 +49,24 @@ function deviceToResponse(device: Selectable<Devices>) {
 		),
 		object: "device",
 	};
+}
+
+function schedulePushUnregistration(
+	c: Context<HonoEnv>,
+	pushUuids: Array<string | null>,
+): void {
+	if (!getPushRelayStatus(c.env).enabled) return;
+	const ids = pushUuids.filter((id): id is string => Boolean(id));
+	if (!ids.length) return;
+	c.executionCtx.waitUntil(
+		Promise.all(
+			ids.map((id) =>
+				unregisterPushDevice(c.env, id).catch((error) =>
+					logPushRelayFailure("push.device.unregister.failed", error),
+				),
+			),
+		),
+	);
 }
 
 export const listDevices = factory.createHandlers(async (c) => {
@@ -68,6 +98,49 @@ export const getKnownDevice = factory.createHandlers(async (c) => {
 export const getDevice = factory.createHandlers(async (c) =>
 	c.json(deviceToResponse(c.get("device"))),
 );
+
+export const updateDevicePushToken = factory.createHandlers(
+	vValidator("json", DevicePushTokenSchema),
+	async (c) => {
+		if (!getPushRelayStatus(c.env).enabled)
+			return new Response(null, { status: 200 });
+		const device = c.get("device");
+		await c
+			.get("db")
+			.updateTable("devices")
+			.set({
+				push_token: c.req.valid("json").pushToken,
+				push_uuid: device.push_uuid ?? crypto.randomUUID(),
+				updated_at: now(),
+			})
+			.where("user_id", "=", c.get("user").id)
+			.where("device_identifier", "=", device.device_identifier)
+			.execute();
+		c.executionCtx.waitUntil(
+			pushDeviceRegistrationFromDatabase(
+				c.env,
+				c.get("user").id,
+				device.device_identifier,
+			).catch((error) =>
+				logPushRelayFailure("push.device.register.failed", error),
+			),
+		);
+		return new Response(null, { status: 200 });
+	},
+);
+
+export const clearDevicePushToken = factory.createHandlers(async (c) => {
+	const device = c.get("device");
+	await c
+		.get("db")
+		.updateTable("devices")
+		.set({ push_token: null, push_uuid: null, updated_at: now() })
+		.where("user_id", "=", c.get("user").id)
+		.where("device_identifier", "=", device.device_identifier)
+		.execute();
+	schedulePushUnregistration(c, [device.push_uuid]);
+	return new Response(null, { status: 200 });
+});
 
 export const deleteDevice = factory.createHandlers(async (c) => {
 	const db = c.get("db");
@@ -124,6 +197,7 @@ export const deleteDevice = factory.createHandlers(async (c) => {
 	if (deleted.numAffectedRows !== 1n)
 		return errorResponse("Device not found", 404);
 	invalidateUserCache(userId);
+	schedulePushUnregistration(c, [device.push_uuid]);
 	return new Response(null, { status: 200 });
 });
 
@@ -135,7 +209,12 @@ export const deleteDevices = factory.createHandlers(
 		const ids = [...new Set(c.req.valid("json").ids)];
 		const ownedDevices = await db
 			.selectFrom("devices")
-			.select(["device_identifier", "session_stamp", "mutation_token"])
+			.select([
+				"device_identifier",
+				"session_stamp",
+				"mutation_token",
+				"push_uuid",
+			])
 			.where("user_id", "=", userId)
 			.where(textColumnInJson("device_identifier", ids))
 			.execute();
@@ -203,6 +282,11 @@ export const deleteDevices = factory.createHandlers(
 			const deletedCount = Number(deleted.numAffectedRows ?? 0n);
 			if (deletedCount) {
 				invalidateUserCache(userId);
+				if (deletedCount === ownedDevices.length)
+					schedulePushUnregistration(
+						c,
+						ownedDevices.map(({ push_uuid }) => push_uuid),
+					);
 			}
 			return c.json({ deleted: deletedCount });
 		}
@@ -282,6 +366,12 @@ export const deleteAllDevices = factory.createHandlers(
 		)
 			return c.json({ error: "Invalid password" }, 400);
 		const userId = user.id;
+		const pushDevices = await db
+			.selectFrom("devices")
+			.select("push_uuid")
+			.where("user_id", "=", userId)
+			.where("push_uuid", "is not", null)
+			.execute();
 		const securityStamp = crypto.randomUUID();
 		const [claimed] = await c
 			.get("dbDialect")
@@ -299,6 +389,10 @@ export const deleteAllDevices = factory.createHandlers(
 		if (claimed.numAffectedRows !== 1n)
 			return errorResponse("Account security changed by another request", 409);
 		invalidateUserCache(userId);
+		schedulePushUnregistration(
+			c,
+			pushDevices.map(({ push_uuid }) => push_uuid),
+		);
 		return new Response(null, { status: 200 });
 	},
 );
