@@ -54,10 +54,17 @@ async function isReferenced(
 			select 1 from sends
 			where type = 1
 				and json_valid(data)
-				and json_type(data, '$.id') = 'text'
+				and (
+					json_type(data, '$.id') = 'text'
+					or json_type(data, '$.Id') = 'text'
+				)
 				and coalesce(
 					storage_key,
-					'sends/' || id || '/' || json_extract(data, '$.id')
+					'sends/' || id || '/' || case
+						when json_type(data, '$.id') = 'text'
+							then json_extract(data, '$.id')
+						else json_extract(data, '$.Id')
+					end
 				) = ${objectKey}
 		) as referenced
 	`.execute(db);
