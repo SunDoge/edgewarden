@@ -5,7 +5,7 @@ import type {
 	SyncResponse,
 } from "@edgewarden/shared";
 import type { InferRequestType } from "hono/client";
-import { ApiError, rpc, rpcJson } from "./rpc";
+import { ApiError, rpc, rpcJson, rpcVoid } from "./rpc";
 
 type CreateCipherPayload = InferRequestType<
 	typeof rpc.api.ciphers.$post
@@ -87,43 +87,43 @@ export async function updateCipherApi(
  * 9. Delete a vault item (cipher)
  */
 export async function deleteCipherApi(id: string): Promise<void> {
-	await rpcJson(await rpc.api.ciphers[":id"].delete.$put({ param: { id } }));
+	rpcVoid(await rpc.api.ciphers[":id"].delete.$put({ param: { id } }));
 }
 
 export async function restoreCipherApi(id: string): Promise<void> {
-	await rpcJson(await rpc.api.ciphers[":id"].restore.$put({ param: { id } }));
+	rpcVoid(await rpc.api.ciphers[":id"].restore.$put({ param: { id } }));
 }
 
 export async function archiveCipherApi(id: string): Promise<void> {
-	await rpcJson(await rpc.api.ciphers[":id"].archive.$put({ param: { id } }));
+	rpcVoid(await rpc.api.ciphers[":id"].archive.$put({ param: { id } }));
 }
 
 export async function unarchiveCipherApi(id: string): Promise<void> {
-	await rpcJson(await rpc.api.ciphers[":id"].unarchive.$put({ param: { id } }));
+	rpcVoid(await rpc.api.ciphers[":id"].unarchive.$put({ param: { id } }));
 }
 
 export async function hardDeleteCipherApi(id: string): Promise<void> {
-	await rpcJson(await rpc.api.ciphers[":id"].$delete({ param: { id } }));
+	rpcVoid(await rpc.api.ciphers[":id"].$delete({ param: { id } }));
 }
 
 export async function deleteCiphersApi(ids: string[]): Promise<void> {
-	await rpcJson(await rpc.api.ciphers.delete.$put({ json: { ids } }));
+	rpcVoid(await rpc.api.ciphers.delete.$put({ json: { ids } }));
 }
 
 export async function restoreCiphersApi(ids: string[]): Promise<void> {
-	await rpcJson(await rpc.api.ciphers.restore.$post({ json: { ids } }));
+	rpcVoid(await rpc.api.ciphers.restore.$post({ json: { ids } }));
 }
 
 export async function archiveCiphersApi(ids: string[]): Promise<void> {
-	await rpcJson(await rpc.api.ciphers.archive.$put({ json: { ids } }));
+	rpcVoid(await rpc.api.ciphers.archive.$put({ json: { ids } }));
 }
 
 export async function unarchiveCiphersApi(ids: string[]): Promise<void> {
-	await rpcJson(await rpc.api.ciphers.unarchive.$put({ json: { ids } }));
+	rpcVoid(await rpc.api.ciphers.unarchive.$put({ json: { ids } }));
 }
 
 export async function hardDeleteCiphersApi(ids: string[]): Promise<void> {
-	await rpcJson(
+	rpcVoid(
 		await rpc.api.ciphers["delete-permanent"].$post({ json: { ids } }),
 	);
 }
@@ -177,7 +177,7 @@ export async function deleteAttachmentApi(
 	cipherId: string,
 	attachmentId: string,
 ): Promise<void> {
-	await rpcJson(
+	rpcVoid(
 		await rpc.api.ciphers[":id"].attachment[":attachmentId"].$delete({
 			param: { id: cipherId, attachmentId },
 		}),

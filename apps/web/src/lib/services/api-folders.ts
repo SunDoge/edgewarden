@@ -1,5 +1,5 @@
 import type { InferRequestType } from "hono/client";
-import { rpc, rpcJson } from "./rpc";
+import { rpc, rpcJson, rpcVoid } from "./rpc";
 
 type ImportCiphersPayload = InferRequestType<
 	typeof rpc.api.ciphers.import.$post
@@ -40,9 +40,9 @@ export async function updateFolderApi(
  * Delete an individual folder
  */
 export async function deleteFolderApi(id: string): Promise<void> {
-	await rpc.api.folders[":id"].$delete({ param: { id } });
+	rpcVoid(await rpc.api.folders[":id"].$delete({ param: { id } }));
 }
 
 export async function deleteFoldersApi(ids: string[]): Promise<void> {
-	await rpcJson(await rpc.api.folders.delete.$post({ json: { ids } }));
+	rpcVoid(await rpc.api.folders.delete.$post({ json: { ids } }));
 }
