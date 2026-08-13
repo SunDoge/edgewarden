@@ -80,7 +80,9 @@ describe("vault import and export", () => {
 		const result = deduplicateTransferDocument(incoming, existing);
 		expect(result.duplicateItems).toBe(0);
 		expect(result.document.items).toHaveLength(1);
-		expect(result.document.folders).toEqual(incoming.folders);
+		expect(result.document.folders).toEqual([
+			{ ...incoming.folders[0], existingId: "old-folder" },
+		]);
 	});
 
 	it("keeps different accounts on the same website during import", () => {
@@ -528,6 +530,33 @@ describe("vault import and export", () => {
 		expect(progress).toEqual([
 			{ processed: 1, total: 2, kind: "folder" },
 			{ processed: 2, total: 2, kind: "item" },
+		]);
+	});
+
+	it("reuses an existing folder and coalesces duplicate incoming folder names", async () => {
+		const encKey = crypto.getRandomValues(new Uint8Array(32));
+		const macKey = crypto.getRandomValues(new Uint8Array(32));
+		const payload = await encryptTransferDocument(
+			{
+				folders: [
+					{ id: "source-a", name: "Work", existingId: "existing-work" },
+					{ id: "source-b", name: "Work", existingId: "existing-work" },
+				],
+				warnings: [],
+				items: [
+					{ folderId: "source-a", type: CipherType.Login, name: "One" },
+					{ folderId: "source-b", type: CipherType.Login, name: "Two" },
+				],
+			},
+			encKey,
+			macKey,
+		);
+
+		expect(payload.folders).toHaveLength(1);
+		expect(payload.folders[0].id).toBe("existing-work");
+		expect(payload.folderRelationships).toEqual([
+			{ key: 0, value: 0 },
+			{ key: 1, value: 0 },
 		]);
 	});
 });

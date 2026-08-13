@@ -16,13 +16,13 @@ import { parseBitwardenCsv } from "./vault-transfer-csv";
 export { buildBitwardenCsv } from "./vault-transfer-csv";
 
 export interface TransferDocument {
-	folders: Array<{ id?: string; name: string }>;
+	folders: Array<{ id?: string; name: string; existingId?: string }>;
 	items: Array<Record<string, any>>;
 	warnings: string[];
 }
 
 export interface EncryptedImportPayload {
-	folders: Array<{ name: string }>;
+	folders: Array<{ id?: string; name: string }>;
 	ciphers: NonNullable<CipherImportInput["ciphers"]>;
 	folderRelationships: Array<{ key: number; value: number }>;
 }
@@ -35,6 +35,7 @@ export interface TransferEncryptionProgress {
 
 export interface ImportDeduplicationResult {
 	document: TransferDocument;
+	completeDocument: TransferDocument;
 	duplicateItems: number;
 	duplicateFolders: number;
 }
@@ -106,18 +107,40 @@ export function deduplicateTransferDocument(
 	const knownFolderNames = new Set(
 		existing.folders.map((folder) => folder.name),
 	);
-	const folders = incoming.folders.filter((folder) => {
-		if (folder.id != null && referencedFolderIds.has(String(folder.id)))
-			return true;
-		if (knownFolderNames.has(folder.name)) return false;
+	const existingFolderIdByName = new Map(
+		existing.folders
+			.filter((folder) => folder.id != null)
+			.map((folder) => [folder.name, String(folder.id)]),
+	);
+	const folders = incoming.folders.flatMap((folder) => {
+		const existingId = existingFolderIdByName.get(folder.name);
+		if (folder.id != null && referencedFolderIds.has(String(folder.id))) {
+			return [{ ...folder, existingId }];
+		}
+		if (knownFolderNames.has(folder.name)) return [];
 		knownFolderNames.add(folder.name);
-		return true;
+		return [folder];
 	});
+	const seenFolderNames = new Set(existingFolderIdByName.keys());
+	let duplicateFolders = 0;
+	for (const folder of incoming.folders) {
+		if (seenFolderNames.has(folder.name)) duplicateFolders++;
+		else seenFolderNames.add(folder.name);
+	}
+	const completeFolders = incoming.folders.map((folder) => ({
+		...folder,
+		existingId: existingFolderIdByName.get(folder.name),
+	}));
 
 	return {
 		document: { folders, items, warnings: incoming.warnings },
+		completeDocument: {
+			folders: completeFolders,
+			items: incoming.items,
+			warnings: incoming.warnings,
+		},
 		duplicateItems,
-		duplicateFolders: incoming.folders.length - folders.length,
+		duplicateFolders,
 	};
 }
 
@@ -254,10 +277,21 @@ export async function encryptTransferDocument(
 	const total = document.folders.length + document.items.length;
 	let processed = 0;
 	const folderIndexMap = new Map<string, number>();
-	const folders: Array<{ name: string }> = [];
-	for (const [index, folder] of document.folders.entries()) {
-		if (folder.id != null) folderIndexMap.set(String(folder.id), index);
+	const folderIndexByName = new Map<string, number>();
+	const folders: Array<{ id?: string; name: string }> = [];
+	for (const folder of document.folders) {
+		const existingIndex = folderIndexByName.get(folder.name);
+		if (existingIndex !== undefined) {
+			if (folder.id != null)
+				folderIndexMap.set(String(folder.id), existingIndex);
+			onProgress?.({ processed: ++processed, total, kind: "folder" });
+			continue;
+		}
+		const outputIndex = folders.length;
+		folderIndexByName.set(folder.name, outputIndex);
+		if (folder.id != null) folderIndexMap.set(String(folder.id), outputIndex);
 		folders.push({
+			...(folder.existingId ? { id: folder.existingId } : {}),
 			name: await encryptStr(folder.name || "Folder", encKey, macKey),
 		});
 		onProgress?.({ processed: ++processed, total, kind: "folder" });

@@ -13,6 +13,7 @@ import {
 import * as Alert from "$lib/components/ui/alert/index.js";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
+import * as Select from "$lib/components/ui/select/index.js";
 import { m } from "$lib/paraglide/messages.js";
 import type {
 	DuplicateMode,
@@ -106,8 +107,16 @@ function hideBrokenIcon(event: Event) {
 	<div class="flex shrink-0 flex-col gap-3 border-b border-slate-200 p-4 dark:border-slate-800">
 		<div class="flex flex-wrap gap-2 sm:flex-nowrap">
 			<div class="relative flex-1"><Search class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input type="search" placeholder="搜索您的保险库项..." class="pl-10" bind:value={searchQuery} /></div>
-			{#if activeCategory === "duplicates"}<select bind:value={duplicateMode} aria-label="重复检测方式" class="h-9 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm sm:flex-none"><option value="exact">完全相同</option><option value="login-site">网站、账号和密码</option><option value="login-credentials">账号和密码</option><option value="password">密码复用</option></select>{/if}
-			<select bind:value={sortMode} aria-label="排序方式" class="h-9 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm sm:flex-none"><option value="edited">最近修改</option><option value="created">最近创建</option><option value="name">名称</option></select>
+			{#if activeCategory === "duplicates"}
+				<Select.Root type="single" bind:value={duplicateMode}>
+					<Select.Trigger class="w-44" aria-label="重复检测方式">{duplicateMode === "exact" ? "完全相同" : duplicateMode === "login-site" ? "网站、账号和密码" : duplicateMode === "login-credentials" ? "账号和密码" : "密码复用"}</Select.Trigger>
+					<Select.Content><Select.Group><Select.Item value="exact">完全相同</Select.Item><Select.Item value="login-site">网站、账号和密码</Select.Item><Select.Item value="login-credentials">账号和密码</Select.Item><Select.Item value="password">密码复用</Select.Item></Select.Group></Select.Content>
+				</Select.Root>
+			{/if}
+			<Select.Root type="single" bind:value={sortMode}>
+				<Select.Trigger class="w-28" aria-label="排序方式">{sortMode === "edited" ? "最近修改" : sortMode === "created" ? "最近创建" : "名称"}</Select.Trigger>
+				<Select.Content><Select.Group><Select.Item value="edited">最近修改</Select.Item><Select.Item value="created">最近创建</Select.Item><Select.Item value="name">名称</Select.Item></Select.Group></Select.Content>
+			</Select.Root>
 		</div>
 		{#if activeCategory === "duplicates" && duplicateGroupCount > 0}
 			<div class="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">

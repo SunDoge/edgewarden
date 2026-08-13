@@ -744,6 +744,52 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		assert.equal(response.status, 400);
 	});
 
+	test("imports into an owned existing folder without creating a duplicate", async () => {
+		const auth = {
+			authorization: `Bearer ${context.accessToken}`,
+			"content-type": "application/json",
+		};
+		const created = await request("/api/folders", {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({ name: "encrypted-import-target" }),
+		});
+		assert.equal(created.status, 200, await created.clone().text());
+		const folderId = (await created.json<{ id: string }>()).id;
+		const before = await context.database
+			.prepare(
+				"SELECT COUNT(*) AS count FROM folders WHERE user_id = (SELECT id FROM users WHERE email = ?)",
+			)
+			.bind(EMAIL)
+			.first<{ count: number }>();
+
+		const imported = await request("/api/ciphers/import", {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({
+				folders: [{ id: folderId, name: "encrypted-import-target" }],
+				ciphers: [{ type: 1, name: "encrypted-imported-item" }],
+				folderRelationships: [{ key: 0, value: 0 }],
+			}),
+		});
+		assert.equal(imported.status, 200, await imported.clone().text());
+		const after = await context.database
+			.prepare(
+				"SELECT COUNT(*) AS count FROM folders WHERE user_id = (SELECT id FROM users WHERE email = ?)",
+			)
+			.bind(EMAIL)
+			.first<{ count: number }>();
+		assert.equal(after?.count, before?.count);
+		assert.equal(
+			await context.database
+				.prepare("SELECT folder_id FROM ciphers WHERE name = ?")
+				.bind("encrypted-imported-item")
+				.first<{ folder_id: string }>()
+				.then((row) => row?.folder_id),
+			folderId,
+		);
+	});
+
 	test("bulk deletes only owned folders and moves their ciphers to no folder", async () => {
 		const createFolder = async (token: string, name: string) => {
 			const response = await request("/api/folders", {

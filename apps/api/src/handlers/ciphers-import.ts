@@ -5,6 +5,7 @@ import { factory } from "../http/factory";
 import { CipherImportSchema } from "../schemas/ciphers";
 import { buildCipherData } from "../services/ciphers/presentation";
 import { executeBatchInChunks, revisionQuery } from "../services/db/batch";
+import * as foldersDb from "../services/db/folders";
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
 
@@ -26,8 +27,18 @@ export const importCiphers = factory.createHandlers(
 		const timestamp = now();
 		const folderIdMap = new Map<number, string>();
 		const queries: CompiledQuery[] = [];
+		const ownedFolderIds = new Set(
+			(await foldersDb.getFoldersByUserId(db, user.id)).map(
+				(folder) => folder.id,
+			),
+		);
 
 		for (let index = 0; index < folders.length; index++) {
+			const existingFolderId = folders[index].id;
+			if (existingFolderId && ownedFolderIds.has(existingFolderId)) {
+				folderIdMap.set(index, existingFolderId);
+				continue;
+			}
 			const folderId = crypto.randomUUID();
 			folderIdMap.set(index, folderId);
 			queries.push(
@@ -57,7 +68,11 @@ export const importCiphers = factory.createHandlers(
 		}> = [];
 		for (let index = 0; index < ciphers.length; index++) {
 			const cipher = ciphers[index];
-			const folderId = cipherFolderMap.get(index) || cipher.folderId || null;
+			const folderId =
+				cipherFolderMap.get(index) ||
+				(cipher.folderId && ownedFolderIds.has(cipher.folderId)
+					? cipher.folderId
+					: null);
 			const sourceId = cipher.id ? String(cipher.id).trim() || null : null;
 			const cipherId = crypto.randomUUID();
 			queries.push(

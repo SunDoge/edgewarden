@@ -172,7 +172,9 @@ async function handleImport(strategy?: "skip" | "all") {
 			return;
 		}
 		const documentToImport =
-			strategy === "all" ? importedData : deduplicated.document;
+			strategy === "all"
+				? deduplicated.completeDocument
+				: deduplicated.document;
 
 		if (
 			documentToImport.folders.length === 0 &&
@@ -307,7 +309,7 @@ async function handleImport(strategy?: "skip" | "all") {
 					{#if deduplicationReview}
 						<div class="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100" role="alert">
 							<p class="font-semibold">写入前检测到重复内容</p>
-							<p>已有或文件内重复密码项 {deduplicationReview.result.duplicateItems} 个，重复空文件夹 {deduplicationReview.result.duplicateFolders} 个。请选择本次导入方式：</p>
+							<p>已有或文件内重复密码项 {deduplicationReview.result.duplicateItems} 个，可复用的同名文件夹 {deduplicationReview.result.duplicateFolders} 个。请选择本次导入方式：</p>
 							<div class="flex flex-col gap-2 sm:flex-row">
 								<Button size="sm" disabled={importing} onclick={() => handleImport("skip")}>跳过重复项并导入</Button>
 								<Button size="sm" variant="outline" disabled={importing} onclick={() => handleImport("all")}>仍然全部导入</Button>
