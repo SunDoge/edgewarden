@@ -60,16 +60,12 @@ export async function loadBackupSettings(
 ): Promise<BackupSettings> {
 	const raw = await getConfigValue(db, BACKUP_SETTINGS_CONFIG_KEY);
 	if (!raw) {
-		const settings = getDefaultBackupSettings(fallbackTimezone);
-		await saveBackupSettings(db, dataEncryptionSecret, settings);
-		return settings;
+		return getDefaultBackupSettings(fallbackTimezone);
 	}
 
 	const envelope = parseBackupSettingsEnvelope(raw);
 	if (!envelope) {
-		const settings = parseBackupSettings(raw, fallbackTimezone);
-		await saveBackupSettings(db, dataEncryptionSecret, settings);
-		return settings;
+		return parseBackupSettings(raw, fallbackTimezone);
 	}
 
 	try {
@@ -139,15 +135,12 @@ export async function getBackupSettingsRepairState(
 ): Promise<BackupSettingsRepairState> {
 	const raw = await getConfigValue(db, BACKUP_SETTINGS_CONFIG_KEY);
 	if (!raw) {
-		const settings = getDefaultBackupSettings(fallbackTimezone);
-		await saveBackupSettings(db, dataEncryptionSecret, settings);
 		return { needsRepair: false, portable: null };
 	}
 
 	const envelope = parseBackupSettingsEnvelope(raw);
 	if (!envelope) {
-		const settings = parseBackupSettings(raw, fallbackTimezone);
-		await saveBackupSettings(db, dataEncryptionSecret, settings);
+		parseBackupSettings(raw, fallbackTimezone);
 		return { needsRepair: false, portable: null };
 	}
 

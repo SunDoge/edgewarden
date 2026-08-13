@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { unzipSync } from "fflate";
 import { test } from "vitest";
 import { createDatabase } from "../middleware/db";
+import {
+	acquireDataOperationLease,
+	releaseDataOperationLease,
+} from "../services/backup/operation-lease";
 import { hashCredential } from "../services/credential-protection";
 import { runMaintenance } from "../services/maintenance";
 
@@ -40,6 +44,72 @@ export function registerAdminOrganizationScenarios(
 			}),
 		});
 		assert.equal(response.status, 400);
+	});
+
+	test("keeps backup settings reads free of D1 writes", async () => {
+		const existing = await context.database
+			.prepare("SELECT value FROM config WHERE key = 'backup.settings.v1'")
+			.first<{ value: string }>();
+		await context.database
+			.prepare("DELETE FROM config WHERE key = 'backup.settings.v1'")
+			.run();
+		try {
+			const response = await request("/api/admin/backup/settings", {
+				headers: { authorization: `Bearer ${context.accessToken}` },
+			});
+			assert.equal(response.status, 200);
+			const settings = await response.json<{ destinations: unknown[] }>();
+			assert.equal(settings.destinations.length, 1);
+			assert.equal(
+				await context.database
+					.prepare("SELECT value FROM config WHERE key = 'backup.settings.v1'")
+					.first(),
+				null,
+			);
+		} finally {
+			if (existing) {
+				await context.database
+					.prepare(
+						"INSERT INTO config (key, value) VALUES ('backup.settings.v1', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+					)
+					.bind(existing.value)
+					.run();
+			}
+		}
+	});
+
+	test("does not overwrite backup settings while a data operation is running", async () => {
+		const settingsResponse = await request("/api/admin/backup/settings", {
+			headers: { authorization: `Bearer ${context.accessToken}` },
+		});
+		assert.equal(settingsResponse.status, 200);
+		const settings = await settingsResponse.json<unknown>();
+		const before = await context.database
+			.prepare("SELECT value FROM config WHERE key = 'backup.settings.v1'")
+			.first<{ value: string }>();
+		const lease = await acquireDataOperationLease(
+			context.database,
+			"backup.test",
+		);
+		assert.ok(lease);
+		try {
+			const response = await request("/api/admin/backup/settings", {
+				method: "PUT",
+				headers: {
+					authorization: `Bearer ${context.accessToken}`,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify(settings),
+			});
+			assert.equal(response.status, 409);
+			assert.match(await response.text(), /operation is running/i);
+			const after = await context.database
+				.prepare("SELECT value FROM config WHERE key = 'backup.settings.v1'")
+				.first<{ value: string }>();
+			assert.deepEqual(after, before);
+		} finally {
+			await releaseDataOperationLease(context.database, lease);
+		}
 	});
 
 	test("enforces admin authorization through shared middleware", async () => {

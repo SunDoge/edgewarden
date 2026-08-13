@@ -147,25 +147,32 @@ export const updateBackupSettings = factory.createHandlers(
 	vValidator("json", BackupSettingsSchema),
 	async (c) => {
 		try {
-			const previous = await loadBackupSettings(
-				c.get("db"),
-				c.env.DATA_ENCRYPTION_SECRET,
-				"UTC",
+			return await withDataOperationLease(
+				c.env.DB,
+				"backup.settings.update",
+				async () => {
+					const previous = await loadBackupSettings(
+						c.get("db"),
+						c.env.DATA_ENCRYPTION_SECRET,
+						"UTC",
+					);
+					const normalized = normalizeBackupSettingsInput(
+						c.req.valid("json"),
+						previous,
+					);
+					await saveBackupSettings(
+						c.get("db"),
+						c.env.DATA_ENCRYPTION_SECRET,
+						normalized,
+					);
+					return c.json(normalized);
+				},
 			);
-			const normalized = normalizeBackupSettingsInput(
-				c.req.valid("json"),
-				previous,
-			);
-			await saveBackupSettings(
-				c.get("db"),
-				c.env.DATA_ENCRYPTION_SECRET,
-				normalized,
-			);
-			return c.json(normalized);
 		} catch (error: unknown) {
+			const message = backupErrorMessage(error, "Backup settings save failed");
 			return errorResponse(
-				backupErrorMessage(error, "Backup settings save failed"),
-				400,
+				message,
+				message.includes("operation is running") ? 409 : 400,
 			);
 		}
 	},
