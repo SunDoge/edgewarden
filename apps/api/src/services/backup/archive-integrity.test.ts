@@ -1,12 +1,16 @@
 import { zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { assertBackupArchiveIntegrity } from "./archive";
+import {
+	assertBackupArchiveIntegrity,
+	assertBackupBlobIntegrity,
+} from "./archive";
 import {
 	buildBackupFileNameInTimeZone,
 	extractBackupFileChecksumPrefix,
 	getBackupArchiveChecksumPrefix,
 	inspectBackupArchiveFileNameChecksum,
 	verifyBackupArchiveFileNameChecksum,
+	sha256Hex,
 } from "./archive-integrity";
 
 const bytes = new TextEncoder().encode("edgewarden backup");
@@ -158,6 +162,51 @@ describe("backup archive integrity", () => {
 				`edgewarden_backup_20260812_030405_${prefix}.zip`,
 			),
 		).rejects.toThrow(`Backup blob checksum mismatch: ${path}`);
+	});
+
+	it("rejects v4 attachment and Send size metadata mismatches", async () => {
+		const attachmentPath = "attachments/cipher-id/attachment-id.bin";
+		const sendPath = "sends/send-id/file-id";
+		const blob = new Uint8Array([1]);
+		const hash = await sha256Hex(blob);
+		const manifest = {
+			formatVersion: 4,
+			blobHashes: { [attachmentPath]: hash, [sendPath]: hash },
+		};
+
+		await expect(
+			assertBackupBlobIntegrity(
+				{
+					manifest,
+					db: {
+						attachments: [
+							{ id: "attachment-id", cipher_id: "cipher-id", size: 2 },
+						],
+						sends: [],
+					},
+				} as never,
+				{ [attachmentPath]: blob },
+			),
+		).rejects.toThrow(`Backup blob size mismatch: ${attachmentPath}`);
+
+		await expect(
+			assertBackupBlobIntegrity(
+				{
+					manifest,
+					db: {
+						attachments: [],
+						sends: [
+							{
+								id: "send-id",
+								type: 1,
+								data: JSON.stringify({ id: "file-id", size: 2 }),
+							},
+						],
+					},
+				} as never,
+				{ [sendPath]: blob },
+			),
+		).rejects.toThrow(`Backup blob size mismatch: ${sendPath}`);
 	});
 
 	it("rejects a syntactically valid database payload with truncated rows", async () => {

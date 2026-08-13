@@ -254,6 +254,43 @@ function getRequiredZipEntries(
 	return entries;
 }
 
+function getStrictBlobEntries(db: BackupPayload["db"]): Array<{
+	path: string;
+	sizeBytes: number;
+}> {
+	const entries: Array<{ path: string; sizeBytes: number }> = [];
+	for (const row of db.attachments) {
+		const cipherId = String(row.cipher_id || "").trim();
+		const attachmentId = String(row.id || "").trim();
+		const sizeBytes = Number(row.size);
+		if (
+			!cipherId ||
+			!attachmentId ||
+			!Number.isSafeInteger(sizeBytes) ||
+			sizeBytes < 0
+		) {
+			throw new Error("Backup archive contains invalid attachment blob metadata");
+		}
+		entries.push({
+			path: `attachments/${cipherId}/${attachmentId}.bin`,
+			sizeBytes,
+		});
+	}
+	for (const row of db.sends || []) {
+		if (Number(row.type) !== 1) continue;
+		const sendId = String(row.id || "").trim();
+		const file = parseSendFileMetadata(row);
+		if (!sendId || !file) {
+			throw new Error("Backup archive contains invalid file Send metadata");
+		}
+		entries.push({
+			path: `sends/${sendId}/${file.fileId}`,
+			sizeBytes: file.sizeBytes,
+		});
+	}
+	return entries;
+}
+
 function createZipEntries(
 	files: Record<string, Uint8Array>,
 ): Record<string, Uint8Array | [Uint8Array, { level: 0 | 1 | 6 }]> {
@@ -357,9 +394,9 @@ export function parseBackupArchive(
 		}
 	}
 	if (manifest.formatVersion >= 4) {
-		for (const entry of getRequiredZipEntries(db, manifest.formatVersion)) {
-			if (!/^[0-9a-f]{64}$/i.test(String(manifest.blobHashes?.[entry] || ""))) {
-				throw new Error(`Backup archive blob checksum is invalid: ${entry}`);
+		for (const { path } of getStrictBlobEntries(db)) {
+			if (!/^[0-9a-f]{64}$/i.test(String(manifest.blobHashes?.[path] || ""))) {
+				throw new Error(`Backup archive blob checksum is invalid: ${path}`);
 			}
 		}
 	}
@@ -660,12 +697,12 @@ export async function assertBackupBlobIntegrity(
 	files: Record<string, Uint8Array>,
 ): Promise<void> {
 	if (payload.manifest.formatVersion < 4) return;
-	for (const path of getRequiredZipEntries(
-		payload.db,
-		payload.manifest.formatVersion,
-	)) {
+	for (const { path, sizeBytes } of getStrictBlobEntries(payload.db)) {
 		const bytes = files[path];
 		if (!bytes) throw new Error(`Backup archive is missing required file: ${path}`);
+		if (bytes.byteLength !== sizeBytes) {
+			throw new Error(`Backup blob size mismatch: ${path}`);
+		}
 		const expected = String(payload.manifest.blobHashes?.[path] || "").toLowerCase();
 		if ((await sha256Hex(bytes)) !== expected) {
 			throw new Error(`Backup blob checksum mismatch: ${path}`);
