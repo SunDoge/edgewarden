@@ -1,9 +1,9 @@
 -- =============================================================================
 -- EDGEWARDEN INITIAL SCHEMA (modelled after Vaultwarden domains)
 -- =============================================================================
--- This is the complete baseline for a fresh deployment. Once a release has
--- been deployed, keep this file immutable and add a numbered migration for
--- every schema change instead of editing this file in place.
+-- This is the complete baseline for a fresh deployment. After this baseline
+-- reaches production, keep it immutable and add a numbered migration for each
+-- schema change instead of editing this file in place.
 --
 -- Principles:
 --   1. All timestamps are INTEGER (Unix seconds). No more TEXT/INTEGER mix.
@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS users (
   created_at INTEGER NOT NULL,
   -- Unix seconds
   updated_at INTEGER NOT NULL,
+	deletion_requested_at INTEGER,
 	CHECK (
 		(kdf_type = 0 AND kdf_iterations >= 100000 AND kdf_memory IS NULL AND kdf_parallelism IS NULL)
 		OR
@@ -102,6 +103,8 @@ CREATE TABLE IF NOT EXISTS users (
 -- if needed (SQLite UNIQUE is case-sensitive for ASCII by default)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_api_key_hash
   ON users(api_key_hash) WHERE api_key_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_deletion_requested
+  ON users(deletion_requested_at) WHERE deletion_requested_at IS NOT NULL;
 -- ---------------------------------------------------------------------------
 -- 3. LOGIN ATTEMPTS
 -- ---------------------------------------------------------------------------
@@ -151,9 +154,13 @@ CREATE TABLE IF NOT EXISTS organizations (
   -- must also have a row in org_members
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
+	deletion_requested_at INTEGER,
+	deletion_token TEXT,
   FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS idx_organizations_owner ON organizations(owner_id);
+CREATE INDEX IF NOT EXISTS idx_organizations_deletion_requested
+  ON organizations(deletion_requested_at) WHERE deletion_requested_at IS NOT NULL;
 -- ---------------------------------------------------------------------------
 -- 6. ORG MEMBERS
 -- ---------------------------------------------------------------------------
@@ -175,6 +182,7 @@ CREATE TABLE IF NOT EXISTS org_members (
   access_all INTEGER NOT NULL DEFAULT 0 CHECK (access_all IN (0, 1)),
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
+	mutation_token TEXT,
   FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE
   SET NULL
@@ -182,6 +190,8 @@ CREATE TABLE IF NOT EXISTS org_members (
 CREATE INDEX IF NOT EXISTS idx_org_members_org_status ON org_members(org_id, status);
 CREATE INDEX IF NOT EXISTS idx_org_members_user ON org_members(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_org_members_org_email ON org_members(org_id, email);
+CREATE INDEX IF NOT EXISTS idx_org_members_mutation_token
+  ON org_members(mutation_token) WHERE mutation_token IS NOT NULL;
 -- ---------------------------------------------------------------------------
 -- 7. COLLECTIONS  (org-level folder for shared ciphers)
 -- ---------------------------------------------------------------------------
@@ -192,9 +202,12 @@ CREATE TABLE IF NOT EXISTS collections (
   -- client-encrypted
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
+	mutation_token TEXT,
   FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_collections_org ON collections(org_id);
+CREATE INDEX IF NOT EXISTS idx_collections_mutation_token
+  ON collections(mutation_token) WHERE mutation_token IS NOT NULL;
 -- ---------------------------------------------------------------------------
 -- 8. COLLECTION MEMBERS  (access control: which members can see which collections)
 -- ---------------------------------------------------------------------------
@@ -218,10 +231,13 @@ CREATE TABLE IF NOT EXISTS folders (
   -- client-encrypted
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
+	mutation_token TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_folders_id_user ON folders(id, user_id);
 CREATE INDEX IF NOT EXISTS idx_folders_user_updated ON folders(user_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_folders_mutation_token
+  ON folders(mutation_token) WHERE mutation_token IS NOT NULL;
 -- ---------------------------------------------------------------------------
 -- 10. CIPHERS
 -- ---------------------------------------------------------------------------
@@ -259,6 +275,8 @@ CREATE TABLE IF NOT EXISTS ciphers (
   -- When to permanently purge (set by cleanup job; e.g. deleted_at + 30 days)
   -- NULL = not yet scheduled for purge
   purge_after INTEGER,
+	mutation_token TEXT,
+	purge_token TEXT,
   CHECK (
     (
       user_id IS NOT NULL
@@ -282,6 +300,8 @@ CREATE INDEX IF NOT EXISTS idx_ciphers_org_updated ON ciphers(org_id, updated_at
 -- Cleanup job: find all rows due for permanent purge
 CREATE INDEX IF NOT EXISTS idx_ciphers_purge_after ON ciphers(purge_after)
 WHERE purge_after IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ciphers_purge_token
+  ON ciphers(purge_token) WHERE purge_token IS NOT NULL;
 -- ---------------------------------------------------------------------------
 -- 11. CIPHER COLLECTIONS  (many-to-many: org ciphers ↔ collections)
 -- ---------------------------------------------------------------------------
@@ -305,10 +325,30 @@ CREATE TABLE IF NOT EXISTS attachments (
   size_name TEXT NOT NULL,
   key TEXT,
   -- client-encrypted attachment key
+	-- Versioned physical object key, independent from the public attachment ID.
+	storage_key TEXT,
+	deleted_at INTEGER,
+	deletion_token TEXT,
   created_at INTEGER NOT NULL,
   FOREIGN KEY (cipher_id) REFERENCES ciphers(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_attachments_cipher ON attachments(cipher_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_attachments_storage_key
+  ON attachments(storage_key) WHERE storage_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_attachments_deleted_at
+  ON attachments(deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_attachments_deletion_token
+  ON attachments(deletion_token) WHERE deletion_token IS NOT NULL;
+-- Durable tombstones make external R2/KV deletion retryable after D1 commits.
+CREATE TABLE IF NOT EXISTS blob_gc_queue (
+  object_key TEXT PRIMARY KEY NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  next_attempt_at INTEGER NOT NULL,
+  last_error TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_blob_gc_queue_due
+  ON blob_gc_queue(next_attempt_at, created_at);
 -- ---------------------------------------------------------------------------
 -- 13. SENDS
 -- ---------------------------------------------------------------------------
@@ -326,6 +366,10 @@ CREATE TABLE IF NOT EXISTS sends (
   -- client-encrypted
   key TEXT NOT NULL,
   -- client-encrypted Send key
+	-- Versioned physical object key for file Sends.
+	storage_key TEXT,
+	-- Internal claim token used while scheduled maintenance purges a Send.
+	purge_token TEXT,
   -- Optional password protection
   password_hash TEXT,
   password_salt TEXT,
@@ -368,6 +412,10 @@ CREATE INDEX IF NOT EXISTS idx_sends_deletion ON sends(deletion_date);
 -- cleanup
 CREATE INDEX IF NOT EXISTS idx_sends_expiration ON sends(expiration_date) -- cleanup
 WHERE expiration_date IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sends_storage_key
+  ON sends(storage_key) WHERE storage_key IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sends_purge_token
+  ON sends(purge_token) WHERE purge_token IS NOT NULL;
 -- ---------------------------------------------------------------------------
 -- 14. REFRESH TOKENS
 -- ---------------------------------------------------------------------------
@@ -403,11 +451,14 @@ CREATE TABLE IF NOT EXISTS devices (
   -- Unix seconds
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
+	mutation_token TEXT,
   PRIMARY KEY (user_id, device_identifier),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_devices_user_updated ON devices(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_devices_user_last_seen ON devices(user_id, last_seen_at);
+CREATE INDEX IF NOT EXISTS idx_devices_mutation_token
+  ON devices(mutation_token) WHERE mutation_token IS NOT NULL;
 -- ---------------------------------------------------------------------------
 -- 16. AUTH REQUESTS  (passwordless / device approval flow)
 -- ---------------------------------------------------------------------------
@@ -436,6 +487,7 @@ CREATE TABLE IF NOT EXISTS auth_requests (
   -- Unix seconds
   response_date INTEGER,
   authentication_date INTEGER,
+	consumption_token TEXT,
 	CHECK (
 		(approved IS NULL AND response_date IS NULL)
 		OR (approved IS NOT NULL AND response_date IS NOT NULL)
@@ -459,6 +511,8 @@ CREATE INDEX IF NOT EXISTS idx_auth_requests_device_pending ON auth_requests(
   request_device_identifier,
   creation_date
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_requests_consumption_token
+  ON auth_requests(consumption_token) WHERE consumption_token IS NOT NULL;
 -- ---------------------------------------------------------------------------
 -- 17. TRUSTED TWO-FACTOR DEVICE TOKENS
 -- ---------------------------------------------------------------------------
@@ -497,12 +551,15 @@ CREATE TABLE IF NOT EXISTS webauthn_credentials (
   purpose TEXT NOT NULL DEFAULT 'login' CHECK (purpose IN ('login', 'twoFactor')),
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
+	mutation_token TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_webauthn_credentials_credential_id ON webauthn_credentials(credential_id);
 -- idx_webauthn_credentials_user is omitted: (user_id, updated_at) covers user_id lookups via prefix
 CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_updated ON webauthn_credentials(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_purpose ON webauthn_credentials(user_id, purpose, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_webauthn_credentials_mutation_token
+  ON webauthn_credentials(mutation_token) WHERE mutation_token IS NOT NULL;
 -- ---------------------------------------------------------------------------
 -- 19. WEBAUTHN CHALLENGES
 -- ---------------------------------------------------------------------------
@@ -520,6 +577,8 @@ CREATE TABLE IF NOT EXISTS webauthn_challenges (
 );
 CREATE INDEX IF NOT EXISTS idx_webauthn_challenges_expires ON webauthn_challenges(expires_at);
 CREATE INDEX IF NOT EXISTS idx_webauthn_challenges_user_scope ON webauthn_challenges(user_id, scope);
+CREATE INDEX IF NOT EXISTS idx_webauthn_challenges_used
+  ON webauthn_challenges(used_at) WHERE used_at IS NOT NULL;
 -- ---------------------------------------------------------------------------
 -- 20. USED ATTACHMENT DOWNLOAD TOKENS  (one-time download JWTs)
 -- ---------------------------------------------------------------------------
@@ -580,6 +639,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   metadata TEXT CHECK (metadata IS NULL OR (json_valid(metadata) AND json_type(metadata, '$') = 'object')),
   -- JSON blob for extra context
   created_at INTEGER NOT NULL,
+	is_tombstone INTEGER NOT NULL DEFAULT 0 CHECK (is_tombstone IN (0, 1)),
   -- Unix seconds
   FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE
   SET NULL
@@ -590,3 +650,51 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_category_created ON audit_logs(categor
 CREATE INDEX IF NOT EXISTS idx_audit_logs_level_created ON audit_logs(level, created_at);
 -- Reverse lookup: "show me the full history of cipher <id>"
 CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs(target_type, target_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_retention
+  ON audit_logs(created_at, id) WHERE is_tombstone = 0;
+
+-- Deletion history is permanent evidence: deletion events must be marked as
+-- tombstones, and existing tombstones cannot be rewritten or removed.
+CREATE TRIGGER IF NOT EXISTS audit_logs_require_tombstone_marker
+BEFORE INSERT ON audit_logs
+WHEN (
+  NEW.action LIKE '%.delete'
+  OR NEW.action LIKE '%.delete.%'
+  OR NEW.action LIKE '%.purged'
+)
+AND NEW.is_tombstone <> 1
+BEGIN
+  SELECT RAISE(ABORT, 'deletion audit events must be tombstones');
+END;
+
+CREATE TRIGGER IF NOT EXISTS audit_logs_protect_tombstone_delete
+BEFORE DELETE ON audit_logs
+WHEN OLD.is_tombstone = 1
+AND NOT EXISTS (
+  SELECT 1 FROM config
+  WHERE key = 'backup.runner.lock.v1'
+    AND json_valid(value)
+    AND json_extract(value, '$.operation') LIKE 'backup.restore%'
+    AND COALESCE(json_extract(value, '$.expiresAt'), 0) > unixepoch()
+)
+BEGIN
+  SELECT RAISE(ABORT, 'audit tombstones cannot be deleted');
+END;
+
+CREATE TRIGGER IF NOT EXISTS audit_logs_protect_tombstone_update
+BEFORE UPDATE ON audit_logs
+WHEN OLD.is_tombstone = 1
+AND (
+  NEW.id IS NOT OLD.id
+  OR NEW.action IS NOT OLD.action
+  OR NEW.category IS NOT OLD.category
+  OR NEW.level IS NOT OLD.level
+  OR NEW.target_type IS NOT OLD.target_type
+  OR NEW.target_id IS NOT OLD.target_id
+  OR NEW.metadata IS NOT OLD.metadata
+  OR NEW.is_tombstone IS NOT OLD.is_tombstone
+  OR NEW.created_at IS NOT OLD.created_at
+)
+BEGIN
+  SELECT RAISE(ABORT, 'audit tombstones are immutable');
+END;
