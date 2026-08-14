@@ -1,7 +1,13 @@
 <script lang="ts">
 import { Eye, EyeOff, File as FileIcon, FileText } from "@lucide/svelte";
 import { Button } from "$lib/components/ui/button/index.js";
+import { Checkbox } from "$lib/components/ui/checkbox/index.js";
+import * as Field from "$lib/components/ui/field/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
+import * as Select from "$lib/components/ui/select/index.js";
+import { Separator } from "$lib/components/ui/separator/index.js";
+import { Textarea } from "$lib/components/ui/textarea/index.js";
+import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
 
 let {
 	isCreating,
@@ -27,22 +33,22 @@ function handleFileChange(event: Event) {
 }
 </script>
 
-<div class="space-y-5">
-	<div class="flex items-center justify-between"><h3 class="font-bold text-lg text-slate-900 dark:text-slate-100">{isCreating ? "新建安全 Send" : "编辑 Send"}</h3><Button variant="ghost" size="sm" onclick={onCancel} class="text-slate-500 hover:text-red-500">取消</Button></div>
-	<hr class="border-slate-200 dark:border-slate-800" />
-	<div class="space-y-4">
-		{#if isCreating}<div class="space-y-1.5"><span class="text-xs font-bold text-slate-400 uppercase tracking-wider">分享类型</span><div class="grid grid-cols-2 gap-2"><button class="py-2.5 rounded-lg border text-sm font-semibold flex items-center justify-center gap-2 transition-colors {form.type === 0 ? 'bg-primary border-primary text-primary-foreground' : 'bg-white dark:bg-slate-800 border-slate-200 text-slate-650 hover:bg-slate-50'}" onclick={() => form.type = 0}><FileText class="size-4" />加密文本</button><button class="py-2.5 rounded-lg border text-sm font-semibold flex items-center justify-center gap-2 transition-colors {form.type === 1 ? 'bg-primary border-primary text-primary-foreground' : 'bg-white dark:bg-slate-800 border-slate-200 text-slate-650 hover:bg-slate-50'}" onclick={() => form.type = 1}><FileIcon class="size-4" />加密文件</button></div></div>{/if}
-		<div class="space-y-1.5"><span class="text-xs font-bold text-slate-400 uppercase tracking-wider">分享名称</span><Input bind:value={form.name} placeholder="例如: 财务表格或密码备份" /></div>
-		{#if form.type === 0}<div class="space-y-1.5"><span class="text-xs font-bold text-slate-400 uppercase tracking-wider">文本内容</span><textarea bind:value={form.textContent} rows="6" placeholder="在此输入需要发送的敏感文字内容（客户端加密传输）..." class="w-full p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-y"></textarea></div>{:else if isCreating}<div class="space-y-1.5"><span class="text-xs font-bold text-slate-400 uppercase tracking-wider">选择文件</span><input type="file" class="w-full p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-600" onchange={handleFileChange} /></div>{/if}
-		<div class="space-y-4 border-t border-slate-250 dark:border-slate-800 pt-4">
-			<span class="text-xs font-bold text-slate-400 uppercase tracking-wider block">安全与失效选项</span>
-			<div class="space-y-1.5"><span class="text-xs font-semibold text-slate-500">限次失效 (最大访问次数)</span><Input type="number" min="1" bind:value={form.maxAccessCount} placeholder="例如：1 (留空则不限)" /></div>
-			<div class="space-y-1.5"><span class="text-xs font-semibold text-slate-500">自动销毁时间 (最长 30 天)</span><select bind:value={form.deletionDays} class="w-full p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm"><option value={1}>1 天后硬删除</option><option value={3}>3 天后硬删除</option><option value={7}>7 天后硬删除</option><option value={14}>14 天后硬删除</option><option value={30}>30 天后硬删除</option></select></div>
-			<div class="space-y-1.5"><span class="text-xs font-semibold text-slate-500">过期时间 (此时间后禁止下载，但保留记录)</span><input type="datetime-local" bind:value={form.expirationDate} class="w-full p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" /></div>
-			<div class="space-y-1.5"><label class="flex items-center gap-2 text-xs font-semibold text-slate-500"><input type="checkbox" bind:checked={form.protectWithPassword} class="size-4 rounded" />启用访问密码</label><div class="relative"><Input type={showPassword ? "text" : "password"} bind:value={form.password} placeholder={isEditing && hasExistingPassword ? "留空以保留现有密码" : "输入访问密码"} disabled={!form.protectWithPassword} class="pr-10" /><button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650" onclick={() => showPassword = !showPassword}>{#if showPassword}<EyeOff class="size-4" />{:else}<Eye class="size-4" />{/if}</button></div></div>
-			<div class="flex items-center gap-2 py-1"><input type="checkbox" id="hideEmail" bind:checked={form.hideEmail} class="rounded border-slate-300 text-primary focus:ring-primary size-4" /><label for="hideEmail" class="text-sm font-semibold text-slate-600 cursor-pointer">隐藏我的邮箱地址</label></div>
-			<div class="flex items-center gap-2 py-1"><input type="checkbox" id="disabled" bind:checked={form.disabled} class="rounded border-slate-300 text-primary focus:ring-primary size-4" /><label for="disabled" class="text-sm font-semibold text-slate-600 cursor-pointer">立即禁用此链接</label></div>
-		</div>
-	</div>
-	<Button onclick={onSave} class="w-full bg-primary text-primary-foreground font-semibold py-2.5">创建并加密传输</Button>
+<div class="flex flex-col gap-5">
+	<div class="flex items-center justify-between"><h3 class="text-lg font-semibold">{isCreating ? "新建安全 Send" : "编辑 Send"}</h3><Button variant="ghost" size="sm" onclick={onCancel}>取消</Button></div>
+	<Separator />
+	<Field.Group>
+		{#if isCreating}<Field.Field><Field.Label>分享类型</Field.Label><ToggleGroup.Root type="single" variant="outline" class="grid w-full grid-cols-2" value={String(form.type)} onValueChange={(value) => { if (value) form.type = Number(value); }}><ToggleGroup.Item value="0"><FileText data-icon="inline-start" />加密文本</ToggleGroup.Item><ToggleGroup.Item value="1"><FileIcon data-icon="inline-start" />加密文件</ToggleGroup.Item></ToggleGroup.Root></Field.Field>{/if}
+		<Field.Field><Field.Label for="send-name">分享名称</Field.Label><Input id="send-name" bind:value={form.name} placeholder="例如：财务表格或密码备份" /></Field.Field>
+		{#if form.type === 0}<Field.Field><Field.Label for="send-content">文本内容</Field.Label><Textarea id="send-content" bind:value={form.textContent} rows={6} placeholder="在此输入需要发送的敏感文字内容（客户端加密传输）..." /></Field.Field>{:else if isCreating}<Field.Field><Field.Label for="send-file">选择文件</Field.Label><Input id="send-file" type="file" onchange={handleFileChange} /></Field.Field>{/if}
+		<Field.FieldSet class="border-t pt-4"><Field.FieldLegend>安全与失效选项</Field.FieldLegend><Field.FieldGroup>
+			<Field.Field><Field.Label for="max-access-count">最大访问次数</Field.Label><Input id="max-access-count" type="number" min="1" bind:value={form.maxAccessCount} placeholder="留空则不限" /><Field.Description>达到次数后链接立即失效。</Field.Description></Field.Field>
+			<Field.Field><Field.Label>自动销毁时间</Field.Label><Select.Root type="single" value={String(form.deletionDays)} onValueChange={(value) => form.deletionDays = Number(value)}><Select.Trigger class="w-full">{form.deletionDays} 天后硬删除</Select.Trigger><Select.Content><Select.Group>{#each [1, 3, 7, 14, 30] as days}<Select.Item value={String(days)}>{days} 天后硬删除</Select.Item>{/each}</Select.Group></Select.Content></Select.Root></Field.Field>
+			<Field.Field><Field.Label for="expiration-date">过期时间</Field.Label><Input id="expiration-date" type="datetime-local" bind:value={form.expirationDate} /><Field.Description>此时间后禁止访问，但保留管理记录。</Field.Description></Field.Field>
+			<Field.Field orientation="horizontal"><Checkbox id="protect-send" bind:checked={form.protectWithPassword} /><Field.Label for="protect-send">启用访问密码</Field.Label></Field.Field>
+			<Field.Field data-disabled={!form.protectWithPassword}><Field.Label for="send-password">访问密码</Field.Label><div class="relative"><Input id="send-password" type={showPassword ? "text" : "password"} bind:value={form.password} placeholder={isEditing && hasExistingPassword ? "留空以保留现有密码" : "输入访问密码"} disabled={!form.protectWithPassword} class="pr-10" /><Button type="button" variant="ghost" size="icon-xs" class="absolute right-1 top-1/2 -translate-y-1/2" onclick={() => showPassword = !showPassword} aria-label={showPassword ? "隐藏密码" : "显示密码"}>{#if showPassword}<EyeOff data-icon />{:else}<Eye data-icon />{/if}</Button></div></Field.Field>
+			<Field.Field orientation="horizontal"><Checkbox id="hideEmail" bind:checked={form.hideEmail} /><Field.Label for="hideEmail">隐藏我的邮箱地址</Field.Label></Field.Field>
+			<Field.Field orientation="horizontal"><Checkbox id="disabled" bind:checked={form.disabled} /><Field.Label for="disabled">立即禁用此链接</Field.Label></Field.Field>
+		</Field.FieldGroup></Field.FieldSet>
+	</Field.Group>
+	<Button onclick={onSave} class="w-full">{isCreating ? "创建并加密传输" : "保存更改"}</Button>
 </div>
