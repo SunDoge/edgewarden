@@ -1,7 +1,13 @@
 <script lang="ts">
-import { Info, RefreshCw, Save, Trash2 } from "@lucide/svelte";
+import { Info, Save, Trash2 } from "@lucide/svelte";
 import { Button } from "$lib/components/ui/button/index.js";
+import * as Card from "$lib/components/ui/card/index.js";
+import { Checkbox } from "$lib/components/ui/checkbox/index.js";
+import * as Field from "$lib/components/ui/field/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
+import * as Select from "$lib/components/ui/select/index.js";
+import { Separator } from "$lib/components/ui/separator/index.js";
+import { Spinner } from "$lib/components/ui/spinner/index.js";
 import type { BackupDestinationForm } from "./destination-form";
 
 let {
@@ -18,49 +24,44 @@ let {
 </script>
 
 <!-- Config Form Card -->
-<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-6">
-	<div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-		<div>
-			<h2 class="text-base font-bold text-slate-900 dark:text-slate-50">备份服务配置</h2>
-			<p class="text-xs text-slate-500">修改远程 WebDAV 或 S3 连接密钥及桶目录</p>
-		</div>
-		<div class="flex gap-2">
+<Card.Root>
+	<Card.Header class="flex-row items-start justify-between">
+		<div><Card.Title>备份服务配置</Card.Title><Card.Description>修改远程 WebDAV 或 S3 连接密钥及桶目录</Card.Description></div>
+		<Card.Action class="flex gap-2">
 			<Button variant="ghost" size="sm" onclick={onDelete} disabled={saving} class="text-red-500 hover:text-red-600">
-				<Trash2 class="size-4 mr-1.5" />
+				<Trash2 data-icon="inline-start" />
 				删除目的地
 			</Button>
-			<Button size="sm" onclick={onSave} disabled={saving} class="gap-1.5">
+			<Button size="sm" onclick={onSave} disabled={saving}>
 				{#if saving}
-					<RefreshCw class="size-3.5 animate-spin" />
+					<Spinner data-icon="inline-start" />
 				{:else}
-					<Save class="size-3.5" />
+					<Save data-icon="inline-start" />
 				{/if}
 				保存修改
 			</Button>
-		</div>
-	</div>
+		</Card.Action>
+	</Card.Header>
+	<Card.Content class="flex flex-col gap-6">
 
 	<!-- Generic fields -->
-	<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-		<div class="space-y-1.5">
-			<label for="backup-name" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">目的地名称</label>
+	<Field.Group class="grid grid-cols-1 md:grid-cols-2">
+		<Field.Field>
+			<Field.Label for="backup-name">目的地名称</Field.Label>
 			<Input id="backup-name" type="text" bind:value={form.name} placeholder="例如：我的 Nextcloud 备份" />
-		</div>
-		<div class="space-y-1.5">
-			<label for="backup-type" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">存储协议</label>
-			<select id="backup-type" bind:value={form.type} class="w-full flex h-10 rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-				<option value="webdav">WebDAV 协议</option>
-				<option value="s3">S3 兼容协议</option>
-			</select>
-		</div>
-		<div class="md:col-span-2 flex items-center gap-2 pt-1.5">
-			<input type="checkbox" id="attachments" bind:checked={form.includeAttachments} class="rounded text-primary focus:ring-primary" />
-			<label for="attachments" class="text-xs text-slate-700 dark:text-slate-300 select-none cursor-pointer flex items-center gap-1.5">
+		</Field.Field>
+		<Field.Field>
+			<Field.Label>存储协议</Field.Label><Select.Root type="single" value={form.type} onValueChange={(value) => form.type = value as typeof form.type}><Select.Trigger class="w-full">{form.type === "webdav" ? "WebDAV 协议" : "S3 兼容协议"}</Select.Trigger><Select.Content><Select.Group><Select.Item value="webdav">WebDAV 协议</Select.Item><Select.Item value="s3">S3 兼容协议</Select.Item></Select.Group></Select.Content></Select.Root>
+		</Field.Field>
+		<Field.Field class="md:col-span-2" orientation="horizontal">
+			<Checkbox id="attachments" bind:checked={form.includeAttachments} />
+			<Field.Label for="attachments" class="flex items-center gap-1.5">
 				同时备份附件与文件 Send（包含 KV/R2 中的文件）
-				<Info class="size-3.5 text-slate-400" title="勾选后，备份流程会将附件和文件 Send 的二进制内容写入 ZIP；不勾选时不会导出文件 Send，避免恢复出缺少文件的记录。" />
-			</label>
-		</div>
-	</div>
+				<Info class="size-3.5 text-muted-foreground" title="勾选后，备份流程会将附件和文件 Send 的二进制内容写入 ZIP；不勾选时不会导出文件 Send，避免恢复出缺少文件的记录。" />
+			</Field.Label>
+		</Field.Field>
+	</Field.Group>
+	<Separator />
 
 	<!-- WebDAV Protocol Fields -->
 	{#if form.type === "webdav"}
@@ -110,13 +111,7 @@ let {
 					<label for="s3-secret-key" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">Secret Access Key</label>
 					<Input id="s3-secret-key" type="password" bind:value={form.s3SecretAccessKey} placeholder="Secret Access Key" />
 				</div>
-				<div class="space-y-1.5">
-					<label for="s3-addressing" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">Addressing Style 地址模式</label>
-					<select id="s3-addressing" bind:value={form.s3AddressingStyle} class="w-full flex h-10 rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-						<option value="path-style">Path Style (路径风格模式)</option>
-						<option value="virtual-hosted-style">Virtual Hosted Style (虚拟主机名模式)</option>
-					</select>
-				</div>
+				<Field.Field><Field.Label>Addressing Style 地址模式</Field.Label><Select.Root type="single" value={form.s3AddressingStyle} onValueChange={(value) => form.s3AddressingStyle = value as typeof form.s3AddressingStyle}><Select.Trigger class="w-full">{form.s3AddressingStyle === "path-style" ? "Path Style（路径风格）" : "Virtual Hosted Style（虚拟主机名）"}</Select.Trigger><Select.Content><Select.Group><Select.Item value="path-style">Path Style（路径风格）</Select.Item><Select.Item value="virtual-hosted-style">Virtual Hosted Style（虚拟主机名）</Select.Item></Select.Group></Select.Content></Select.Root></Field.Field>
 				<div class="space-y-1.5">
 					<label for="s3-path" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">备份根目录</label>
 					<Input id="s3-path" type="text" bind:value={form.s3RootPath} placeholder="edgewarden" />
@@ -129,27 +124,19 @@ let {
 	<div class="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
 		<h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">定时自动备份设定 (Cron Trigger)</h3>
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-			<div class="md:col-span-3 flex items-center gap-2">
-				<input type="checkbox" id="schedEnabled" bind:checked={form.scheduleEnabled} class="rounded text-primary focus:ring-primary" />
-				<label for="schedEnabled" class="text-xs text-slate-700 dark:text-slate-300 select-none cursor-pointer font-semibold">
+			<Field.Field class="md:col-span-3" orientation="horizontal">
+				<Checkbox id="schedEnabled" bind:checked={form.scheduleEnabled} />
+				<Field.Label for="schedEnabled">
 					启用此目的地的自动定时备份任务
-				</label>
-			</div>
+				</Field.Label>
+			</Field.Field>
 
 			<div class="space-y-1.5">
 				<label for="schedule-interval" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">备份执行间隔 (小时)</label>
 				<Input id="schedule-interval" type="number" bind:value={form.scheduleInterval} min="1" max="99" disabled={!form.scheduleEnabled} />
 			</div>
 
-			<div class="space-y-1.5">
-				<label for="schedule-time" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">每日首个备份小时</label>
-				<select id="schedule-time" bind:value={form.scheduleStartTime} disabled={!form.scheduleEnabled} class="h-9 w-full rounded-md border bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50">
-					{#each Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`) as hour}
-						<option value={hour}>{hour}</option>
-					{/each}
-				</select>
-				<p class="text-[10px] text-slate-400">任务每小时检查一次，会在所选小时内执行，不保证精确到分钟。</p>
-			</div>
+			<Field.Field data-disabled={!form.scheduleEnabled}><Field.Label>每日首个备份小时</Field.Label><Select.Root type="single" value={form.scheduleStartTime} disabled={!form.scheduleEnabled} onValueChange={(value) => form.scheduleStartTime = value}><Select.Trigger class="w-full">{form.scheduleStartTime}</Select.Trigger><Select.Content><Select.Group>{#each Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`) as hour}<Select.Item value={hour}>{hour}</Select.Item>{/each}</Select.Group></Select.Content></Select.Root><Field.Description>任务每小时检查一次，会在所选小时内执行，不保证精确到分钟。</Field.Description></Field.Field>
 
 			<div class="space-y-1.5">
 				<label for="schedule-retention" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">最大保留历史文件数 (Retention)</label>
@@ -157,4 +144,5 @@ let {
 			</div>
 		</div>
 	</div>
-</div>
+	</Card.Content>
+</Card.Root>
