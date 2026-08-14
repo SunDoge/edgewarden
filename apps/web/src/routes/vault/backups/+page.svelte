@@ -273,15 +273,15 @@ function showSuccess(msg: string) {
 		<!-- Header -->
 		<div class="flex items-center justify-between">
 			<div class="flex items-center gap-3">
-				<Button variant="outline" size="icon" onclick={() => goto("/vault")} class="size-9">
-					<ArrowLeft class="size-4" />
+				<Button variant="outline" size="icon" onclick={() => goto("/vault")} aria-label="返回保险库">
+					<ArrowLeft />
 				</Button>
 				<div>
-					<h1 class="text-xl font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+					<h1 class="flex items-center gap-2 text-xl font-bold">
 						<Database class="size-5 text-primary" />
 						云备份中心
 					</h1>
-					<p class="text-xs text-slate-500 mt-0.5">配置与管理整个密码库实例的安全备份，可导出为标准的端到端加密备份包</p>
+					<p class="mt-0.5 text-xs text-muted-foreground">配置与管理整个密码库实例的安全备份，可导出为标准的端到端加密备份包</p>
 				</div>
 			</div>
 		</div>
@@ -301,9 +301,9 @@ function showSuccess(msg: string) {
 		{:else if loading}
 			<Empty.Root class="flex-1"><Empty.Header><Empty.Media><Spinner class="size-8" /></Empty.Media><Empty.Title>正在载入备份配置</Empty.Title></Empty.Header></Empty.Root>
 		{:else}
-			<div class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+			<div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-4">
 				<!-- Left Column: Destinations list -->
-				<div class="lg:col-span-1 space-y-4">
+				<div class="flex flex-col gap-4 lg:col-span-1">
 					<BackupDestinationList
 						destinations={settings.destinations}
 						selectedId={selectedDestId}
@@ -321,7 +321,7 @@ function showSuccess(msg: string) {
 				</div>
 
 				<!-- Right Column: Destination settings -->
-				<div class="lg:col-span-3 space-y-6">
+				<div class="flex flex-col gap-6 lg:col-span-3">
 					{#if !selectedDestId}
 						<Empty.Root><Empty.Header><Empty.Media variant="icon"><Settings2 /></Empty.Media><Empty.Title>请选择备份目的地</Empty.Title><Empty.Description>在左侧选择已有目的地，或添加一个新目的地。</Empty.Description></Empty.Header></Empty.Root>
 					{:else}

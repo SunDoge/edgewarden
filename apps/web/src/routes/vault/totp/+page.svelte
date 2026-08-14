@@ -2,9 +2,12 @@
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
 import { Button } from "$lib/components/ui/button/index.js";
+import * as Card from "$lib/components/ui/card/index.js";
+import * as Empty from "$lib/components/ui/empty/index.js";
+import { Spinner } from "$lib/components/ui/spinner/index.js";
 import { calcTotpNow } from "$lib/services/crypto";
 import { syncVaultData, vault } from "$lib/stores/vault.svelte";
-import { ArrowLeft, Check, Copy, KeyRound, RefreshCw } from "@lucide/svelte";
+import { ArrowLeft, Check, Copy, KeyRound } from "@lucide/svelte";
 
 let codes = $state<
 	Record<string, { code: string; remain: number; period?: number } | null>
@@ -59,14 +62,14 @@ onMount(() => {
 <svelte:head><title>验证码 - Edgewarden</title></svelte:head>
 
 <main class="min-h-screen bg-muted/30 p-4 md:p-6">
-	<div class="mx-auto max-w-5xl space-y-6">
+	<div class="mx-auto flex max-w-5xl flex-col gap-6">
 		<header class="flex items-start gap-2 sm:items-center sm:gap-3"><Button variant="ghost" size="icon" class="shrink-0" onclick={() => goto("/vault")} aria-label="返回保险库"><ArrowLeft /></Button><div class="min-w-0"><h1 class="text-xl font-bold sm:text-2xl">验证码</h1><p class="text-sm text-muted-foreground">所有验证码均在本机根据保险库中的 TOTP 密钥计算。</p></div></header>
-		{#if vault.isSyncing && !items.length}<div class="flex items-center gap-2 text-sm text-muted-foreground"><RefreshCw class="animate-spin" />正在载入…</div>
-		{:else if !items.length}<div class="rounded-lg border bg-card p-8 text-center text-muted-foreground"><KeyRound class="mx-auto mb-3 size-8" />没有包含 TOTP 密钥的登录项。</div>
+		{#if vault.isSyncing && !items.length}<Empty.Root><Empty.Media variant="icon"><Spinner /></Empty.Media><Empty.Header><Empty.Title>正在载入验证码</Empty.Title></Empty.Header></Empty.Root>
+		{:else if !items.length}<Empty.Root><Empty.Media variant="icon"><KeyRound /></Empty.Media><Empty.Header><Empty.Title>没有包含 TOTP 密钥的登录项</Empty.Title><Empty.Description>为登录项目添加 TOTP 密钥后，验证码会显示在这里。</Empty.Description></Empty.Header></Empty.Root>
 		{:else}<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 			{#each items as item (item.id)}
 				{@const live = codes[item.id]}
-				<div class="rounded-lg border bg-card p-4"><div class="mb-3 min-w-0"><p class="truncate font-semibold">{item.name}</p><p class="truncate text-xs text-muted-foreground">{item.login?.username || "无用户名"}</p></div><div class="flex items-center justify-between gap-3"><div><p class="font-mono text-2xl font-bold tracking-widest">{live ? `${live.code.slice(0, 3)} ${live.code.slice(3)}` : "——— ———"}</p><p class="text-xs text-muted-foreground">{live ? `${live.remain} 秒后刷新` : "无法计算"}</p></div><Button variant="outline" size="icon" disabled={!live} onclick={() => live && copyCode(item.id, live.code)} aria-label={`复制 ${item.name} 的验证码`}>{#if copiedId === item.id}<Check />{:else}<Copy />{/if}</Button></div></div>
+				<Card.Root><Card.Header class="pb-3"><Card.Title class="truncate">{item.name}</Card.Title><Card.Description class="truncate">{item.login?.username || "无用户名"}</Card.Description></Card.Header><Card.Content><div class="flex items-center justify-between gap-3"><div><p class="font-mono text-2xl font-bold tracking-widest">{live ? `${live.code.slice(0, 3)} ${live.code.slice(3)}` : "——— ———"}</p><p class="text-xs text-muted-foreground">{live ? `${live.remain} 秒后刷新` : "无法计算"}</p></div><Button variant="outline" size="icon" disabled={!live} onclick={() => live && copyCode(item.id, live.code)} aria-label={`复制 ${item.name} 的验证码`}>{#if copiedId === item.id}<Check />{:else}<Copy />{/if}</Button></div></Card.Content></Card.Root>
 			{/each}
 		</div>{/if}
 	</div>

@@ -49,16 +49,16 @@ function selectFolder(folderId: string | null) {
 	</header>
 
 	<nav class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
-		<button class={cn("flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors", activeFolder === null && activeCategory === "all" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted")} onclick={() => selectFolder(null)}>
+		<Button variant={activeFolder === null && activeCategory === "all" ? "secondary" : "ghost"} class="w-full justify-start" onclick={() => selectFolder(null)}>
 			<Folder class="size-4 shrink-0" />
 			<span class="truncate">所有文件夹</span>
-		</button>
+		</Button>
 		{#each vault.folders as folder (folder.id)}
 			<div class={cn("group flex items-center rounded-lg transition-colors", activeFolder === folder.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted")}>
-				<button class="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm font-medium" onclick={() => selectFolder(folder.id)}>
+				<Button variant="ghost" class="h-auto min-w-0 flex-1 justify-start px-3 py-2" onclick={() => selectFolder(folder.id)}>
 					<Folder class="size-4 shrink-0" />
 					<span class="truncate">{folder.name}</span>
-				</button>
+				</Button>
 				<span class="mr-2 text-xs tabular-nums text-muted-foreground group-hover:hidden">{vault.ciphers.filter((item) => item.folderId === folder.id).length}</span>
 				<div class="mr-1 hidden items-center gap-0.5 group-hover:flex">
 					<Button variant="ghost" size="icon-xs" onclick={() => onRenameFolder(folder)} title="重命名" aria-label={`重命名 ${folder.name}`}><Edit data-icon /></Button>

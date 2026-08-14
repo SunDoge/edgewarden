@@ -18,6 +18,7 @@ import { Input } from "$lib/components/ui/input/index.js";
 import { Progress } from "$lib/components/ui/progress/index.js";
 import * as Select from "$lib/components/ui/select/index.js";
 import { Separator } from "$lib/components/ui/separator/index.js";
+import { Spinner } from "$lib/components/ui/spinner/index.js";
 import { importCiphersApi } from "$lib/services/api";
 import {
 	buildBitwardenCsv,
@@ -240,7 +241,7 @@ async function handleImport(strategy?: "skip" | "all") {
 		</div>
 	</header>
 
-	<main class="mx-auto w-full max-w-4xl flex-1 space-y-4 p-4 sm:space-y-6 md:p-8">
+	<main class="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4 p-4 sm:gap-6 md:p-8">
 		{#if errorMsg}
 			<Alert.Root variant="destructive"><ShieldAlert /><Alert.Title>操作失败</Alert.Title><Alert.Description>{errorMsg}</Alert.Description></Alert.Root>
 		{/if}
@@ -291,7 +292,7 @@ async function handleImport(strategy?: "skip" | "all") {
 					{#if pendingImport}<div class="rounded-md border bg-muted p-3 text-xs"><p class="font-medium">导入预览</p><p>{pendingImport.folders.length} 个文件夹，{pendingImport.items.length} 个条目</p>{#if pendingImport.warnings.length}<p class="mt-1 text-amber-600">{pendingImport.warnings.length} 条格式警告</p>{/if}</div>{/if}
 						{#if encryptedImport}<Field.Field><Field.Label for="import-password">加密导出密码</Field.Label><Input id="import-password" type="password" autocomplete="off" bind:value={importPassword} placeholder="仅在浏览器内用于解密" /><Field.Description>密码和解密后的内容不会发送到服务器。</Field.Description></Field.Field>{/if}
 					{#if deduplicationReview}
-						<Alert.Root class="space-y-3">
+						<Alert.Root class="flex flex-col gap-3">
 							<p class="font-semibold">写入前检测到重复内容</p>
 							<p>已有或文件内重复密码项 {deduplicationReview.result.duplicateItems} 个，可复用的同名文件夹 {deduplicationReview.result.duplicateFolders} 个。请选择本次导入方式：</p>
 							<div class="flex flex-col gap-2 sm:flex-row">
@@ -307,7 +308,7 @@ async function handleImport(strategy?: "skip" | "all") {
 						onclick={() => handleImport()}
 					>
 						{#if importing}
-							<div class="mr-2 size-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent"></div>
+							<Spinner data-icon="inline-start" />
 							正在导入并加密数据...
 						{:else}
 							<Upload data-icon="inline-start" />
@@ -315,8 +316,8 @@ async function handleImport(strategy?: "skip" | "all") {
 						{/if}
 					</Button>
 					{#if importing}
-						<div class="space-y-1.5" aria-live="polite">
-							<div class="flex justify-between text-[11px] text-slate-500">
+					<div class="flex flex-col gap-1.5" aria-live="polite">
+						<div class="flex justify-between text-xs text-muted-foreground">
 								<span>{importProgressLabel}</span>
 								<span>{importProgress}%</span>
 							</div>
