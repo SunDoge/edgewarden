@@ -145,7 +145,7 @@ function customFieldTypeLabel(value: number): string {
 			<Field.FieldSet class="border-t pt-4"><Field.FieldLegend>登录信息</Field.FieldLegend><Field.FieldGroup>
 				<Field.Field><Field.Label>用户名</Field.Label><Input bind:value={form.loginUsername} placeholder="用户名" /></Field.Field>
 				<Field.Field><Field.Label>密码</Field.Label><Input type="password" bind:value={form.loginPassword} placeholder="密码" /></Field.Field>
-				<div class="space-y-2">
+				<div class="flex flex-col gap-2">
 					<div class="flex items-center justify-between"><Field.Label>网页链接</Field.Label><Button type="button" size="xs" variant="ghost" onclick={() => form.loginUris = [...form.loginUris, { uri: "", match: null }]}><Plus data-icon="inline-start" />添加</Button></div>
 					{#each form.loginUris as uri, index}
 						<div class="flex gap-2"><Input bind:value={uri.uri} placeholder="https://example.com" /><Select.Root type="single" value={uri.match == null ? "__default" : String(uri.match)} onValueChange={(value) => uri.match = value === "__default" ? null : Number(value)}><Select.Trigger class="w-28">{uriMatchLabel(uri.match)}</Select.Trigger><Select.Content><Select.Group><Select.Item value="__default">默认</Select.Item><Select.Item value="0">根域</Select.Item><Select.Item value="1">主机</Select.Item><Select.Item value="2">前缀</Select.Item><Select.Item value="3">完全匹配</Select.Item><Select.Item value="4">正则</Select.Item><Select.Item value="5">从不</Select.Item></Select.Group></Select.Content></Select.Root>{#if form.loginUris.length > 1}<Button type="button" variant="ghost" size="icon-sm" onclick={() => form.loginUris = form.loginUris.filter((_, itemIndex) => itemIndex !== index)} aria-label="删除网址"><Trash2 data-icon /></Button>{/if}</div>
@@ -161,17 +161,14 @@ function customFieldTypeLabel(value: number): string {
 		{/if}
 
 		{#if form.type === CipherType.Card}
-			<div class="space-y-4 border-t border-slate-200 dark:border-slate-850 pt-4">
-				<div class="space-y-1.5"><span class="text-xs font-semibold text-slate-400 font-bold">持卡人姓名</span><Input bind:value={form.cardholderName} placeholder="持卡人" /></div>
-				<div class="space-y-1.5"><span class="text-xs font-semibold text-slate-400 font-bold">卡号</span><Input bind:value={form.cardNumber} placeholder="卡号" /></div>
-			</div>
+			<Field.FieldSet class="border-t pt-4"><Field.FieldLegend>支付卡片</Field.FieldLegend><Field.FieldGroup><Field.Field><Field.Label>持卡人姓名</Field.Label><Input bind:value={form.cardholderName} placeholder="持卡人" /></Field.Field><Field.Field><Field.Label>卡号</Field.Label><Input bind:value={form.cardNumber} placeholder="卡号" /></Field.Field></Field.FieldGroup></Field.FieldSet>
 		{/if}
 
 		{#if form.type >= CipherType.SshKey}
-			<div class="space-y-1.5 border-t pt-4"><span class="text-xs font-semibold text-slate-400">类型数据（JSON）</span><Textarea bind:value={form.extraData} rows={10} class="font-mono text-xs" /><p class="text-xs text-muted-foreground">对象中的所有字符串都会在发送前逐字段加密。</p></div>
+			<Field.Field class="border-t pt-4"><Field.Label>类型数据（JSON）</Field.Label><Textarea bind:value={form.extraData} rows={10} class="font-mono text-xs" /><Field.Description>对象中的所有字符串都会在发送前逐字段加密。</Field.Description></Field.Field>
 		{/if}
 
-		<div class="space-y-3 border-t pt-4">
+		<div class="flex flex-col gap-3 border-t pt-4">
 			<div class="flex items-center justify-between"><Field.Label>自定义字段</Field.Label><Button type="button" size="xs" variant="ghost" onclick={() => form.customFields = [...form.customFields, { name: "", value: "", type: 0 }]}><Plus data-icon="inline-start" />添加</Button></div>
 			{#each form.customFields as field, index}
 				<div class="grid grid-cols-[1fr_1fr_auto] gap-2"><Input bind:value={field.name} placeholder="字段名" /><Input bind:value={field.value} type={field.type === 1 ? "password" : "text"} placeholder="字段值" /><Button type="button" variant="ghost" size="icon-sm" onclick={() => form.customFields = form.customFields.filter((_, itemIndex) => itemIndex !== index)} aria-label="删除字段"><Trash2 data-icon /></Button><div class="col-span-2"><Select.Root type="single" value={String(field.type)} onValueChange={(value) => field.type = Number(value)}><Select.Trigger class="w-full">{customFieldTypeLabel(field.type)}</Select.Trigger><Select.Content><Select.Group><Select.Item value="0">文本</Select.Item><Select.Item value="1">隐藏</Select.Item><Select.Item value="2">布尔</Select.Item></Select.Group></Select.Content></Select.Root></div></div>
@@ -179,10 +176,7 @@ function customFieldTypeLabel(value: number): string {
 		</div>
 
 		{#if form.type === CipherType.Identity}
-			<div class="space-y-4 border-t border-slate-200 dark:border-slate-850 pt-4">
-				<div class="grid grid-cols-2 gap-2"><div class="space-y-1.5"><span class="text-xs font-semibold text-slate-400 font-bold">姓</span><Input bind:value={form.lastName} placeholder="姓" /></div><div class="space-y-1.5"><span class="text-xs font-semibold text-slate-400 font-bold">名</span><Input bind:value={form.firstName} placeholder="名" /></div></div>
-				<div class="space-y-1.5"><span class="text-xs font-semibold text-slate-400 font-bold">证件号码</span><Input bind:value={form.identityNumber} placeholder="身份证/护照等号码" /></div>
-			</div>
+			<Field.FieldSet class="border-t pt-4"><Field.FieldLegend>个人身份</Field.FieldLegend><Field.FieldGroup><div class="grid grid-cols-2 gap-2"><Field.Field><Field.Label>姓</Field.Label><Input bind:value={form.lastName} placeholder="姓" /></Field.Field><Field.Field><Field.Label>名</Field.Label><Input bind:value={form.firstName} placeholder="名" /></Field.Field></div><Field.Field><Field.Label>证件号码</Field.Label><Input bind:value={form.identityNumber} placeholder="身份证/护照等号码" /></Field.Field></Field.FieldGroup></Field.FieldSet>
 		{/if}
 
 		<Field.Field class="border-t pt-4"><Field.Label>便签 / 备注</Field.Label><Textarea bind:value={form.notes} rows={4} placeholder="便签内容..." /></Field.Field>
