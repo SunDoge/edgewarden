@@ -5,8 +5,11 @@ import { isLoggedIn } from "$lib/services/api";
 import { loadVaultSnapshot } from "$lib/services/vault-db";
 import { vault, unlock } from "$lib/stores/vault.svelte";
 import { Button } from "$lib/components/ui/button/index.js";
+import * as Alert from "$lib/components/ui/alert/index.js";
+import * as Card from "$lib/components/ui/card/index.js";
+import * as Field from "$lib/components/ui/field/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
-import { Label } from "$lib/components/ui/label/index.js";
+import { Spinner } from "$lib/components/ui/spinner/index.js";
 import { ShieldCheck, KeyRound, Eye, EyeOff, WifiOff } from "@lucide/svelte";
 import ThemeToggle from "$lib/components/theme-toggle.svelte";
 
@@ -57,38 +60,34 @@ async function handleUnlock(e: SubmitEvent) {
 	<title>解锁保险库 - Edgewarden</title>
 </svelte:head>
 
-<div class="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+<div class="flex min-h-screen items-center justify-center bg-muted/30 p-4">
 	<div class="absolute right-4 top-4"><ThemeToggle /></div>
-	<div class="w-full max-w-sm space-y-6">
+	<Card.Root class="w-full max-w-sm">
 		<!-- Logo -->
-		<div class="text-center space-y-2">
-			<div class="mx-auto w-14 h-14 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground mb-4">
+		<Card.Header class="items-center gap-2 text-center">
+			<div class="mb-4 flex size-14 items-center justify-center rounded-xl bg-primary text-primary-foreground">
 				<ShieldCheck class="size-8" />
 			</div>
-			<h1 class="text-2xl font-bold text-slate-900 dark:text-slate-100">解锁您的保险库</h1>
+			<Card.Title class="text-2xl">解锁您的保险库</Card.Title>
 			{#if email}
-				<p class="text-sm text-slate-500">{email}</p>
+				<Card.Description>{email}</Card.Description>
 			{/if}
-		</div>
+		</Card.Header>
+		<Card.Content class="flex flex-col gap-4">
 
 		{#if !hasCache}
 			<!-- No cache: must be online to unlock -->
-			<div class="p-4 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 flex items-start gap-3 text-amber-700 dark:text-amber-400 text-sm">
-				<WifiOff class="size-4 shrink-0 mt-0.5" />
-				<span>首次使用请先联网登录，之后才可离线解锁。</span>
-			</div>
+			<Alert.Root><WifiOff /><Alert.Title>需要联网登录</Alert.Title><Alert.Description>首次使用请先联网登录，之后才可离线解锁。</Alert.Description></Alert.Root>
 			<Button class="w-full" onclick={() => goto("/login")}>返回登录</Button>
 		{:else}
 			<!-- Unlock form -->
 			{#if error}
-				<div class="p-3 rounded-lg bg-destructive/10 text-destructive text-sm border border-destructive/20">
-					{error}
-				</div>
+				<Alert.Root variant="destructive"><Alert.Title>解锁失败</Alert.Title><Alert.Description>{error}</Alert.Description></Alert.Root>
 			{/if}
 
-			<form onsubmit={handleUnlock} class="space-y-4">
-				<div class="space-y-2">
-					<Label for="password">主密码</Label>
+			<form onsubmit={handleUnlock}><Field.Group>
+				<Field.Field>
+					<Field.Label for="password">主密码</Field.Label>
 					<div class="relative">
 						<span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
 							<KeyRound class="size-4" />
@@ -103,35 +102,37 @@ async function handleUnlock(e: SubmitEvent) {
 							required
 							autofocus
 						/>
-						<button
+						<Button
 							type="button"
-							class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+							variant="ghost" size="icon-xs" class="absolute right-1 top-1/2 -translate-y-1/2"
 							onclick={() => (showPassword = !showPassword)}
+							aria-label={showPassword ? "隐藏密码" : "显示密码"}
 						>
 							{#if showPassword}
 								<EyeOff class="size-4" />
 							{:else}
 								<Eye class="size-4" />
 							{/if}
-						</button>
+						</Button>
 					</div>
-				</div>
+				</Field.Field>
 
 				<Button type="submit" class="w-full" disabled={loading || !password}>
 					{#if loading}
-						<div class="size-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2"></div>
+						<Spinner data-icon="inline-start" />
 						正在解锁...
 					{:else}
 						解锁保险库
 					{/if}
 				</Button>
-			</form>
+			</Field.Group></form>
 
 			<div class="text-center">
-				<a href="/login" class="text-sm text-slate-500 hover:text-primary hover:underline">
+				<a href="/login" class="text-sm text-muted-foreground hover:text-primary hover:underline">
 					使用其他账号登录
 				</a>
 			</div>
 		{/if}
-	</div>
+		</Card.Content>
+	</Card.Root>
 </div>
