@@ -16,9 +16,13 @@ import {
 	syncVaultData,
 } from "$lib/stores/vault.svelte";
 import { Button } from "$lib/components/ui/button/index.js";
+import * as Alert from "$lib/components/ui/alert/index.js";
+import * as Field from "$lib/components/ui/field/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
-import { Label } from "$lib/components/ui/label/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
+import { Separator } from "$lib/components/ui/separator/index.js";
+import { Spinner } from "$lib/components/ui/spinner/index.js";
+import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
 import { assertTwoFactorPasskeyCredential } from "$lib/services/passkeys";
 import {
 	Eye,
@@ -31,6 +35,7 @@ import {
 import TurnstileWidget from "$lib/components/turnstile-widget.svelte";
 import { readDevLoginCredentials } from "$lib/services/dev-login";
 import ThemeToggle from "$lib/components/theme-toggle.svelte";
+import { match } from "ts-pattern";
 
 let email = $state("");
 let password = $state("");
@@ -207,11 +212,11 @@ async function completePasskeyUnlock() {
 	<title>登录 - Edgewarden</title>
 </svelte:head>
 
-<div class="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+<div class="flex min-h-screen items-center justify-center bg-muted/30 p-4">
 	<div class="absolute right-4 top-4"><ThemeToggle /></div>
-	<Card.Root class="w-full max-w-md shadow-lg border-slate-100 dark:border-slate-800">
-		<Card.Header class="space-y-2 text-center">
-			<div class="mx-auto w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-2">
+	<Card.Root class="w-full max-w-md shadow-lg">
+		<Card.Header class="items-center gap-2 text-center">
+			<div class="mb-2 flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
 				<KeyRound class="size-6" />
 			</div>
 			<Card.Title class="text-2xl font-bold tracking-tight">登录到 Edgewarden</Card.Title>
@@ -222,15 +227,12 @@ async function completePasskeyUnlock() {
 
 		<Card.Content>
 			{#if error}
-				<div class="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm flex items-start gap-2.5 border border-destructive/20 animate-in fade-in slide-in-from-top-1 duration-200">
-					<ShieldAlert class="size-4 shrink-0 mt-0.5" />
-					<span>{error}</span>
-				</div>
+				<Alert.Root variant="destructive" class="mb-4"><ShieldAlert /><Alert.Title>登录失败</Alert.Title><Alert.Description>{error}</Alert.Description></Alert.Root>
 			{/if}
 
-			<form onsubmit={handleSubmit} class="space-y-4">
-				<div class="space-y-2">
-					<Label for="email">电子邮件地址</Label>
+			<form onsubmit={handleSubmit}><Field.Group>
+				<Field.Field>
+					<Field.Label for="email">电子邮件地址</Field.Label>
 					<div class="relative">
 						<span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
 							<Mail class="size-4" />
@@ -245,17 +247,15 @@ async function completePasskeyUnlock() {
 							required
 						/>
 					</div>
-				</div>
+				</Field.Field>
 
 				{#if twoFactorRequired}
-					<div class="space-y-2"><div class="flex items-center justify-between"><Label for="two-factor-token">{twoFactorProvider === "0" ? "两步验证码" : twoFactorProvider === "3" ? "YubiKey OTP" : "恢复代码"}</Label><div class="flex gap-2">{#if availableTwoFactorProviders.includes("3")}<button type="button" class="text-xs text-primary hover:underline" onclick={() => { twoFactorProvider = "3"; twoFactorToken = ""; }}>YubiKey</button>{/if}<button type="button" class="text-xs text-primary hover:underline" onclick={() => { twoFactorProvider = twoFactorProvider === "0" ? "8" : "0"; twoFactorToken = ""; }}>{twoFactorProvider === "0" ? "使用恢复代码" : "使用身份验证器"}</button></div></div><Input id="two-factor-token" bind:value={twoFactorToken} inputmode={twoFactorProvider === "0" ? "numeric" : "text"} autocomplete="one-time-code" maxlength={64} required /></div>
-					{#if twoFactorPasskeyChallenge}<Button type="button" variant="outline" class="w-full" onclick={completeTwoFactorPasskey} disabled={loading || (turnstileEnabled && !turnstileToken)}><Fingerprint />使用安全密钥验证</Button>{/if}
+					<Field.Field><Field.Label for="two-factor-token">{match(twoFactorProvider).with("0", () => "两步验证码").with("3", () => "YubiKey OTP").otherwise(() => "恢复代码")}</Field.Label><ToggleGroup.Root type="single" size="sm" variant="outline" value={twoFactorProvider} onValueChange={(value) => { if (value) { twoFactorProvider = value as typeof twoFactorProvider; twoFactorToken = ""; } }}><ToggleGroup.Item value="0">身份验证器</ToggleGroup.Item>{#if availableTwoFactorProviders.includes("3")}<ToggleGroup.Item value="3">YubiKey</ToggleGroup.Item>{/if}<ToggleGroup.Item value="8">恢复代码</ToggleGroup.Item></ToggleGroup.Root><Input id="two-factor-token" bind:value={twoFactorToken} inputmode={twoFactorProvider === "0" ? "numeric" : "text"} autocomplete="one-time-code" maxlength={64} required /></Field.Field>
+					{#if twoFactorPasskeyChallenge}<Button type="button" variant="outline" class="w-full" onclick={completeTwoFactorPasskey} disabled={loading || (turnstileEnabled && !turnstileToken)}><Fingerprint data-icon="inline-start" />使用安全密钥验证</Button>{/if}
 				{/if}
 
-				<div class="space-y-2">
-					<div class="flex items-center justify-between">
-						<Label for="password">主密码</Label>
-					</div>
+				<Field.Field>
+					<Field.Label for="password">主密码</Field.Label>
 					<div class="relative">
 						<span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
 							<KeyRound class="size-4" />
@@ -269,19 +269,20 @@ async function completePasskeyUnlock() {
 							class="pl-10 pr-10"
 							required
 						/>
-						<button
+						<Button
 							type="button"
-							class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+							variant="ghost" size="icon-xs" class="absolute right-1 top-1/2 -translate-y-1/2"
 							onclick={() => (showPassword = !showPassword)}
+							aria-label={showPassword ? "隐藏密码" : "显示密码"}
 						>
 							{#if showPassword}
-								<EyeOff class="size-4" />
+								<EyeOff data-icon />
 							{:else}
-								<Eye class="size-4" />
+								<Eye data-icon />
 							{/if}
-						</button>
+						</Button>
 					</div>
-				</div>
+				</Field.Field>
 
 				{#if turnstileEnabled && turnstileSiteKey}
 					<TurnstileWidget
@@ -294,25 +295,25 @@ async function completePasskeyUnlock() {
 
 				<Button type="submit" class="w-full mt-2" disabled={loading || turnstileLoading || (turnstileEnabled && !turnstileToken)}>
 					{#if loading}
-						<div class="size-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2"></div>
+						<Spinner data-icon="inline-start" />
 						正在进行安全解密...
 					{:else}
 						解锁密码库
 					{/if}
 				</Button>
-			</form>
+			</Field.Group></form>
 
-			<div class="my-4 flex items-center gap-3 text-xs text-muted-foreground"><span class="h-px flex-1 bg-border"></span>或<span class="h-px flex-1 bg-border"></span></div>
-			<Button type="button" variant="outline" class="w-full" onclick={handlePasskeyLogin} disabled={loading}><Fingerprint />使用通行密钥登录</Button>
+			<div class="my-4 flex items-center gap-3 text-xs text-muted-foreground"><Separator class="flex-1" />或<Separator class="flex-1" /></div>
+			<Button type="button" variant="outline" class="w-full" onclick={handlePasskeyLogin} disabled={loading}><Fingerprint data-icon="inline-start" />使用通行密钥登录</Button>
 
 			{#if passkeyUnlock}
-				<form class="mt-4 space-y-3 rounded-md border p-3" onsubmit={(event) => { event.preventDefault(); void completePasskeyUnlock(); }}><p class="text-sm text-muted-foreground">这把通行密钥仅用于登录。请输入主密码解锁保险库。</p><Label for="passkey-password">主密码</Label><Input id="passkey-password" type="password" bind:value={passkeyPassword} autocomplete="current-password" required /><Button class="w-full" type="submit" disabled={loading}>解锁保险库</Button></form>
+				<form class="mt-4 rounded-md border p-3" onsubmit={(event) => { event.preventDefault(); void completePasskeyUnlock(); }}><Field.Group><Field.Description>这把通行密钥仅用于登录。请输入主密码解锁保险库。</Field.Description><Field.Field><Field.Label for="passkey-password">主密码</Field.Label><Input id="passkey-password" type="password" bind:value={passkeyPassword} autocomplete="current-password" required /></Field.Field><Button class="w-full" type="submit" disabled={loading}>解锁保险库</Button></Field.Group></form>
 			{/if}
 		</Card.Content>
 
-		<Card.Footer class="flex flex-col items-center border-t border-slate-100 dark:border-slate-800 py-4 gap-2">
+		<Card.Footer class="flex flex-col items-center border-t py-4 gap-2">
 			<a href="/recover-2fa" class="text-sm text-primary font-medium hover:underline">无法使用两步验证？</a>
-			<p class="text-sm text-slate-500">
+			<p class="text-sm text-muted-foreground">
 				还没有账号？
 				<a href="/register" class="text-primary font-medium hover:underline">
 					立即注册

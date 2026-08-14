@@ -65,65 +65,60 @@ let {
 
 	<!-- WebDAV Protocol Fields -->
 	{#if form.type === "webdav"}
-		<div class="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-800">
-			<h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">WebDAV 存储节点设置</h3>
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-				<div class="md:col-span-2 space-y-1.5">
-					<label for="dav-url" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">WebDAV 服务器基础 URL</label>
+		<Field.FieldSet>
+			<Field.FieldLegend>WebDAV 存储节点设置</Field.FieldLegend>
+			<Field.FieldGroup class="grid grid-cols-1 md:grid-cols-2">
+				<Field.Field class="md:col-span-2">
+					<Field.Label for="dav-url">WebDAV 服务器基础 URL</Field.Label>
 					<Input id="dav-url" type="url" bind:value={form.davBaseUrl} placeholder="https://nextcloud.example.com/remote.php/dav/files/username" />
-				</div>
-				<div class="space-y-1.5">
-					<label for="dav-username" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">用户名</label>
+				</Field.Field>
+				<Field.Field>
+					<Field.Label for="dav-username">用户名</Field.Label>
 					<Input id="dav-username" type="text" bind:value={form.davUsername} placeholder="用户名" />
-				</div>
-				<div class="space-y-1.5">
-					<label for="dav-password" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">应用密码 / 访问密码</label>
+				</Field.Field>
+				<Field.Field>
+					<Field.Label for="dav-password">应用密码 / 访问密码</Field.Label>
 					<Input id="dav-password" type="password" bind:value={form.davPassword} placeholder="密码 (密文显示)" />
-				</div>
-				<div class="space-y-1.5 md:col-span-2">
-					<label for="dav-path" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">备份根目录</label>
+				</Field.Field>
+				<Field.Field class="md:col-span-2">
+					<Field.Label for="dav-path">备份根目录</Field.Label>
 					<Input id="dav-path" type="text" bind:value={form.davRemotePath} placeholder="edgewarden" />
-				</div>
-			</div>
-		</div>
+				</Field.Field>
+			</Field.FieldGroup>
+		</Field.FieldSet>
 	{:else}
 		<!-- S3 Protocol Fields -->
-		<div class="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-800">
-			<h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">S3 兼容对象存储设置</h3>
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-				<div class="md:col-span-2 space-y-1.5">
-					<label for="s3-endpoint" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">Endpoint 端点 URL</label>
+		<Field.FieldSet>
+			<Field.FieldLegend>S3 兼容对象存储设置</Field.FieldLegend>
+			<Field.FieldGroup class="grid grid-cols-1 md:grid-cols-2">
+				<Field.Field class="md:col-span-2">
+					<Field.Label for="s3-endpoint">Endpoint 端点 URL</Field.Label>
 					<Input id="s3-endpoint" type="url" bind:value={form.s3Endpoint} placeholder="https://s3.us-east-1.amazonaws.com" />
-				</div>
-				<div class="space-y-1.5">
-					<label for="s3-bucket" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">Bucket 存储桶</label>
+				</Field.Field>
+				<Field.Field><Field.Label for="s3-bucket">Bucket 存储桶</Field.Label>
 					<Input id="s3-bucket" type="text" bind:value={form.s3Bucket} placeholder="my-edgewarden-backups" />
-				</div>
-				<div class="space-y-1.5">
-					<label for="s3-region" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">Region 区域</label>
+				</Field.Field>
+				<Field.Field><Field.Label for="s3-region">Region 区域</Field.Label>
 					<Input id="s3-region" type="text" bind:value={form.s3Region} placeholder="auto" />
-				</div>
-				<div class="space-y-1.5">
-					<label for="s3-access-key" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">Access Key ID</label>
+				</Field.Field>
+				<Field.Field><Field.Label for="s3-access-key">Access Key ID</Field.Label>
 					<Input id="s3-access-key" type="text" bind:value={form.s3AccessKeyId} placeholder="Access Key ID" />
-				</div>
-				<div class="space-y-1.5">
-					<label for="s3-secret-key" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">Secret Access Key</label>
+				</Field.Field>
+				<Field.Field><Field.Label for="s3-secret-key">Secret Access Key</Field.Label>
 					<Input id="s3-secret-key" type="password" bind:value={form.s3SecretAccessKey} placeholder="Secret Access Key" />
-				</div>
+				</Field.Field>
 				<Field.Field><Field.Label>Addressing Style 地址模式</Field.Label><Select.Root type="single" value={form.s3AddressingStyle} onValueChange={(value) => form.s3AddressingStyle = value as typeof form.s3AddressingStyle}><Select.Trigger class="w-full">{form.s3AddressingStyle === "path-style" ? "Path Style（路径风格）" : "Virtual Hosted Style（虚拟主机名）"}</Select.Trigger><Select.Content><Select.Group><Select.Item value="path-style">Path Style（路径风格）</Select.Item><Select.Item value="virtual-hosted-style">Virtual Hosted Style（虚拟主机名）</Select.Item></Select.Group></Select.Content></Select.Root></Field.Field>
-				<div class="space-y-1.5">
-					<label for="s3-path" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">备份根目录</label>
+				<Field.Field><Field.Label for="s3-path">备份根目录</Field.Label>
 					<Input id="s3-path" type="text" bind:value={form.s3RootPath} placeholder="edgewarden" />
-				</div>
-			</div>
-		</div>
+				</Field.Field>
+			</Field.FieldGroup>
+		</Field.FieldSet>
 	{/if}
 
 	<!-- Schedule Settings Section -->
-	<div class="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-		<h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">定时自动备份设定 (Cron Trigger)</h3>
-		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+	<Field.FieldSet>
+		<Field.FieldLegend>定时自动备份设定 (Cron Trigger)</Field.FieldLegend>
+		<Field.FieldGroup class="grid grid-cols-1 md:grid-cols-3">
 			<Field.Field class="md:col-span-3" orientation="horizontal">
 				<Checkbox id="schedEnabled" bind:checked={form.scheduleEnabled} />
 				<Field.Label for="schedEnabled">
@@ -131,18 +126,18 @@ let {
 				</Field.Label>
 			</Field.Field>
 
-			<div class="space-y-1.5">
-				<label for="schedule-interval" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">备份执行间隔 (小时)</label>
+			<Field.Field data-disabled={!form.scheduleEnabled}>
+				<Field.Label for="schedule-interval">备份执行间隔 (小时)</Field.Label>
 				<Input id="schedule-interval" type="number" bind:value={form.scheduleInterval} min="1" max="99" disabled={!form.scheduleEnabled} />
-			</div>
+			</Field.Field>
 
 			<Field.Field data-disabled={!form.scheduleEnabled}><Field.Label>每日首个备份小时</Field.Label><Select.Root type="single" value={form.scheduleStartTime} disabled={!form.scheduleEnabled} onValueChange={(value) => form.scheduleStartTime = value}><Select.Trigger class="w-full">{form.scheduleStartTime}</Select.Trigger><Select.Content><Select.Group>{#each Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`) as hour}<Select.Item value={hour}>{hour}</Select.Item>{/each}</Select.Group></Select.Content></Select.Root><Field.Description>任务每小时检查一次，会在所选小时内执行，不保证精确到分钟。</Field.Description></Field.Field>
 
-			<div class="space-y-1.5">
-				<label for="schedule-retention" class="text-xs font-medium text-slate-700 dark:text-slate-300 block">最大保留历史文件数 (Retention)</label>
+			<Field.Field data-disabled={!form.scheduleEnabled}>
+				<Field.Label for="schedule-retention">最大保留历史文件数 (Retention)</Field.Label>
 				<Input id="schedule-retention" type="number" bind:value={form.scheduleRetention} placeholder="30" disabled={!form.scheduleEnabled} />
-			</div>
-		</div>
-	</div>
+			</Field.Field>
+		</Field.FieldGroup>
+	</Field.FieldSet>
 	</Card.Content>
 </Card.Root>
