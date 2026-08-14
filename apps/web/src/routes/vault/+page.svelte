@@ -78,9 +78,6 @@ let deleteLoading = $state(false);
 let attachmentBusy = $state<string | null>(null);
 let mobileSidebarOpen = $state(false);
 let mobileDetailOpen = $state(false);
-let saveNotice = $state<{ kind: "saved" | "warning"; message: string } | null>(
-	null,
-);
 let pendingConfirmation = $state<
 	| { kind: "merge-folders" }
 	| { kind: "delete-attachment"; attachment: any }
@@ -391,7 +388,6 @@ function cancelEdit() {
 }
 
 async function handleSaveCipher() {
-	saveNotice = null;
 	let saved: Awaited<ReturnType<typeof saveVaultCipher>>;
 	try {
 		saved = await saveVaultCipher({
@@ -409,12 +405,11 @@ async function handleSaveCipher() {
 	// The mutation response is the server acknowledgement. Keep this separate
 	// from the following pull so a refresh failure is never reported as a save
 	// failure after D1 has already committed the encrypted item.
-	saveNotice = {
-		kind: "saved",
-		message: m.vault_saved_to_server({
+	toast.success(
+		m.vault_saved_to_server({
 			time: formatTime(saved.revisionDate),
 		}),
-	};
+	);
 	isCreating = false;
 	isEditing = false;
 	selectedItem = null;
@@ -425,10 +420,7 @@ async function handleSaveCipher() {
 		// subsequent pull cannot refresh the local snapshot.
 	}
 	if (vault.isOffline || vault.status === "error") {
-		saveNotice = {
-			kind: "warning",
-			message: m.vault_saved_refresh_failed(),
-		};
+		toast.warning(m.vault_saved_refresh_failed());
 	}
 }
 
@@ -627,12 +619,7 @@ async function toggleFavorite(item: any) {
 	<title>我的保险库 - Edgewarden</title>
 </svelte:head>
 
-<div class="h-screen bg-slate-50 dark:bg-slate-950 flex flex-col overflow-hidden">
-	{#if saveNotice}
-		<div class="fixed left-1/2 top-3 z-[60] -translate-x-1/2 rounded-md border px-3 py-2 text-sm font-medium shadow-lg {saveNotice.kind === 'saved' ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200' : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200'}" role="status">
-			{saveNotice.message}
-		</div>
-	{/if}
+<div class="flex h-screen flex-col overflow-hidden bg-muted/30">
 	<VaultHeader onOpenNavigation={() => mobileSidebarOpen = true} onLogout={handleLogout} />
 
 	<div class="relative flex flex-1 overflow-hidden">

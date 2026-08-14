@@ -5,6 +5,10 @@ import { isLoggedIn } from "$lib/services/api";
 import { vault } from "$lib/stores/vault.svelte";
 import { fetchDomainRules, updateDomainRules } from "$lib/services/api";
 import { Button } from "$lib/components/ui/button/index.js";
+import * as Alert from "$lib/components/ui/alert/index.js";
+import * as Card from "$lib/components/ui/card/index.js";
+import { Skeleton } from "$lib/components/ui/skeleton/index.js";
+import { Spinner } from "$lib/components/ui/spinner/index.js";
 import CustomEquivalentDomains from "$lib/components/domains/CustomEquivalentDomains.svelte";
 import { normalizeEquivalentDomainRule } from "$lib/services/equivalent-domains";
 import GlobalEquivalentDomains from "$lib/components/domains/GlobalEquivalentDomains.svelte";
@@ -32,7 +36,6 @@ let successMsg = $state("");
 let customRules = $state<CustomEquivalentDomain[]>([]);
 let globalRules = $state<GlobalEquivalentDomain[]>([]);
 let excludedTypes = $state<Set<number>>(new Set());
-
 
 onMount(async () => {
 	if (!isLoggedIn()) {
@@ -135,16 +138,16 @@ function showTimedError(msg: string) {
 	<title>域名等效规则 - Edgewarden</title>
 </svelte:head>
 
-<div class="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col">
+<div class="flex min-h-screen flex-col bg-muted/30">
 	<!-- Navbar Header -->
 	<header class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-background px-3 py-2 sm:h-14 sm:flex-nowrap sm:px-6 sm:py-0">
 		<div class="flex items-center gap-3">
-			<Button variant="ghost" size="icon" onclick={() => goto("/vault")} class="size-9 rounded-lg">
-				<ArrowLeft class="size-4" />
+			<Button variant="ghost" size="icon" onclick={() => goto("/vault")} aria-label="返回保险库">
+				<ArrowLeft />
 			</Button>
 			<div class="flex items-center gap-2">
 				<Globe class="size-5 text-primary" />
-				<h1 class="font-bold text-base text-slate-800 dark:text-slate-100">域名等效规则</h1>
+				<h1 class="text-base font-bold">域名等效规则</h1>
 			</div>
 		</div>
 
@@ -154,17 +157,16 @@ function showTimedError(msg: string) {
 				size="sm"
 				onclick={loadRules}
 				disabled={loading || saving}
-				class="gap-1.5 h-9"
 			>
-				<RefreshCw class="size-3.5 {loading ? 'animate-spin' : ''}" />
+				{#if loading}<Spinner data-icon="inline-start" />{:else}<RefreshCw data-icon="inline-start" />{/if}
 				<span class="hidden sm:inline">同步刷新</span>
 			</Button>
 			<Button
 				onclick={handleSave}
 				disabled={loading || saving}
-				class="gap-1.5 h-9 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+				class="font-semibold"
 			>
-				<Save class="size-3.5" />
+				{#if saving}<Spinner data-icon="inline-start" />{:else}<Save data-icon="inline-start" />{/if}
 				{saving ? "保存中..." : "保存"}<span class="hidden sm:inline">并应用</span>
 			</Button>
 		</div>
@@ -173,52 +175,29 @@ function showTimedError(msg: string) {
 	<main class="mx-auto flex w-full min-w-0 max-w-6xl flex-1 flex-col gap-6 overflow-y-auto p-3 sm:p-6 md:p-8">
 		<!-- Notification Alerts -->
 		{#if error}
-			<div class="p-4 rounded-xl border border-red-200 bg-red-50 text-red-700 dark:bg-red-950/20 dark:border-red-900/50 dark:text-red-400 flex gap-3 items-start animate-in fade-in slide-in-from-top-2 duration-200">
-				<AlertCircle class="size-5 shrink-0 mt-0.5" />
-				<div>
-					<p class="text-sm font-semibold">操作提示</p>
-					<p class="text-xs mt-0.5 leading-relaxed">{error}</p>
-				</div>
-			</div>
+			<Alert.Root variant="destructive"><AlertCircle /><Alert.Title>操作提示</Alert.Title><Alert.Description>{error}</Alert.Description></Alert.Root>
 		{/if}
 
 		{#if successMsg}
-			<div class="p-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:border-emerald-900/50 dark:text-emerald-400 flex gap-3 items-start animate-in fade-in slide-in-from-top-2 duration-200">
-				<ShieldCheck class="size-5 shrink-0 mt-0.5" />
-				<div>
-					<p class="text-sm font-semibold">成功</p>
-					<p class="text-xs mt-0.5 leading-relaxed">{successMsg}</p>
-				</div>
-			</div>
+			<Alert.Root><ShieldCheck /><Alert.Title>成功</Alert.Title><Alert.Description>{successMsg}</Alert.Description></Alert.Root>
 		{/if}
 
 		<!-- Intro Description Card -->
-		<div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
-			<div class="space-y-1">
-				<h2 class="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-					<Info class="size-4 text-slate-400" />
-					关于域名等效规则
-				</h2>
-				<p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-3xl">
+		<Alert.Root>
+			<Info />
+			<Alert.Title>关于域名等效规则</Alert.Title>
+			<Alert.Description class="max-w-3xl leading-relaxed">
 					等效规则允许将不同的域名或主机名组合在一起。
 					当您登录属于同一规则下的任何域名时，Edgewarden 会认为它们是等效的，并自动推荐您的账户凭据。
-					例如，将 <code class="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded font-mono text-[10px] text-primary">apple.com</code> 和 <code class="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded font-mono text-[10px] text-primary">icloud.com</code> 设为等效。
-				</p>
-			</div>
-		</div>
+					例如，将 <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-primary">apple.com</code> 和 <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-primary">icloud.com</code> 设为等效。
+			</Alert.Description>
+		</Alert.Root>
 
 		{#if loading}
 			<!-- Skeleton Loader -->
-			<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 				{#each Array(2) as _}
-					<div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm animate-pulse">
-						<div class="h-6 w-40 bg-slate-200 dark:bg-slate-800 rounded"></div>
-						<div class="space-y-3">
-							<div class="h-10 bg-slate-100 dark:bg-slate-850 rounded"></div>
-							<div class="h-10 bg-slate-100 dark:bg-slate-850 rounded"></div>
-							<div class="h-10 bg-slate-100 dark:bg-slate-850 rounded"></div>
-						</div>
-					</div>
+					<Card.Root><Card.Header><Skeleton class="h-6 w-40" /><Skeleton class="h-4 w-64 max-w-full" /></Card.Header><Card.Content class="flex flex-col gap-3">{#each Array(3) as _}<Skeleton class="h-10 w-full" />{/each}</Card.Content></Card.Root>
 				{/each}
 			</div>
 		{:else}

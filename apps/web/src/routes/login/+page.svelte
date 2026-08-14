@@ -234,7 +234,7 @@ async function completePasskeyUnlock() {
 				<Field.Field>
 					<Field.Label for="email">电子邮件地址</Field.Label>
 					<div class="relative">
-						<span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
+						<span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
 							<Mail class="size-4" />
 						</span>
 						<Input
@@ -257,7 +257,7 @@ async function completePasskeyUnlock() {
 				<Field.Field>
 					<Field.Label for="password">主密码</Field.Label>
 					<div class="relative">
-						<span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
+						<span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
 							<KeyRound class="size-4" />
 						</span>
 						<Input

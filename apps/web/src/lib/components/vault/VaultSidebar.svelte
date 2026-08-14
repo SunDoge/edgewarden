@@ -27,6 +27,7 @@ import {
 } from "@lucide/svelte";
 import { goto } from "$app/navigation";
 import { Button } from "$lib/components/ui/button/index.js";
+import { Badge } from "$lib/components/ui/badge/index.js";
 import { Separator } from "$lib/components/ui/separator/index.js";
 import type { VaultCategory } from "$lib/services/vault-filter";
 import { vault } from "$lib/stores/vault.svelte";
@@ -143,44 +144,46 @@ function navigateTo(href: string) {
 	<nav class="flex flex-col gap-1.5" aria-label="保险库导航">
 		<p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">类型过滤</p>
 		{#each filters as item (item.id)}
-			<button
-				class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors {activeCategory === item.id && !activeFolder ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'}"
+			<Button
+				variant={activeCategory === item.id && !activeFolder ? "secondary" : "ghost"}
+				class="w-full justify-start"
 				onclick={() => selectCategory(item.id)}
 			>
-				<item.icon class="size-4" />
+				<item.icon />
 				<span>{item.label}</span>
-				<span class="ml-auto rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{item.count}</span>
-			</button>
+				<Badge variant="secondary" class="ml-auto">{item.count}</Badge>
+			</Button>
 		{/each}
 
 		<Separator class="my-2" />
 		{#each cipherTypes as item (item.id)}
-			<button
-				class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors {activeCategory === item.id ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'}"
+			<Button
+				variant={activeCategory === item.id ? "secondary" : "ghost"}
+				class="w-full justify-start"
 				onclick={() => selectCategory(item.id)}
 			>
-				<item.icon class="size-4" />
+				<item.icon />
 				<span>{item.label}</span>
-			</button>
+			</Button>
 		{/each}
 
 		<Separator class="my-2" />
 		<p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">工具与设置</p>
 		{#each tools as item (item.href)}
-			<button class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted" onclick={() => navigateTo(item.href)}>
-				<item.icon class="size-4" />
+			<Button variant="ghost" class="w-full justify-start" onclick={() => navigateTo(item.href)}>
+				<item.icon />
 				<span>{item.label}</span>
-			</button>
+			</Button>
 		{/each}
 
 		{#if vault.profile?.role === "admin"}
 			<Separator class="my-2" />
 			<p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">管理</p>
 			{#each adminTools as item (item.href)}
-				<button class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted" onclick={() => navigateTo(item.href)}>
-					<item.icon class="size-4" />
+				<Button variant="ghost" class="w-full justify-start" onclick={() => navigateTo(item.href)}>
+					<item.icon />
 					<span>{item.label}</span>
-				</button>
+				</Button>
 			{/each}
 		{/if}
 	</nav>
@@ -200,10 +203,10 @@ function navigateTo(href: string) {
 		</div>
 		{#each vault.folders as folder (folder.id)}
 			<div class="group flex w-full items-center justify-between rounded-lg text-left text-sm font-medium transition-colors {activeFolder === folder.id ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'}">
-				<button class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left font-medium" onclick={() => { activeFolder = folder.id; activeCategory = 'all'; onNavigate?.(); }}>
+				<Button variant="ghost" class="h-auto min-w-0 flex-1 justify-start px-3 py-2" onclick={() => { activeFolder = folder.id; activeCategory = 'all'; onNavigate?.(); }}>
 					<Folder class="size-4 shrink-0" />
 					<span class="truncate">{folder.name}</span>
-				</button>
+				</Button>
 				<div class="flex shrink-0 items-center gap-1.5 pr-2">
 					<span class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground group-hover:hidden">{vault.ciphers.filter((item) => item.folderId === folder.id).length}</span>
 					<Button variant="ghost" size="icon-xs" class="hidden text-muted-foreground group-hover:inline-flex" onclick={(event) => { event.stopPropagation(); onRenameFolder(folder); }} title="重命名" aria-label={`重命名 ${folder.name}`}><Edit data-icon /></Button>

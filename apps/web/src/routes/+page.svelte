@@ -3,6 +3,8 @@ import { onMount } from "svelte";
 import { goto } from "$app/navigation";
 import { isLoggedIn } from "$lib/services/api";
 import { restoreWebSession } from "$lib/services/rpc";
+import * as Empty from "$lib/components/ui/empty/index.js";
+import { Spinner } from "$lib/components/ui/spinner/index.js";
 
 onMount(async () => {
 	await restoreWebSession();
@@ -14,9 +16,6 @@ onMount(async () => {
 });
 </script>
 
-<div class="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
-	<div class="flex flex-col items-center gap-3">
-		<div class="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
-		<p class="text-slate-500 font-medium text-sm">正在载入 Edgewarden...</p>
-	</div>
+<div class="flex min-h-screen items-center justify-center bg-muted/30">
+	<Empty.Root><Empty.Media variant="icon"><Spinner /></Empty.Media><Empty.Header><Empty.Title>正在载入 Edgewarden</Empty.Title><Empty.Description>正在恢复本地会话。</Empty.Description></Empty.Header></Empty.Root>
 </div>

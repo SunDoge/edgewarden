@@ -17,6 +17,8 @@ import * as Empty from "$lib/components/ui/empty/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import * as Select from "$lib/components/ui/select/index.js";
 import { Skeleton } from "$lib/components/ui/skeleton/index.js";
+import { match } from "ts-pattern";
+import { cn } from "$lib/utils";
 import { m } from "$lib/paraglide/messages.js";
 import type {
 	DuplicateMode,
@@ -104,20 +106,37 @@ function hideBrokenIcon(event: Event) {
 	image.style.display = "none";
 	image.nextElementSibling?.classList.remove("hidden");
 }
+
+function duplicateModeLabel(mode: DuplicateMode) {
+	return match(mode)
+		.with("exact", () => "完全相同")
+		.with("login-site", () => "网站、账号和密码")
+		.with("login-credentials", () => "账号和密码")
+		.with("password", () => "密码复用")
+		.exhaustive();
+}
+
+function sortModeLabel(mode: VaultSort) {
+	return match(mode)
+		.with("edited", () => "最近修改")
+		.with("created", () => "最近创建")
+		.with("name", () => "名称")
+		.exhaustive();
+}
 </script>
 
 <section class="flex flex-1 flex-col overflow-hidden border-r bg-background">
 	<div class="flex shrink-0 flex-col gap-3 border-b p-4">
 		<div class="flex flex-wrap gap-2 sm:flex-nowrap">
-			<div class="relative flex-1"><Search class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input type="search" placeholder="搜索您的保险库项..." class="pl-10" bind:value={searchQuery} /></div>
+			<div class="relative flex-1"><Search class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input type="search" placeholder="搜索您的保险库项..." class="pl-10" bind:value={searchQuery} /></div>
 			{#if activeCategory === "duplicates"}
 				<Select.Root type="single" bind:value={duplicateMode}>
-					<Select.Trigger class="w-44" aria-label="重复检测方式">{duplicateMode === "exact" ? "完全相同" : duplicateMode === "login-site" ? "网站、账号和密码" : duplicateMode === "login-credentials" ? "账号和密码" : "密码复用"}</Select.Trigger>
+					<Select.Trigger class="w-44" aria-label="重复检测方式">{duplicateModeLabel(duplicateMode)}</Select.Trigger>
 					<Select.Content><Select.Group><Select.Item value="exact">完全相同</Select.Item><Select.Item value="login-site">网站、账号和密码</Select.Item><Select.Item value="login-credentials">账号和密码</Select.Item><Select.Item value="password">密码复用</Select.Item></Select.Group></Select.Content>
 				</Select.Root>
 			{/if}
 			<Select.Root type="single" bind:value={sortMode}>
-				<Select.Trigger class="w-28" aria-label="排序方式">{sortMode === "edited" ? "最近修改" : sortMode === "created" ? "最近创建" : "名称"}</Select.Trigger>
+				<Select.Trigger class="w-28" aria-label="排序方式">{sortModeLabel(sortMode)}</Select.Trigger>
 				<Select.Content><Select.Group><Select.Item value="edited">最近修改</Select.Item><Select.Item value="created">最近创建</Select.Item><Select.Item value="name">名称</Select.Item></Select.Group></Select.Content>
 			</Select.Root>
 		</div>
@@ -161,10 +180,10 @@ function hideBrokenIcon(event: Event) {
 			<div style="padding-top: {padTop}px; padding-bottom: {padBottom}px;" class="divide-y">
 				{#each visibleItems as item (item.id)}
 					{@const Icon = cipherTypeIcon(item.type)}
-					<div class="flex items-center"><Checkbox checked={!!selectedIds[item.id]} onCheckedChange={() => onToggleSelection(item.id)} aria-label={`选择 ${item.name}`} class="ml-3" /><button class="flex w-full items-center gap-3.5 border-l-2 p-4 text-left transition-colors hover:bg-muted/50 {selectedItem?.id === item.id ? 'border-primary bg-muted/60' : 'border-transparent'}" onclick={() => { selectedItem = item; onSelectItem?.(item); }}>
+					<div class="flex items-center"><Checkbox checked={!!selectedIds[item.id]} onCheckedChange={() => onToggleSelection(item.id)} aria-label={`选择 ${item.name}`} class="ml-3" /><Button variant="ghost" class={cn("h-auto w-full justify-start gap-3.5 rounded-none border-l-2 border-transparent p-4 text-left", selectedItem?.id === item.id && "border-primary bg-muted/60")} onclick={() => { selectedItem = item; onSelectItem?.(item); }}>
 						<div class="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-muted text-muted-foreground">{#if cipherDomain(item)}<img src="/icons/{encodeURIComponent(cipherDomain(item) ?? '')}/icon.png" alt="" class="size-5.5 rounded-md object-contain" onload={revealIcon} onerror={hideBrokenIcon} style="opacity: 0; transition: opacity 0.2s;" /><div class="absolute inset-0 hidden items-center justify-center"><Icon class="size-5" /></div>{:else}<Icon class="size-5" />{/if}</div>
 						<div class="min-w-0 flex-1"><div class="flex items-center gap-1.5"><h4 class="truncate text-sm font-semibold text-foreground">{item.name}</h4>{#if item.favorite}<Star class="size-3 shrink-0 fill-current text-amber-400" />{/if}</div><p class="mt-0.5 truncate text-xs text-muted-foreground">{item.login?.username || cipherTypeName(item.type)}</p></div>
-					</button></div>
+					</Button></div>
 				{/each}
 			</div>
 		{/if}

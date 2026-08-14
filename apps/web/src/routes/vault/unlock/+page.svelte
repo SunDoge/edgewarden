@@ -89,7 +89,7 @@ async function handleUnlock(e: SubmitEvent) {
 				<Field.Field>
 					<Field.Label for="password">主密码</Field.Label>
 					<div class="relative">
-						<span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+						<span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
 							<KeyRound class="size-4" />
 						</span>
 						<Input

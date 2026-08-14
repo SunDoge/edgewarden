@@ -26,6 +26,7 @@ import { Input } from "$lib/components/ui/input/index.js";
 import { Separator } from "$lib/components/ui/separator/index.js";
 import { Spinner } from "$lib/components/ui/spinner/index.js";
 import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
+import { cn } from "$lib/utils";
 import {
 	Search,
 	Plus,
@@ -243,7 +244,7 @@ function copyShareLink(send: any) {
 				variant="ghost" size="sm"
 				onclick={loadSends}
 				disabled={loading}
-				class="text-slate-500"
+				aria-label="刷新 Send"
 			>
 				{#if loading}<Spinner />{:else}<RefreshCw data-icon />{/if}
 			</Button>
@@ -256,7 +257,7 @@ function copyShareLink(send: any) {
 			{#if errorMsg}<div class="p-3"><Alert.Root variant="destructive"><Alert.Title>操作失败</Alert.Title><Alert.Description>{errorMsg}</Alert.Description></Alert.Root></div>{/if}
 			<div class="flex shrink-0 items-center gap-2 border-b border-border p-3 sm:gap-3 sm:p-4">
 				<div class="relative flex-1">
-					<Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
+					<Search class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 					<Input type="search" placeholder="搜索您创建的分享..." class="pl-10" bind:value={searchQuery} />
 				</div>
 				<Button class="shrink-0 font-semibold" onclick={startCreate} aria-label="新建 Send">
@@ -278,8 +279,7 @@ function copyShareLink(send: any) {
 				{:else}
 					{#each filteredSends as send}
 						<div role="button" tabindex="0"
-							class="w-full p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/30 text-left transition-colors
-								{selectedSend?.id === send.id ? 'bg-primary/5 dark:bg-primary/10 border-l-2 border-primary' : 'border-l-2 border-transparent'}"
+							class={cn("flex w-full items-center justify-between border-l-2 border-transparent p-4 text-left transition-colors hover:bg-muted/50", selectedSend?.id === send.id && "border-primary bg-muted/60")}
 							onclick={() => selectSend(send)} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") selectSend(send); }}
 						>
 							<div class="flex items-center gap-3.5 min-w-0 flex-1">
@@ -298,7 +298,7 @@ function copyShareLink(send: any) {
 										<Badge variant="secondary">已禁用</Badge>
 										{/if}
 									</div>
-									<p class="text-xs text-slate-400 truncate mt-0.5">
+									<p class="mt-0.5 truncate text-xs text-muted-foreground">
 										{send.type === 0 ? "加密文本" : "加密文件"} • 已访问 {send.accessCount} 次
 									</p>
 								</div>
@@ -348,11 +348,7 @@ function copyShareLink(send: any) {
 					onDelete={() => deleteTarget = { kind: "single", id: selectedSend.id }}
 				/>
 			{:else}
-				<div class="h-full flex flex-col items-center justify-center text-center text-slate-400 p-8">
-					<Share2 class="size-10 text-slate-300 dark:text-slate-700 mb-3" />
-					<p class="font-medium text-sm">选择一个 Send 查看传输详情</p>
-					<p class="text-xs text-slate-500 mt-1">您创建的任何阅后即焚内容将在此列出，并附带管理统计。</p>
-				</div>
+				<Empty.Root class="h-full"><Empty.Header><Empty.Media variant="icon"><Share2 /></Empty.Media><Empty.Title>选择一个 Send 查看传输详情</Empty.Title><Empty.Description>您创建的任何阅后即焚内容将在此列出，并附带管理统计。</Empty.Description></Empty.Header></Empty.Root>
 			{/if}
 		</section>
 	</div>
