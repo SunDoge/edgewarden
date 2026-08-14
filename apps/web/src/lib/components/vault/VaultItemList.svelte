@@ -12,8 +12,11 @@ import {
 } from "@lucide/svelte";
 import * as Alert from "$lib/components/ui/alert/index.js";
 import { Button } from "$lib/components/ui/button/index.js";
+import { Checkbox } from "$lib/components/ui/checkbox/index.js";
+import * as Empty from "$lib/components/ui/empty/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import * as Select from "$lib/components/ui/select/index.js";
+import { Skeleton } from "$lib/components/ui/skeleton/index.js";
 import { m } from "$lib/paraglide/messages.js";
 import type {
 	DuplicateMode,
@@ -103,8 +106,8 @@ function hideBrokenIcon(event: Event) {
 }
 </script>
 
-<section class="flex flex-1 flex-col overflow-hidden border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-	<div class="flex shrink-0 flex-col gap-3 border-b border-slate-200 p-4 dark:border-slate-800">
+<section class="flex flex-1 flex-col overflow-hidden border-r bg-background">
+	<div class="flex shrink-0 flex-col gap-3 border-b p-4">
 		<div class="flex flex-wrap gap-2 sm:flex-nowrap">
 			<div class="relative flex-1"><Search class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input type="search" placeholder="搜索您的保险库项..." class="pl-10" bind:value={searchQuery} /></div>
 			{#if activeCategory === "duplicates"}
@@ -130,11 +133,11 @@ function hideBrokenIcon(event: Event) {
 			<div class="flex flex-wrap items-center gap-2 text-sm">
 				<span>已选择 {selectedCount} 项</span>
 				{#if activeCategory === "trash"}
-					<Button size="sm" variant="outline" onclick={() => onBulkAction("restore")}><RotateCcw />恢复</Button><Button size="sm" variant="destructive" onclick={() => onBulkAction("permanent")}><Trash2 />永久删除</Button>
+					<Button size="sm" variant="outline" onclick={() => onBulkAction("restore")}><RotateCcw data-icon="inline-start" />恢复</Button><Button size="sm" variant="destructive" onclick={() => onBulkAction("permanent")}><Trash2 data-icon="inline-start" />永久删除</Button>
 				{:else if activeCategory === "archive"}
-					<Button size="sm" variant="outline" onclick={() => onBulkAction("unarchive")}><ArchiveRestore />取消归档</Button><Button size="sm" variant="destructive" onclick={() => onBulkAction("delete")}><Trash2 />移到回收站</Button>
+					<Button size="sm" variant="outline" onclick={() => onBulkAction("unarchive")}><ArchiveRestore data-icon="inline-start" />取消归档</Button><Button size="sm" variant="destructive" onclick={() => onBulkAction("delete")}><Trash2 data-icon="inline-start" />移到回收站</Button>
 				{:else}
-					<Button size="sm" variant="outline" onclick={() => onBulkAction("archive")}><Archive />归档</Button><Button size="sm" variant="outline" onclick={onMove}><Folder />移动</Button><Button size="sm" variant="destructive" onclick={() => onBulkAction("delete")}><Trash2 />移到回收站</Button>
+					<Button size="sm" variant="outline" onclick={() => onBulkAction("archive")}><Archive data-icon="inline-start" />归档</Button><Button size="sm" variant="outline" onclick={onMove}><Folder data-icon="inline-start" />移动</Button><Button size="sm" variant="destructive" onclick={() => onBulkAction("delete")}><Trash2 data-icon="inline-start" />移到回收站</Button>
 				{/if}
 				<Button size="sm" variant="ghost" onclick={onClearSelection}>取消选择</Button>
 			</div>
@@ -143,7 +146,7 @@ function hideBrokenIcon(event: Event) {
 
 	<div bind:this={listContainer} bind:clientHeight={viewportHeight} onscroll={(event) => { const top = event.currentTarget.scrollTop; const bucket = Math.floor(Math.max(0, top) / rowHeight); if (bucket !== currentBucket) { currentBucket = bucket; scrollTop = top; } }} class="flex-1 overflow-y-auto">
 		{#if isSyncing}
-			<div class="divide-y divide-slate-100 dark:divide-slate-800/50">{#each Array(6) as _}<div class="flex w-full animate-pulse items-center gap-3.5 p-4"><div class="size-10 shrink-0 rounded-xl bg-slate-200 dark:bg-slate-800"></div><div class="min-w-0 flex-1 space-y-2 py-1"><div class="h-3.5 w-1/3 rounded bg-slate-200 dark:bg-slate-800"></div><div class="h-2.5 w-1/2 rounded bg-slate-200/60 dark:bg-slate-800/60"></div></div></div>{/each}</div>
+			<div class="divide-y">{#each Array(6) as _}<div class="flex w-full items-center gap-3.5 p-4"><Skeleton class="size-10 shrink-0 rounded-xl" /><div class="flex min-w-0 flex-1 flex-col gap-2 py-1"><Skeleton class="h-3.5 w-1/3" /><Skeleton class="h-2.5 w-1/2" /></div></div>{/each}</div>
 		{:else if error}
 			<div class="p-4">
 				<Alert.Root variant="destructive">
@@ -153,14 +156,14 @@ function hideBrokenIcon(event: Event) {
 				</Alert.Root>
 			</div>
 		{:else if items.length === 0}
-			<div class="p-12 text-center text-slate-400"><Lock class="mx-auto mb-3 size-12 text-slate-300 dark:text-slate-700" /><p class="text-sm font-medium">找不到符合要求的条目</p><p class="mt-1 text-xs text-slate-500">点击左侧“添加新条目”来创建一个。</p></div>
+			<Empty.Root><Empty.Header><Empty.Media variant="icon"><Lock /></Empty.Media><Empty.Title>找不到符合要求的条目</Empty.Title><Empty.Description>调整搜索或筛选条件，或者添加一个新条目。</Empty.Description></Empty.Header></Empty.Root>
 		{:else}
-			<div style="padding-top: {padTop}px; padding-bottom: {padBottom}px;" class="divide-y divide-slate-100 dark:divide-slate-800/50">
+			<div style="padding-top: {padTop}px; padding-bottom: {padBottom}px;" class="divide-y">
 				{#each visibleItems as item (item.id)}
 					{@const Icon = cipherTypeIcon(item.type)}
-					<div class="flex items-center"><input type="checkbox" checked={!!selectedIds[item.id]} onchange={() => onToggleSelection(item.id)} aria-label={`选择 ${item.name}`} class="ml-3 size-4 rounded border-input" /><button class="flex w-full items-center gap-3.5 border-l-2 p-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/30 {selectedItem?.id === item.id ? 'border-primary bg-primary/5 dark:bg-primary/10' : 'border-transparent'}" onclick={() => { selectedItem = item; onSelectItem?.(item); }}>
-						<div class="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/50 bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">{#if cipherDomain(item)}<img src="/icons/{encodeURIComponent(cipherDomain(item) ?? '')}/icon.png" alt="" class="size-5.5 rounded-md object-contain" onload={revealIcon} onerror={hideBrokenIcon} style="opacity: 0; transition: opacity 0.2s;" /><div class="absolute inset-0 hidden items-center justify-center"><Icon class="size-5" /></div>{:else}<Icon class="size-5" />{/if}</div>
-						<div class="min-w-0 flex-1"><div class="flex items-center gap-1.5"><h4 class="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{item.name}</h4>{#if item.favorite}<Star class="size-3 shrink-0 fill-current text-amber-400" />{/if}</div><p class="mt-0.5 truncate text-xs text-slate-500">{item.login?.username || cipherTypeName(item.type)}</p></div>
+					<div class="flex items-center"><Checkbox checked={!!selectedIds[item.id]} onCheckedChange={() => onToggleSelection(item.id)} aria-label={`选择 ${item.name}`} class="ml-3" /><button class="flex w-full items-center gap-3.5 border-l-2 p-4 text-left transition-colors hover:bg-muted/50 {selectedItem?.id === item.id ? 'border-primary bg-muted/60' : 'border-transparent'}" onclick={() => { selectedItem = item; onSelectItem?.(item); }}>
+						<div class="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-muted text-muted-foreground">{#if cipherDomain(item)}<img src="/icons/{encodeURIComponent(cipherDomain(item) ?? '')}/icon.png" alt="" class="size-5.5 rounded-md object-contain" onload={revealIcon} onerror={hideBrokenIcon} style="opacity: 0; transition: opacity 0.2s;" /><div class="absolute inset-0 hidden items-center justify-center"><Icon class="size-5" /></div>{:else}<Icon class="size-5" />{/if}</div>
+						<div class="min-w-0 flex-1"><div class="flex items-center gap-1.5"><h4 class="truncate text-sm font-semibold text-foreground">{item.name}</h4>{#if item.favorite}<Star class="size-3 shrink-0 fill-current text-amber-400" />{/if}</div><p class="mt-0.5 truncate text-xs text-muted-foreground">{item.login?.username || cipherTypeName(item.type)}</p></div>
 					</button></div>
 				{/each}
 			</div>
