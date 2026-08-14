@@ -5,7 +5,6 @@ import {
 	Check,
 	Database,
 	Lock,
-	RefreshCw,
 	Settings2,
 } from "@lucide/svelte";
 import { onMount } from "svelte";
@@ -24,6 +23,12 @@ import type {
 	BackupSettings,
 } from "$lib/components/backup/types";
 import { Button } from "$lib/components/ui/button/index.js";
+import * as Alert from "$lib/components/ui/alert/index.js";
+import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
+import * as Empty from "$lib/components/ui/empty/index.js";
+import * as Field from "$lib/components/ui/field/index.js";
+import { Input } from "$lib/components/ui/input/index.js";
+import { Spinner } from "$lib/components/ui/spinner/index.js";
 import {
 	exportBackupLocalApi,
 	fetchBackupSettingsApi,
@@ -48,9 +53,12 @@ let selectedDestId = $state<string | null>(null);
 let form = $state(createDefaultBackupDestinationForm());
 
 // Local backups forms
-let localFile = $state<File | null>(null);
+let localFile = $state<File | undefined>();
 let replaceExisting = $state(false);
 let allowChecksumMismatch = $state(false);
+let deleteConfirmOpen = $state(false);
+let restoreConfirmOpen = $state(false);
+let restoreConfirmation = $state("");
 
 onMount(async () => {
 	if (!vault.isUnlocked) {
@@ -173,8 +181,6 @@ async function triggerBackup() {
 
 async function deleteDestination() {
 	if (!selectedDestId) return;
-	if (!confirm("您确定要删除此备份目的地吗？已存在的远程文件不会被删除。"))
-		return;
 
 	saving = true;
 	error = "";
@@ -215,20 +221,18 @@ async function handleLocalExport() {
 	}
 }
 
-async function handleLocalImport() {
+function requestLocalImport() {
 	if (!localFile) {
-		alert("请先选择备份 zip 文件！");
+		error = "请先选择备份 ZIP 文件。";
 		return;
 	}
+	restoreConfirmation = "";
+	restoreConfirmOpen = true;
+}
 
-	const msg =
-		"确定要从本地备份文件导入吗？\n警告：如果选择 [替换现有数据]，此操作将全量覆盖系统中的所有账户和加密数据！\n\n如果确认，请输入 REVERT：";
-	const confirmVal = prompt(msg);
-	if (confirmVal !== "REVERT") {
-		alert("操作已取消");
-		return;
-	}
-
+async function handleLocalImport() {
+	if (!localFile || restoreConfirmation !== "REVERT") return;
+	restoreConfirmOpen = false;
 	restoring = true;
 	error = "";
 	try {
@@ -238,11 +242,11 @@ async function handleLocalImport() {
 			allowChecksumMismatch,
 		);
 		if (replaceExisting) {
-			alert("系统恢复成功！请重新登录您的账户。");
+			showSuccess("系统恢复成功，请重新登录账户。");
 			goto("/login");
 		} else {
-			alert("备份导入成功！已导入备份中的所有非冲突数据。");
-			localFile = null;
+			showSuccess("备份导入成功，已导入所有非冲突数据。");
+			localFile = undefined;
 		}
 	} catch (e: any) {
 		error = e.message || "本地备份导入失败。";
@@ -284,32 +288,18 @@ function showSuccess(msg: string) {
 
 		<!-- Alerts -->
 		{#if error}
-			<div class="p-3.5 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/50 rounded-lg text-sm flex items-start gap-2">
-				<AlertCircle class="size-4 shrink-0 mt-0.5" />
-				<span>{error}</span>
-			</div>
+			<Alert.Root variant="destructive"><AlertCircle /><Alert.Title>操作失败</Alert.Title><Alert.Description>{error}</Alert.Description></Alert.Root>
 		{/if}
 
 		{#if successMsg}
-			<div class="p-3.5 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/50 rounded-lg text-sm flex items-start gap-2">
-				<Check class="size-4 shrink-0 mt-0.5" />
-				<span>{successMsg}</span>
-			</div>
+			<Alert.Root><Check /><Alert.Title>操作成功</Alert.Title><Alert.Description>{successMsg}</Alert.Description></Alert.Root>
 		{/if}
 
 		<!-- Main Layout -->
 		{#if vault.profile?.role !== "admin"}
-			<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-12 text-center max-w-md mx-auto space-y-4 my-12">
-				<Lock class="size-12 mx-auto text-slate-400 dark:text-slate-600" />
-				<h2 class="text-lg font-bold text-slate-900 dark:text-slate-100">仅限管理员访问</h2>
-				<p class="text-sm text-slate-500">云备份中心是系统级管理面板，只有系统管理员账户能够配置和触发全量数据库备份。</p>
-				<Button variant="outline" onclick={() => goto("/vault")} class="w-full">返回保险库</Button>
-			</div>
+			<Empty.Root class="mx-auto my-12 max-w-md"><Empty.Header><Empty.Media variant="icon"><Lock /></Empty.Media><Empty.Title>仅限管理员访问</Empty.Title><Empty.Description>云备份中心是系统级管理面板，只有系统管理员能够配置和触发全量数据库备份。</Empty.Description></Empty.Header><Empty.Content><Button variant="outline" onclick={() => goto("/vault")}>返回保险库</Button></Empty.Content></Empty.Root>
 		{:else if loading}
-			<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-12 text-center flex-1 flex flex-col items-center justify-center">
-				<RefreshCw class="size-8 text-primary animate-spin mb-3" />
-				<span class="text-sm text-slate-500">正在载入备份配置设置...</span>
-			</div>
+			<Empty.Root class="flex-1"><Empty.Header><Empty.Media><Spinner class="size-8" /></Empty.Media><Empty.Title>正在载入备份配置</Empty.Title></Empty.Header></Empty.Root>
 		{:else}
 			<div class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
 				<!-- Left Column: Destinations list -->
@@ -326,17 +316,14 @@ function showSuccess(msg: string) {
 						bind:allowChecksumMismatch
 						{restoring}
 						onExport={handleLocalExport}
-						onImport={handleLocalImport}
+						onImport={requestLocalImport}
 					/>
 				</div>
 
 				<!-- Right Column: Destination settings -->
 				<div class="lg:col-span-3 space-y-6">
 					{#if !selectedDestId}
-						<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-12 text-center text-slate-400">
-							<Settings2 class="size-12 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
-							<p class="font-medium text-sm">请在左侧选择或添加一个备份目的地</p>
-						</div>
+						<Empty.Root><Empty.Header><Empty.Media variant="icon"><Settings2 /></Empty.Media><Empty.Title>请选择备份目的地</Empty.Title><Empty.Description>在左侧选择已有目的地，或添加一个新目的地。</Empty.Description></Empty.Header></Empty.Root>
 					{:else}
 						{@const currentDest = settings.destinations.find(d => d.id === selectedDestId)}
 						
@@ -344,7 +331,7 @@ function showSuccess(msg: string) {
 							bind:form
 							{saving}
 							onSave={saveSettings}
-							onDelete={deleteDestination}
+							onDelete={() => deleteConfirmOpen = true}
 						/>
 
 						<RemoteBackupManager
@@ -362,3 +349,11 @@ function showSuccess(msg: string) {
 		{/if}
 	</div>
 </div>
+
+<AlertDialog.Root bind:open={deleteConfirmOpen}>
+	<AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>删除备份目的地</AlertDialog.Title><AlertDialog.Description>配置将被删除，但已经存在的远程备份文件不会被删除。</AlertDialog.Description></AlertDialog.Header><AlertDialog.Footer><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action class="bg-destructive text-destructive-foreground hover:bg-destructive/90" onclick={deleteDestination}>确认删除</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content>
+</AlertDialog.Root>
+
+<AlertDialog.Root bind:open={restoreConfirmOpen}>
+	<AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>确认恢复备份</AlertDialog.Title><AlertDialog.Description>{replaceExisting ? "替换模式会覆盖系统中的账户与加密数据。" : "合并模式会导入备份中的非冲突数据。"} 请输入 REVERT 继续。</AlertDialog.Description></AlertDialog.Header><Field.Field data-invalid={restoreConfirmation.length > 0 && restoreConfirmation !== "REVERT"}><Field.Label for="restore-confirmation">确认文本</Field.Label><Input id="restore-confirmation" bind:value={restoreConfirmation} autocomplete="off" aria-invalid={restoreConfirmation.length > 0 && restoreConfirmation !== "REVERT"} placeholder="REVERT" /></Field.Field><AlertDialog.Footer><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action disabled={restoreConfirmation !== "REVERT"} onclick={handleLocalImport}>恢复备份</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content>
+</AlertDialog.Root>

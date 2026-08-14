@@ -1,6 +1,12 @@
 <script lang="ts">
-import { Download, RefreshCw } from "@lucide/svelte";
+import { Download } from "@lucide/svelte";
 import { Button } from "$lib/components/ui/button/index.js";
+import * as Card from "$lib/components/ui/card/index.js";
+import { Checkbox } from "$lib/components/ui/checkbox/index.js";
+import * as Field from "$lib/components/ui/field/index.js";
+import { Input } from "$lib/components/ui/input/index.js";
+import { Separator } from "$lib/components/ui/separator/index.js";
+import { Spinner } from "$lib/components/ui/spinner/index.js";
 
 let {
 	file = $bindable(),
@@ -10,7 +16,7 @@ let {
 	onExport,
 	onImport,
 }: {
-	file: File | null;
+	file: File | undefined;
 	replaceExisting: boolean;
 	allowChecksumMismatch: boolean;
 	restoring: boolean;
@@ -19,30 +25,24 @@ let {
 } = $props();
 </script>
 
-<div class="space-y-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-	<span class="block text-xs font-semibold uppercase tracking-wider text-slate-400">手动备份与恢复</span>
-	<Button variant="outline" size="sm" onclick={onExport} class="w-full gap-2">
-		<Download class="size-3.5" />导出本地备份 (.zip)
-	</Button>
-	<hr class="border-slate-100 dark:border-slate-800" />
-	<div class="space-y-2">
-		<span class="block text-xs font-medium text-slate-700 dark:text-slate-300">从本地文件恢复</span>
-		<input
+<Card.Root>
+	<Card.Header><Card.Title>手动备份与恢复</Card.Title><Card.Description>下载加密备份包，或从已有备份恢复数据。</Card.Description></Card.Header>
+	<Card.Content><Field.Group>
+		<Button variant="outline" size="sm" onclick={onExport} class="w-full">
+			<Download data-icon="inline-start" />导出本地备份 (.zip)
+		</Button>
+		<Separator />
+		<Field.Field>
+			<Field.Label for="local-backup-file">从本地文件恢复</Field.Label>
+		<Input id="local-backup-file"
 			type="file"
 			accept=".zip"
-			class="block w-full rounded border p-1 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950"
-			onchange={(event) => (file = event.currentTarget.files?.[0] ?? null)}
+			onchange={(event) => (file = event.currentTarget.files?.[0])}
 		/>
-		<div class="mt-2 flex items-center gap-4">
-			<label class="flex cursor-pointer items-center gap-1 text-[11px] text-slate-600 dark:text-slate-400">
-				<input type="checkbox" bind:checked={replaceExisting} class="rounded" />替换现有数据
-			</label>
-			<label class="flex cursor-pointer items-center gap-1 text-[11px] text-slate-600 dark:text-slate-400">
-				<input type="checkbox" bind:checked={allowChecksumMismatch} class="rounded" />忽略校验和错误
-			</label>
-		</div>
-		<Button variant="outline" size="sm" onclick={onImport} disabled={!file || restoring} class="mt-1.5 w-full">
-			{#if restoring}<RefreshCw class="mr-1.5 size-3.5 animate-spin" />正在导入...{:else}导入并应用{/if}
+		</Field.Field>
+		<Field.FieldSet><Field.FieldLegend>恢复选项</Field.FieldLegend><Field.FieldGroup><Field.Field orientation="horizontal"><Checkbox id="replace-existing" bind:checked={replaceExisting} /><Field.Label for="replace-existing">替换现有数据</Field.Label></Field.Field><Field.Field orientation="horizontal"><Checkbox id="ignore-checksum" bind:checked={allowChecksumMismatch} /><Field.Label for="ignore-checksum">忽略校验和错误</Field.Label></Field.Field></Field.FieldGroup></Field.FieldSet>
+		<Button variant="outline" size="sm" onclick={onImport} disabled={!file || restoring} class="w-full">
+			{#if restoring}<Spinner data-icon="inline-start" />正在导入...{:else}导入并应用{/if}
 		</Button>
-	</div>
-</div>
+	</Field.Group></Card.Content>
+</Card.Root>
