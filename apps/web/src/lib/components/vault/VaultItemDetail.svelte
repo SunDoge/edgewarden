@@ -17,6 +17,8 @@ import {
 	Upload,
 } from "@lucide/svelte";
 import { Button } from "$lib/components/ui/button/index.js";
+import { Checkbox } from "$lib/components/ui/checkbox/index.js";
+import { Separator } from "$lib/components/ui/separator/index.js";
 import LoginCipherDetail from "./LoginCipherDetail.svelte";
 import CardCipherDetail from "./CardCipherDetail.svelte";
 import IdentityCipherDetail from "./IdentityCipherDetail.svelte";
@@ -74,10 +76,10 @@ function copyToClipboard(text: string, fieldName: string) {
 }
 </script>
 
-				<div class="space-y-6 animate-in fade-in duration-200">
+				<div class="flex flex-col gap-6 animate-in fade-in duration-200">
 					<div class="flex items-center justify-between">
 						<div class="flex items-center gap-3 min-w-0">
-							<div class="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center shrink-0 overflow-hidden relative border border-slate-200/50 dark:border-slate-850">
+							<div class="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-muted text-muted-foreground">
 								{#if getDomain(item)}
 									<img
 										src="/icons/{encodeURIComponent(getDomain(item) ?? "")}/icon.png"
@@ -102,20 +104,20 @@ function copyToClipboard(text: string, fieldName: string) {
 								{/if}
 							</div>
 							<div class="min-w-0">
-								<h3 class="font-bold text-lg text-slate-900 dark:text-slate-100 truncate flex items-center gap-1.5">
+								<h3 class="flex items-center gap-1.5 truncate text-lg font-bold">
 									{item.name}
 									{#if item.favorite}
 										<Star class="size-4 fill-current text-amber-400 shrink-0" />
 									{/if}
 								</h3>
-								<p class="text-xs text-slate-400 flex items-center gap-1 mt-0.5 flex-wrap">
+								<p class="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
 									<span>{getTypeName(item.type)}</span>
 									{#if item.folderId}
 										{@const folder = folders.find(f => f.id === item.folderId)}
 										{#if folder}
-											<span class="text-slate-350 dark:text-slate-700">•</span>
+											<span aria-hidden="true">•</span>
 											<span class="flex items-center gap-0.5 max-w-[120px] truncate">
-												<Folder class="size-3 text-slate-450 shrink-0" />
+												<Folder class="size-3 shrink-0" />
 												{folder.name}
 											</span>
 										{/if}
@@ -129,15 +131,15 @@ function copyToClipboard(text: string, fieldName: string) {
 							{#if item.deletedDate && !item.readOnly}
 								<Button variant="ghost" size="icon" onclick={onRestore} class="size-8.5 rounded-lg" title="恢复"><RotateCcw class="size-4" /></Button>
 							{:else if !item.readOnly}
-								<Button variant="ghost" size="icon" onclick={onEdit} class="size-8.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="编辑"><Edit class="size-4" /></Button>
+								<Button variant="ghost" size="icon-sm" onclick={onEdit} title="编辑"><Edit /></Button>
 							{/if}
-							{#if !item.readOnly}<Button variant="ghost" size="icon" onclick={onDelete} class="size-8.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20" title="删除">
-								<Trash2 class="size-4" />
+							{#if !item.readOnly}<Button variant="ghost" size="icon-sm" onclick={onDelete} class="text-destructive hover:text-destructive" title="删除">
+								<Trash2 />
 							</Button>{/if}
 						</div>
 					</div>
 
-					<hr class="border-slate-200 dark:border-slate-800" />
+					<Separator />
 
 					<!-- Login -->
 					{#if item.type === CipherType.Login}
@@ -147,18 +149,18 @@ function copyToClipboard(text: string, fieldName: string) {
 					{#if item.type === CipherType.Card}<CardCipherDetail card={item.card} {copiedField} onCopy={copyToClipboard} />{/if}
 					{#if item.type === CipherType.Identity}<IdentityCipherDetail identity={item.identity} {copiedField} onCopy={copyToClipboard} />{/if}
 					{#if getExtraData(item)}
-						<div class="space-y-3">
+						<div class="flex flex-col gap-3">
 							{#each Object.entries(getExtraData(item) ?? {}) as [key, value]}
-								<div class="space-y-1.5"><span class="text-xs font-semibold text-slate-400">{key}</span><div class="flex items-center justify-between rounded-lg border bg-white p-2 dark:bg-slate-800"><span class="break-all text-sm font-mono">{String(value ?? "")}</span><Button variant="ghost" size="icon-sm" onclick={() => copyToClipboard(String(value ?? ""), `extra-${key}`)} aria-label={`复制 ${key}`}><Copy /></Button></div></div>
+								<div class="flex flex-col gap-1.5"><span class="text-xs font-semibold text-muted-foreground">{key}</span><div class="flex items-center justify-between rounded-lg border bg-background p-2"><span class="break-all text-sm font-mono">{String(value ?? "")}</span><Button variant="ghost" size="icon-sm" onclick={() => copyToClipboard(String(value ?? ""), `extra-${key}`)} aria-label={`复制 ${key}`}><Copy /></Button></div></div>
 							{/each}
 						</div>
 					{/if}
 
 					<!-- Notes -->
 					{#if item.notes}
-						<div class="space-y-1.5">
-							<span class="text-xs font-semibold text-slate-400">便签</span>
-							<div class="p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm whitespace-pre-wrap leading-relaxed">
+						<div class="flex flex-col gap-1.5">
+							<span class="text-xs font-semibold text-muted-foreground">便签</span>
+							<div class="rounded-lg border bg-background p-3 text-sm whitespace-pre-wrap leading-relaxed">
 								{item.notes}
 							</div>
 						</div>
@@ -166,42 +168,42 @@ function copyToClipboard(text: string, fieldName: string) {
 
 					<!-- Custom Fields -->
 					{#if item.fields && item.fields.length > 0}
-						<div class="border-t border-slate-200 dark:border-slate-800/80 pt-4 mt-4 space-y-4">
-							<h4 class="font-bold text-xs text-slate-400 uppercase tracking-wider">自定义字段</h4>
+						<div class="mt-4 flex flex-col gap-4 border-t pt-4">
+							<h4 class="text-xs font-bold uppercase tracking-wider text-muted-foreground">自定义字段</h4>
 							{#each item.fields as field, idx}
-								<div class="space-y-1.5">
-									<span class="text-xs font-semibold text-slate-500">{field.name || "未命名"}</span>
+								<div class="flex flex-col gap-1.5">
+									<span class="text-xs font-semibold text-muted-foreground">{field.name || "未命名"}</span>
 									
 									{#if field.type === 2 || field.type === "2"}
-										<div class="p-2.5 rounded-lg bg-white dark:bg-slate-800 border flex items-center gap-2">
-											<input type="checkbox" checked={field.value === "true" || field.value === true} disabled class="rounded border-slate-300 text-primary size-4" />
-											<span class="text-sm font-medium text-slate-700 dark:text-slate-300">
+										<div class="flex items-center gap-2 rounded-lg border bg-background p-2.5">
+											<Checkbox checked={field.value === "true" || field.value === true} disabled />
+											<span class="text-sm font-medium">
 												{#if field.value === "true" || field.value === true}是{:else}否{/if}
 											</span>
 										</div>
 									{:else if field.type === 1 || field.type === "1"}
-										<div class="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+										<div class="flex items-center justify-between rounded-lg border bg-background p-2">
 											<span class="text-sm font-mono truncate pr-2 select-all">
 												{#if hiddenFieldsMap[idx]}{field.value}{:else}••••••••••••{/if}
 											</span>
 											<div class="flex items-center gap-1 shrink-0">
 												<Button variant="ghost" size="icon" class="size-8" onclick={() => hiddenFieldsMap[idx] = !hiddenFieldsMap[idx]}>
 													{#if hiddenFieldsMap[idx]}
-														<EyeOff class="size-4 text-slate-400" />
+												<EyeOff />
 													{:else}
-														<Eye class="size-4 text-slate-400" />
+												<Eye />
 													{/if}
 												</Button>
 												<Button variant="ghost" size="icon" class="size-8" onclick={() => copyToClipboard(field.value, `field-${idx}`)}>
-													{#if copiedField === `field-${idx}`}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}
+											{#if copiedField === `field-${idx}`}<Check class="text-primary" />{:else}<Copy />{/if}
 												</Button>
 											</div>
 										</div>
 									{:else}
-										<div class="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+										<div class="flex items-center justify-between rounded-lg border bg-background p-2">
 											<span class="text-sm font-medium truncate pr-2 select-all">{field.value || ""}</span>
 											<Button variant="ghost" size="icon" class="size-8" onclick={() => copyToClipboard(field.value, `field-${idx}`)}>
-												{#if copiedField === `field-${idx}`}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}
+										{#if copiedField === `field-${idx}`}<Check class="text-primary" />{:else}<Copy />{/if}
 											</Button>
 										</div>
 									{/if}
@@ -212,33 +214,33 @@ function copyToClipboard(text: string, fieldName: string) {
 
 					<!-- Attachments are encrypted in the browser before upload. -->
 					{#if !item.deletedDate}
-						<div class="border-t border-slate-200 pt-4 dark:border-slate-800/80">
+						<div class="border-t pt-4">
 							<div class="mb-3 flex items-center justify-between gap-2">
-								<h4 class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-400"><Paperclip class="size-3.5" />附件</h4>
+								<h4 class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Paperclip class="size-3.5" />附件</h4>
 								<input bind:this={attachmentInput} type="file" class="sr-only" onchange={onAttachmentUpload} aria-label="选择要上传的附件" />
 								{#if !item.readOnly}<Button type="button" size="xs" variant="outline" disabled={attachmentBusy !== null} onclick={() => attachmentInput?.click()}>
 									<Upload />{attachmentBusy === "upload" ? "正在加密…" : "添加附件"}
 								</Button>{/if}
 							</div>
 							{#if item.attachments?.length}
-								<div class="space-y-2">
+								<div class="flex flex-col gap-2">
 									{#each item.attachments as attachment (attachment.id)}
-										<div class="flex items-center gap-2 rounded-lg border bg-white p-2 dark:bg-slate-800">
-											<Paperclip class="size-4 shrink-0 text-slate-400" />
-											<div class="min-w-0 flex-1"><p class="truncate text-sm font-medium">{attachment.fileName}</p><p class="text-[11px] text-slate-400">{attachment.sizeName}</p></div>
+										<div class="flex items-center gap-2 rounded-lg border bg-background p-2">
+											<Paperclip class="size-4 shrink-0 text-muted-foreground" />
+											<div class="min-w-0 flex-1"><p class="truncate text-sm font-medium">{attachment.fileName}</p><p class="text-xs text-muted-foreground">{attachment.sizeName}</p></div>
 											<Button type="button" variant="ghost" size="icon-sm" disabled={attachmentBusy !== null} onclick={() => onAttachmentDownload(attachment)} aria-label={`下载 ${attachment.fileName}`}><Download /></Button>
 											{#if !item.readOnly}<Button type="button" variant="ghost" size="icon-sm" disabled={attachmentBusy !== null} onclick={() => onAttachmentDelete(attachment)} aria-label={`删除 ${attachment.fileName}`} class="text-red-500"><Trash2 /></Button>{/if}
 										</div>
 									{/each}
 								</div>
 							{:else}
-								<p class="text-xs text-slate-400">暂无附件。文件内容和文件名均在浏览器中加密。</p>
+								<p class="text-xs text-muted-foreground">暂无附件。文件内容和文件名均在浏览器中加密。</p>
 							{/if}
 						</div>
 					{/if}
 
 					<!-- Item History Meta -->
-					<div class="border-t border-slate-200 dark:border-slate-800/80 pt-4 mt-6 text-[11px] text-slate-400 dark:text-slate-500 space-y-1 bg-slate-50/50 dark:bg-slate-900/50 p-3 rounded-lg">
+					<div class="mt-6 flex flex-col gap-1 rounded-lg border-t bg-muted/50 p-3 pt-4 text-xs text-muted-foreground">
 						{#if item.creationDate}
 							<p class="flex justify-between">
 								<span>创建时间</span>

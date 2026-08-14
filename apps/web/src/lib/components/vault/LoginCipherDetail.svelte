@@ -1,5 +1,6 @@
 <script lang="ts">
 import { Button } from "$lib/components/ui/button/index.js";
+import * as Field from "$lib/components/ui/field/index.js";
 import { Check, Copy, ExternalLink, Eye, EyeOff } from "@lucide/svelte";
 
 let {
@@ -31,45 +32,47 @@ function copy(text: string, field: string) {
 }
 </script>
 
-<div class="space-y-4">
+<Field.Group>
 	{#if login?.username}
-		<div class="space-y-1.5">
-			<span class="text-xs font-semibold text-slate-400">用户名</span>
-			<div class="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-800">
+		<Field.Field>
+			<Field.Label>用户名</Field.Label>
+			<div class="flex items-center justify-between rounded-lg border bg-background p-2">
 				<span class="truncate pr-2 text-sm font-medium select-all">{login.username}</span>
-				<Button variant="ghost" size="icon" class="size-8" onclick={() => copy(login.username, "username")}>{#if copiedField === "username"}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}</Button>
+				<Button variant="ghost" size="icon-sm" onclick={() => copy(login.username, "username")} aria-label="复制用户名">{#if copiedField === "username"}<Check class="text-primary" />{:else}<Copy />{/if}</Button>
 			</div>
-		</div>
+		</Field.Field>
 	{/if}
 
 	{#if login?.password}
-		<div class="space-y-1.5">
-			<span class="text-xs font-semibold text-slate-400">密码</span>
-			<div class="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-800">
+		<Field.Field>
+			<Field.Label>密码</Field.Label>
+			<div class="flex items-center justify-between rounded-lg border bg-background p-2">
 				<span class="truncate pr-2 font-mono text-sm select-all">{showPassword && !hidePasswords ? login.password : "••••••••••••"}</span>
 				{#if !hidePasswords}<div class="flex shrink-0 items-center gap-1">
-					<Button variant="ghost" size="icon" class="size-8" onclick={() => showPassword = !showPassword}>{#if showPassword}<EyeOff class="size-4 text-slate-400" />{:else}<Eye class="size-4 text-slate-400" />{/if}</Button>
-					<Button variant="ghost" size="icon" class="size-8" onclick={() => copy(login.password, "password")}>{#if copiedField === "password"}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}</Button>
+					<Button variant="ghost" size="icon-sm" onclick={() => showPassword = !showPassword} aria-label={showPassword ? "隐藏密码" : "显示密码"}>{#if showPassword}<EyeOff />{:else}<Eye />{/if}</Button>
+					<Button variant="ghost" size="icon-sm" onclick={() => copy(login.password, "password")} aria-label="复制密码">{#if copiedField === "password"}<Check class="text-primary" />{:else}<Copy />{/if}</Button>
 				</div>{/if}
 			</div>
-		</div>
+		</Field.Field>
 	{/if}
 
 	{#if login?.totp && !hidePasswords}
-		<div class="space-y-1.5">
-			<span class="text-xs font-semibold text-slate-400">单次有效密码 (TOTP)</span>
-			<div class="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-800">
-				{#if totp}<div class="flex items-center gap-2"><span class="font-mono text-sm font-bold tracking-wider text-primary select-all">{totp.code.slice(0, 3)} {totp.code.slice(3)}</span><span class="text-xs text-slate-400">({totp.remain}s)</span></div><Button variant="ghost" size="icon" class="size-8 shrink-0" onclick={() => copy(totp?.code || "", "totp")}>{#if copiedField === "totp"}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}</Button>{:else}<span class="text-xs text-slate-400">正在计算...</span>{/if}
+		<Field.Field>
+			<Field.Label>单次有效密码 (TOTP)</Field.Label>
+			<div class="flex items-center justify-between rounded-lg border bg-background p-2">
+				{#if totp}<div class="flex items-center gap-2"><span class="font-mono text-sm font-bold tracking-wider text-primary select-all">{totp.code.slice(0, 3)} {totp.code.slice(3)}</span><span class="text-xs text-muted-foreground">({totp.remain}s)</span></div><Button variant="ghost" size="icon-sm" class="shrink-0" onclick={() => copy(totp?.code || "", "totp")} aria-label="复制动态密码">{#if copiedField === "totp"}<Check class="text-primary" />{:else}<Copy />{/if}</Button>{:else}<span class="text-xs text-muted-foreground">正在计算...</span>{/if}
 			</div>
-		</div>
+		</Field.Field>
 	{/if}
 
 	{#if uris.length > 0}
-		<div class="space-y-2">
-			<span class="text-xs font-semibold text-slate-400">{uris.length > 1 ? "网页链接列表" : "网页链接"}</span>
+		<Field.Field>
+			<Field.Label>{uris.length > 1 ? "网页链接列表" : "网页链接"}</Field.Label>
+			<div class="flex flex-col gap-2">
 			{#each uris as uriItem, index}
-				{#if uriItem.uri}<div class="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-800"><a href={uriItem.uri} target="_blank" rel="noopener noreferrer" class="flex truncate pr-2 text-sm font-medium text-primary hover:underline">{uriItem.uri}<ExternalLink class="size-3 shrink-0" /></a><Button variant="ghost" size="icon" class="size-8 shrink-0" onclick={() => copy(uriItem.uri, `uri-${index}`)}>{#if copiedField === `uri-${index}`}<Check class="size-4 text-green-500" />{:else}<Copy class="size-4 text-slate-400" />{/if}</Button></div>{/if}
+				{#if uriItem.uri}<div class="flex items-center justify-between rounded-lg border bg-background p-2"><a href={uriItem.uri} target="_blank" rel="noopener noreferrer" class="flex truncate pr-2 text-sm font-medium text-primary hover:underline">{uriItem.uri}<ExternalLink class="size-3 shrink-0" /></a><Button variant="ghost" size="icon-sm" class="shrink-0" onclick={() => copy(uriItem.uri, `uri-${index}`)} aria-label="复制网页链接">{#if copiedField === `uri-${index}`}<Check class="text-primary" />{:else}<Copy />{/if}</Button></div>{/if}
 			{/each}
-		</div>
+			</div>
+		</Field.Field>
 	{/if}
-</div>
+</Field.Group>
