@@ -39,12 +39,12 @@ function selectFolder(folderId: string | null) {
 		<h2 class="text-sm font-semibold">文件夹</h2>
 		<div class="flex items-center gap-1">
 			{#if duplicateFolderCount}
-				<Button variant="ghost" size="icon-sm" onclick={onMergeDuplicateFolders} disabled={mergingDuplicateFolders} title={`合并 ${duplicateFolderCount} 个同名重复文件夹`} aria-label="合并同名重复文件夹"><Combine /></Button>
+				<Button variant="ghost" size="icon-sm" onclick={onMergeDuplicateFolders} disabled={mergingDuplicateFolders} title={`合并 ${duplicateFolderCount} 个同名重复文件夹`} aria-label="合并同名重复文件夹"><Combine data-icon /></Button>
 			{/if}
 			{#if vault.folders.length}
-				<button class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive" onclick={onDeleteAllFolders} title="删除全部文件夹" aria-label="删除全部文件夹"><Trash2 class="size-4" /></button>
+				<Button variant="ghost" size="icon-sm" onclick={onDeleteAllFolders} title="删除全部文件夹" aria-label="删除全部文件夹" class="text-muted-foreground hover:text-destructive"><Trash2 data-icon /></Button>
 			{/if}
-			<button class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onclick={onCreateFolder} title="新建文件夹" aria-label="新建文件夹"><Plus class="size-4" /></button>
+			<Button variant="ghost" size="icon-sm" onclick={onCreateFolder} title="新建文件夹" aria-label="新建文件夹" class="text-muted-foreground"><Plus data-icon /></Button>
 		</div>
 	</header>
 
@@ -61,8 +61,8 @@ function selectFolder(folderId: string | null) {
 				</button>
 				<span class="mr-2 text-xs tabular-nums text-muted-foreground group-hover:hidden">{vault.ciphers.filter((item) => item.folderId === folder.id).length}</span>
 				<div class="mr-1 hidden items-center gap-0.5 group-hover:flex">
-					<button class="rounded p-1 text-muted-foreground hover:text-foreground" onclick={() => onRenameFolder(folder)} title="重命名" aria-label={`重命名 ${folder.name}`}><Edit class="size-3.5" /></button>
-					<button class="rounded p-1 text-muted-foreground hover:text-destructive" onclick={() => onDeleteFolder(folder)} title="删除" aria-label={`删除 ${folder.name}`}><Trash2 class="size-3.5" /></button>
+					<Button variant="ghost" size="icon-xs" onclick={() => onRenameFolder(folder)} title="重命名" aria-label={`重命名 ${folder.name}`}><Edit data-icon /></Button>
+					<Button variant="ghost" size="icon-xs" onclick={() => onDeleteFolder(folder)} title="删除" aria-label={`删除 ${folder.name}`} class="hover:text-destructive"><Trash2 data-icon /></Button>
 				</div>
 			</div>
 		{:else}

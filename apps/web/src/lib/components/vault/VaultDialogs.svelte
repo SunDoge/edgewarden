@@ -1,57 +1,58 @@
 <script lang="ts">
-	import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-	import { Button } from "$lib/components/ui/button/index.js";
-	import * as Dialog from "$lib/components/ui/dialog/index.js";
-	import { Input } from "$lib/components/ui/input/index.js";
+import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
+import { Button } from "$lib/components/ui/button/index.js";
+import * as Dialog from "$lib/components/ui/dialog/index.js";
+import { Input } from "$lib/components/ui/input/index.js";
+import * as Select from "$lib/components/ui/select/index.js";
 
-	interface FolderOption {
-		id: string;
-		name: string;
-	}
+interface FolderOption {
+	id: string;
+	name: string;
+}
 
-	let {
-		deleteOpen = $bindable(),
-		deleteAllFoldersOpen = $bindable(),
-		moveOpen = $bindable(),
-		folderOpen = $bindable(),
-		deleteFolderOpen = $bindable(),
-		moveFolderId = $bindable(),
-		folderName = $bindable(),
-		selectedItemName,
-		selectedItemDeleted,
-		deleteLoading,
-		folders,
-		selectedCount,
-		folderMode,
-		folderLoading,
-		targetFolderName,
-		onDeleteItem,
-		onDeleteAllFolders,
-		onMoveItems,
-		onSaveFolder,
-		onDeleteFolder,
-	}: {
-		deleteOpen: boolean;
-		deleteAllFoldersOpen: boolean;
-		moveOpen: boolean;
-		folderOpen: boolean;
-		deleteFolderOpen: boolean;
-		moveFolderId: string | null;
-		folderName: string;
-		selectedItemName?: string;
-		selectedItemDeleted: boolean;
-		deleteLoading: boolean;
-		folders: FolderOption[];
-		selectedCount: number;
-		folderMode: "create" | "rename";
-		folderLoading: boolean;
-		targetFolderName?: string;
-		onDeleteItem: () => void;
-		onDeleteAllFolders: () => void;
-		onMoveItems: () => void;
-		onSaveFolder: () => void;
-		onDeleteFolder: () => void;
-	} = $props();
+let {
+	deleteOpen = $bindable(),
+	deleteAllFoldersOpen = $bindable(),
+	moveOpen = $bindable(),
+	folderOpen = $bindable(),
+	deleteFolderOpen = $bindable(),
+	moveFolderId = $bindable(),
+	folderName = $bindable(),
+	selectedItemName,
+	selectedItemDeleted,
+	deleteLoading,
+	folders,
+	selectedCount,
+	folderMode,
+	folderLoading,
+	targetFolderName,
+	onDeleteItem,
+	onDeleteAllFolders,
+	onMoveItems,
+	onSaveFolder,
+	onDeleteFolder,
+}: {
+	deleteOpen: boolean;
+	deleteAllFoldersOpen: boolean;
+	moveOpen: boolean;
+	folderOpen: boolean;
+	deleteFolderOpen: boolean;
+	moveFolderId: string | null;
+	folderName: string;
+	selectedItemName?: string;
+	selectedItemDeleted: boolean;
+	deleteLoading: boolean;
+	folders: FolderOption[];
+	selectedCount: number;
+	folderMode: "create" | "rename";
+	folderLoading: boolean;
+	targetFolderName?: string;
+	onDeleteItem: () => void;
+	onDeleteAllFolders: () => void;
+	onMoveItems: () => void;
+	onSaveFolder: () => void;
+	onDeleteFolder: () => void;
+} = $props();
 </script>
 
 <AlertDialog.Root bind:open={deleteOpen}>
@@ -69,7 +70,7 @@
 </AlertDialog.Root>
 
 <Dialog.Root bind:open={moveOpen}>
-	<Dialog.Content><Dialog.Header><Dialog.Title>移动所选条目</Dialog.Title><Dialog.Description>选择目标文件夹；选择“无文件夹”会移出当前文件夹。</Dialog.Description></Dialog.Header><select bind:value={moveFolderId} class="h-9 rounded-md border bg-background px-3 text-sm"><option value={null}>无文件夹</option>{#each folders as folder (folder.id)}<option value={folder.id}>{folder.name}</option>{/each}</select><Dialog.Footer><Button variant="outline" onclick={() => moveOpen = false}>取消</Button><Button onclick={onMoveItems} disabled={deleteLoading}>移动 {selectedCount} 项</Button></Dialog.Footer></Dialog.Content>
+	<Dialog.Content><Dialog.Header><Dialog.Title>移动所选条目</Dialog.Title><Dialog.Description>选择目标文件夹；选择“无文件夹”会移出当前文件夹。</Dialog.Description></Dialog.Header><Select.Root type="single" value={moveFolderId ?? "__none"} onValueChange={(value) => moveFolderId = value === "__none" ? null : value}><Select.Trigger class="w-full">{moveFolderId ? folders.find((folder) => folder.id === moveFolderId)?.name ?? "选择文件夹" : "无文件夹"}</Select.Trigger><Select.Content><Select.Group><Select.Item value="__none">无文件夹</Select.Item>{#each folders as folder (folder.id)}<Select.Item value={folder.id}>{folder.name}</Select.Item>{/each}</Select.Group></Select.Content></Select.Root><Dialog.Footer><Button variant="outline" onclick={() => moveOpen = false}>取消</Button><Button onclick={onMoveItems} disabled={deleteLoading}>移动 {selectedCount} 项</Button></Dialog.Footer></Dialog.Content>
 </Dialog.Root>
 
 <AlertDialog.Root bind:open={folderOpen}>

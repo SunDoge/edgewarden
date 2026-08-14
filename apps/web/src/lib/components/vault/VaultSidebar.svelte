@@ -190,12 +190,12 @@ function navigateTo(href: string) {
 			<p id="folders-heading" class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">文件夹</p>
 			<div class="flex items-center gap-1">
 				{#if duplicateFolderCount}
-					<Button variant="ghost" size="icon-xs" onclick={onMergeDuplicateFolders} disabled={mergingDuplicateFolders} title={`合并 ${duplicateFolderCount} 个同名重复文件夹`} aria-label="合并同名重复文件夹"><Combine /></Button>
+					<Button variant="ghost" size="icon-xs" onclick={onMergeDuplicateFolders} disabled={mergingDuplicateFolders} title={`合并 ${duplicateFolderCount} 个同名重复文件夹`} aria-label="合并同名重复文件夹"><Combine data-icon /></Button>
 				{/if}
 				{#if vault.folders.length}
-					<button class="rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive" onclick={onDeleteAllFolders} title="删除全部文件夹"><Trash2 class="size-3.5" /></button>
+					<Button variant="ghost" size="icon-xs" onclick={onDeleteAllFolders} title="删除全部文件夹" aria-label="删除全部文件夹" class="text-muted-foreground hover:text-destructive"><Trash2 data-icon /></Button>
 				{/if}
-				<button class="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground" onclick={onCreateFolder} title="新建文件夹"><Plus class="size-3.5" /></button>
+				<Button variant="ghost" size="icon-xs" onclick={onCreateFolder} title="新建文件夹" aria-label="新建文件夹" class="text-muted-foreground"><Plus data-icon /></Button>
 			</div>
 		</div>
 		{#each vault.folders as folder (folder.id)}
@@ -206,8 +206,8 @@ function navigateTo(href: string) {
 				</button>
 				<div class="flex shrink-0 items-center gap-1.5 pr-2">
 					<span class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground group-hover:hidden">{vault.ciphers.filter((item) => item.folderId === folder.id).length}</span>
-					<button class="hidden rounded p-0.5 text-muted-foreground hover:text-foreground group-hover:inline-flex" onclick={(event) => { event.stopPropagation(); onRenameFolder(folder); }} title="重命名"><Edit class="size-3.5" /></button>
-					<button class="hidden rounded p-0.5 text-muted-foreground hover:text-destructive group-hover:inline-flex" onclick={(event) => { event.stopPropagation(); onDeleteFolder(folder); }} title="删除"><Trash2 class="size-3.5" /></button>
+					<Button variant="ghost" size="icon-xs" class="hidden text-muted-foreground group-hover:inline-flex" onclick={(event) => { event.stopPropagation(); onRenameFolder(folder); }} title="重命名" aria-label={`重命名 ${folder.name}`}><Edit data-icon /></Button>
+					<Button variant="ghost" size="icon-xs" class="hidden text-muted-foreground hover:text-destructive group-hover:inline-flex" onclick={(event) => { event.stopPropagation(); onDeleteFolder(folder); }} title="删除" aria-label={`删除 ${folder.name}`}><Trash2 data-icon /></Button>
 				</div>
 			</div>
 		{:else}
