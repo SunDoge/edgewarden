@@ -3,6 +3,7 @@ import { ShieldCheck, Trash2 } from "@lucide/svelte";
 import { onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge/index.js";
 import { Button } from "$lib/components/ui/button/index.js";
+import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
 import * as Dialog from "$lib/components/ui/dialog/index.js";
 import * as Field from "$lib/components/ui/field/index.js";
@@ -56,6 +57,7 @@ let deletePasskey = $state<AccountPasskey | null>(null);
 let deletePassword = $state("");
 let enablePasskey = $state<AccountPasskey | null>(null);
 let enablePassword = $state("");
+let pendingLoginOnly = $state<any>(null);
 
 onMount(load);
 
@@ -92,26 +94,42 @@ async function createPasskey() {
 					symMacKey: bytesToBase64(vault.symMacKey),
 				});
 			} catch (error) {
-				if (
-					!confirm(
-						"无法为这把通行密钥启用保险库直接解锁。仍保存为仅登录通行密钥？",
-					)
-				)
-					throw error;
+				pendingLoginOnly = pending;
+				return;
 			}
 		}
-		await createAccountPasskeyApi({
-			token: pending.token,
-			deviceResponse: pending.request,
-			name: name.trim() || undefined,
-			supportsPrf: pending.supportsPrf && !!keySet.encryptedUserKey,
-			...keySet,
-		});
-		await load();
-		createOpen = false;
-		name = "";
-		password = "";
-		onMessage("通行密钥已添加");
+		await persistPasskey(pending, keySet);
+	} catch (error) {
+		onError(error);
+	} finally {
+		busy = "";
+	}
+}
+
+async function persistPasskey(
+	pending: any,
+	keySet: Record<string, string | undefined> = {},
+) {
+	await createAccountPasskeyApi({
+		token: pending.token,
+		deviceResponse: pending.request,
+		name: name.trim() || undefined,
+		supportsPrf: pending.supportsPrf && !!keySet.encryptedUserKey,
+		...keySet,
+	});
+	await load();
+	createOpen = false;
+	pendingLoginOnly = null;
+	name = "";
+	password = "";
+	onMessage("通行密钥已添加");
+}
+
+async function confirmLoginOnlyPasskey() {
+	if (!pendingLoginOnly) return;
+	busy = "create";
+	try {
+		await persistPasskey(pendingLoginOnly);
 	} catch (error) {
 		onError(error);
 	} finally {
@@ -179,7 +197,7 @@ async function enableDirectUnlock() {
 	<Card.Header class="flex-row items-start justify-between"><div><Card.Title>通行密钥</Card.Title><Card.Description>最多添加 5 把 WebAuthn 通行密钥；支持 PRF 的设备可直接解锁保险库。</Card.Description></div><Button size="sm" onclick={() => createOpen = true} disabled={passkeys.length >= 5}>添加</Button></Card.Header>
 	<Card.Content class="flex flex-col gap-2">
 		{#each passkeys as passkey (passkey.id)}
-			<div class="flex items-center justify-between gap-3 rounded-md border p-3"><div><div class="font-medium">{passkey.name || "通行密钥"}</div><div class="text-xs text-muted-foreground">{passkey.creationDate ? new Date(passkey.creationDate).toLocaleString() : ""}</div></div><div class="flex items-center gap-2"><Badge variant={passkey.prfStatus === 0 ? "default" : "secondary"}>{passkey.prfStatus === 0 ? "可直接解锁" : passkey.prfStatus === 1 ? "可启用直接解锁" : "仅登录"}</Badge>{#if passkey.prfStatus === 1}<Button variant="outline" size="sm" onclick={() => enablePasskey = passkey}><ShieldCheck />启用直接解锁</Button>{/if}<Button variant="ghost" size="icon-sm" onclick={() => deletePasskey = passkey} aria-label="删除通行密钥"><Trash2 /></Button></div></div>
+			<div class="flex items-center justify-between gap-3 rounded-md border p-3"><div><div class="font-medium">{passkey.name || "通行密钥"}</div><div class="text-xs text-muted-foreground">{passkey.creationDate ? new Date(passkey.creationDate).toLocaleString() : ""}</div></div><div class="flex items-center gap-2"><Badge variant={passkey.prfStatus === 0 ? "default" : "secondary"}>{passkey.prfStatus === 0 ? "可直接解锁" : passkey.prfStatus === 1 ? "可启用直接解锁" : "仅登录"}</Badge>{#if passkey.prfStatus === 1}<Button variant="outline" size="sm" onclick={() => enablePasskey = passkey}><ShieldCheck data-icon="inline-start" />启用直接解锁</Button>{/if}<Button variant="ghost" size="icon-sm" onclick={() => deletePasskey = passkey} aria-label="删除通行密钥"><Trash2 data-icon /></Button></div></div>
 		{:else}<p class="py-4 text-sm text-muted-foreground">尚未添加通行密钥。</p>{/each}
 	</Card.Content>
 </Card.Root>
@@ -189,3 +207,5 @@ async function enableDirectUnlock() {
 <Dialog.Root open={!!enablePasskey} onOpenChange={(open) => { if (!open) enablePasskey = null; }}><Dialog.Content><Dialog.Header><Dialog.Title>启用直接解锁</Dialog.Title><Dialog.Description>验证主密码和这把通行密钥后，浏览器会使用 PRF 输出保护保险库密钥。</Dialog.Description></Dialog.Header><Field.Field><Field.Label for="enable-passkey-password">当前主密码</Field.Label><Input id="enable-passkey-password" type="password" bind:value={enablePassword} autocomplete="current-password" /></Field.Field><Dialog.Footer><Button variant="outline" onclick={() => enablePasskey = null}>取消</Button><Button onclick={enableDirectUnlock} disabled={!enablePassword || busy === "enable"}>启用</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
 
 <Dialog.Root open={!!deletePasskey} onOpenChange={(open) => { if (!open) deletePasskey = null; }}><Dialog.Content><Dialog.Header><Dialog.Title>删除通行密钥</Dialog.Title><Dialog.Description>请输入当前主密码确认删除“{deletePasskey?.name || "通行密钥"}”。</Dialog.Description></Dialog.Header><Field.Field><Field.Label for="delete-passkey-password">当前主密码</Field.Label><Input id="delete-passkey-password" type="password" bind:value={deletePassword} autocomplete="current-password" /></Field.Field><Dialog.Footer><Button variant="outline" onclick={() => deletePasskey = null}>取消</Button><Button variant="destructive" onclick={removePasskey} disabled={!deletePassword || busy === "delete"}>删除</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
+
+<AlertDialog.Root open={pendingLoginOnly !== null} onOpenChange={(open) => { if (!open) pendingLoginOnly = null; }}><AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>直接解锁不可用</AlertDialog.Title><AlertDialog.Description>这把通行密钥未能生成保护保险库密钥所需的 PRF 输出。可以继续保存，但它只能用于登录，不能直接解锁保险库。</AlertDialog.Description></AlertDialog.Header><AlertDialog.Footer><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action onclick={confirmLoginOnlyPasskey}>保存为仅登录密钥</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content></AlertDialog.Root>
