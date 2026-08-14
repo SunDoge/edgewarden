@@ -15,6 +15,7 @@ import { Wifi, WifiOff } from "@lucide/svelte";
 import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 import { m } from "$lib/paraglide/messages.js";
 import { syncDocumentLocale } from "$lib/i18n/format";
+import { Toaster } from "$lib/components/ui/sonner/index.js";
 
 let { children } = $props();
 let networkStatus = $state<NetworkStatus>("checking");
@@ -77,6 +78,7 @@ onMount(() => {
 	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 </svelte:head>
 {@render children()}
+<Toaster richColors position="top-center" />
 <div class="fixed bottom-3 right-3 z-50" aria-live="polite">
 	<Badge variant={networkStatus === "offline" ? "destructive" : "outline"}>
 		{#if networkStatus === "offline"}<WifiOff class="size-3" />{m.network_offline()}{:else}<Wifi class="size-3" />{networkStatus === "checking" ? m.network_checking() : m.network_online()}{/if}
