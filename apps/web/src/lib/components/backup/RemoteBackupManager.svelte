@@ -1,5 +1,9 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
+import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
+import { Button } from "$lib/components/ui/button/index.js";
+import * as Field from "$lib/components/ui/field/index.js";
+import { Input } from "$lib/components/ui/input/index.js";
 import {
 	deleteRemoteBackupApi,
 	downloadRemoteBackupApi,
@@ -38,6 +42,9 @@ let downloading = $state<string | null>(null);
 let deleting = $state<string | null>(null);
 let inspecting = $state<string | null>(null);
 let restoring = $state(false);
+let deletePath = $state<string | null>(null);
+let restorePath = $state<string | null>(null);
+let restoreConfirmation = $state("");
 
 async function load(id = destinationId, path = currentPath) {
 	browsing = true;
@@ -90,10 +97,13 @@ async function download(path: string, fileName: string) {
 }
 
 async function remove(path: string) {
-	if (
-		!confirm(`确定要从远程服务器删除此备份文件 "${path}" 吗？此操作无法撤销。`)
-	)
-		return;
+	deletePath = path;
+}
+
+async function confirmRemove() {
+	if (!deletePath) return;
+	const path = deletePath;
+	deletePath = null;
 	deleting = path;
 	try {
 		await deleteRemoteBackupApi(destinationId, path);
@@ -126,10 +136,14 @@ async function inspect(path: string) {
 }
 
 async function restore(path: string) {
-	const confirmation = prompt(
-		"确定要从远程备份文件恢复吗？\n警告：此操作将使用该备份全量覆盖系统中的所有数据，包括其他用户和保险库条目！此操作不可逆！\n\n请在下方输入 REVERT 确认：",
-	);
-	if (confirmation !== "REVERT") return;
+	restorePath = path;
+	restoreConfirmation = "";
+}
+
+async function confirmRestore() {
+	if (!restorePath || restoreConfirmation !== "REVERT") return;
+	const path = restorePath;
+	restorePath = null;
 	restoring = true;
 	try {
 		await restoreRemoteBackupApi(
@@ -138,7 +152,7 @@ async function restore(path: string) {
 			true,
 			allowChecksumMismatch,
 		);
-		alert("恢复成功！由于主数据库已替换，请重新登录您的账户。");
+		onSuccess("恢复成功，主数据库已替换，请重新登录账户。");
 		await goto("/login");
 	} catch (error) {
 		onError(error instanceof Error ? error.message : "从远程备份恢复失败。");
@@ -170,3 +184,7 @@ async function restore(path: string) {
 	onRestore={restore}
 	onDelete={remove}
 />
+
+<AlertDialog.Root open={deletePath !== null} onOpenChange={(open) => { if (!open) deletePath = null; }}><AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>删除远程备份</AlertDialog.Title><AlertDialog.Description>确定要从远程服务器删除“{deletePath}”吗？此操作无法撤销。</AlertDialog.Description></AlertDialog.Header><AlertDialog.Footer><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action class="bg-destructive text-destructive-foreground hover:bg-destructive/90" onclick={confirmRemove}>确认删除</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content></AlertDialog.Root>
+
+<AlertDialog.Root open={restorePath !== null} onOpenChange={(open) => { if (!open) restorePath = null; }}><AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>恢复远程备份</AlertDialog.Title><AlertDialog.Description>此操作会用该备份覆盖整个系统，包括其他用户和保险库条目。请输入 REVERT 继续。</AlertDialog.Description></AlertDialog.Header><Field.Field data-invalid={restoreConfirmation.length > 0 && restoreConfirmation !== "REVERT"}><Field.Label for="remote-restore-confirmation">确认文本</Field.Label><Input id="remote-restore-confirmation" bind:value={restoreConfirmation} aria-invalid={restoreConfirmation.length > 0 && restoreConfirmation !== "REVERT"} autocomplete="off" placeholder="REVERT" /></Field.Field><AlertDialog.Footer><AlertDialog.Cancel>取消</AlertDialog.Cancel><Button variant="destructive" disabled={restoreConfirmation !== "REVERT"} onclick={confirmRestore}>恢复备份</Button></AlertDialog.Footer></AlertDialog.Content></AlertDialog.Root>
