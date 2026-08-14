@@ -21,6 +21,7 @@ import {
 } from "$lib/services/crypto";
 import { vault, syncVaultData, logout } from "$lib/stores/vault.svelte";
 import { Button } from "$lib/components/ui/button/index.js";
+import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
 import AccountPasskeys from "$lib/components/settings/AccountPasskeys.svelte";
 import AccountSecurityDialogs from "$lib/components/settings/AccountSecurityDialogs.svelte";
 import AuthRequestSettings from "$lib/components/settings/AuthRequestSettings.svelte";
@@ -72,6 +73,7 @@ let confirmPassword = $state("");
 let theme = $state<ThemePreference>("system");
 let lockTimeoutMinutes = $state<"0" | "1" | "5" | "15" | "30">("15");
 let sessionTimeoutAction = $state<SessionTimeoutAction>("lock");
+let rotateApiKeyOpen = $state(false);
 
 function fail(value: unknown) {
 	error = value instanceof Error ? value.message : "操作失败";
@@ -146,7 +148,7 @@ async function revealApiKey() {
 }
 
 async function rotateApiKey() {
-	if (!confirm("旧 API Key 会立即失效，确认轮换？")) return;
+	rotateApiKeyOpen = false;
 	busy = "api-key";
 	try {
 		apiKey = (await rotateApiKeyApi()).apiKey;
@@ -319,8 +321,8 @@ async function changeMasterPassword() {
 		<Card.Root>
 			<Card.Header><Card.Title>API Key</Card.Title><Card.Description>用于受信任的客户端集成，请勿公开。</Card.Description></Card.Header>
 			<Card.Content class="flex flex-col gap-3">
-				{#if apiKey}<div class="flex gap-2"><Input value={apiKey} readonly class="font-mono" /><Button variant="outline" size="icon" onclick={() => copy(apiKey)} aria-label="复制 API Key"><Copy /></Button></div>{/if}
-				<div class="flex gap-2"><Button variant="outline" onclick={revealApiKey} disabled={busy === "api-key"}><KeyRound />{apiKey ? "重新读取" : "显示 API Key"}</Button><Button variant="outline" onclick={rotateApiKey} disabled={busy === "api-key"}><RefreshCw />轮换</Button></div>
+				{#if apiKey}<div class="flex gap-2"><Input value={apiKey} readonly class="font-mono" /><Button variant="outline" size="icon" onclick={() => copy(apiKey)} aria-label="复制 API Key"><Copy data-icon /></Button></div>{/if}
+				<div class="flex gap-2"><Button variant="outline" onclick={revealApiKey} disabled={busy === "api-key"}><KeyRound data-icon="inline-start" />{apiKey ? "重新读取" : "显示 API Key"}</Button><Button variant="outline" onclick={() => rotateApiKeyOpen = true} disabled={busy === "api-key"}><RefreshCw data-icon="inline-start" />轮换</Button></div>
 			</Card.Content>
 		</Card.Root>
 
@@ -402,3 +404,5 @@ async function changeMasterPassword() {
 	onDisableTotp={disableTotp}
 	onChangePassword={changeMasterPassword}
 />
+
+<AlertDialog.Root bind:open={rotateApiKeyOpen}><AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>轮换 API Key</AlertDialog.Title><AlertDialog.Description>旧 API Key 会立即失效，所有使用旧密钥的客户端都需要重新配置。</AlertDialog.Description></AlertDialog.Header><AlertDialog.Footer><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action onclick={rotateApiKey}>确认轮换</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content></AlertDialog.Root>

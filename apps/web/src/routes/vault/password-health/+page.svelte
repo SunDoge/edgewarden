@@ -1,7 +1,15 @@
 <script lang="ts">
 import { onMount } from "svelte";
+import { match } from "ts-pattern";
 import { goto } from "$app/navigation";
 import { Button } from "$lib/components/ui/button/index.js";
+import * as Alert from "$lib/components/ui/alert/index.js";
+import { Badge } from "$lib/components/ui/badge/index.js";
+import * as Card from "$lib/components/ui/card/index.js";
+import * as Empty from "$lib/components/ui/empty/index.js";
+import { Progress } from "$lib/components/ui/progress/index.js";
+import { Spinner } from "$lib/components/ui/spinner/index.js";
+import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
 import {
 	inspectPasswordHealth,
 	type PasswordHealthReport,
@@ -13,7 +21,6 @@ import {
 	CheckCircle2,
 	Eye,
 	EyeOff,
-	RefreshCw,
 	ShieldAlert,
 } from "@lucide/svelte";
 
@@ -25,12 +32,12 @@ let filter = $state<"all" | "exposed" | "reused" | "weak">("all");
 let progress = $state({ checked: 0, total: 0 });
 let revealed = $state<Set<string>>(new Set());
 let filteredItems = $derived(
-	report?.items.filter(
-		(item) =>
-			filter === "all" ||
-			(filter === "exposed" && (item.exposedCount ?? 0) > 0) ||
-			(filter === "reused" && item.reusedCount > 1) ||
-			(filter === "weak" && item.weak),
+	report?.items.filter((item) =>
+		match(filter)
+			.with("exposed", () => (item.exposedCount ?? 0) > 0)
+			.with("reused", () => item.reusedCount > 1)
+			.with("weak", () => item.weak)
+			.otherwise(() => true),
 	) ?? [],
 );
 
@@ -83,15 +90,15 @@ function toggleReveal(id: string) {
 
 <svelte:head><title>密码健康 - Edgewarden</title></svelte:head>
 
-<main class="min-h-screen bg-muted/30 p-4 md:p-6"><div class="mx-auto max-w-5xl space-y-6">
-	<header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div class="flex min-w-0 items-start gap-2 sm:items-center sm:gap-3"><Button variant="ghost" size="icon" class="shrink-0" onclick={() => goto("/vault")} aria-label="返回保险库"><ArrowLeft /></Button><div class="min-w-0"><h1 class="text-xl font-bold sm:text-2xl">密码健康</h1><p class="text-sm text-muted-foreground">只向 Have I Been Pwned 发送 SHA-1 摘要前 5 位；密码和完整摘要不会离开浏览器。</p></div></div><Button class="self-end sm:self-auto" onclick={scan} disabled={scanning || vault.isSyncing}>{#if scanning}<RefreshCw class="animate-spin" />{:else}<ShieldAlert />{/if}{report ? "重新检查" : "开始检查"}</Button></header>
-	{#if scanError}<div class="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{scanError}</div>{/if}
-	{#if scanning}<div class="rounded-lg border bg-card p-4 text-sm text-muted-foreground">正在检查 {progress.checked} / {progress.total}</div>{/if}
-	{#if report}<div class="grid gap-3 sm:grid-cols-4">
-		<button class="rounded-lg border bg-card p-4 text-left {filter === 'exposed' ? 'ring-2 ring-primary' : ''}" onclick={() => filter = "exposed"}><p class="text-2xl font-bold text-destructive">{report.exposedCount}</p><p class="text-xs text-muted-foreground">已泄露</p></button>
-		<button class="rounded-lg border bg-card p-4 text-left {filter === 'reused' ? 'ring-2 ring-primary' : ''}" onclick={() => filter = "reused"}><p class="text-2xl font-bold text-amber-600">{report.reusedCount}</p><p class="text-xs text-muted-foreground">重复使用</p></button>
-		<button class="rounded-lg border bg-card p-4 text-left {filter === 'weak' ? 'ring-2 ring-primary' : ''}" onclick={() => filter = "weak"}><p class="text-2xl font-bold text-amber-600">{report.weakCount}</p><p class="text-xs text-muted-foreground">弱密码</p></button>
-		<button class="rounded-lg border bg-card p-4 text-left {filter === 'all' ? 'ring-2 ring-primary' : ''}" onclick={() => filter = "all"}><p class="text-2xl font-bold">{report.eligibleCount}</p><p class="text-xs text-muted-foreground">已检查</p></button>
-	</div><div class="space-y-2">{#each filteredItems as risk (risk.cipherId)}{@const cipher = vault.ciphers.find((item) => item.id === risk.cipherId)}<div class="flex w-full flex-wrap items-center gap-3 rounded-lg border bg-card p-3 text-left sm:flex-nowrap"><button class="min-w-0 flex-1 text-left" onclick={() => goto(`/vault?cipher=${encodeURIComponent(risk.cipherId)}`)}><p class="truncate font-semibold">{cipher?.name ?? "未知条目"}</p><p class="truncate text-xs text-muted-foreground">{cipher?.login?.username ?? ""}</p><p class="mt-1 truncate font-mono text-xs">{revealed.has(risk.cipherId) ? cipher?.login?.password : "••••••••••••"}</p></button><Button variant="ghost" size="icon-sm" onclick={() => toggleReveal(risk.cipherId)} aria-label="显示或隐藏密码">{#if revealed.has(risk.cipherId)}<EyeOff />{:else}<Eye />{/if}</Button><div class="flex w-full flex-wrap gap-1 text-xs sm:w-auto sm:justify-end">{#if risk.exposedCount === null}<span class="rounded bg-muted px-2 py-1">查询不可用</span>{:else if risk.exposedCount > 0}<span class="rounded bg-destructive/10 px-2 py-1 text-destructive">泄露 {risk.exposedCount} 次</span>{/if}{#if risk.reusedCount > 1}<span class="rounded bg-amber-100 px-2 py-1 text-amber-800">重复 {risk.reusedCount} 项</span>{/if}{#if risk.weak}<span class="rounded bg-amber-100 px-2 py-1 text-amber-800">弱密码</span>{/if}</div></div>{/each}{#if !filteredItems.length}<div class="rounded-lg border bg-card p-8 text-center text-muted-foreground"><CheckCircle2 class="mx-auto mb-2 text-emerald-600" />当前筛选下未发现密码风险。</div>{/if}</div>
-	{:else if !scanning}<div class="rounded-lg border bg-card p-8 text-center text-muted-foreground"><AlertTriangle class="mx-auto mb-3" />检查会在浏览器中计算摘要，并使用 k-anonymity 查询泄露次数。</div>{/if}
+<main class="min-h-screen bg-muted/30 p-4 md:p-6"><div class="mx-auto flex max-w-5xl flex-col gap-6">
+	<header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div class="flex min-w-0 items-start gap-2 sm:items-center sm:gap-3"><Button variant="ghost" size="icon" class="shrink-0" onclick={() => goto("/vault")} aria-label="返回保险库"><ArrowLeft data-icon /></Button><div class="min-w-0"><h1 class="text-xl font-semibold sm:text-2xl">密码健康</h1><p class="text-sm text-muted-foreground">只向 Have I Been Pwned 发送 SHA-1 摘要前 5 位；密码和完整摘要不会离开浏览器。</p></div></div><Button class="self-end sm:self-auto" onclick={scan} disabled={scanning || vault.isSyncing}>{#if scanning}<Spinner data-icon="inline-start" />{:else}<ShieldAlert data-icon="inline-start" />{/if}{report ? "重新检查" : "开始检查"}</Button></header>
+	{#if scanError}<Alert.Root variant="destructive"><Alert.Title>检查失败</Alert.Title><Alert.Description>{scanError}</Alert.Description></Alert.Root>{/if}
+	{#if scanning}<Card.Root><Card.Content class="flex flex-col gap-2 pt-6"><div class="flex justify-between text-sm text-muted-foreground"><span>正在检查密码</span><span>{progress.checked} / {progress.total}</span></div><Progress value={progress.checked} max={Math.max(progress.total, 1)} /></Card.Content></Card.Root>{/if}
+	{#if report}<ToggleGroup.Root type="single" variant="outline" spacing={2} value={filter} onValueChange={(value) => { if (value) filter = value as typeof filter; }} class="grid w-full grid-cols-2 sm:grid-cols-4">
+		<ToggleGroup.Item value="exposed" class="h-auto flex-col items-start p-4"><span class="text-2xl font-semibold text-destructive">{report.exposedCount}</span><span class="text-xs text-muted-foreground">已泄露</span></ToggleGroup.Item>
+		<ToggleGroup.Item value="reused" class="h-auto flex-col items-start p-4"><span class="text-2xl font-semibold">{report.reusedCount}</span><span class="text-xs text-muted-foreground">重复使用</span></ToggleGroup.Item>
+		<ToggleGroup.Item value="weak" class="h-auto flex-col items-start p-4"><span class="text-2xl font-semibold">{report.weakCount}</span><span class="text-xs text-muted-foreground">弱密码</span></ToggleGroup.Item>
+		<ToggleGroup.Item value="all" class="h-auto flex-col items-start p-4"><span class="text-2xl font-semibold">{report.eligibleCount}</span><span class="text-xs text-muted-foreground">已检查</span></ToggleGroup.Item>
+	</ToggleGroup.Root><div class="flex flex-col gap-2">{#each filteredItems as risk (risk.cipherId)}{@const cipher = vault.ciphers.find((item) => item.id === risk.cipherId)}<Card.Root><Card.Content class="flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap"><Button variant="ghost" class="h-auto min-w-0 flex-1 justify-start p-1 text-left" onclick={() => goto(`/vault?cipher=${encodeURIComponent(risk.cipherId)}`)}><span class="min-w-0"><span class="block truncate font-semibold">{cipher?.name ?? "未知条目"}</span><span class="block truncate text-xs text-muted-foreground">{cipher?.login?.username ?? ""}</span><span class="mt-1 block truncate font-mono text-xs">{revealed.has(risk.cipherId) ? cipher?.login?.password : "••••••••••••"}</span></span></Button><Button variant="ghost" size="icon-sm" onclick={() => toggleReveal(risk.cipherId)} aria-label="显示或隐藏密码">{#if revealed.has(risk.cipherId)}<EyeOff data-icon />{:else}<Eye data-icon />{/if}</Button><div class="flex w-full flex-wrap gap-1 sm:w-auto sm:justify-end">{#if risk.exposedCount === null}<Badge variant="outline">查询不可用</Badge>{:else if risk.exposedCount > 0}<Badge variant="destructive">泄露 {risk.exposedCount} 次</Badge>{/if}{#if risk.reusedCount > 1}<Badge variant="secondary">重复 {risk.reusedCount} 项</Badge>{/if}{#if risk.weak}<Badge variant="secondary">弱密码</Badge>{/if}</div></Card.Content></Card.Root>{/each}{#if !filteredItems.length}<Empty.Root><Empty.Header><Empty.Media variant="icon"><CheckCircle2 /></Empty.Media><Empty.Title>未发现密码风险</Empty.Title><Empty.Description>当前筛选条件下没有需要处理的条目。</Empty.Description></Empty.Header></Empty.Root>{/if}</div>
+	{:else if !scanning}<Empty.Root><Empty.Header><Empty.Media variant="icon"><AlertTriangle /></Empty.Media><Empty.Title>检查密码健康</Empty.Title><Empty.Description>检查会在浏览器中计算摘要，并使用 k-anonymity 查询泄露次数。</Empty.Description></Empty.Header><Empty.Content><Button onclick={scan}><ShieldAlert data-icon="inline-start" />开始检查</Button></Empty.Content></Empty.Root>{/if}
 </div></main>
