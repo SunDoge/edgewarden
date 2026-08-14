@@ -1,6 +1,9 @@
 <script lang="ts">
 import { Plus } from "@lucide/svelte";
+import { Badge } from "$lib/components/ui/badge/index.js";
 import { Button } from "$lib/components/ui/button/index.js";
+import * as Card from "$lib/components/ui/card/index.js";
+import * as Empty from "$lib/components/ui/empty/index.js";
 import type { BackupDestinationRecord } from "./types";
 
 let {
@@ -16,27 +19,23 @@ let {
 } = $props();
 </script>
 
-<div class="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-	<div class="flex items-center justify-between">
-		<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">备份目的地</span>
-		<Button size="icon" variant="ghost" onclick={onAdd} class="size-7 text-slate-500" title="添加新目的地">
-			<Plus class="size-4" />
-		</Button>
-	</div>
-	<div class="space-y-1.5">
+<Card.Root>
+	<Card.Header>
+		<Card.Title>备份目的地</Card.Title>
+		<Card.Action><Button size="icon-sm" variant="ghost" onclick={onAdd} aria-label="添加新目的地"><Plus /></Button></Card.Action>
+	</Card.Header>
+	<Card.Content class="flex flex-col gap-1.5">
 		{#each destinations as destination (destination.id)}
-			<button
-				class="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-all {selectedId === destination.id
-					? 'border-primary/20 bg-primary/5 font-medium text-primary'
-					: 'border-transparent text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800'}"
+			<Button
+				variant={selectedId === destination.id ? "secondary" : "ghost"}
+				class="w-full justify-between"
 				onclick={() => onSelect(destination.id)}
 			>
 				<span class="truncate pr-2">{destination.name}</span>
-				<span class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase text-slate-500 dark:bg-slate-800">{destination.type}</span>
-			</button>
+				<Badge variant="outline" class="uppercase">{destination.type}</Badge>
+			</Button>
+		{:else}
+			<Empty.Root><Empty.Header><Empty.Media variant="icon"><Plus /></Empty.Media><Empty.Title>未配置备份目的地</Empty.Title><Empty.Description>添加 R2 或 KV 目的地以启用自动备份。</Empty.Description></Empty.Header><Empty.Content><Button size="sm" onclick={onAdd}><Plus data-icon="inline-start" />添加目的地</Button></Empty.Content></Empty.Root>
 		{/each}
-		{#if destinations.length === 0}
-			<p class="py-4 text-center text-xs text-slate-400">未配置备份目的地</p>
-		{/if}
-	</div>
-</div>
+	</Card.Content>
+</Card.Root>
