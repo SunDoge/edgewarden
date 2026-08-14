@@ -12,14 +12,18 @@ import {
 	type SendKeys,
 } from "$lib/services/send-crypto";
 import { ApiError } from "$lib/services/rpc";
+import * as Alert from "$lib/components/ui/alert/index.js";
 import { Button } from "$lib/components/ui/button/index.js";
+import * as Card from "$lib/components/ui/card/index.js";
+import * as Empty from "$lib/components/ui/empty/index.js";
+import * as Field from "$lib/components/ui/field/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
+import { Separator } from "$lib/components/ui/separator/index.js";
+import { Spinner } from "$lib/components/ui/spinner/index.js";
 import {
 	Share2,
-	FileText,
 	File,
 	Lock,
-	Download,
 	Copy,
 	Check,
 	Eye,
@@ -167,81 +171,67 @@ function handleCopyText() {
 	<title>安全分享 - Edgewarden Send</title>
 </svelte:head>
 
-<div class="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
-	<div class="w-full max-w-lg bg-white dark:bg-slate-900 shadow-xl border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden p-6 space-y-6">
-		<div class="text-center space-y-2">
-			<div class="mx-auto w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-2">
-				<Share2 class="size-6" />
-			</div>
-			<h2 class="text-xl font-bold text-slate-800 dark:text-slate-100">Edgewarden Send</h2>
-			<p class="text-xs text-slate-400">安全、端到端加密、阅后即焚分享</p>
-		</div>
+<div class="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+	<Card.Root class="w-full max-w-lg shadow-xl">
+		<Card.Header class="items-center gap-2 text-center">
+			<div class="flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Share2 /></div>
+			<Card.Title>Edgewarden Send</Card.Title>
+			<Card.Description>安全、端到端加密、阅后即焚分享</Card.Description>
+		</Card.Header>
+		<Card.Content class="flex flex-col gap-6">
 
 		{#if loading}
-			<div class="p-8 text-center text-slate-500">
-				<div class="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin mx-auto mb-3"></div>
-				<span class="text-sm font-semibold">正在建立端到端解密通道...</span>
-			</div>
+			<Empty.Root><Empty.Media variant="icon"><Spinner /></Empty.Media><Empty.Header><Empty.Title>正在建立端到端解密通道</Empty.Title><Empty.Description>正在安全获取并解密分享内容。</Empty.Description></Empty.Header></Empty.Root>
 		{:else if error && !passwordRequired}
-			<div class="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-start gap-2.5">
-				<ShieldAlert class="size-4 shrink-0 mt-0.5" />
-				<span>{error}</span>
-			</div>
+			<Alert.Root variant="destructive"><ShieldAlert /><Alert.Title>无法打开分享</Alert.Title><Alert.Description>{error}</Alert.Description></Alert.Root>
 		{:else if passwordRequired}
-			<form onsubmit={(e) => { e.preventDefault(); loadPublicSend(); }} class="space-y-4">
-				<div class="p-4 bg-slate-50 dark:bg-slate-850 border border-slate-150 dark:border-slate-800 rounded-xl space-y-2">
-					<div class="flex items-center gap-2 text-slate-650 text-sm font-semibold">
-						<Lock class="size-4 text-slate-500" />
-						<span>此安全分享已启用密码保护</span>
-					</div>
-					<p class="text-xs text-slate-400">请输入发送者设置的访问密码以继续解锁密文。</p>
-				</div>
+			<form onsubmit={(e) => { e.preventDefault(); loadPublicSend(); }}>
+				<Field.Group>
+				<Alert.Root><Lock /><Alert.Title>此安全分享已启用密码保护</Alert.Title><Alert.Description>请输入发送者设置的访问密码以继续解锁密文。</Alert.Description></Alert.Root>
 
 				{#if error}
-					<div class="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs">
-						{error}
-					</div>
+					<Alert.Root variant="destructive"><ShieldAlert /><Alert.Description>{error}</Alert.Description></Alert.Root>
 				{/if}
 
-				<div class="space-y-1.5">
+				<Field.Field>
+					<Field.Label for="send-password">访问密码</Field.Label>
 					<div class="relative">
 						<Input
+							id="send-password"
 							type={showPassword ? "text" : "password"}
 							bind:value={accessPassword}
 							placeholder="输入访问密码"
 							class="pr-10"
 							required
 						/>
-						<button
+						<Button
 							type="button"
-							class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650"
+							variant="ghost"
+							size="icon-xs"
+							class="absolute right-2 top-1/2 -translate-y-1/2"
 							onclick={() => (showPassword = !showPassword)}
+							aria-label={showPassword ? "隐藏密码" : "显示密码"}
 						>
-							{#if showPassword}<EyeOff class="size-4" />{:else}<Eye class="size-4" />{/if}
-						</button>
+							{#if showPassword}<EyeOff />{:else}<Eye />{/if}
+						</Button>
 					</div>
-				</div>
+				</Field.Field>
 
 				<Button type="submit" class="w-full font-semibold">
 					验证密码并解锁
 				</Button>
+				</Field.Group>
 			</form>
 		{:else if sendData}
-			<div class="space-y-4">
-				<div class="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-250 dark:border-emerald-900 rounded-xl space-y-1">
-					<div class="flex items-center gap-2 text-emerald-650 text-sm font-semibold">
-						<LockOpen class="size-4 text-emerald-500" />
-						<span>解密成功</span>
-					</div>
-					<p class="text-[11px] text-slate-400">
+			<div class="flex flex-col gap-4">
+				<Alert.Root><LockOpen /><Alert.Title>解密成功</Alert.Title><Alert.Description>
 						密钥仅保留在您的浏览器内存中。服务器已限制或将在到期后物理销毁此项。
-					</p>
-				</div>
+				</Alert.Description></Alert.Root>
 
 				{#if sendData.type === 0}
 					<!-- Text Send payload -->
-					<div class="space-y-2">
-						<div class="flex justify-between items-center text-xs text-slate-400">
+					<div class="flex flex-col gap-2">
+						<div class="flex items-center justify-between text-xs text-muted-foreground">
 							<span>分享内容</span>
 							<Button variant="ghost" size="sm" onclick={handleCopyText} class="h-7 text-xs gap-1">
 								{#if copied}
@@ -253,28 +243,28 @@ function handleCopyText() {
 								{/if}
 							</Button>
 						</div>
-						<pre class="w-full p-4 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm whitespace-pre-wrap leading-relaxed select-all font-mono break-all">{decryptedText}</pre>
+						<pre class="w-full select-all whitespace-pre-wrap break-all rounded-xl border bg-muted/50 p-4 font-mono text-sm leading-relaxed">{decryptedText}</pre>
 					</div>
 				{:else if sendData.type === 1}
 					<!-- File Send payload -->
-					<div class="p-5 border border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-900/50 flex flex-col items-center text-center space-y-4">
-						<div class="w-14 h-14 bg-primary/10 text-primary flex items-center justify-center rounded-2xl">
-							<File class="size-7" />
+					<div class="flex flex-col items-center gap-4 rounded-2xl border bg-muted/30 p-5 text-center">
+						<div class="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+							<File />
 						</div>
-						<div class="space-y-1">
-							<h4 class="font-bold text-base text-slate-800 dark:text-slate-100 max-w-xs truncate">{decryptedFileName}</h4>
-							<p class="text-xs text-slate-400">{decryptedFileSizeName}</p>
+						<div class="flex max-w-full flex-col gap-1">
+							<h4 class="max-w-xs truncate text-base font-bold">{decryptedFileName}</h4>
+							<p class="text-xs text-muted-foreground">{decryptedFileSizeName}</p>
 						</div>
 						<Button
 							onclick={handleDownloadFile}
 							disabled={fileDownloading}
-							class="w-full font-semibold gap-2 py-3 bg-primary text-primary-foreground"
+							class="w-full font-semibold"
 						>
 							{#if fileDownloading}
-								<div class="size-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
+								<Spinner data-icon="inline-start" />
 								正在解密文件...
 							{:else}
-								<ArrowDownToLine class="size-4" />
+								<ArrowDownToLine data-icon="inline-start" />
 								下载加密保护文件
 							{/if}
 						</Button>
@@ -282,11 +272,13 @@ function handleCopyText() {
 				{/if}
 
 				{#if sendData.creatorIdentifier}
-					<p class="text-center text-[10px] text-slate-400 mt-4">
+					<Separator />
+					<p class="text-center text-xs text-muted-foreground">
 						此链接由公开的 {sendData.creatorIdentifier} 签名提供
 					</p>
 				{/if}
 			</div>
 		{/if}
-	</div>
+		</Card.Content>
+	</Card.Root>
 </div>

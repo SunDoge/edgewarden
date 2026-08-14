@@ -3,9 +3,13 @@ import { goto } from "$app/navigation";
 import { onMount } from "svelte";
 import { getRegistrationConfigApi, register } from "$lib/services/api";
 import { Button } from "$lib/components/ui/button/index.js";
+import * as Alert from "$lib/components/ui/alert/index.js";
+import * as Empty from "$lib/components/ui/empty/index.js";
+import * as Field from "$lib/components/ui/field/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
-import { Label } from "$lib/components/ui/label/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
+import { Separator } from "$lib/components/ui/separator/index.js";
+import { Spinner } from "$lib/components/ui/spinner/index.js";
 import TurnstileWidget from "$lib/components/turnstile-widget.svelte";
 import ThemeToggle from "$lib/components/theme-toggle.svelte";
 import {
@@ -15,7 +19,6 @@ import {
 	KeyRound,
 	Mail,
 	User,
-	Info,
 	CheckCircle2,
 } from "@lucide/svelte";
 
@@ -132,11 +135,11 @@ async function handleSubmit(e: SubmitEvent) {
 	<title>注册账号 - Edgewarden</title>
 </svelte:head>
 
-<div class="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+<div class="flex min-h-screen items-center justify-center bg-muted/30 p-4">
 	<div class="absolute right-4 top-4"><ThemeToggle /></div>
-	<Card.Root class="w-full max-w-lg shadow-lg border-slate-100 dark:border-slate-800">
-		<Card.Header class="space-y-2 text-center">
-			<div class="mx-auto w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-2">
+	<Card.Root class="w-full max-w-lg shadow-lg">
+		<Card.Header class="items-center gap-2 text-center">
+			<div class="mb-2 flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
 				<User class="size-6" />
 			</div>
 			<Card.Title class="text-2xl font-bold tracking-tight">创建您的 Edgewarden 账号</Card.Title>
@@ -147,37 +150,26 @@ async function handleSubmit(e: SubmitEvent) {
 
 		<Card.Content>
 			{#if success}
-				<div class="p-6 rounded-lg bg-green-50 dark:bg-green-950/20 text-green-600 dark:text-green-400 text-center border border-green-200 dark:border-green-900/50 space-y-3">
-					<CheckCircle2 class="size-12 mx-auto animate-bounce" />
-					<h4 class="font-bold text-lg">注册成功！</h4>
-					<p class="text-sm">您的零知识密码库已初始化。正在为您跳转到登录页面...</p>
-				</div>
+				<Empty.Root><Empty.Header><Empty.Media variant="icon"><CheckCircle2 /></Empty.Media><Empty.Title>注册成功</Empty.Title><Empty.Description>您的零知识密码库已初始化，正在跳转到登录页面。</Empty.Description></Empty.Header><Empty.Content><Spinner /></Empty.Content></Empty.Root>
 			{:else}
 				{#if !configLoading && bootstrapRequired && !adminPasswordConfigured}
-					<div class="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm border border-destructive/20">
-						服务端尚未配置 BOOTSTRAP_SECRET，无法安全创建首个管理员账号。
-					</div>
+					<Alert.Root variant="destructive" class="mb-4"><Alert.Title>部署配置不完整</Alert.Title><Alert.Description>服务端尚未配置 BOOTSTRAP_SECRET，无法安全创建首个管理员账号。</Alert.Description></Alert.Root>
 				{:else if !configLoading && !registrationAvailable}
-					<div class="mb-4 p-3 rounded-lg bg-muted text-muted-foreground text-sm border">
-						公开注册已关闭。请填写有效邀请码，或联系管理员开启注册。
-					</div>
+					<Alert.Root class="mb-4"><Alert.Title>公开注册已关闭</Alert.Title><Alert.Description>请填写有效邀请码，或联系管理员开启注册。</Alert.Description></Alert.Root>
 				{/if}
 				{#if error}
-					<div class="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm flex items-start gap-2.5 border border-destructive/20 animate-in fade-in slide-in-from-top-1 duration-200">
-						<ShieldAlert class="size-4 shrink-0 mt-0.5" />
-						<span>{error}</span>
-					</div>
+					<Alert.Root variant="destructive" class="mb-4"><ShieldAlert /><Alert.Title>注册失败</Alert.Title><Alert.Description>{error}</Alert.Description></Alert.Root>
 				{/if}
 
-				<form onsubmit={handleSubmit} class="space-y-4">
+				<form onsubmit={handleSubmit}><Field.Group>
 					{#if bootstrapRequired}
-						<div class="space-y-2"><Label for="admin-password">部署管理员密码 <span class="text-destructive">*</span></Label><Input id="admin-password" type="password" bind:value={adminPassword} autocomplete="current-password" disabled={loading} required /></div>
+						<Field.Field><Field.Label for="admin-password">部署管理员密码 *</Field.Label><Input id="admin-password" type="password" bind:value={adminPassword} autocomplete="current-password" disabled={loading} required /></Field.Field>
 					{:else if invitationsAllowed}
-						<div class="space-y-2"><Label for="invite-code">邀请码（可选）</Label><Input id="invite-code" bind:value={inviteCode} autocomplete="off" disabled={loading} /></div>
+						<Field.Field><Field.Label for="invite-code">邀请码（可选）</Field.Label><Input id="invite-code" bind:value={inviteCode} autocomplete="off" disabled={loading} /></Field.Field>
 					{/if}
-					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<div class="space-y-2">
-							<Label for="email">电子邮件地址 <span class="text-destructive">*</span></Label>
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+						<Field.Field>
+							<Field.Label for="email">电子邮件地址 *</Field.Label>
 							<div class="relative">
 								<span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
 									<Mail class="size-4" />
@@ -192,10 +184,10 @@ async function handleSubmit(e: SubmitEvent) {
 									required
 								/>
 							</div>
-						</div>
+						</Field.Field>
 
-						<div class="space-y-2">
-							<Label for="name">您的姓名（可选）</Label>
+						<Field.Field>
+							<Field.Label for="name">您的姓名（可选）</Field.Label>
 							<div class="relative">
 								<span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
 									<User class="size-4" />
@@ -209,12 +201,12 @@ async function handleSubmit(e: SubmitEvent) {
 									class="pl-10"
 								/>
 							</div>
-						</div>
+						</Field.Field>
 					</div>
 
-					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<div class="space-y-2">
-							<Label for="password">主密码 <span class="text-destructive">*</span></Label>
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+						<Field.Field data-invalid={password.length > 0 && !isPasswordLengthValid}>
+							<Field.Label for="password">主密码 *</Field.Label>
 							<div class="relative">
 								<span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
 									<KeyRound class="size-4" />
@@ -228,22 +220,24 @@ async function handleSubmit(e: SubmitEvent) {
 									class="pl-10 pr-10"
 									required
 								/>
-								<button
+								<Button
 									type="button"
-									class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+									variant="ghost" size="icon-xs" class="absolute right-1 top-1/2 -translate-y-1/2"
 									onclick={() => (showPassword = !showPassword)}
+									aria-label={showPassword ? "隐藏密码" : "显示密码"}
 								>
 									{#if showPassword}
 										<EyeOff class="size-4" />
 									{:else}
 										<Eye class="size-4" />
 									{/if}
-								</button>
+								</Button>
 							</div>
-						</div>
+							<Field.Description>至少 8 位字符。</Field.Description>
+						</Field.Field>
 
-						<div class="space-y-2">
-							<Label for="confirmPassword">确认主密码 <span class="text-destructive">*</span></Label>
+						<Field.Field data-invalid={confirmPassword.length > 0 && !isPasswordMatch}>
+							<Field.Label for="confirmPassword">确认主密码 *</Field.Label>
 							<div class="relative">
 								<span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
 									<KeyRound class="size-4" />
@@ -257,31 +251,25 @@ async function handleSubmit(e: SubmitEvent) {
 									class="pl-10 pr-10"
 									required
 								/>
-								<button
+								<Button
 									type="button"
-									class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+									variant="ghost" size="icon-xs" class="absolute right-1 top-1/2 -translate-y-1/2"
 									onclick={() => (showConfirmPassword = !showConfirmPassword)}
+									aria-label={showConfirmPassword ? "隐藏密码" : "显示密码"}
 								>
 									{#if showConfirmPassword}
 										<EyeOff class="size-4" />
 									{:else}
 										<Eye class="size-4" />
 									{/if}
-								</button>
+								</Button>
 							</div>
-						</div>
+							{#if confirmPassword.length > 0 && !isPasswordMatch}<Field.Error>两次输入的密码不一致。</Field.Error>{/if}
+						</Field.Field>
 					</div>
 
-					<div class="space-y-2">
-						<div class="flex items-center gap-1.5">
-							<Label for="hint">密码提示问题（可选）</Label>
-							<span class="group relative cursor-pointer text-slate-400 dark:text-slate-500 hover:text-slate-600">
-								<Info class="size-4" />
-								<span class="absolute left-1/2 bottom-full mb-1.5 hidden group-hover:block -translate-x-1/2 w-48 p-2 rounded bg-slate-900 text-white text-xs leading-normal shadow-lg text-center z-10">
-									如果忘记了密码，提示将发到您的邮箱（服务端仅存储提示文本）。
-								</span>
-							</span>
-						</div>
+					<Field.Field>
+						<Field.Label for="hint">密码提示问题（可选）</Field.Label>
 						<Input
 							id="hint"
 							type="text"
@@ -289,10 +277,12 @@ async function handleSubmit(e: SubmitEvent) {
 							bind:value={hint}
 							disabled={loading}
 						/>
-					</div>
+						<Field.Description>如果忘记密码，提示可帮助回忆；服务端仅存储提示文本。</Field.Description>
+					</Field.Field>
 
-					<div class="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3">
-						<Label for="iterations">PBKDF2 迭代次数</Label>
+					<Separator />
+					<Field.Field>
+						<Field.Label for="iterations">PBKDF2 迭代次数</Field.Label>
 						<Input
 							id="iterations"
 							type="number"
@@ -300,10 +290,10 @@ async function handleSubmit(e: SubmitEvent) {
 							min="100000"
 							disabled={loading}
 						/>
-						<p class="text-xs text-slate-400 dark:text-slate-500">
+						<Field.Description>
 							更高的次数意味着更强的防暴力破解能力，但设备导出密钥的时间会随之变长。推荐值为 600,000。
-						</p>
-					</div>
+						</Field.Description>
+					</Field.Field>
 
 					{#if turnstileEnabled && turnstileSiteKey}
 						<TurnstileWidget
@@ -317,18 +307,18 @@ async function handleSubmit(e: SubmitEvent) {
 
 					<Button type="submit" class="w-full mt-2" disabled={loading || configLoading || !registrationAvailable || (bootstrapRequired && !adminPasswordConfigured) || (turnstileEnabled && !turnstileToken)}>
 						{#if loading}
-							<div class="size-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2"></div>
+							<Spinner data-icon="inline-start" />
 							正在本地派生加密密钥...
 						{:else}
 							创建我的主密码库
 						{/if}
 					</Button>
-				</form>
+				</Field.Group></form>
 			{/if}
 		</Card.Content>
 
-		<Card.Footer class="flex flex-col items-center border-t border-slate-100 dark:border-slate-800 py-4 gap-2">
-			<p class="text-sm text-slate-500">
+		<Card.Footer class="flex flex-col items-center gap-2 border-t py-4">
+			<p class="text-sm text-muted-foreground">
 				已有 Edgewarden 账号？
 				<a href="/login" class="text-primary font-medium hover:underline">
 					立即登录

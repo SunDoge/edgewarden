@@ -1,6 +1,9 @@
 <script lang="ts">
 import { ArrowLeft, Lock } from "@lucide/svelte";
 import { Button } from "$lib/components/ui/button/index.js";
+import * as Empty from "$lib/components/ui/empty/index.js";
+import { Separator } from "$lib/components/ui/separator/index.js";
+import { Skeleton } from "$lib/components/ui/skeleton/index.js";
 import type { VaultEditorForm as VaultEditorDraft } from "$lib/services/vault-editor";
 import VaultEditorForm from "./VaultEditorForm.svelte";
 import VaultItemDetail from "./VaultItemDetail.svelte";
@@ -61,12 +64,12 @@ let {
 	{:else if selectedItem}
 		<VaultItemDetail item={selectedItem} {folders} {totp} {attachmentBusy} {onFavorite} {onArchive} {onRestore} {onEdit} {onDelete} {onAttachmentUpload} {onAttachmentDownload} {onAttachmentDelete} />
 	{:else if isSyncing}
-		<div class="animate-pulse space-y-6">
-			<div class="flex items-center gap-3"><div class="size-12 shrink-0 rounded-2xl bg-slate-200 dark:bg-slate-800"></div><div class="flex-1 space-y-2"><div class="h-5 w-1/2 rounded bg-slate-200 dark:bg-slate-800"></div><div class="h-3 w-1/3 rounded bg-slate-200/60 dark:bg-slate-800/60"></div></div></div>
-			<hr class="border-slate-200 dark:border-slate-800" />
-			<div class="space-y-4">{#each Array(3) as _}<div class="space-y-2"><div class="h-3 w-1/4 rounded bg-slate-200/60 dark:bg-slate-800/60"></div><div class="h-10 w-full rounded bg-slate-200 dark:bg-slate-800"></div></div>{/each}</div>
+		<div class="flex flex-col gap-6" aria-label="正在加载项目详情">
+			<div class="flex items-center gap-3"><Skeleton class="size-12 shrink-0 rounded-2xl" /><div class="flex flex-1 flex-col gap-2"><Skeleton class="h-5 w-1/2" /><Skeleton class="h-3 w-1/3" /></div></div>
+			<Separator />
+			<div class="flex flex-col gap-4">{#each Array(3) as _}<div class="flex flex-col gap-2"><Skeleton class="h-3 w-1/4" /><Skeleton class="h-10 w-full" /></div>{/each}</div>
 		</div>
 	{:else}
-		<div class="flex h-full flex-col items-center justify-center p-8 text-center text-slate-400"><Lock class="mb-3 size-10 text-slate-300 dark:text-slate-700" /><p class="text-sm font-medium">选择一个项目查看详情</p><p class="mt-1 text-xs text-slate-500">点击列表中任何条目，将在此显示解密数据。</p></div>
+		<Empty.Root class="h-full"><Empty.Media variant="icon"><Lock /></Empty.Media><Empty.Header><Empty.Title>选择一个项目查看详情</Empty.Title><Empty.Description>点击列表中任何条目，将在此显示解密数据。</Empty.Description></Empty.Header></Empty.Root>
 	{/if}
 </section>
