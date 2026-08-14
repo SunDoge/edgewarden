@@ -1,6 +1,8 @@
 <script lang="ts">
 import { CipherType } from "@edgewarden/shared";
 import { onMount } from "svelte";
+import { toast } from "svelte-sonner";
+import { match } from "ts-pattern";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import VaultDetailPanel from "$lib/components/vault/VaultDetailPanel.svelte";
@@ -9,6 +11,7 @@ import VaultFolderSidebar from "$lib/components/vault/VaultFolderSidebar.svelte"
 import VaultHeader from "$lib/components/vault/VaultHeader.svelte";
 import VaultItemList from "$lib/components/vault/VaultItemList.svelte";
 import VaultSidebar from "$lib/components/vault/VaultSidebar.svelte";
+import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
 import { formatTime } from "$lib/i18n/format";
 import { m } from "$lib/paraglide/messages.js";
 import {
@@ -78,6 +81,12 @@ let mobileDetailOpen = $state(false);
 let saveNotice = $state<{ kind: "saved" | "warning"; message: string } | null>(
 	null,
 );
+let pendingConfirmation = $state<
+	| { kind: "merge-folders" }
+	| { kind: "delete-attachment"; attachment: any }
+	| { kind: "bulk"; action: VaultBulkAction }
+	| null
+>(null);
 
 // Folder management dialog state
 let folderDialogOpen = $state(false);
@@ -125,7 +134,7 @@ async function handleFolderSubmit() {
 		await syncVaultData();
 		folderDialogOpen = false;
 	} catch (e: any) {
-		alert("操作文件夹失败: " + (e.message || e));
+		toast.error("操作文件夹失败: " + (e.message || e));
 	} finally {
 		folderDialogLoading = false;
 	}
@@ -142,7 +151,7 @@ async function confirmDeleteFolder() {
 		await syncVaultData();
 		deleteFolderDialogOpen = false;
 	} catch (e: any) {
-		alert("删除文件夹失败: " + (e.message || e));
+		toast.error("删除文件夹失败: " + (e.message || e));
 	} finally {
 		deleteFolderLoading = false;
 	}
@@ -157,7 +166,7 @@ async function confirmDeleteAllFolders() {
 		await syncVaultData();
 		deleteAllFoldersDialogOpen = false;
 	} catch (e: any) {
-		alert("删除全部文件夹失败: " + (e.message || e));
+		toast.error("删除全部文件夹失败: " + (e.message || e));
 	} finally {
 		deleteFolderLoading = false;
 	}
@@ -239,13 +248,11 @@ let duplicateFolderCount = $derived(
 );
 
 async function mergeDuplicateFolders() {
-	if (
-		!duplicateFolderCount ||
-		!confirm(
-			`合并 ${duplicateFolderCount} 个同名重复文件夹？其中的密码项会移动到最近修改的同名文件夹，不会删除密码项。`,
-		)
-	)
-		return;
+	if (!duplicateFolderCount) return;
+	pendingConfirmation = { kind: "merge-folders" };
+}
+
+async function executeMergeDuplicateFolders() {
 	mergingDuplicateFolders = true;
 	try {
 		const result = await mergeDuplicateVaultFolders(
@@ -254,11 +261,11 @@ async function mergeDuplicateFolders() {
 		);
 		activeFolder = null;
 		await syncVaultData();
-		alert(
+		toast.success(
 			`已合并 ${result.mergedFolders} 个重复文件夹，移动 ${result.movedItems} 个密码项。`,
 		);
 	} catch (error) {
-		alert(
+		toast.error(
 			`合并重复文件夹失败：${error instanceof Error ? error.message : error}`,
 		);
 	} finally {
@@ -288,7 +295,7 @@ async function handleAttachmentUpload(event: Event) {
 			? { encKey: vault.symEncKey, macKey: vault.symMacKey }
 			: null;
 	if (!ownerKey) {
-		alert("密钥未就绪，请重新解锁保险库");
+		toast.error("密钥未就绪，请重新解锁保险库");
 		return;
 	}
 	attachmentBusy = "upload";
@@ -296,7 +303,7 @@ async function handleAttachmentUpload(event: Event) {
 		await uploadVaultAttachment(cipher, file, ownerKey);
 		await refreshSelectedItem(cipher.id);
 	} catch (error) {
-		alert(
+		toast.error(
 			`附件上传失败：${error instanceof Error ? error.message : String(error)}`,
 		);
 	} finally {
@@ -323,7 +330,7 @@ async function handleAttachmentDownload(attachment: any) {
 		anchor.click();
 		setTimeout(() => URL.revokeObjectURL(url), 0);
 	} catch (error) {
-		alert(
+		toast.error(
 			`附件下载失败：${error instanceof Error ? error.message : String(error)}`,
 		);
 	} finally {
@@ -334,16 +341,22 @@ async function handleAttachmentDownload(attachment: any) {
 async function handleAttachmentDelete(attachment: any) {
 	const cipher = selectedItem;
 	if (cipher?.readOnly) {
-		alert("该组织条目为只读");
+		toast.error("该组织条目为只读");
 		return;
 	}
-	if (!cipher || !confirm(`确定删除附件“${attachment.fileName}”吗？`)) return;
+	if (!cipher) return;
+	pendingConfirmation = { kind: "delete-attachment", attachment };
+}
+
+async function executeAttachmentDelete(attachment: any) {
+	const cipher = selectedItem;
+	if (!cipher) return;
 	attachmentBusy = attachment.id;
 	try {
 		await deleteAttachmentApi(cipher.id, attachment.id);
 		await refreshSelectedItem(cipher.id);
 	} catch (error) {
-		alert(
+		toast.error(
 			`附件删除失败：${error instanceof Error ? error.message : String(error)}`,
 		);
 	} finally {
@@ -362,7 +375,7 @@ function startCreate() {
 function startEdit() {
 	if (!selectedItem) return;
 	if (selectedItem.readOnly) {
-		alert("该组织条目为只读");
+		toast.error("该组织条目为只读");
 		return;
 	}
 	isCreating = false;
@@ -389,7 +402,7 @@ async function handleSaveCipher() {
 			resolveOwnerKey,
 		});
 	} catch (e: any) {
-		alert("保存失败：" + (e.message || e));
+		toast.error("保存失败：" + (e.message || e));
 		return;
 	}
 
@@ -422,7 +435,7 @@ async function handleSaveCipher() {
 function handleDeleteCipher() {
 	if (!selectedItem) return;
 	if (selectedItem.readOnly) {
-		alert("该组织条目为只读");
+		toast.error("该组织条目为只读");
 		return;
 	}
 	deleteDialogOpen = true;
@@ -439,7 +452,7 @@ async function confirmDeleteCipher() {
 		isEditing = false;
 		await syncVaultData();
 	} catch (e: any) {
-		alert("删除失败：" + (e.message || e));
+		toast.error("删除失败：" + (e.message || e));
 	} finally {
 		deleteLoading = false;
 	}
@@ -448,7 +461,7 @@ async function confirmDeleteCipher() {
 async function restoreSelectedCipher() {
 	if (!selectedItem?.deletedDate) return;
 	if (selectedItem.readOnly) {
-		alert("该组织条目为只读");
+		toast.error("该组织条目为只读");
 		return;
 	}
 	deleteLoading = true;
@@ -457,7 +470,7 @@ async function restoreSelectedCipher() {
 		selectedItem = null;
 		await syncVaultData();
 	} catch (e: any) {
-		alert("恢复失败：" + (e.message || e));
+		toast.error("恢复失败：" + (e.message || e));
 	} finally {
 		deleteLoading = false;
 	}
@@ -466,7 +479,7 @@ async function restoreSelectedCipher() {
 async function toggleArchiveSelected() {
 	if (!selectedItem || selectedItem.deletedDate) return;
 	if (selectedItem.readOnly) {
-		alert("该组织条目为只读");
+		toast.error("该组织条目为只读");
 		return;
 	}
 	deleteLoading = true;
@@ -476,7 +489,7 @@ async function toggleArchiveSelected() {
 		selectedItem = null;
 		await syncVaultData();
 	} catch (e: any) {
-		alert("归档操作失败：" + (e.message || e));
+		toast.error("归档操作失败：" + (e.message || e));
 	} finally {
 		deleteLoading = false;
 	}
@@ -500,18 +513,17 @@ function selectRedundantDuplicates() {
 
 async function runBulkAction(action: VaultBulkAction) {
 	if (!selectedIdList.length) return;
+	if (action === "delete" || action === "permanent") {
+		pendingConfirmation = { kind: "bulk", action };
+		return;
+	}
+	await executeBulkAction(action);
+}
+
+async function executeBulkAction(action: VaultBulkAction) {
 	const items = selectedIdList
 		.map((id) => vault.ciphers.find((cipher) => cipher.id === id))
 		.filter(Boolean) as any[];
-	if (
-		(action === "delete" || action === "permanent") &&
-		!confirm(
-			action === "permanent"
-				? `永久删除选中的 ${selectedIdList.length} 项？此操作无法撤销。`
-				: `将选中的 ${selectedIdList.length} 项移到回收站？`,
-		)
-	)
-		return;
 	deleteLoading = true;
 	try {
 		await applyVaultBulkAction(action, items);
@@ -519,10 +531,45 @@ async function runBulkAction(action: VaultBulkAction) {
 		selectedItem = null;
 		await syncVaultData();
 	} catch (e: any) {
-		alert("批量操作失败：" + (e.message || e));
+		toast.error("批量操作失败：" + (e.message || e));
 	} finally {
 		deleteLoading = false;
 	}
+}
+
+async function confirmPendingAction() {
+	if (!pendingConfirmation) return;
+	const pending = pendingConfirmation;
+	pendingConfirmation = null;
+	await match(pending)
+		.with({ kind: "merge-folders" }, () => executeMergeDuplicateFolders())
+		.with({ kind: "delete-attachment" }, ({ attachment }) =>
+			executeAttachmentDelete(attachment),
+		)
+		.with({ kind: "bulk" }, ({ action }) => executeBulkAction(action))
+		.exhaustive();
+}
+
+function pendingConfirmationText(): string {
+	return match(pendingConfirmation)
+		.with(
+			{ kind: "merge-folders" },
+			() =>
+				`合并 ${duplicateFolderCount} 个同名重复文件夹？密码项会移动到最近修改的同名文件夹。`,
+		)
+		.with(
+			{ kind: "delete-attachment" },
+			({ attachment }) => `确定删除附件“${attachment.fileName}”吗？`,
+		)
+		.with(
+			{ kind: "bulk", action: "permanent" },
+			() => `永久删除选中的 ${selectedIdList.length} 项？此操作无法撤销。`,
+		)
+		.with(
+			{ kind: "bulk" },
+			() => `将选中的 ${selectedIdList.length} 项移到回收站？`,
+		)
+		.otherwise(() => "请确认此操作。");
 }
 
 function resolveOwnerKey(organizationId?: string | null) {
@@ -551,7 +598,7 @@ async function moveSelectedItems() {
 		clearSelection();
 		await syncVaultData();
 	} catch (e: any) {
-		alert("移动失败：" + (e.message || e));
+		toast.error("移动失败：" + (e.message || e));
 	} finally {
 		deleteLoading = false;
 	}
@@ -569,7 +616,7 @@ async function toggleFavorite(item: any) {
 		selectedItem =
 			vault.ciphers.find((cipher) => cipher.id === item.id) ?? null;
 	} catch (e: any) {
-		alert("收藏操作失败：" + (e.message || e));
+		toast.error("收藏操作失败：" + (e.message || e));
 	} finally {
 		deleteLoading = false;
 	}
@@ -690,3 +737,7 @@ async function toggleFavorite(item: any) {
 	onSaveFolder={handleFolderSubmit}
 	onDeleteFolder={confirmDeleteFolder}
 />
+
+<AlertDialog.Root open={pendingConfirmation !== null} onOpenChange={(open) => { if (!open) pendingConfirmation = null; }}>
+	<AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>确认操作</AlertDialog.Title><AlertDialog.Description>{pendingConfirmationText()}</AlertDialog.Description></AlertDialog.Header><AlertDialog.Footer><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action class="bg-destructive text-destructive-foreground hover:bg-destructive/90" onclick={confirmPendingAction}>确认</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content>
+</AlertDialog.Root>
