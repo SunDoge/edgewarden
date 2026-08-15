@@ -4,7 +4,11 @@ import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { BulkIdsSchema, MoveCiphersSchema } from "../schemas/ciphers";
 import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
-import { executeFencedPersonalCipherBulkMutation } from "../services/ciphers/access";
+import {
+	executeFencedPersonalCipherBulkMutation,
+	visibleOrganizationCipherViewBulkUpsertQuery,
+} from "../services/ciphers/access";
+import { executeBatch, revisionQuery } from "../services/db/batch";
 import * as foldersDb from "../services/db/folders";
 import { textColumnInJson } from "../services/db/json-array";
 import { errorResponse } from "../utils/response";
@@ -102,6 +106,16 @@ export const moveCiphers = factory.createHandlers(
 					.where(expectedState)
 					.compile(),
 		);
+		const [organizationViews] = await c.get("dbDialect").batch([
+			visibleOrganizationCipherViewBulkUpsertQuery(db, {
+				userId,
+				cipherIds: ids,
+				folderId,
+				updatedAt: ts,
+			}),
+		]);
+		if ((organizationViews.numAffectedRows ?? 0n) > 0n)
+			await executeBatch(c.get("dbDialect"), [revisionQuery(db, userId, ts)]);
 		return new Response(null, { status: 200 });
 	},
 );
@@ -200,6 +214,16 @@ export const archiveCiphers = factory.createHandlers(
 					.where(expectedState)
 					.compile(),
 		);
+		const [organizationViews] = await c.get("dbDialect").batch([
+			visibleOrganizationCipherViewBulkUpsertQuery(db, {
+				userId: user.id,
+				cipherIds: ids,
+				archivedAt: ts,
+				updatedAt: ts,
+			}),
+		]);
+		if ((organizationViews.numAffectedRows ?? 0n) > 0n)
+			await executeBatch(c.get("dbDialect"), [revisionQuery(db, user.id, ts)]);
 		return new Response(null, { status: 200 });
 	},
 );
@@ -239,6 +263,16 @@ export const unarchiveCiphers = factory.createHandlers(
 					.where(expectedState)
 					.compile(),
 		);
+		const [organizationViews] = await c.get("dbDialect").batch([
+			visibleOrganizationCipherViewBulkUpsertQuery(db, {
+				userId: user.id,
+				cipherIds: ids,
+				archivedAt: null,
+				updatedAt: ts,
+			}),
+		]);
+		if ((organizationViews.numAffectedRows ?? 0n) > 0n)
+			await executeBatch(c.get("dbDialect"), [revisionQuery(db, user.id, ts)]);
 		return new Response(null, { status: 200 });
 	},
 );

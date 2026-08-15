@@ -3,52 +3,82 @@ import { LIMITS } from "../../config";
 import type { Ciphers, DB } from "../../types/db";
 import { now } from "../../utils/time";
 
+export type CipherView = Selectable<Ciphers>;
+
+type CipherViewRow = Selectable<Ciphers> & {
+	view_folder_id: string | null;
+	view_favorite: number;
+	view_archived_at: number | null;
+};
+
+function toCipherView(row: CipherViewRow): CipherView {
+	const { view_folder_id, view_favorite, view_archived_at, ...cipher } = row;
+	return {
+		...cipher,
+		folder_id: cipher.org_id ? view_folder_id : cipher.folder_id,
+		favorite: cipher.org_id ? view_favorite : cipher.favorite,
+		archived_at: cipher.org_id ? view_archived_at : cipher.archived_at,
+	};
+}
+
+function selectCipherView(db: Kysely<DB>, userId: string) {
+	return db
+		.selectFrom("ciphers")
+		.leftJoin("cipher_user_settings as view", (join) =>
+			join
+				.onRef("view.cipher_id", "=", "ciphers.id")
+				.on("view.user_id", "=", userId),
+		)
+		.selectAll("ciphers")
+		.select([
+			"view.folder_id as view_folder_id",
+			"view.favorite as view_favorite",
+			"view.archived_at as view_archived_at",
+		]);
+}
+
 export async function getCiphersByUserId(
 	db: Kysely<DB>,
 	userId: string,
 ): Promise<Selectable<Ciphers>[]> {
-	return db
-		.selectFrom("ciphers")
-		.selectAll()
-		.where("user_id", "=", userId)
-		.where("deleted_at", "is", null)
-		.execute();
+	return selectCipherView(db, userId)
+		.where("ciphers.user_id", "=", userId)
+		.where("ciphers.deleted_at", "is", null)
+		.execute()
+		.then((rows) => rows.map((row) => toCipherView(row as CipherViewRow)));
 }
 
 export async function getAllCiphersByUserId(
 	db: Kysely<DB>,
 	userId: string,
 ): Promise<Selectable<Ciphers>[]> {
-	return db
-		.selectFrom("ciphers")
-		.selectAll()
-		.where("user_id", "=", userId)
+	return selectCipherView(db, userId)
+		.where("ciphers.user_id", "=", userId)
 		.where((expression) =>
 			expression.or([
-				expression("purge_after", "is", null),
-				expression("purge_after", ">", now()),
+				expression("ciphers.purge_after", "is", null),
+				expression("ciphers.purge_after", ">", now()),
 			]),
 		)
-		.execute();
+		.execute()
+		.then((rows) => rows.map((row) => toCipherView(row as CipherViewRow)));
 }
 
 export async function getCipherById(
 	db: Kysely<DB>,
 	id: string,
+	userId: string,
 ): Promise<Selectable<Ciphers> | null> {
-	return (
-		(await db
-			.selectFrom("ciphers")
-			.selectAll()
-			.where("id", "=", id)
-			.where((expression) =>
-				expression.or([
-					expression("purge_after", "is", null),
-					expression("purge_after", ">", now()),
-				]),
-			)
-			.executeTakeFirst()) ?? null
-	);
+	const row = await selectCipherView(db, userId)
+		.where("ciphers.id", "=", id)
+		.where((expression) =>
+			expression.or([
+				expression("ciphers.purge_after", "is", null),
+				expression("ciphers.purge_after", ">", now()),
+			]),
+		)
+		.executeTakeFirst();
+	return row ? toCipherView(row as CipherViewRow) : null;
 }
 
 export async function createCipher(

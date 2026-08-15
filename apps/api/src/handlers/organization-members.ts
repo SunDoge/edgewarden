@@ -121,6 +121,7 @@ export const listOrganizationMembers = factory.createHandlers(async (c) => {
 				id: access.collection_id,
 				readOnly: Boolean(access.read_only),
 				hidePasswords: Boolean(access.hide_passwords),
+				manage: Boolean(access.manage),
 			})),
 			creationDate: toIso(member.created_at),
 			object: "organizationUser",

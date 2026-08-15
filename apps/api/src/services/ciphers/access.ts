@@ -191,3 +191,123 @@ export async function validateOrganizationCollections(
 	}
 	return { member, collectionIds: uniqueIds } as const;
 }
+
+/**
+ * Persists the current member's view of an organization cipher only after the
+ * owning cipher mutation has committed. The conditional INSERT keeps the view
+ * update in the same D1 batch without opening a cross-request race window.
+ */
+export function organizationCipherViewStateQuery(
+	db: Kysely<DB>,
+	args: {
+		cipherId: string;
+		userId: string;
+		folderId: string | null;
+		favorite: number;
+		archivedAt: number | null;
+		updatedAt: number;
+		committedMutationToken: string;
+	},
+) {
+	return db
+		.insertInto("cipher_user_settings")
+		.columns([
+			"cipher_id",
+			"user_id",
+			"folder_id",
+			"favorite",
+			"archived_at",
+			"updated_at",
+		])
+		.expression(
+			db
+				.selectFrom("ciphers")
+				.select([
+					sql<string>`${args.cipherId}`.as("cipher_id"),
+					sql<string>`${args.userId}`.as("user_id"),
+					sql<string | null>`${args.folderId}`.as("folder_id"),
+					sql<number>`${args.favorite}`.as("favorite"),
+					sql<number | null>`${args.archivedAt}`.as("archived_at"),
+					sql<number>`${args.updatedAt}`.as("updated_at"),
+				])
+				.where("id", "=", args.cipherId)
+				.where("org_id", "is not", null)
+				.where("mutation_token", "=", args.committedMutationToken),
+		)
+		.onConflict((conflict) =>
+			conflict.columns(["cipher_id", "user_id"]).doUpdateSet({
+				folder_id: args.folderId,
+				favorite: args.favorite,
+				archived_at: args.archivedAt,
+				updated_at: args.updatedAt,
+			}),
+		)
+		.compile();
+}
+
+export function visibleOrganizationCipherViewBulkUpsertQuery(
+	db: Kysely<DB>,
+	args: {
+		userId: string;
+		cipherIds: string[];
+		updatedAt: number;
+		folderId?: string | null;
+		archivedAt?: number | null;
+	},
+): CompiledQuery {
+	const ids = JSON.stringify([...new Set(args.cipherIds)]);
+	const folder =
+		args.folderId === undefined
+			? sql`current_view.folder_id`
+			: sql`${args.folderId}`;
+	const archived =
+		args.archivedAt === undefined
+			? sql`current_view.archived_at`
+			: sql`${args.archivedAt}`;
+	const changed =
+		args.folderId !== undefined && args.archivedAt !== undefined
+			? sql<boolean>`current_view.folder_id IS NOT ${args.folderId}
+				OR current_view.archived_at IS NOT ${args.archivedAt}`
+			: args.folderId !== undefined
+				? sql<boolean>`current_view.folder_id IS NOT ${args.folderId}`
+				: sql<boolean>`current_view.archived_at IS NOT ${args.archivedAt ?? null}`;
+	return sql`
+		INSERT INTO cipher_user_settings (
+			cipher_id, user_id, folder_id, favorite, archived_at, updated_at
+		)
+		SELECT
+			cipher.id,
+			${args.userId},
+			${folder},
+			COALESCE(current_view.favorite, 0),
+			${archived},
+			${args.updatedAt}
+		FROM ciphers cipher
+		INNER JOIN org_members member
+			ON member.org_id = cipher.org_id
+		 AND member.user_id = ${args.userId}
+		 AND member.status = 'confirmed'
+		LEFT JOIN cipher_user_settings current_view
+			ON current_view.cipher_id = cipher.id
+		 AND current_view.user_id = ${args.userId}
+		WHERE cipher.id IN (SELECT value FROM json_each(${ids}))
+		  AND cipher.deleted_at IS NULL
+		  AND (${changed})
+		  AND (
+			member.access_all = 1
+			OR EXISTS (
+				SELECT 1
+				FROM cipher_collections link
+				INNER JOIN collection_members access
+					ON access.collection_id = link.collection_id
+				 AND access.org_member_id = member.id
+				WHERE link.cipher_id = cipher.id
+			)
+		  )
+		ON CONFLICT(cipher_id, user_id) DO UPDATE SET
+			folder_id = excluded.folder_id,
+			favorite = excluded.favorite,
+			archived_at = excluded.archived_at,
+			updated_at = excluded.updated_at
+	`.compile(db);
+}

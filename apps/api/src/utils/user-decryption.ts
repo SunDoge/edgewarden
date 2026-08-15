@@ -11,6 +11,9 @@ type UserLike = Pick<
 	| "kdf_parallelism"
 	| "private_key"
 	| "public_key"
+	| "master_password_salt"
+	| "signed_public_key"
+	| "security_state"
 >;
 
 export function buildAccountKeys(
@@ -21,11 +24,11 @@ export function buildAccountKeys(
 		publicKeyEncryptionKeyPair: {
 			wrappedPrivateKey: user.private_key,
 			publicKey: user.public_key ?? "",
-			signedPublicKey: null,
+			signedPublicKey: user.signed_public_key,
 			object: "publicKeyEncryptionKeyPair",
 			Object: "publicKeyEncryptionKeyPair",
 		},
-		securityState: null,
+		securityState: user.security_state,
 		signatureKeyPair: null,
 		object: "privateKeys",
 		Object: "privateKeys",
@@ -48,7 +51,7 @@ export function buildUserDecryptionOptions(
 			},
 			MasterKeyEncryptedUserKey: user.key,
 			MasterKeyWrappedUserKey: user.key,
-			Salt: user.email.toLowerCase(),
+			Salt: user.master_password_salt ?? user.email.toLowerCase(),
 			Object: "masterPasswordUnlock",
 		},
 		TrustedDeviceOption: null,
@@ -72,7 +75,7 @@ export function buildUserDecryptionCompat(
 			},
 			masterKeyWrappedUserKey: user.key,
 			masterKeyEncryptedUserKey: user.key,
-			salt: user.email.toLowerCase(),
+			salt: user.master_password_salt ?? user.email.toLowerCase(),
 		},
 		...(webAuthnPrfOptions.length ? { webAuthnPrfOptions } : {}),
 	};

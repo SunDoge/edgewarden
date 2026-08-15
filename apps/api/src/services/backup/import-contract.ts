@@ -79,6 +79,7 @@ export function backupTableCounts(
 		webauthn_credentials: (db.webauthn_credentials || []).length,
 		folders: (db.folders || []).length,
 		ciphers: (db.ciphers || []).length,
+		cipher_user_settings: (db.cipher_user_settings || []).length,
 		cipher_collections: (db.cipher_collections || []).length,
 		attachments: attachmentCount,
 		sends: sendCount,

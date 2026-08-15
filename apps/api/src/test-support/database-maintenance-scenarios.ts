@@ -426,9 +426,18 @@ export function registerDatabaseMaintenanceScenarios(
 			.where("member.status", "=", "confirmed")
 			.executeTakeFirstOrThrow();
 		const user = await db
-			.selectFrom("users")
-			.select("id")
-			.where("email", "=", EMAIL)
+			.selectFrom("users as candidate")
+			.select(["candidate.id", "candidate.email"])
+			.where(({ not, exists, selectFrom }) =>
+				not(
+					exists(
+						selectFrom("org_members")
+							.select("id")
+							.where("org_id", "=", owner.org_id)
+							.whereRef("user_id", "=", "candidate.id"),
+					),
+				),
+			)
 			.executeTakeFirstOrThrow();
 		const memberId = crypto.randomUUID();
 		const timestamp = Math.floor(Date.now() / 1000);
@@ -439,7 +448,7 @@ export function registerDatabaseMaintenanceScenarios(
 					id: memberId,
 					org_id: owner.org_id,
 					user_id: user.id,
-					email: `removed-${memberId}@example.com`,
+					email: user.email,
 					role: "member",
 					status: "confirmed",
 					access_all: 1,
@@ -464,7 +473,10 @@ export function registerDatabaseMaintenanceScenarios(
 				.select("revision_date")
 				.where("user_id", "=", user.id)
 				.executeTakeFirstOrThrow();
-			assert.equal(after.revision_date, before.revision_date + 1);
+			assert.equal(
+				after.revision_date,
+				Math.max(before.revision_date + 1, timestamp),
+			);
 		} finally {
 			await db.deleteFrom("org_members").where("id", "=", memberId).execute();
 			await db.destroy();

@@ -131,7 +131,11 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
 		claims.attachmentId !== c.req.param("attachmentId")
 	)
 		return errorResponse("Invalid or expired upload token", 401);
-	const cipher = await ciphersDb.getCipherById(c.get("db"), claims.cipherId);
+	const cipher = await ciphersDb.getCipherById(
+		c.get("db"),
+		claims.cipherId,
+		claims.userId,
+	);
 	const attachment = await attachmentsDb.getByIdIncludingDeleted(
 		c.get("db"),
 		claims.attachmentId,

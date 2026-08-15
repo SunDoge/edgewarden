@@ -23,6 +23,85 @@ function cloneRows(rows: SqlRow[]): SqlRow[] {
 	return rows.map((row) => ({ ...row }));
 }
 
+function requiredId(row: SqlRow, field: string, table: string): string {
+	const value = String(row[field] ?? "").trim();
+	if (!value) throw new Error(`Invalid backup: ${table}.${field} is required`);
+	return value;
+}
+
+/** Reject authorization graphs that satisfy simple FKs but cross org bounds. */
+export function validateBackupOrganizationGraph(
+	payload: BackupPayload["db"],
+): void {
+	const organizations = new Set(
+		(payload.organizations || []).map((row) =>
+			requiredId(row, "id", "organizations"),
+		),
+	);
+	const memberOrg = new Map(
+		(payload.org_members || []).map((row) => [
+			requiredId(row, "id", "org_members"),
+			requiredId(row, "org_id", "org_members"),
+		]),
+	);
+	const collectionOrg = new Map(
+		(payload.collections || []).map((row) => [
+			requiredId(row, "id", "collections"),
+			requiredId(row, "org_id", "collections"),
+		]),
+	);
+	const cipherOrg = new Map(
+		(payload.ciphers || []).map((row) => [
+			requiredId(row, "id", "ciphers"),
+			typeof row.org_id === "string" && row.org_id.trim()
+				? row.org_id.trim()
+				: null,
+		]),
+	);
+	for (const orgId of memberOrg.values()) {
+		if (!organizations.has(orgId))
+			throw new Error(
+				"Invalid backup: organization member references unknown org",
+			);
+	}
+	for (const orgId of collectionOrg.values()) {
+		if (!organizations.has(orgId))
+			throw new Error("Invalid backup: collection references unknown org");
+	}
+	for (const row of payload.collection_members || []) {
+		const collectionId = requiredId(row, "collection_id", "collection_members");
+		const memberId = requiredId(row, "org_member_id", "collection_members");
+		if (
+			!collectionOrg.has(collectionId) ||
+			collectionOrg.get(collectionId) !== memberOrg.get(memberId)
+		)
+			throw new Error(
+				"Invalid backup: collection access crosses organization boundary",
+			);
+	}
+	for (const row of payload.cipher_collections || []) {
+		const cipherId = requiredId(row, "cipher_id", "cipher_collections");
+		const collectionId = requiredId(row, "collection_id", "cipher_collections");
+		if (
+			!cipherOrg.has(cipherId) ||
+			cipherOrg.get(cipherId) === null ||
+			cipherOrg.get(cipherId) !== collectionOrg.get(collectionId)
+		)
+			throw new Error(
+				"Invalid backup: cipher collection crosses organization boundary",
+			);
+	}
+	for (const row of payload.cipher_user_settings || []) {
+		const cipherId = requiredId(row, "cipher_id", "cipher_user_settings");
+		requiredId(row, "user_id", "cipher_user_settings");
+		const orgId = cipherOrg.get(cipherId);
+		if (!orgId)
+			throw new Error(
+				"Invalid backup: personal cipher cannot have organization user settings",
+			);
+	}
+}
+
 function getFileSendPath(
 	row: SqlRow,
 ): { path: string; sizeBytes: number } | null {
@@ -86,6 +165,7 @@ export async function importPreparedBackupRows(
 	dataEncryptionSecret: string,
 	activeOperationLeaseValue: string | null = null,
 ): Promise<BackupPayload["db"]> {
+	validateBackupOrganizationGraph(payload);
 	const importedConfigRows = await prepareImportedConfigRows(
 		dataEncryptionSecret,
 		payload.config || [],
@@ -119,6 +199,7 @@ export async function importPreparedBackupRows(
 			...row,
 			archived_at: row.archived_at ?? null,
 		})),
+		cipher_user_settings: cloneRows(payload.cipher_user_settings || []),
 		cipher_collections: cloneRows(payload.cipher_collections || []),
 		attachments: cloneRows(payload.attachments || []).map((row) => {
 			const cipherId = String(row.cipher_id || "").trim();

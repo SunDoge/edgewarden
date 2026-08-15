@@ -125,6 +125,21 @@ export const deleteFolder = factory.createHandlers(async (c) => {
 				),
 			)
 			.compile(),
+		db
+			.updateTable("cipher_user_settings")
+			.set({ folder_id: null, updated_at: ts })
+			.where("folder_id", "=", id)
+			.where("user_id", "=", userId)
+			.where((eb) =>
+				eb.exists(
+					db
+						.selectFrom("folders")
+						.select("id")
+						.where("id", "=", id)
+						.where("mutation_token", "=", mutationToken),
+				),
+			)
+			.compile(),
 		auditEventInsertQuery(
 			db,
 			{
@@ -187,6 +202,22 @@ export const deleteFolders = factory.createHandlers(
 					folder_id: null,
 					updated_at: sql<number>`MAX(updated_at + 1, ${ts})`,
 				})
+				.where("user_id", "=", userId)
+				.where((eb) =>
+					eb(
+						"folder_id",
+						"in",
+						db
+							.selectFrom("folders")
+							.select("id")
+							.where("user_id", "=", userId)
+							.where("mutation_token", "=", mutationToken),
+					),
+				)
+				.compile(),
+			db
+				.updateTable("cipher_user_settings")
+				.set({ folder_id: null, updated_at: ts })
 				.where("user_id", "=", userId)
 				.where((eb) =>
 					eb(
