@@ -8,14 +8,20 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: sync-bitwarden-domain-rules
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      # Generated updates belong on the development branch and reach main
+      # through the same reviewed release flow as application changes.
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
         with:
-          version: latest
+          ref: dev
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 26
@@ -29,4 +35,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add apps/api/src/static/global_domains.bitwarden.json apps/api/src/static/global_domains.bitwarden.meta.json
           git commit -m "chore(domains): sync Bitwarden rules"
-          git push
+          git push origin HEAD:dev
