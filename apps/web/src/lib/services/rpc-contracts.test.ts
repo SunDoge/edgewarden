@@ -12,7 +12,7 @@ describe("RPC response contracts", () => {
 		)) {
 			const source = readFileSync(join(directory, file), "utf8");
 			const functions = source.matchAll(
-				/export async function\s+(\w+)\s*\([^]*?\): Promise<void>\s*\{([^]*?)\n\}/g,
+				/export async function\s+(\w+)\s*\([\s\S]*?\): Promise<void>\s*\{([\s\S]*?)\n\}/g,
 			);
 			for (const match of functions) {
 				if (/\brpcJson\s*\(/.test(match[2]))
