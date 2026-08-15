@@ -89,7 +89,7 @@ async function buildSyncPayload(c: Context<HonoEnv>) {
 	const restrictedCollectionAccess = restrictedMembers.length
 		? await db
 				.selectFrom("collection_members")
-				.select(["collection_id", "read_only", "hide_passwords"])
+				.select(["collection_id", "read_only", "hide_passwords", "manage"])
 				.where(
 					sql<boolean>`org_member_id in (select value from json_each(${JSON.stringify(restrictedMembers.map((row) => row.member_id))}))`,
 				)
@@ -118,7 +118,17 @@ async function buildSyncPayload(c: Context<HonoEnv>) {
 	const organizationCiphers = organizationIds.length
 		? await db
 				.selectFrom("ciphers")
-				.selectAll()
+				.leftJoin("cipher_user_settings as view", (join) =>
+					join
+						.onRef("view.cipher_id", "=", "ciphers.id")
+						.on("view.user_id", "=", user.id),
+				)
+				.selectAll("ciphers")
+				.select([
+					"view.folder_id as folder_id",
+					"view.favorite as favorite",
+					"view.archived_at as archived_at",
+				])
 				.where((expression) =>
 					expression.or([
 						sql<boolean>`org_id in (
@@ -265,7 +275,7 @@ async function buildSyncPayload(c: Context<HonoEnv>) {
 				defaultUserCollectionEmail: null,
 				readOnly: Boolean(access?.read_only),
 				hidePasswords: Boolean(access?.hide_passwords),
-				manage: false,
+				manage: Boolean(access?.manage),
 				creationDate: toIso(collection.created_at),
 				revisionDate: toIso(collection.updated_at),
 				object: "collectionDetails",

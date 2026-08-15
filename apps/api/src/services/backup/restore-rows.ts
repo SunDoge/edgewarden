@@ -67,6 +67,12 @@ export async function importBackupRows(
 				"key",
 				"private_key",
 				"public_key",
+				"master_password_salt",
+				"signed_public_key",
+				"security_version",
+				"security_state",
+				"v2_upgrade_token",
+				"user_key_id",
 				"kdf_type",
 				"kdf_iterations",
 				"kdf_memory",
@@ -124,7 +130,6 @@ export async function importBackupRows(
 				"name",
 				"public_key",
 				"private_key",
-				"owner_id",
 				"deletion_requested_at",
 				"created_at",
 				"updated_at",
@@ -169,7 +174,13 @@ export async function importBackupRows(
 		buildInsertStatements(
 			db,
 			tableName("collection_members"),
-			["collection_id", "org_member_id", "read_only", "hide_passwords"],
+			[
+				"collection_id",
+				"org_member_id",
+				"read_only",
+				"hide_passwords",
+				"manage",
+			],
 			payload.collection_members || [],
 		),
 	);
@@ -236,6 +247,23 @@ export async function importBackupRows(
 				"purge_after",
 			],
 			payload.ciphers || [],
+		),
+	);
+	await runInsertBatch(
+		db,
+		tableName("cipher_user_settings"),
+		buildInsertStatements(
+			db,
+			tableName("cipher_user_settings"),
+			[
+				"cipher_id",
+				"user_id",
+				"folder_id",
+				"favorite",
+				"archived_at",
+				"updated_at",
+			],
+			payload.cipher_user_settings || [],
 		),
 	);
 	await runInsertBatch(

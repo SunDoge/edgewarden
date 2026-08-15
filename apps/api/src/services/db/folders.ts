@@ -63,6 +63,12 @@ export async function deleteFolder(
 		.where("folder_id", "=", id)
 		.where("user_id", "=", userId)
 		.execute();
+	await db
+		.updateTable("cipher_user_settings")
+		.set({ folder_id: null, updated_at: now() })
+		.where("folder_id", "=", id)
+		.where("user_id", "=", userId)
+		.execute();
 
 	const result = await db
 		.deleteFrom("folders")

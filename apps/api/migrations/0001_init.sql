@@ -38,6 +38,14 @@ CREATE TABLE IF NOT EXISTS users (
   key TEXT NOT NULL,
   private_key TEXT,
   public_key TEXT,
+  -- Explicit salt decouples master-password derivation from mutable email.
+  -- NULL keeps compatibility with legacy accounts that derive it from email.
+  master_password_salt TEXT,
+  signed_public_key TEXT,
+  security_version INTEGER CHECK (security_version IS NULL OR security_version >= 0),
+  security_state TEXT,
+  v2_upgrade_token TEXT CHECK (v2_upgrade_token IS NULL OR json_valid(v2_upgrade_token)),
+  user_key_id TEXT CHECK (user_key_id IS NULL OR length(user_key_id) = 32),
   -- KDF parameters travel with the user so clients can migrate algorithms
   kdf_type INTEGER NOT NULL CHECK (kdf_type IN (0, 1)),
   -- 0 = PBKDF2-SHA256, 1 = Argon2id
@@ -149,16 +157,11 @@ CREATE TABLE IF NOT EXISTS organizations (
   -- Organization key pair generated and encrypted by Bitwarden-compatible clients.
   public_key TEXT,
   private_key TEXT,
-  -- client-encrypted
-  owner_id TEXT NOT NULL,
-  -- must also have a row in org_members
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
 	deletion_requested_at INTEGER,
-	deletion_token TEXT,
-  FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE RESTRICT
+	deletion_token TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_organizations_owner ON organizations(owner_id);
 CREATE INDEX IF NOT EXISTS idx_organizations_deletion_requested
   ON organizations(deletion_requested_at) WHERE deletion_requested_at IS NOT NULL;
 -- ---------------------------------------------------------------------------
@@ -170,7 +173,7 @@ CREATE TABLE IF NOT EXISTS org_members (
   org_id TEXT NOT NULL,
   user_id TEXT,
   -- NULL while status = 'invited'
-  email TEXT NOT NULL,
+  email TEXT NOT NULL CHECK (email = lower(trim(email))),
   -- invitation target; kept for audit
   -- Client-encrypted organization key granted to this member.
   key TEXT,
@@ -190,6 +193,8 @@ CREATE TABLE IF NOT EXISTS org_members (
 CREATE INDEX IF NOT EXISTS idx_org_members_org_status ON org_members(org_id, status);
 CREATE INDEX IF NOT EXISTS idx_org_members_user ON org_members(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_org_members_org_email ON org_members(org_id, email);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_org_members_org_user
+  ON org_members(org_id, user_id) WHERE user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_org_members_mutation_token
   ON org_members(mutation_token) WHERE mutation_token IS NOT NULL;
 -- ---------------------------------------------------------------------------
@@ -216,6 +221,7 @@ CREATE TABLE IF NOT EXISTS collection_members (
   org_member_id TEXT NOT NULL,
   read_only INTEGER NOT NULL DEFAULT 0 CHECK (read_only IN (0, 1)),
   hide_passwords INTEGER NOT NULL DEFAULT 0 CHECK (hide_passwords IN (0, 1)),
+  manage INTEGER NOT NULL DEFAULT 0 CHECK (manage IN (0, 1)),
   PRIMARY KEY (collection_id, org_member_id),
   FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
   FOREIGN KEY (org_member_id) REFERENCES org_members(id) ON DELETE CASCADE
@@ -253,7 +259,8 @@ CREATE TABLE IF NOT EXISTS ciphers (
   type INTEGER NOT NULL CHECK (type BETWEEN 1 AND 8),
   -- 1=Login, 2=SecureNote, 3=Card, 4=Identity, 5=SSH key,
   -- 6=Bank account, 7=Driver license, 8=Passport
-  -- Personal folder (NULL for org ciphers — use cipher_collections instead)
+  -- Personal-cipher view state. Organization ciphers keep per-member state in
+  -- cipher_user_settings because favorite/archive/folder are user-specific.
   folder_id TEXT,
   name TEXT NOT NULL,
   -- client-encrypted (NOT NULL for integrity)
@@ -303,7 +310,26 @@ WHERE purge_after IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ciphers_purge_token
   ON ciphers(purge_token) WHERE purge_token IS NOT NULL;
 -- ---------------------------------------------------------------------------
--- 11. CIPHER COLLECTIONS  (many-to-many: org ciphers ↔ collections)
+-- 11. ORGANIZATION CIPHER USER SETTINGS
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS cipher_user_settings (
+  cipher_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  folder_id TEXT,
+  favorite INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1)),
+  archived_at INTEGER,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (cipher_id, user_id),
+  FOREIGN KEY (cipher_id) REFERENCES ciphers(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (folder_id, user_id) REFERENCES folders(id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cipher_user_settings_user_folder
+  ON cipher_user_settings(user_id, folder_id);
+CREATE INDEX IF NOT EXISTS idx_cipher_user_settings_user_archived
+  ON cipher_user_settings(user_id, archived_at);
+-- ---------------------------------------------------------------------------
+-- 12. CIPHER COLLECTIONS  (many-to-many: org ciphers ↔ collections)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS cipher_collections (
   cipher_id TEXT NOT NULL,

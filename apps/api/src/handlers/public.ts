@@ -119,6 +119,7 @@ export const registerAccount = factory.createHandlers(
 			key: body.key,
 			private_key: body.keys?.encryptedPrivateKey ?? null,
 			public_key: body.keys?.publicKey ?? null,
+			master_password_salt: email,
 			kdf_type: body.kdf,
 			kdf_iterations: body.kdfIterations,
 			kdf_memory: body.kdfMemory ?? null,

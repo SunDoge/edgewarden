@@ -554,9 +554,9 @@ export function registerAdminOrganizationScenarios(
 		await context.database.batch([
 			context.database
 				.prepare(
-					"INSERT INTO organizations (id,name,owner_id,created_at,updated_at) VALUES (?,?,?,?,?)",
+					"INSERT INTO organizations (id,name,created_at,updated_at) VALUES (?,?,?,?)",
 				)
-				.bind(orgId, "encrypted-delete-org", owner.id, timestamp, timestamp),
+				.bind(orgId, "encrypted-delete-org", timestamp, timestamp),
 			context.database
 				.prepare(
 					"INSERT INTO org_members (id,org_id,user_id,email,key,role,status,access_all,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -726,15 +726,9 @@ export function registerAdminOrganizationScenarios(
 		await context.database.batch([
 			context.database
 				.prepare(
-					"INSERT INTO organizations (id,name,owner_id,created_at,updated_at) VALUES (?,?,?,?,?)",
+					"INSERT INTO organizations (id,name,created_at,updated_at) VALUES (?,?,?,?)",
 				)
-				.bind(
-					orgId,
-					"Concurrent invitation org",
-					owner.id,
-					timestamp,
-					timestamp,
-				),
+				.bind(orgId, "Concurrent invitation org", timestamp, timestamp),
 			context.database
 				.prepare(
 					"INSERT INTO org_members (id,org_id,user_id,email,role,status,access_all,key,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -863,12 +857,11 @@ export function registerAdminOrganizationScenarios(
 		await context.database.batch([
 			context.database
 				.prepare(
-					"INSERT INTO organizations (id,name,owner_id,public_key,private_key,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+					"INSERT INTO organizations (id,name,public_key,private_key,created_at,updated_at) VALUES (?,?,?,?,?,?)",
 				)
 				.bind(
 					orgId,
 					"Test organization",
-					owner.id,
 					"public",
 					"private",
 					timestamp,
@@ -924,9 +917,9 @@ export function registerAdminOrganizationScenarios(
 				.bind(collectionId, restrictedMemberId),
 			context.database
 				.prepare(
-					"INSERT INTO organizations (id,name,owner_id,created_at,updated_at) VALUES (?,?,?,?,?)",
+					"INSERT INTO organizations (id,name,created_at,updated_at) VALUES (?,?,?,?)",
 				)
-				.bind(otherOrgId, "Other organization", owner.id, timestamp, timestamp),
+				.bind(otherOrgId, "Other organization", timestamp, timestamp),
 			context.database
 				.prepare(
 					"INSERT INTO collections (id,org_id,name,created_at,updated_at) VALUES (?,?,?,?,?)",
@@ -1029,6 +1022,90 @@ export function registerAdminOrganizationScenarios(
 				folder_id: string | null;
 			}>();
 		assert.deepEqual(stored, { user_id: null, org_id: orgId, folder_id: null });
+
+		const favorited = await request(`/api/ciphers/${cipher.id}`, {
+			method: "PUT",
+			headers: {
+				authorization: `Bearer ${context.accessToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({ ...payload, favorite: true }),
+		});
+		assert.equal(favorited.status, 200, await favorited.clone().text());
+		assert.equal(
+			(await favorited.json<{ favorite: boolean }>()).favorite,
+			true,
+		);
+		const restrictedView = await request(`/api/ciphers/${cipher.id}`, {
+			headers: { authorization: `Bearer ${context.memberAccessToken}` },
+		});
+		assert.equal(
+			(await restrictedView.json<{ favorite: boolean }>()).favorite,
+			false,
+			"organization cipher favorites must be isolated per member",
+		);
+		const archived = await request(`/api/ciphers/${cipher.id}/archive`, {
+			method: "PUT",
+			headers: { authorization: `Bearer ${context.accessToken}` },
+		});
+		assert.ok(
+			(await archived.json<{ archivedDate: string | null }>()).archivedDate,
+		);
+		const restrictedAfterArchive = await request(`/api/ciphers/${cipher.id}`, {
+			headers: { authorization: `Bearer ${context.memberAccessToken}` },
+		});
+		assert.equal(
+			(await restrictedAfterArchive.json<{ archivedDate: string | null }>())
+				.archivedDate,
+			null,
+			"organization cipher archives must be isolated per member",
+		);
+		const unarchived = await request(`/api/ciphers/${cipher.id}/unarchive`, {
+			method: "PUT",
+			headers: { authorization: `Bearer ${context.accessToken}` },
+		});
+		assert.equal(unarchived.status, 200, await unarchived.clone().text());
+		await context.database
+			.prepare(
+				"UPDATE collection_members SET read_only = 0 WHERE collection_id = ? AND org_member_id = ?",
+			)
+			.bind(collectionId, restrictedMemberId)
+			.run();
+		const memberArchived = await request("/api/ciphers/archive", {
+			method: "PUT",
+			headers: {
+				authorization: `Bearer ${context.memberAccessToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({ ids: [cipher.id] }),
+		});
+		assert.equal(
+			memberArchived.status,
+			200,
+			await memberArchived.clone().text(),
+		);
+		const ownerAfterMemberArchive = await request(`/api/ciphers/${cipher.id}`, {
+			headers: { authorization: `Bearer ${context.accessToken}` },
+		});
+		assert.equal(
+			(await ownerAfterMemberArchive.json<{ archivedDate: string | null }>())
+				.archivedDate,
+			null,
+		);
+		await request("/api/ciphers/unarchive", {
+			method: "PUT",
+			headers: {
+				authorization: `Bearer ${context.memberAccessToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({ ids: [cipher.id] }),
+		});
+		await context.database
+			.prepare(
+				"UPDATE collection_members SET read_only = 1 WHERE collection_id = ? AND org_member_id = ?",
+			)
+			.bind(collectionId, restrictedMemberId)
+			.run();
 
 		const secondCollectionId = crypto.randomUUID();
 		await context.database.batch([

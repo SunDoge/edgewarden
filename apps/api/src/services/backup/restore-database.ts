@@ -19,6 +19,7 @@ export type BackupTableName =
 	| "collection_members"
 	| "folders"
 	| "ciphers"
+	| "cipher_user_settings"
 	| "cipher_collections"
 	| "attachments"
 	| "webauthn_credentials"
@@ -37,6 +38,7 @@ const BACKUP_TABLES: BackupTableName[] = [
 	"collection_members",
 	"folders",
 	"ciphers",
+	"cipher_user_settings",
 	"cipher_collections",
 	"attachments",
 	"webauthn_credentials",
@@ -176,6 +178,7 @@ function buildResetImportTargetStatements(
 		"DELETE FROM sends",
 		"DELETE FROM attachments",
 		"DELETE FROM cipher_collections",
+		"DELETE FROM cipher_user_settings",
 		"DELETE FROM ciphers",
 		"DELETE FROM folders",
 		"DELETE FROM collection_members",
@@ -270,7 +273,9 @@ export async function swapShadowTablesIntoPlace(
 		);
 	}
 	if (restoreAudit) {
-		const auditFileName = Array.from(restoreAudit.fileName).slice(0, 1024).join("");
+		const auditFileName = Array.from(restoreAudit.fileName)
+			.slice(0, 1024)
+			.join("");
 		const metadata = serializeAuditMetadata({
 			fileName: auditFileName,
 			status: "success",

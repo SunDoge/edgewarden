@@ -8,6 +8,7 @@ import {
 	conditionalCipherRevisionQuery,
 	getCipherCollectionIds,
 	getCipherPermissions,
+	organizationCipherViewStateQuery,
 	revisionQueriesForCipher,
 	validateOrganizationCollections,
 } from "../services/ciphers/access";
@@ -58,10 +59,7 @@ export const createCipher = factory.createHandlers(
 		const collectionIds = body.collectionIds ?? [];
 		if (!organizationId && collectionIds.length)
 			return errorResponse("Personal ciphers cannot use collections", 400);
-		if (organizationId && body.folderId)
-			return errorResponse("Organization ciphers cannot use folders", 400);
 		if (
-			!organizationId &&
 			body.folderId &&
 			!(await foldersDb.getFolderById(db, body.folderId, user.id))
 		) {
@@ -89,7 +87,7 @@ export const createCipher = factory.createHandlers(
 			folder_id: organizationId ? null : (body.folderId ?? null),
 			name: body.name,
 			notes: body.notes ?? null,
-			favorite: body.favorite ? 1 : 0,
+			favorite: organizationId ? 0 : body.favorite ? 1 : 0,
 			reprompt: body.reprompt ?? 0,
 			key: body.key ?? null,
 			data: buildCipherData(body),
@@ -106,6 +104,21 @@ export const createCipher = factory.createHandlers(
 		};
 		await executeBatch(c.get("dbDialect"), [
 			db.insertInto("ciphers").values(values).compile(),
+			...(organizationId
+				? [
+						db
+							.insertInto("cipher_user_settings")
+							.values({
+								cipher_id: id,
+								user_id: user.id,
+								folder_id: body.folderId ?? null,
+								favorite: body.favorite ? 1 : 0,
+								archived_at: null,
+								updated_at: ts,
+							})
+							.compile(),
+					]
+				: []),
 			...collectionIds.map((collectionId) =>
 				db
 					.insertInto("cipher_collections")
@@ -115,7 +128,7 @@ export const createCipher = factory.createHandlers(
 			...(await revisionQueriesForCipher(db, owner, ts)),
 		]);
 
-		const created = await ciphersDb.getCipherById(db, id);
+		const created = await ciphersDb.getCipherById(db, id, user.id);
 		if (!created) {
 			console.error(
 				JSON.stringify({
@@ -162,12 +175,9 @@ export const updateCipher = factory.createHandlers(
 		if ((body.organizationId ?? null) !== (cipher.org_id ?? null))
 			return errorResponse("Cipher ownership cannot be changed", 400);
 		const collectionIds = body.collectionIds ?? [];
-		if (cipher.org_id && body.folderId)
-			return errorResponse("Organization ciphers cannot use folders", 400);
 		if (!cipher.org_id && collectionIds.length)
 			return errorResponse("Personal ciphers cannot use collections", 400);
 		if (
-			!cipher.org_id &&
 			body.folderId &&
 			!(await foldersDb.getFolderById(db, body.folderId, user.id))
 		) {
@@ -205,10 +215,10 @@ export const updateCipher = factory.createHandlers(
 			.updateTable("ciphers")
 			.set({
 				type: body.type,
-				folder_id: cipher.org_id ? null : (body.folderId ?? null),
+				folder_id: cipher.org_id ? cipher.folder_id : (body.folderId ?? null),
 				name: body.name,
 				notes: body.notes ?? null,
-				favorite: body.favorite ? 1 : 0,
+				favorite: cipher.org_id ? cipher.favorite : body.favorite ? 1 : 0,
 				reprompt: body.reprompt ?? 0,
 				key: body.key ?? null,
 				data: buildCipherData(body),
@@ -230,6 +240,19 @@ export const updateCipher = factory.createHandlers(
 			.where("id", "=", cipher.id)
 			.where("mutation_token", "=", mutationToken);
 		const followupQueries: CompiledQuery[] = [
+			...(cipher.org_id
+				? [
+						organizationCipherViewStateQuery(db, {
+							cipherId: cipher.id,
+							userId: user.id,
+							folderId: body.folderId ?? null,
+							favorite: body.favorite ? 1 : 0,
+							archivedAt: cipher.archived_at,
+							updatedAt: ts,
+							committedMutationToken: mutationToken,
+						}),
+					]
+				: []),
 			db
 				.deleteFrom("cipher_collections")
 				.where("cipher_id", "=", cipher.id)
@@ -260,7 +283,7 @@ export const updateCipher = factory.createHandlers(
 				409,
 			);
 		}
-		const updated = await ciphersDb.getCipherById(db, cipher.id);
+		const updated = await ciphersDb.getCipherById(db, cipher.id, user.id);
 		if (!updated) {
 			console.error(
 				JSON.stringify({
@@ -407,7 +430,7 @@ export const restoreCipher = factory.createHandlers(async (c) => {
 	]);
 	if (restored.numAffectedRows !== 1n)
 		return errorResponse("Cipher changed during restore", 409);
-	const cipher = await ciphersDb.getCipherById(db, id);
+	const cipher = await ciphersDb.getCipherById(db, id, c.get("user").id);
 	if (!cipher) return errorResponse("Cipher changed after restore", 409);
 	return c.json(
 		cipherToResponse(
@@ -430,21 +453,38 @@ export const archiveCipher = factory.createHandlers(async (c) => {
 			db
 				.updateTable("ciphers")
 				.set({
-					archived_at: now(),
+					archived_at: cipher.org_id ? null : now(),
 					updated_at: ts,
 					mutation_token: mutationToken,
 				})
 				.where("id", "=", cipher.id)
 				.where("deleted_at", "is", null)
-				.where("archived_at", "is", null)
+				.$if(!cipher.org_id, (query) => query.where("archived_at", "is", null))
 				.where(sql<boolean>`mutation_token IS ${cipher.mutation_token}`)
 				.compile(),
+			...(cipher.org_id
+				? [
+						organizationCipherViewStateQuery(db, {
+							cipherId: cipher.id,
+							userId: c.get("user").id,
+							folderId: cipher.folder_id,
+							favorite: cipher.favorite,
+							archivedAt: ts,
+							updatedAt: ts,
+							committedMutationToken: mutationToken,
+						}),
+					]
+				: []),
 			conditionalCipherRevisionQuery(db, cipher.id, mutationToken, ts),
 		]);
 		if (archived.numAffectedRows !== 1n)
 			return errorResponse("Cipher changed during archive", 409);
 	}
-	const updated = await ciphersDb.getCipherById(db, cipher.id);
+	const updated = await ciphersDb.getCipherById(
+		db,
+		cipher.id,
+		c.get("user").id,
+	);
 	if (!updated) return errorResponse("Cipher changed after archive", 409);
 	return c.json(
 		cipherToResponse(
@@ -473,15 +513,34 @@ export const unarchiveCipher = factory.createHandlers(async (c) => {
 				})
 				.where("id", "=", cipher.id)
 				.where("deleted_at", "is", null)
-				.where("archived_at", "is not", null)
+				.$if(!cipher.org_id, (query) =>
+					query.where("archived_at", "is not", null),
+				)
 				.where(sql<boolean>`mutation_token IS ${cipher.mutation_token}`)
 				.compile(),
+			...(cipher.org_id
+				? [
+						organizationCipherViewStateQuery(db, {
+							cipherId: cipher.id,
+							userId: c.get("user").id,
+							folderId: cipher.folder_id,
+							favorite: cipher.favorite,
+							archivedAt: null,
+							updatedAt: ts,
+							committedMutationToken: mutationToken,
+						}),
+					]
+				: []),
 			conditionalCipherRevisionQuery(db, cipher.id, mutationToken, ts),
 		]);
 		if (unarchived.numAffectedRows !== 1n)
 			return errorResponse("Cipher changed during unarchive", 409);
 	}
-	const updated = await ciphersDb.getCipherById(db, cipher.id);
+	const updated = await ciphersDb.getCipherById(
+		db,
+		cipher.id,
+		c.get("user").id,
+	);
 	if (!updated) return errorResponse("Cipher changed after unarchive", 409);
 	return c.json(
 		cipherToResponse(

@@ -37,9 +37,11 @@ export async function deleteAccountData(
 			.where(({ not, exists, selectFrom }) =>
 				not(
 					exists(
-						selectFrom("organizations")
+						selectFrom("org_members")
 							.select("id")
-							.where("owner_id", "=", userId),
+							.where("user_id", "=", userId)
+							.where("role", "=", "owner")
+							.where("status", "=", "confirmed"),
 					),
 				),
 			)

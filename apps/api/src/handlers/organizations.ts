@@ -79,7 +79,6 @@ export const createOrganization = factory.createHandlers(
 				.values({
 					id: orgId,
 					name: body.name,
-					owner_id: user.id,
 					public_key: body.publicKey ?? null,
 					private_key: body.encryptedPrivateKey ?? null,
 					created_at: ts,

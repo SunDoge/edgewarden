@@ -5,330 +5,345 @@
 
 import type { ColumnType } from "kysely";
 
-export type Generated<T> =
-	T extends ColumnType<infer S, infer I, infer U>
-		? ColumnType<S, I | undefined, U>
-		: ColumnType<T, T | undefined, T>;
+export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
+  ? ColumnType<S, I | undefined, U>
+  : ColumnType<T, T | undefined, T>;
 
 export interface AttachmentDownloadTokens {
-	expires_at: number;
-	jti: string;
+  expires_at: number;
+  jti: string;
 }
 
 export interface Attachments {
-	cipher_id: string;
-	created_at: number;
-	deleted_at: number | null;
-	deletion_token: string | null;
-	file_name: string;
-	id: string;
-	key: string | null;
-	size: number;
-	size_name: string;
-	storage_key: string | null;
+  cipher_id: string;
+  created_at: number;
+  deleted_at: number | null;
+  deletion_token: string | null;
+  file_name: string;
+  id: string;
+  key: string | null;
+  size: number;
+  size_name: string;
+  storage_key: string | null;
 }
 
 export interface AuditLogs {
-	action: string;
-	actor_user_id: string | null;
-	category: Generated<string>;
-	created_at: number;
-	id: string;
-	is_tombstone: Generated<number>;
-	level: Generated<string>;
-	metadata: string | null;
-	target_id: string | null;
-	target_type: string | null;
+  action: string;
+  actor_user_id: string | null;
+  category: Generated<string>;
+  created_at: number;
+  id: string;
+  is_tombstone: Generated<number>;
+  level: Generated<string>;
+  metadata: string | null;
+  target_id: string | null;
+  target_type: string | null;
 }
 
 export interface AuthRequests {
-	access_code_encrypted: string;
-	access_code_hash: string;
-	approved: number | null;
-	authentication_date: number | null;
-	consumption_token: string | null;
-	creation_date: number;
-	id: string;
-	key: string | null;
-	master_password_hash: string | null;
-	organization_id: string | null;
-	public_key: string;
-	request_country_name: string | null;
-	request_device_identifier: string;
-	request_device_type: number;
-	request_ip_address: string | null;
-	response_date: number | null;
-	response_device_identifier: string | null;
-	type: number;
-	user_id: string;
+  access_code_encrypted: string;
+  access_code_hash: string;
+  approved: number | null;
+  authentication_date: number | null;
+  consumption_token: string | null;
+  creation_date: number;
+  id: string;
+  key: string | null;
+  master_password_hash: string | null;
+  organization_id: string | null;
+  public_key: string;
+  request_country_name: string | null;
+  request_device_identifier: string;
+  request_device_type: number;
+  request_ip_address: string | null;
+  response_date: number | null;
+  response_device_identifier: string | null;
+  type: number;
+  user_id: string;
 }
 
 export interface BlobGcQueue {
-	attempts: Generated<number>;
-	created_at: number;
-	last_error: string | null;
-	next_attempt_at: number;
-	object_key: string;
+  attempts: Generated<number>;
+  created_at: number;
+  last_error: string | null;
+  next_attempt_at: number;
+  object_key: string;
 }
 
 export interface CipherCollections {
-	cipher_id: string;
-	collection_id: string;
+  cipher_id: string;
+  collection_id: string;
 }
 
 export interface Ciphers {
-	archived_at: number | null;
-	created_at: number;
-	data: string;
-	deleted_at: number | null;
-	favorite: Generated<number>;
-	fields: string | null;
-	folder_id: string | null;
-	id: string;
-	key: string | null;
-	mutation_token: string | null;
-	name: string;
-	notes: string | null;
-	org_id: string | null;
-	password_history: string | null;
-	purge_after: number | null;
-	purge_token: string | null;
-	reprompt: Generated<number>;
-	type: number;
-	updated_at: number;
-	user_id: string | null;
+  archived_at: number | null;
+  created_at: number;
+  data: string;
+  deleted_at: number | null;
+  favorite: Generated<number>;
+  fields: string | null;
+  folder_id: string | null;
+  id: string;
+  key: string | null;
+  mutation_token: string | null;
+  name: string;
+  notes: string | null;
+  org_id: string | null;
+  password_history: string | null;
+  purge_after: number | null;
+  purge_token: string | null;
+  reprompt: Generated<number>;
+  type: number;
+  updated_at: number;
+  user_id: string | null;
+}
+
+export interface CipherUserSettings {
+  archived_at: number | null;
+  cipher_id: string;
+  favorite: Generated<number>;
+  folder_id: string | null;
+  updated_at: number;
+  user_id: string;
 }
 
 export interface CollectionMembers {
-	collection_id: string;
-	hide_passwords: Generated<number>;
-	org_member_id: string;
-	read_only: Generated<number>;
+  collection_id: string;
+  hide_passwords: Generated<number>;
+  manage: Generated<number>;
+  org_member_id: string;
+  read_only: Generated<number>;
 }
 
 export interface Collections {
-	created_at: number;
-	id: string;
-	mutation_token: string | null;
-	name: string;
-	org_id: string;
-	updated_at: number;
+  created_at: number;
+  id: string;
+  mutation_token: string | null;
+  name: string;
+  org_id: string;
+  updated_at: number;
 }
 
 export interface Config {
-	key: string;
-	value: string;
+  key: string;
+  value: string;
 }
 
 export interface Devices {
-	banned: Generated<number>;
-	banned_at: number | null;
-	created_at: number;
-	device_identifier: string;
-	device_note: string | null;
-	encrypted_private_key: string | null;
-	encrypted_public_key: string | null;
-	encrypted_user_key: string | null;
-	last_seen_at: number | null;
-	mutation_token: string | null;
-	name: string;
-	push_token: string | null;
-	push_uuid: string | null;
-	session_stamp: string | null;
-	type: number;
-	updated_at: number;
-	user_id: string;
+  banned: Generated<number>;
+  banned_at: number | null;
+  created_at: number;
+  device_identifier: string;
+  device_note: string | null;
+  encrypted_private_key: string | null;
+  encrypted_public_key: string | null;
+  encrypted_user_key: string | null;
+  last_seen_at: number | null;
+  mutation_token: string | null;
+  name: string;
+  push_token: string | null;
+  push_uuid: string | null;
+  session_stamp: string | null;
+  type: number;
+  updated_at: number;
+  user_id: string;
 }
 
 export interface DeviceTrustTokens {
-	device_identifier: string;
-	expires_at: number;
-	token: string;
-	user_id: string;
+  device_identifier: string;
+  expires_at: number;
+  token: string;
+  user_id: string;
 }
 
 export interface DomainSettings {
-	custom_equivalent_domains: Generated<string>;
-	equivalent_domains: Generated<string>;
-	excluded_global_equivalent_domains: Generated<string>;
-	updated_at: number;
-	user_id: string;
+  custom_equivalent_domains: Generated<string>;
+  equivalent_domains: Generated<string>;
+  excluded_global_equivalent_domains: Generated<string>;
+  updated_at: number;
+  user_id: string;
 }
 
 export interface Folders {
-	created_at: number;
-	id: string;
-	mutation_token: string | null;
-	name: string;
-	updated_at: number;
-	user_id: string;
+  created_at: number;
+  id: string;
+  mutation_token: string | null;
+  name: string;
+  updated_at: number;
+  user_id: string;
 }
 
 export interface Invites {
-	code: string;
-	code_encrypted: string;
-	created_at: number;
-	created_by: string;
-	email: string;
-	expires_at: number;
-	status: string;
-	updated_at: number;
-	used_by: string | null;
+  code: string;
+  code_encrypted: string;
+  created_at: number;
+  created_by: string;
+  email: string;
+  expires_at: number;
+  status: string;
+  updated_at: number;
+  used_by: string | null;
 }
 
 export interface LoginAttempts {
-	failure_count: Generated<number>;
-	identifier_hash: string;
-	locked_until: number | null;
-	updated_at: number;
-	window_started_at: number;
+  failure_count: Generated<number>;
+  identifier_hash: string;
+  locked_until: number | null;
+  updated_at: number;
+  window_started_at: number;
 }
 
 export interface Organizations {
-	created_at: number;
-	deletion_requested_at: number | null;
-	deletion_token: string | null;
-	id: string;
-	name: string;
-	owner_id: string;
-	private_key: string | null;
-	public_key: string | null;
-	updated_at: number;
+  created_at: number;
+  deletion_requested_at: number | null;
+  deletion_token: string | null;
+  id: string;
+  name: string;
+  private_key: string | null;
+  public_key: string | null;
+  updated_at: number;
 }
 
 export interface OrgMembers {
-	access_all: Generated<number>;
-	created_at: number;
-	email: string;
-	id: string;
-	key: string | null;
-	mutation_token: string | null;
-	org_id: string;
-	role: Generated<string>;
-	status: Generated<string>;
-	updated_at: number;
-	user_id: string | null;
+  access_all: Generated<number>;
+  created_at: number;
+  email: string;
+  id: string;
+  key: string | null;
+  mutation_token: string | null;
+  org_id: string;
+  role: Generated<string>;
+  status: Generated<string>;
+  updated_at: number;
+  user_id: string | null;
 }
 
 export interface RefreshTokens {
-	device_identifier: string | null;
-	device_session_stamp: string | null;
-	expires_at: number;
-	token: string;
-	user_id: string;
+  device_identifier: string | null;
+  device_session_stamp: string | null;
+  expires_at: number;
+  token: string;
+  user_id: string;
 }
 
 export interface Sends {
-	access_count: Generated<number>;
-	auth_type: Generated<number>;
-	created_at: number;
-	data: string;
-	deletion_date: number;
-	disabled: Generated<number>;
-	emails: string | null;
-	expiration_date: number | null;
-	hide_email: number | null;
-	id: string;
-	key: string;
-	max_access_count: number | null;
-	name: string;
-	notes: string | null;
-	org_id: string | null;
-	password_algorithm: string | null;
-	password_hash: string | null;
-	password_iterations: number | null;
-	password_salt: string | null;
-	purge_token: string | null;
-	storage_key: string | null;
-	type: number;
-	updated_at: number;
-	user_id: string | null;
+  access_count: Generated<number>;
+  auth_type: Generated<number>;
+  created_at: number;
+  data: string;
+  deletion_date: number;
+  disabled: Generated<number>;
+  emails: string | null;
+  expiration_date: number | null;
+  hide_email: number | null;
+  id: string;
+  key: string;
+  max_access_count: number | null;
+  name: string;
+  notes: string | null;
+  org_id: string | null;
+  password_algorithm: string | null;
+  password_hash: string | null;
+  password_iterations: number | null;
+  password_salt: string | null;
+  purge_token: string | null;
+  storage_key: string | null;
+  type: number;
+  updated_at: number;
+  user_id: string | null;
 }
 
 export interface UserRevisions {
-	revision_date: number;
-	user_id: string;
+  revision_date: number;
+  user_id: string;
 }
 
 export interface Users {
-	api_key_encrypted: string | null;
-	api_key_hash: string | null;
-	created_at: number;
-	deletion_requested_at: number | null;
-	email: string;
-	id: string;
-	kdf_iterations: number;
-	kdf_memory: number | null;
-	kdf_parallelism: number | null;
-	kdf_type: number;
-	key: string;
-	master_password_hash: string;
-	master_password_hint: string | null;
-	name: string | null;
-	private_key: string | null;
-	public_key: string | null;
-	role: Generated<string>;
-	security_stamp: string;
-	status: Generated<string>;
-	totp_recovery_code: string | null;
-	totp_secret: string | null;
-	updated_at: number;
-	verify_devices: Generated<number>;
-	yubikey_config: Generated<string>;
+  api_key_encrypted: string | null;
+  api_key_hash: string | null;
+  created_at: number;
+  deletion_requested_at: number | null;
+  email: string;
+  id: string;
+  kdf_iterations: number;
+  kdf_memory: number | null;
+  kdf_parallelism: number | null;
+  kdf_type: number;
+  key: string;
+  master_password_hash: string;
+  master_password_hint: string | null;
+  master_password_salt: string | null;
+  name: string | null;
+  private_key: string | null;
+  public_key: string | null;
+  role: Generated<string>;
+  security_stamp: string;
+  security_state: string | null;
+  security_version: number | null;
+  signed_public_key: string | null;
+  status: Generated<string>;
+  totp_recovery_code: string | null;
+  totp_secret: string | null;
+  updated_at: number;
+  user_key_id: string | null;
+  v2_upgrade_token: string | null;
+  verify_devices: Generated<number>;
+  yubikey_config: Generated<string>;
 }
 
 export interface WebauthnChallenges {
-	challenge_hash: string;
-	created_at: number;
-	expires_at: number;
-	scope: string;
-	used_at: number | null;
-	user_id: string | null;
+  challenge_hash: string;
+  created_at: number;
+  expires_at: number;
+  scope: string;
+  used_at: number | null;
+  user_id: string | null;
 }
 
 export interface WebauthnCredentials {
-	aa_guid: string | null;
-	counter: Generated<number>;
-	created_at: number;
-	credential_id: string;
-	encrypted_private_key: string | null;
-	encrypted_public_key: string | null;
-	encrypted_user_key: string | null;
-	id: string;
-	mutation_token: string | null;
-	name: string;
-	public_key: string;
-	purpose: Generated<string>;
-	supports_prf: Generated<number>;
-	transports: string | null;
-	type: string | null;
-	updated_at: number;
-	user_id: string;
+  aa_guid: string | null;
+  counter: Generated<number>;
+  created_at: number;
+  credential_id: string;
+  encrypted_private_key: string | null;
+  encrypted_public_key: string | null;
+  encrypted_user_key: string | null;
+  id: string;
+  mutation_token: string | null;
+  name: string;
+  public_key: string;
+  purpose: Generated<string>;
+  supports_prf: Generated<number>;
+  transports: string | null;
+  type: string | null;
+  updated_at: number;
+  user_id: string;
 }
 
 export interface DB {
-	attachment_download_tokens: AttachmentDownloadTokens;
-	attachments: Attachments;
-	audit_logs: AuditLogs;
-	auth_requests: AuthRequests;
-	blob_gc_queue: BlobGcQueue;
-	cipher_collections: CipherCollections;
-	ciphers: Ciphers;
-	collection_members: CollectionMembers;
-	collections: Collections;
-	config: Config;
-	device_trust_tokens: DeviceTrustTokens;
-	devices: Devices;
-	domain_settings: DomainSettings;
-	folders: Folders;
-	invites: Invites;
-	login_attempts: LoginAttempts;
-	org_members: OrgMembers;
-	organizations: Organizations;
-	refresh_tokens: RefreshTokens;
-	sends: Sends;
-	user_revisions: UserRevisions;
-	users: Users;
-	webauthn_challenges: WebauthnChallenges;
-	webauthn_credentials: WebauthnCredentials;
+  attachment_download_tokens: AttachmentDownloadTokens;
+  attachments: Attachments;
+  audit_logs: AuditLogs;
+  auth_requests: AuthRequests;
+  blob_gc_queue: BlobGcQueue;
+  cipher_collections: CipherCollections;
+  cipher_user_settings: CipherUserSettings;
+  ciphers: Ciphers;
+  collection_members: CollectionMembers;
+  collections: Collections;
+  config: Config;
+  device_trust_tokens: DeviceTrustTokens;
+  devices: Devices;
+  domain_settings: DomainSettings;
+  folders: Folders;
+  invites: Invites;
+  login_attempts: LoginAttempts;
+  org_members: OrgMembers;
+  organizations: Organizations;
+  refresh_tokens: RefreshTokens;
+  sends: Sends;
+  user_revisions: UserRevisions;
+  users: Users;
+  webauthn_challenges: WebauthnChallenges;
+  webauthn_credentials: WebauthnCredentials;
 }

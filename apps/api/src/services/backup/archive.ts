@@ -82,6 +82,7 @@ export interface BackupPayload {
 		collection_members?: SqlRow[];
 		folders: SqlRow[];
 		ciphers: SqlRow[];
+		cipher_user_settings?: SqlRow[];
 		cipher_collections?: SqlRow[];
 		attachments: SqlRow[];
 		webauthn_credentials?: SqlRow[];
@@ -102,6 +103,7 @@ const BACKUP_DB_TABLES = [
 	"collection_members",
 	"folders",
 	"ciphers",
+	"cipher_user_settings",
 	"cipher_collections",
 	"attachments",
 	"webauthn_credentials",
@@ -422,6 +424,7 @@ export async function buildBackupArchive(
 		collectionMemberRows,
 		folderRows,
 		cipherRows,
+		cipherUserSettingRows,
 		cipherCollectionRows,
 		attachmentRows,
 		webauthnRows,
@@ -542,6 +545,7 @@ export async function buildBackupArchive(
 			collection_members: collectionMemberRows.length,
 			folders: exportedFolderRows.length,
 			ciphers: exportedCipherRows.length,
+			cipher_user_settings: cipherUserSettingRows.length,
 			cipher_collections: cipherCollectionRows.length,
 			attachments: exportedAttachmentRows.length,
 			webauthn_credentials: exportedWebauthnRows.length,
@@ -584,6 +588,7 @@ export async function buildBackupArchive(
 					collection_members: collectionMemberRows,
 					folders: exportedFolderRows,
 					ciphers: exportedCipherRows,
+					cipher_user_settings: cipherUserSettingRows,
 					cipher_collections: cipherCollectionRows,
 					attachments: exportedAttachmentRows,
 					webauthn_credentials: exportedWebauthnRows,

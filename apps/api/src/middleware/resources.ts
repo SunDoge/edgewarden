@@ -45,7 +45,11 @@ export const requireAuthRequest = createMiddleware<HonoEnv>(async (c, next) => {
 export const requireCipher = createMiddleware<HonoEnv>(async (c, next) => {
 	const id = c.req.param("id");
 	if (!id) return errorResponse("Not found", 404);
-	const cipher = await ciphersDb.getCipherById(c.get("db"), id);
+	const cipher = await ciphersDb.getCipherById(
+		c.get("db"),
+		id,
+		c.get("user").id,
+	);
 	if (!cipher) {
 		return errorResponse("Not found", 404);
 	}

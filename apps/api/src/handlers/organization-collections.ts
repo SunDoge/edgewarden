@@ -24,6 +24,7 @@ function collectionResponse(
 	},
 	readOnly = false,
 	hidePasswords = false,
+	manage = false,
 ) {
 	return {
 		id: collection.id,
@@ -31,6 +32,7 @@ function collectionResponse(
 		name: collection.name,
 		readOnly,
 		hidePasswords,
+		manage,
 		creationDate: toIso(collection.created_at),
 		revisionDate: toIso(collection.updated_at),
 		object: "collectionDetails",
@@ -55,6 +57,7 @@ export const listCollections = factory.createHandlers(async (c) => {
 			"collection.updated_at",
 			"access.read_only",
 			"access.hide_passwords",
+			"access.manage",
 		])
 		.where("collection.org_id", "=", member.org_id);
 	if (!member.access_all)
@@ -66,6 +69,7 @@ export const listCollections = factory.createHandlers(async (c) => {
 				row,
 				Boolean(row.read_only),
 				Boolean(row.hide_passwords),
+				Boolean(row.manage),
 			),
 		),
 		object: "list",
@@ -95,6 +99,7 @@ export const listUserCollections = factory.createHandlers(async (c) => {
 			"collection.updated_at",
 			"access.read_only",
 			"access.hide_passwords",
+			"access.manage",
 		])
 		.where("member.user_id", "=", c.get("user").id)
 		.where("member.status", "=", "confirmed")
@@ -111,6 +116,7 @@ export const listUserCollections = factory.createHandlers(async (c) => {
 				row,
 				Boolean(row.read_only),
 				Boolean(row.hide_passwords),
+				Boolean(row.manage),
 			),
 		),
 		object: "list",

@@ -11,6 +11,7 @@ export interface BackupDatabaseSnapshot {
 	collectionMemberRows: BackupSnapshotRow[];
 	folderRows: BackupSnapshotRow[];
 	cipherRows: BackupSnapshotRow[];
+	cipherUserSettingRows: BackupSnapshotRow[];
 	cipherCollectionRows: BackupSnapshotRow[];
 	attachmentRows: BackupSnapshotRow[];
 	webauthnRows: BackupSnapshotRow[];
@@ -42,6 +43,9 @@ export async function readBackupDatabaseSnapshot(
 		db.prepare("SELECT * FROM collection_members ORDER BY collection_id ASC"),
 		db.prepare("SELECT * FROM folders ORDER BY created_at ASC"),
 		db.prepare("SELECT * FROM ciphers ORDER BY created_at ASC"),
+		db.prepare(
+			"SELECT * FROM cipher_user_settings ORDER BY cipher_id ASC, user_id ASC",
+		),
 		db.prepare("SELECT * FROM cipher_collections ORDER BY cipher_id ASC"),
 		db.prepare("SELECT * FROM attachments ORDER BY id ASC"),
 		db.prepare("SELECT * FROM webauthn_credentials ORDER BY created_at ASC"),
@@ -60,10 +64,11 @@ export async function readBackupDatabaseSnapshot(
 		collectionMemberRows: rows(results[7]),
 		folderRows: rows(results[8]),
 		cipherRows: rows(results[9]),
-		cipherCollectionRows: rows(results[10]),
-		attachmentRows: rows(results[11]),
-		webauthnRows: rows(results[12]),
-		auditRows: rows(results[13]),
-		sendsRows: rows(results[14]),
+		cipherUserSettingRows: rows(results[10]),
+		cipherCollectionRows: rows(results[11]),
+		attachmentRows: rows(results[12]),
+		webauthnRows: rows(results[13]),
+		auditRows: rows(results[14]),
+		sendsRows: rows(results[15]),
 	};
 }
