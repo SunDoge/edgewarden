@@ -89,5 +89,6 @@ disabled when Turnstile is enabled; `.env.local` is ignored by Git.
 The release number is shared by the API, Web Vault, and backup manifests through `packages/shared/version.ts`. Bitwarden's advertised compatibility version is deliberately separate because official clients use it for capability negotiation.
 
 - [Client compatibility and test matrix](docs/compatibility.md)
+- [Supported product scope](docs/support-scope.md)
 - [Upgrade, restore, and troubleshooting guide](docs/operations.md)
 - [Security boundaries](docs/security.md)
