@@ -1,6 +1,7 @@
 {
 	"name": "edgewarden",
 	"version": "1.0.0",
+	"packageManager": "pnpm@11.21.0",
 	"private": true,
 	"description": "A Bitwarden-compatible password manager for Cloudflare Workers",
 	"scripts": {
@@ -18,6 +19,7 @@
 		"domains:sync": "node scripts/sync-bitwarden-domains.ts",
 		"check": "pnpm --parallel --filter './apps/*' --if-present run check && node scripts/check-cloudflare-config.ts && node scripts/check-migrations.ts",
 		"lint": "biome lint .",
+		"lint:ci": "biome lint . --diagnostic-level=error --max-diagnostics=100",
 		"format": "biome format --write ."
 	},
 	"keywords": [],

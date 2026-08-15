@@ -90,6 +90,7 @@ The release number is shared by the API, Web Vault, and backup manifests through
 
 - [Client compatibility and test matrix](docs/compatibility.md)
 - [Testing guide and reusable helpers](docs/testing.md)
+- [Development branches and CI workflow](docs/development.md)
 - [Supported product scope](docs/support-scope.md)
 - [Upgrade, restore, and troubleshooting guide](docs/operations.md)
 - [Security boundaries](docs/security.md)
