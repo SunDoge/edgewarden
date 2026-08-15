@@ -7,12 +7,10 @@ import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import VaultDetailPanel from "$lib/components/vault/VaultDetailPanel.svelte";
 import VaultDialogs from "$lib/components/vault/VaultDialogs.svelte";
-import VaultFolderSidebar from "$lib/components/vault/VaultFolderSidebar.svelte";
 import VaultHeader from "$lib/components/vault/VaultHeader.svelte";
 import VaultItemList from "$lib/components/vault/VaultItemList.svelte";
-import VaultSidebar from "$lib/components/vault/VaultSidebar.svelte";
+import VaultNavigation from "$lib/components/vault/VaultNavigation.svelte";
 import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-import * as Sheet from "$lib/components/ui/sheet/index.js";
 import { formatTime } from "$lib/i18n/format";
 import { m } from "$lib/paraglide/messages.js";
 import {
@@ -624,53 +622,20 @@ async function toggleFavorite(item: any) {
 	<VaultHeader onOpenNavigation={() => mobileSidebarOpen = true} onLogout={handleLogout} />
 
 	<div class="relative flex flex-1 overflow-hidden">
-		<!-- Sheet provides focus trapping and keyboard dismissal on mobile. -->
-		<Sheet.Root bind:open={mobileSidebarOpen}>
-			<Sheet.Content side="left" class="w-72 gap-0 p-0 md:hidden" showCloseButton={false}>
-				<Sheet.Header class="sr-only"><Sheet.Title>保险库导航</Sheet.Title><Sheet.Description>筛选密码、管理文件夹并打开工具。</Sheet.Description></Sheet.Header>
-				<VaultSidebar
-					bind:activeCategory
-					bind:activeFolder
-					{duplicateCount}
-					onCreate={() => { mobileSidebarOpen = false; startCreate(); }}
-					onCreateFolder={openCreateFolder}
-					onRenameFolder={openRenameFolder}
-					onDeleteFolder={openDeleteFolder}
-					onDeleteAllFolders={() => (deleteAllFoldersDialogOpen = true)}
-					onMergeDuplicateFolders={mergeDuplicateFolders}
-					{duplicateFolderCount}
-					{mergingDuplicateFolders}
-					onNavigate={() => mobileSidebarOpen = false}
-				/>
-			</Sheet.Content>
-		</Sheet.Root>
-
-		<div class="hidden md:flex">
-			<VaultSidebar
-				bind:activeCategory
-				bind:activeFolder
-				{duplicateCount}
-				onCreate={startCreate}
-				onCreateFolder={openCreateFolder}
-				onRenameFolder={openRenameFolder}
-				onDeleteFolder={openDeleteFolder}
-				onDeleteAllFolders={() => (deleteAllFoldersDialogOpen = true)}
-				onMergeDuplicateFolders={mergeDuplicateFolders}
-				{duplicateFolderCount}
-				{mergingDuplicateFolders}
-			/>
-			<VaultFolderSidebar
-				bind:activeCategory
-				bind:activeFolder
-				onCreateFolder={openCreateFolder}
-				onRenameFolder={openRenameFolder}
-				onDeleteFolder={openDeleteFolder}
-				onDeleteAllFolders={() => (deleteAllFoldersDialogOpen = true)}
-				onMergeDuplicateFolders={mergeDuplicateFolders}
-				{duplicateFolderCount}
-				{mergingDuplicateFolders}
-			/>
-		</div>
+		<VaultNavigation
+			bind:mobileOpen={mobileSidebarOpen}
+			bind:activeCategory
+			bind:activeFolder
+			{duplicateCount}
+			{duplicateFolderCount}
+			{mergingDuplicateFolders}
+			onCreate={startCreate}
+			onCreateFolder={openCreateFolder}
+			onRenameFolder={openRenameFolder}
+			onDeleteFolder={openDeleteFolder}
+			onDeleteAllFolders={() => (deleteAllFoldersDialogOpen = true)}
+			onMergeDuplicateFolders={mergeDuplicateFolders}
+		/>
 
 		<div class="flex min-w-0 flex-1 {mobileDetailOpen ? 'hidden md:flex' : 'flex'}">
 		<VaultItemList
