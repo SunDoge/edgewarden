@@ -4,6 +4,7 @@ import adapter from "@sveltejs/adapter-static";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { defineConfig } from "vitest/config";
+import { svelteTesting } from "@testing-library/svelte/vite";
 
 export default defineConfig({
 	plugins: [
@@ -48,6 +49,7 @@ export default defineConfig({
 				fallback: "index.html",
 			}),
 		}),
+		svelteTesting(),
 	],
 	server: {
 		proxy: {
