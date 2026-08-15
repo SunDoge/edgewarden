@@ -4,16 +4,17 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"predev": "pnpm --filter @edgewarden/api run rpc:types",
+		"i18n:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy localStorage preferredLanguage baseLocale --emit-ts-declarations --silent",
+		"predev": "pnpm --filter @edgewarden/api run rpc:types && pnpm run i18n:compile",
 		"dev": "vite dev",
-		"prebuild": "pnpm --filter @edgewarden/api run rpc:types",
+		"prebuild": "pnpm --filter @edgewarden/api run rpc:types && pnpm run i18n:compile",
 		"build": "vite build",
 		"preview": "vite preview",
-		"prepare": "svelte-kit sync || echo ''",
-		"precheck": "pnpm --filter @edgewarden/api run rpc:types",
+		"prepare": "pnpm run i18n:compile && svelte-kit sync",
+		"precheck": "pnpm --filter @edgewarden/api run rpc:types && pnpm run i18n:compile",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"pretest": "pnpm --filter @edgewarden/api run rpc:types",
+		"pretest": "pnpm --filter @edgewarden/api run rpc:types && pnpm run i18n:compile",
 		"test": "vitest run"
 	},
 	"devDependencies": {
