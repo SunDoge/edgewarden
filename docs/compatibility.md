@@ -1,6 +1,6 @@
 # Client compatibility
 
-Edgewarden implements the Bitwarden password-manager protocol; it is not a drop-in implementation of every Bitwarden product. Personal vaults, folders, organizations and collections, attachments, Send, TOTP/Steam Guard, passkeys, YubiKey OTP, login requests, import/export, and instance backup are in scope. Enterprise billing, SCIM, SSO, directory sync, emergency access, and mail delivery are not.
+Edgewarden implements the Bitwarden password-manager protocol; it is not a drop-in implementation of every Bitwarden product. Personal password-manager functionality is the complete compatibility target, while organizations intentionally support basic encrypted sharing rather than enterprise parity. See the [support scope](support-scope.md) for the normative product boundary.
 
 Bitwarden password-protected and unencrypted JSON imports preserve stored website passkeys in `login.fido2Credentials` and encrypt every credential field locally before upload. Password-protected files are decrypted only in browser memory and support both PBKDF2-SHA256 and Argon2id export parameters. Account-restricted exports cannot be moved to another server by design. Passkeys used to sign in to a Bitwarden account are RP-bound account credentials rather than vault items; create new account-login passkeys for the Edgewarden hostname after migration.
 
