@@ -22,17 +22,13 @@ import {
 import { vault, syncVaultData, logout } from "$lib/stores/vault.svelte";
 import { Button } from "$lib/components/ui/button/index.js";
 import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-import AccountPasskeys from "$lib/components/settings/AccountPasskeys.svelte";
 import AccountSecurityDialogs from "$lib/components/settings/AccountSecurityDialogs.svelte";
-import AuthRequestSettings from "$lib/components/settings/AuthRequestSettings.svelte";
 import DeviceManager from "$lib/components/settings/DeviceManager.svelte";
-import TwoFactorPasskeys from "$lib/components/settings/TwoFactorPasskeys.svelte";
-import YubikeySettings from "$lib/components/settings/YubikeySettings.svelte";
-import { Input } from "$lib/components/ui/input/index.js";
-import * as Field from "$lib/components/ui/field/index.js";
+import SettingsGeneralPanel from "$lib/components/settings/SettingsGeneralPanel.svelte";
+import SettingsSecurityPanel from "$lib/components/settings/SettingsSecurityPanel.svelte";
+import * as Alert from "$lib/components/ui/alert/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
-import * as Select from "$lib/components/ui/select/index.js";
-import { Badge } from "$lib/components/ui/badge/index.js";
+import * as Tabs from "$lib/components/ui/tabs/index.js";
 import {
 	applyThemePreference,
 	loadClientPreferences,
@@ -40,14 +36,7 @@ import {
 	type SessionTimeoutAction,
 	type ThemePreference,
 } from "$lib/services/client-preferences";
-import {
-	ArrowLeft,
-	Copy,
-	KeyRound,
-	LoaderCircle,
-	RefreshCw,
-	ShieldCheck,
-} from "@lucide/svelte";
+import { ArrowLeft, LoaderCircle } from "@lucide/svelte";
 
 let loading = $state(true);
 let busy = $state("");
@@ -287,101 +276,19 @@ async function changeMasterPassword() {
 		<div><h1 class="text-2xl font-semibold">账户与安全</h1><p class="text-sm text-muted-foreground">管理资料、API Key、两步验证和登录设备。</p></div>
 	</header>
 
-	{#if error}<div class="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>{/if}
-	{#if message}<div class="rounded-md border border-border bg-muted p-3 text-sm">{message}</div>{/if}
+	{#if error}<Alert.Root variant="destructive"><Alert.Title>操作失败</Alert.Title><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
+	{#if message}<Alert.Root><Alert.Title>设置已更新</Alert.Title><Alert.Description>{message}</Alert.Description></Alert.Root>{/if}
 
 	{#if loading}
 		<div class="flex items-center gap-2 py-12 text-muted-foreground"><LoaderCircle class="animate-spin" />正在加载账户设置…</div>
 	{:else if profile}
-		<Card.Root>
-			<Card.Header><Card.Title>外观与会话</Card.Title><Card.Description>偏好仅保存在此浏览器，不包含密码或保险库密钥。</Card.Description></Card.Header>
-			<Card.Content>
-				<Field.Group>
-					<Field.Field><Field.Label>主题</Field.Label><Select.Root type="single" bind:value={theme}><Select.Trigger>{theme === "system" ? "跟随系统" : theme === "light" ? "浅色" : "深色"}</Select.Trigger><Select.Content><Select.Group><Select.Item value="system">跟随系统</Select.Item><Select.Item value="light">浅色</Select.Item><Select.Item value="dark">深色</Select.Item></Select.Group></Select.Content></Select.Root></Field.Field>
-					<Field.Field><Field.Label>无操作后</Field.Label><Select.Root type="single" bind:value={lockTimeoutMinutes}><Select.Trigger>{lockTimeoutMinutes === "0" ? "永不" : `${lockTimeoutMinutes} 分钟`}</Select.Trigger><Select.Content><Select.Group><Select.Item value="1">1 分钟</Select.Item><Select.Item value="5">5 分钟</Select.Item><Select.Item value="15">15 分钟</Select.Item><Select.Item value="30">30 分钟</Select.Item><Select.Item value="0">永不</Select.Item></Select.Group></Select.Content></Select.Root></Field.Field>
-					<Field.Field><Field.Label>超时操作</Field.Label><Select.Root type="single" bind:value={sessionTimeoutAction}><Select.Trigger>{sessionTimeoutAction === "lock" ? "锁定保险库" : "退出登录"}</Select.Trigger><Select.Content><Select.Group><Select.Item value="lock">锁定保险库</Select.Item><Select.Item value="logout">退出登录并清除离线缓存</Select.Item></Select.Group></Select.Content></Select.Root><Field.Description>“锁定”保留加密离线缓存；“退出”会同时清除缓存和令牌。</Field.Description></Field.Field>
-					<Field.Field orientation="horizontal"><Button onclick={saveLocalPreferences}>保存偏好</Button></Field.Field>
-				</Field.Group>
-			</Card.Content>
-		</Card.Root>
-
-		<Card.Root>
-			<Card.Header><Card.Title>个人资料</Card.Title><Card.Description>{profile.email}</Card.Description></Card.Header>
-			<Card.Content>
-				<form onsubmit={(event) => { event.preventDefault(); void saveProfile(); }}>
-					<Field.Group>
-						<Field.Field><Field.Label for="name">显示名称</Field.Label><Input id="name" bind:value={name} autocomplete="name" /></Field.Field>
-						<Field.Field><Field.Label for="hint">主密码提示</Field.Label><Input id="hint" bind:value={hint} /><Field.Description>提示不会通过此页面直接显示给未登录用户。</Field.Description></Field.Field>
-						<Field.Field orientation="horizontal"><Button type="submit" disabled={busy === "profile"}>{busy === "profile" ? "保存中…" : "保存资料"}</Button></Field.Field>
-					</Field.Group>
-				</form>
-			</Card.Content>
-		</Card.Root>
-
-		<Card.Root>
-			<Card.Header><Card.Title>API Key</Card.Title><Card.Description>用于受信任的客户端集成，请勿公开。</Card.Description></Card.Header>
-			<Card.Content class="flex flex-col gap-3">
-				{#if apiKey}<div class="flex gap-2"><Input value={apiKey} readonly class="font-mono" /><Button variant="outline" size="icon" onclick={() => copy(apiKey)} aria-label="复制 API Key"><Copy data-icon /></Button></div>{/if}
-				<div class="flex gap-2"><Button variant="outline" onclick={revealApiKey} disabled={busy === "api-key"}><KeyRound data-icon="inline-start" />{apiKey ? "重新读取" : "显示 API Key"}</Button><Button variant="outline" onclick={() => rotateApiKeyOpen = true} disabled={busy === "api-key"}><RefreshCw data-icon="inline-start" />轮换</Button></div>
-			</Card.Content>
-		</Card.Root>
-
-		<Card.Root>
-			<Card.Header><Card.Title>主密码</Card.Title><Card.Description>更改后会重新保护保险库密钥，并退出所有设备。</Card.Description></Card.Header>
-			<Card.Content><Button variant="outline" onclick={() => passwordOpen = true}>更改主密码</Button></Card.Content>
-		</Card.Root>
-
-		<Card.Root>
-			<Card.Header><Card.Title>两步验证</Card.Title><Card.Description>使用兼容 TOTP 的身份验证器保护登录。</Card.Description></Card.Header>
-			<Card.Content class="flex flex-col gap-4">
-				<div class="flex items-center gap-2"><Badge variant={profile.twoFactorEnabled ? "default" : "secondary"}>{profile.twoFactorEnabled ? "已启用" : "未启用"}</Badge></div>
-				{#if recoveryCode}<div class="flex gap-2"><Input value={recoveryCode} readonly class="font-mono" /><Button variant="outline" size="icon" onclick={() => copy(recoveryCode)} aria-label="复制恢复代码"><Copy /></Button></div>{/if}
-				<div class="flex flex-wrap gap-2">
-					{#if profile.twoFactorEnabled}<Button variant="outline" onclick={showRecoveryCode} disabled={busy === "recovery"}>查看恢复代码</Button><Button variant="destructive" onclick={() => disableOpen = true}>关闭两步验证</Button>{:else}<Button onclick={beginTotp} disabled={busy === "totp"}><ShieldCheck />设置身份验证器</Button>{/if}
-				</div>
-			</Card.Content>
-		</Card.Root>
-
-		<TwoFactorPasskeys
-			email={profile.email}
-			kdfIterations={profile.kdfIterations}
-			onMessage={(value) => { message = value; error = ""; }}
-			onError={fail}
-		/>
-
-		<YubikeySettings
-			email={profile.email}
-			kdfIterations={profile.kdfIterations}
-			isAdmin={profile.role === "admin"}
-			onMessage={(value) => { message = value; error = ""; }}
-			onError={fail}
-		/>
-
-		<AccountPasskeys
-			email={profile.email}
-			kdfIterations={profile.kdfIterations}
-			onMessage={(value) => { message = value; error = ""; }}
-			onError={fail}
-		/>
-
-		<AuthRequestSettings
-			email={profile.email}
-			onMessage={(value) => { message = value; error = ""; }}
-			onError={fail}
-		/>
-
-		<DeviceManager
-			bind:devices
-			{passwordHash}
-			onMessage={(value) => { message = value; error = ""; }}
-			onError={fail}
-			onSessionRevoked={async (reason) => { await logout(); await goto(`/login?reason=${reason}`); }}
-		/>
-
-		<Card.Root class="border-destructive/40">
-			<Card.Header><Card.Title>删除账户</Card.Title><Card.Description>永久删除个人保险库、Sends、设备、通行密钥和账户资料。若你仍拥有组织，必须先删除或转移组织。</Card.Description></Card.Header>
-			<Card.Content><Button variant="destructive" onclick={() => deleteAccountOpen = true}>永久删除账户</Button></Card.Content>
-		</Card.Root>
+		<Tabs.Root value="general" class="flex flex-col gap-6">
+			<Tabs.List class="grid h-auto w-full grid-cols-2 sm:grid-cols-4"><Tabs.Trigger value="general">常规</Tabs.Trigger><Tabs.Trigger value="security">安全</Tabs.Trigger><Tabs.Trigger value="devices">设备</Tabs.Trigger><Tabs.Trigger value="danger">危险区域</Tabs.Trigger></Tabs.List>
+			<Tabs.Content value="general"><SettingsGeneralPanel email={profile.email} bind:theme bind:lockTimeoutMinutes bind:sessionTimeoutAction bind:name bind:hint {apiKey} {busy} onSavePreferences={saveLocalPreferences} onSaveProfile={saveProfile} onCopy={copy} onRevealApiKey={revealApiKey} onRotateApiKey={() => rotateApiKeyOpen = true} /></Tabs.Content>
+			<Tabs.Content value="security"><SettingsSecurityPanel {profile} {recoveryCode} {busy} onCopy={copy} onChangePassword={() => passwordOpen = true} onShowRecoveryCode={showRecoveryCode} onDisableTwoFactor={() => disableOpen = true} onBeginTotp={beginTotp} onMessage={(value) => { message = value; error = ""; }} onError={fail} /></Tabs.Content>
+			<Tabs.Content value="devices"><DeviceManager bind:devices {passwordHash} onMessage={(value) => { message = value; error = ""; }} onError={fail} onSessionRevoked={async (reason) => { await logout(); await goto(`/login?reason=${reason}`); }} /></Tabs.Content>
+			<Tabs.Content value="danger"><Card.Root class="border-destructive/40"><Card.Header><Card.Title>删除账户</Card.Title><Card.Description>永久删除个人保险库、Sends、设备、通行密钥和账户资料。若你仍拥有组织，必须先删除或转移组织。</Card.Description></Card.Header><Card.Content><Button variant="destructive" onclick={() => deleteAccountOpen = true}>永久删除账户</Button></Card.Content></Card.Root></Tabs.Content>
+		</Tabs.Root>
 	{/if}
 </main>
 
