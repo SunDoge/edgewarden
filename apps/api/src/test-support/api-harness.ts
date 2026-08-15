@@ -14,7 +14,51 @@ export interface ApiTestHarness {
 		init?: RequestInit,
 		executionContext?: ExecutionContext,
 	) => Promise<Response>;
+	json: <TBody>(
+		path: string,
+		body: TBody,
+		init?: Omit<RequestInit, "body">,
+	) => Promise<Response>;
+	authenticated: (accessToken: string) => ApiTestClient;
 	dispose: () => Promise<void>;
+}
+
+export interface ApiTestClient {
+	request: (path: string, init?: RequestInit) => Promise<Response>;
+	json: <TBody>(
+		path: string,
+		body: TBody,
+		init?: Omit<RequestInit, "body">,
+	) => Promise<Response>;
+}
+
+/** Parse a response and include its body in the failure, instead of emitting an opaque status mismatch. */
+export async function expectJson<T>(
+	response: Response,
+	expectedStatus = 200,
+): Promise<T> {
+	const text = await response.text();
+	if (response.status !== expectedStatus) {
+		throw new Error(
+			`Expected HTTP ${expectedStatus}, received ${response.status}: ${text || "<empty body>"}`,
+		);
+	}
+	try {
+		return JSON.parse(text) as T;
+	} catch (error) {
+		throw new Error(`Expected a JSON response, received: ${text || "<empty body>"}`, {
+			cause: error,
+		});
+	}
+}
+
+function jsonInit<TBody>(
+	body: TBody,
+	init: Omit<RequestInit, "body"> = {},
+): RequestInit {
+	const headers = new Headers(init.headers);
+	headers.set("content-type", "application/json");
+	return { ...init, method: init.method ?? "POST", headers, body: JSON.stringify(body) };
 }
 
 async function applyMigrations(database: D1Database): Promise<void> {
@@ -123,30 +167,47 @@ export async function createApiTestHarness(secrets: {
 		REALTIME: realtime,
 	} as unknown as CloudflareBindings;
 
+	const request: ApiTestHarness["request"] = async (
+		path,
+		init = {},
+		executionContext,
+	) => {
+		if (executionContext) {
+			return app.request(path, init, bindings, executionContext);
+		}
+		const backgroundTasks: Promise<unknown>[] = [];
+		const testExecutionContext = {
+			waitUntil(task: Promise<unknown>) {
+				backgroundTasks.push(task);
+			},
+			passThroughOnException() {},
+			props: {},
+		} as ExecutionContext;
+		const response = await app.request(path, init, bindings, testExecutionContext);
+		// Awaiting waitUntil work makes background side effects deterministic in tests.
+		await Promise.all(backgroundTasks);
+		return response;
+	};
+	const json: ApiTestHarness["json"] = (path, body, init) =>
+		request(path, jsonInit(body, init));
+
 	return {
 		bindings,
 		database,
 		r2Values,
-		request: async (path, init = {}, executionContext) => {
-			if (executionContext) {
-				return app.request(path, init, bindings, executionContext);
-			}
-			const backgroundTasks: Promise<unknown>[] = [];
-			const testExecutionContext = {
-				waitUntil(task: Promise<unknown>) {
-					backgroundTasks.push(task);
-				},
-				passThroughOnException() {},
-				props: {},
-			} as ExecutionContext;
-			const response = await app.request(
-				path,
-				init,
-				bindings,
-				testExecutionContext,
-			);
-			await Promise.all(backgroundTasks);
-			return response;
+		request,
+		json,
+		authenticated: (accessToken) => {
+			const withAuthorization = (init: RequestInit = {}): RequestInit => {
+				const headers = new Headers(init.headers);
+				headers.set("authorization", `Bearer ${accessToken}`);
+				return { ...init, headers };
+			};
+			return {
+				request: (path, init) => request(path, withAuthorization(init)),
+				json: (path, body, init) =>
+					request(path, withAuthorization(jsonInit(body, init))),
+			};
 		},
 		dispose: () => miniflare.dispose(),
 	};
