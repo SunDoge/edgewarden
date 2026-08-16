@@ -1,4 +1,5 @@
 import { CipherType } from "@edgewarden/shared";
+import Papa from "papaparse";
 import type { TransferDocument } from "./vault-transfer";
 
 const TYPE_KEYS: Record<number, string> = {
@@ -13,35 +14,20 @@ const TYPE_KEYS: Record<number, string> = {
 };
 
 function parseCsvRows(text: string): string[][] {
-	const rows: string[][] = [];
-	let row: string[] = [];
-	let field = "";
-	let quoted = false;
-	for (let index = 0; index < text.length; index++) {
-		const char = text[index];
-		if (quoted) {
-			if (char === '"' && text[index + 1] === '"') {
-				field += '"';
-				index++;
-			} else if (char === '"') quoted = false;
-			else field += char;
-		} else if (char === '"') quoted = true;
-		else if (char === ",") {
-			row.push(field);
-			field = "";
-		} else if (char === "\n") {
-			row.push(field.replace(/\r$/, ""));
-			rows.push(row);
-			row = [];
-			field = "";
-		} else field += char;
+	const result = Papa.parse<string[]>(text.replace(/^\uFEFF/, ""), {
+		delimiter: ",",
+		dynamicTyping: false,
+		skipEmptyLines: "greedy",
+	});
+	const fatal = result.errors.find(
+		(error) => error.code !== "TooFewFields" && error.code !== "TooManyFields",
+	);
+	if (fatal) {
+		const location =
+			fatal.row === undefined ? "" : `（第 ${fatal.row + 1} 行）`;
+		throw new Error(`CSV 格式错误${location}：${fatal.message}`);
 	}
-	if (quoted) throw new Error("CSV 引号未闭合");
-	if (field || row.length) {
-		row.push(field.replace(/\r$/, ""));
-		rows.push(row);
-	}
-	return rows.filter((entry) => entry.some((value) => value.trim()));
+	return result.data;
 }
 
 function first(record: Record<string, string>, names: string[]): string {
@@ -50,10 +36,13 @@ function first(record: Record<string, string>, names: string[]): string {
 }
 
 export function parseBitwardenCsv(text: string): TransferDocument {
-	const rows = parseCsvRows(text.replace(/^\uFEFF/, ""));
+	const rows = parseCsvRows(text);
 	if (rows.length < 2) throw new Error("CSV 中没有可导入的数据");
 	const headers = rows[0].map((value) =>
-		value.trim().toLowerCase().replace(/[ _-]+/g, ""),
+		value
+			.trim()
+			.toLowerCase()
+			.replace(/[ _-]+/g, ""),
 	);
 	const folders: Array<{ id: string; name: string }> = [];
 	const folderIds = new Map<string, string>();
@@ -65,7 +54,12 @@ export function parseBitwardenCsv(text: string): TransferDocument {
 		const name =
 			first(record, ["name", "title", "sitename", "account"]).trim() ||
 			`Imported item ${rowIndex + 1}`;
-		const username = first(record, ["loginusername", "username", "user", "email"]);
+		const username = first(record, [
+			"loginusername",
+			"username",
+			"user",
+			"email",
+		]);
 		const password = first(record, ["loginpassword", "password", "pass"]);
 		const uri = first(record, ["loginuri", "url", "website", "hostname"]);
 		const notes = first(record, ["notes", "extra", "comment"]);
@@ -89,7 +83,11 @@ export function parseBitwardenCsv(text: string): TransferDocument {
 			folderId,
 		};
 		if (first(record, ["type"]).trim().toLowerCase() === "note") {
-			return { ...common, type: CipherType.SecureNote, secureNote: { type: 0 } };
+			return {
+				...common,
+				type: CipherType.SecureNote,
+				secureNote: { type: 0 },
+			};
 		}
 		return {
 			...common,
@@ -106,19 +104,25 @@ export function parseBitwardenCsv(text: string): TransferDocument {
 	return { folders, items, warnings };
 }
 
-function csvCell(value: unknown): string {
-	const text = String(value ?? "");
-	return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
 export function buildBitwardenCsv(document: TransferDocument): string {
 	const folderById = new Map(
 		document.folders.map((folder) => [folder.id, folder.name]),
 	);
-	const rows = [[
-		"folder", "favorite", "type", "name", "notes", "fields", "reprompt",
-		"login_uri", "login_username", "login_password", "login_totp",
-	]];
+	const rows = [
+		[
+			"folder",
+			"favorite",
+			"type",
+			"name",
+			"notes",
+			"fields",
+			"reprompt",
+			"login_uri",
+			"login_username",
+			"login_password",
+			"login_totp",
+		],
+	];
 	for (const item of document.items) {
 		const login = item.login ?? {};
 		const csvType = item.type === CipherType.Login ? "login" : "note";
@@ -141,5 +145,10 @@ export function buildBitwardenCsv(document: TransferDocument): string {
 			login.totp ?? "",
 		]);
 	}
-	return rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+	return Papa.unparse(rows, {
+		delimiter: ",",
+		header: false,
+		newline: "\r\n",
+		skipEmptyLines: false,
+	});
 }

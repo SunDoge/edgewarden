@@ -161,6 +161,15 @@ describe("frontend crypto utils", () => {
 		expect(result).toEqual({ code: "94287082", remain: 1 });
 	});
 
+	it("rejects HOTP and malformed TOTP URIs", async () => {
+		await expect(
+			calcTotpNow("otpauth://hotp/Test?secret=GEZDGNBVGY3TQOJQ&counter=1"),
+		).resolves.toBeNull();
+		await expect(
+			calcTotpNow("otpauth://totp/Test?issuer=MissingSecret"),
+		).resolves.toBeNull();
+	});
+
 	it("generates Steam Guard codes from steam URIs", async () => {
 		const result = await calcTotpNow(
 			"steam://GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",

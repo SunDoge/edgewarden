@@ -1,4 +1,4 @@
-import { buildAwsV4Authorization, sha256Hex } from "./aws-signature";
+import { AwsClient } from "aws4fetch";
 import type { S3BackupDestination } from "./config";
 import {
 	MAX_BACKUP_ARCHIVE_BYTES,
@@ -73,33 +73,22 @@ async function signedRequest(
 	contentType?: string,
 	timeoutMs = REMOTE_METADATA_TIMEOUT_MS,
 ): Promise<Response> {
-	const payloadHashHex = await sha256Hex(body || new Uint8Array());
-	const amzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
-	const headers: Record<string, string> = {
-		host: url.host,
-		"x-amz-content-sha256": payloadHashHex,
-		"x-amz-date": amzDate,
-	};
-	if (method === "PUT")
-		headers["content-type"] = contentType || "application/octet-stream";
-
-	const authorization = await buildAwsV4Authorization(
+	// aws4fetch is built on fetch and Web Crypto, so it works without the much
+	// larger AWS SDK in the Workers runtime. Keep retries disabled here because
+	// callers decide whether an upload/delete operation is safe to retry.
+	const client = new AwsClient({
+		accessKeyId: config.accessKeyId,
+		secretAccessKey: config.secretAccessKey,
+		service: "s3",
+		region: config.region || "auto",
+		retries: 0,
+	});
+	return client.fetch(url, {
 		method,
-		url,
-		headers,
-		payloadHashHex,
-		config.accessKeyId,
-		config.secretAccessKey,
-		config.region || "auto",
-	);
-	return fetch(url.toString(), {
-		method,
-		headers: {
-			Authorization: authorization,
-			"X-Amz-Content-Sha256": headers["x-amz-content-sha256"],
-			"X-Amz-Date": headers["x-amz-date"],
-			...(method === "PUT" ? { "Content-Type": headers["content-type"] } : {}),
-		},
+		headers:
+			method === "PUT"
+				? { "Content-Type": contentType || "application/octet-stream" }
+				: undefined,
 		body,
 		signal: AbortSignal.timeout(timeoutMs),
 	});
