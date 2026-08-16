@@ -89,7 +89,7 @@ export const updateAdminRegistrationPolicy = factory.createHandlers(
 	async (c) => {
 		const body = c.req.valid("json");
 		const passwordError = await verifyAdminPassword(
-			c as any,
+			c,
 			body.masterPasswordHash,
 		);
 		if (passwordError) return passwordError;

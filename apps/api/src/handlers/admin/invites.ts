@@ -87,7 +87,7 @@ export const createAdminInvite = factory.createHandlers(
 	async (c) => {
 		const body = c.req.valid("json");
 		const passwordError = await verifyAdminPassword(
-			c as any,
+			c,
 			body.masterPasswordHash,
 		);
 		if (passwordError) return passwordError;
@@ -151,7 +151,7 @@ export const deleteAdminInvite = factory.createHandlers(
 	vValidator("json", AdminPasswordSchema),
 	async (c) => {
 		const passwordError = await verifyAdminPassword(
-			c as any,
+			c,
 			c.req.valid("json").masterPasswordHash,
 		);
 		if (passwordError) return passwordError;
@@ -184,7 +184,7 @@ export const deleteAdminInvites = factory.createHandlers(
 	vValidator("json", AdminPasswordSchema),
 	async (c) => {
 		const passwordError = await verifyAdminPassword(
-			c as any,
+			c,
 			c.req.valid("json").masterPasswordHash,
 		);
 		if (passwordError) return passwordError;
