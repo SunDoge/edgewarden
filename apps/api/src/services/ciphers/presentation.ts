@@ -1,4 +1,6 @@
+import { parseJsonWithSchema } from "@edgewarden/shared";
 import type { Selectable } from "kysely";
+import * as v from "valibot";
 import type { Attachments, Ciphers } from "../../types/db";
 import { toIso } from "../../utils/time";
 
@@ -43,6 +45,9 @@ const SERVER_MANAGED_CIPHER_FIELDS = new Set([
 	"organizationUseTotp",
 	"lastKnownRevisionDate",
 ]);
+const CipherDataStorageSchema = v.record(v.string(), v.unknown());
+const CipherFieldsStorageSchema = v.array(v.unknown());
+const PasswordHistoryStorageSchema = v.array(v.unknown());
 
 const EPOCH_ISO = new Date(0).toISOString();
 
@@ -165,7 +170,7 @@ export function cipherToResponse(
 	permissions: CipherPermissions = { edit: true, viewPassword: true },
 	object: "cipher" | "cipherDetails" = "cipherDetails",
 ) {
-	const data = JSON.parse(cipher.data) as Record<string, unknown>;
+	const data = parseJsonWithSchema(cipher.data, CipherDataStorageSchema);
 	return {
 		...data,
 		id: cipher.id,
@@ -175,7 +180,9 @@ export function cipherToResponse(
 		name: cipher.name,
 		notes: cipher.notes ?? null,
 		fields: presentFields(
-			cipher.fields ? JSON.parse(cipher.fields) : (data.fields ?? null),
+			cipher.fields
+				? parseJsonWithSchema(cipher.fields, CipherFieldsStorageSchema)
+				: (data.fields ?? null),
 		),
 		data: null,
 		login: cipher.type === 1 ? presentLoginData(data.login ?? {}) : null,
@@ -208,7 +215,10 @@ export function cipherToResponse(
 		archivedDate: cipher.archived_at ? toIso(cipher.archived_at) : null,
 		passwordHistory: presentPasswordHistory(
 			cipher.password_history
-				? JSON.parse(cipher.password_history)
+				? parseJsonWithSchema(
+						cipher.password_history,
+						PasswordHistoryStorageSchema,
+					)
 				: (data.passwordHistory ?? null),
 		),
 		object,

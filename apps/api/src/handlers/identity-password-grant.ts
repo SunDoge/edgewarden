@@ -194,10 +194,13 @@ export async function handlePasswordGrant(
 			}
 		} else if (provider === String(TWO_FACTOR_WEBAUTHN)) {
 			try {
-				const parsed = JSON.parse(token) as {
-					token?: string;
-					deviceResponse?: unknown;
-				};
+				const parsed = parseJsonWithSchema(
+					token,
+					v.object({
+						token: v.string(),
+						deviceResponse: v.unknown(),
+					}),
+				);
 				await assertTwoFactorPasskey(
 					c.req.raw,
 					c.env,
@@ -330,3 +333,5 @@ export async function handlePasswordGrant(
 		),
 	);
 }
+import { parseJsonWithSchema } from "@edgewarden/shared";
+import * as v from "valibot";

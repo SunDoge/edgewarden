@@ -73,7 +73,12 @@ export const listAuditLogs = factory.createHandlers(
 				level: log.level,
 				targetType: log.target_type,
 				targetId: log.target_id,
-				metadata: log.metadata ? JSON.parse(log.metadata) : {},
+				metadata: log.metadata
+					? (safeParseJsonWithSchema(
+							log.metadata,
+							v.record(v.string(), v.unknown()),
+						) ?? {})
+					: {},
 				createdAt: toIso(log.created_at),
 				object: "auditLog",
 			})),
@@ -124,3 +129,5 @@ export const updateAuditSettings = factory.createHandlers(
 		return c.json({ ...settings, object: "auditLogSettings" });
 	},
 );
+import { safeParseJsonWithSchema } from "@edgewarden/shared";
+import * as v from "valibot";

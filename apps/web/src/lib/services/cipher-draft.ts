@@ -1,5 +1,6 @@
-import { CipherType } from "@edgewarden/shared";
+import { CipherType, parseJsonWithSchema } from "@edgewarden/shared";
 import { match } from "ts-pattern";
+import * as v from "valibot";
 
 export interface CipherDraft {
 	type: CipherType;
@@ -94,7 +95,10 @@ export function buildCipherPayload(
 		.otherwise((type) => {
 			let parsed: Record<string, unknown>;
 			try {
-				parsed = JSON.parse(draft.extraData || "{}");
+				parsed = parseJsonWithSchema(
+					draft.extraData || "{}",
+					v.record(v.string(), v.unknown()),
+				);
 			} catch {
 				throw new Error("类型数据必须是有效的 JSON");
 			}

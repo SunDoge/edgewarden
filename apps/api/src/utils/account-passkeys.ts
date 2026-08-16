@@ -4,6 +4,7 @@ import type {
 	RegistrationResponseJSON,
 	WebAuthnCredential,
 } from "@simplewebauthn/server";
+import { safeParseJsonWithSchema } from "@edgewarden/shared";
 import { sign, verify } from "hono/jwt";
 import type { Selectable } from "kysely";
 import * as v from "valibot";
@@ -32,6 +33,7 @@ const ACCOUNT_PASSKEY_CREATE_TOKEN_TTL_SECONDS = 7 * 60;
 const DEFAULT_RP_NAME = "Edgewarden";
 const EXTENSION_ORIGIN_PATTERN =
 	/^(chrome-extension|moz-extension|safari-web-extension):\/\//;
+const AuthenticatorTransportsSchema = v.array(v.string());
 
 const AccountPasskeyTokenPayloadSchema = v.object({
 	typ: v.literal(ACCOUNT_PASSKEY_TOKEN_TYPE),
@@ -178,12 +180,7 @@ export function userHandleToUserId(
 
 export function parseTransports(value: string | null): string[] | null {
 	if (!value) return null;
-	try {
-		const parsed = JSON.parse(value);
-		return Array.isArray(parsed) ? parsed.map(String) : null;
-	} catch {
-		return null;
-	}
+	return safeParseJsonWithSchema(value, AuthenticatorTransportsSchema);
 }
 
 export function accountPasskeyPrfStatus(

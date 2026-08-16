@@ -5,7 +5,11 @@ import type {
 	DomainRulesResponse,
 	GlobalEquivalentDomain,
 } from "@edgewarden/shared";
-import { normalizeEquivalentDomain } from "@edgewarden/shared";
+import {
+	normalizeEquivalentDomain,
+	safeParseJsonWithSchema,
+} from "@edgewarden/shared";
+import * as v from "valibot";
 
 type RawGlobalDomain = Partial<GlobalEquivalentDomain> & {
 	Type?: unknown;
@@ -61,6 +65,40 @@ export const globalDomains: readonly GlobalEquivalentDomain[] = [
 	...bitwardenGlobalDomains,
 	...customGlobalDomains,
 ];
+
+const EquivalentDomainsStorageSchema = v.array(v.array(v.string()));
+const CustomEquivalentDomainsStorageSchema = v.array(v.unknown());
+const ExcludedGlobalDomainsStorageSchema = v.array(v.number());
+
+/** Validate the three JSON columns read from D1 before normalizing them. */
+export function parseStoredDomainSettings(settings: {
+	equivalent_domains: string;
+	custom_equivalent_domains: string;
+	excluded_global_equivalent_domains: string;
+}): {
+	equivalentDomains: string[][];
+	customEquivalentDomains: CustomEquivalentDomain[];
+	excludedGlobalEquivalentDomains: number[];
+} {
+	return {
+		equivalentDomains:
+			safeParseJsonWithSchema(
+				settings.equivalent_domains,
+				EquivalentDomainsStorageSchema,
+			) ?? [],
+		customEquivalentDomains: normalizeCustomEquivalentDomains(
+			safeParseJsonWithSchema(
+				settings.custom_equivalent_domains,
+				CustomEquivalentDomainsStorageSchema,
+			) ?? [],
+		),
+		excludedGlobalEquivalentDomains:
+			safeParseJsonWithSchema(
+				settings.excluded_global_equivalent_domains,
+				ExcludedGlobalDomainsStorageSchema,
+			) ?? [],
+	};
+}
 
 export function normalizeEquivalentDomains(input: unknown): string[][] {
 	if (!Array.isArray(input)) return [];

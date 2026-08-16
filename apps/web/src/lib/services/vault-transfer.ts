@@ -3,7 +3,9 @@ import {
 	type CipherResponse,
 	CipherType,
 	type FolderResponse,
+	parseJsonWithSchema,
 } from "@edgewarden/shared";
+import * as v from "valibot";
 import {
 	decryptPasswordProtectedExport,
 	isPasswordProtectedExport,
@@ -50,6 +52,26 @@ const TYPE_KEYS: Record<number, string> = {
 	[CipherType.DriversLicense]: "driversLicense",
 	[CipherType.Passport]: "passport",
 };
+
+const ImportItemSchema = v.record(v.string(), v.unknown());
+const ImportFolderSchema = v.looseObject({
+	id: v.optional(v.union([v.string(), v.number()])),
+	name: v.optional(v.unknown()),
+});
+const VaultImportObjectSchema = v.looseObject({
+	encrypted: v.optional(v.boolean()),
+	folders: v.optional(v.array(ImportFolderSchema)),
+	items: v.optional(v.array(ImportItemSchema)),
+	ciphers: v.optional(v.array(ImportItemSchema)),
+});
+const VaultImportSourceSchema = v.union([
+	v.array(ImportItemSchema),
+	VaultImportObjectSchema,
+]);
+
+function parseVaultImportSource(text: string) {
+	return parseJsonWithSchema(text.trim(), VaultImportSourceSchema);
+}
 
 /**
  * Compares decrypted vault contents in memory. No plaintext or fingerprint leaves
@@ -184,7 +206,7 @@ export function parseVaultImport(
 				: "csv"
 			: format;
 	if (selected === "csv") return parseBitwardenCsv(text);
-	const raw = JSON.parse(trimmed);
+	const raw = parseVaultImportSource(trimmed);
 	const source = Array.isArray(raw) ? { items: raw } : raw;
 	if (source.encrypted === true) {
 		if (isPasswordProtectedExport(source))
@@ -194,7 +216,7 @@ export function parseVaultImport(
 		);
 	}
 	const folders = Array.isArray(source.folders)
-		? source.folders.map((folder: any) => ({
+		? source.folders.map((folder) => ({
 				id: folder.id != null ? String(folder.id) : undefined,
 				name: String(folder.name ?? "Folder"),
 			}))
@@ -208,7 +230,7 @@ export function parseVaultImport(
 		throw new Error("导入文件中没有保险库数据");
 	return {
 		folders,
-		items: items.map((item: any, index: number) => ({
+		items: items.map((item, index: number) => ({
 			...item,
 			type: Number(item.type || CipherType.Login),
 			name: String(item.name ?? `Imported item ${index + 1}`),
@@ -221,7 +243,7 @@ export function parseVaultImport(
 export function inspectEncryptedVaultImport(
 	text: string,
 ): "password-protected" | "account-restricted" | null {
-	const source: unknown = JSON.parse(text.trim());
+	const source = parseVaultImportSource(text);
 	if (
 		!source ||
 		typeof source !== "object" ||
@@ -240,7 +262,7 @@ export async function parseVaultImportFile(
 	password?: string,
 ): Promise<TransferDocument> {
 	if (format === "csv") return parseVaultImport(text, format);
-	const source: unknown = JSON.parse(text.trim());
+	const source = parseVaultImportSource(text);
 	if (
 		!source ||
 		typeof source !== "object" ||

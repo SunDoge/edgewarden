@@ -1,3 +1,6 @@
+import { safeParseJsonWithSchema } from "@edgewarden/shared";
+import * as v from "valibot";
+
 export const SIGNALR_RECORD_SEPARATOR = String.fromCharCode(0x1e);
 export const SIGNALR_HANDSHAKE_ACK = new TextEncoder().encode(
 	`{}${SIGNALR_RECORD_SEPARATOR}`,
@@ -5,6 +8,9 @@ export const SIGNALR_HANDSHAKE_ACK = new TextEncoder().encode(
 export const SIGNALR_SYNC_VAULT = 5;
 
 export type SignalRProtocol = "json" | "messagepack";
+const SignalRHandshakeSchema = v.object({
+	protocol: v.picklist(["json", "messagepack"]),
+});
 
 function concatBytes(chunks: Uint8Array[]): Uint8Array {
 	const output = new Uint8Array(
@@ -104,13 +110,8 @@ export function parseSignalRHandshake(
 						: new Uint8Array(message),
 				);
 	for (const frame of text.split(SIGNALR_RECORD_SEPARATOR).filter(Boolean)) {
-		try {
-			const handshake = JSON.parse(frame) as { protocol?: unknown };
-			if (handshake.protocol === "json") return "json";
-			if (handshake.protocol === "messagepack") return "messagepack";
-		} catch {
-			// A malformed frame is not a valid SignalR handshake.
-		}
+		const handshake = safeParseJsonWithSchema(frame, SignalRHandshakeSchema);
+		if (handshake) return handshake.protocol;
 	}
 	return null;
 }

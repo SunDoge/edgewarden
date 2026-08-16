@@ -7,6 +7,7 @@ import * as foldersDb from "../services/db/folders";
 import * as sendsDb from "../services/db/sends";
 import * as webauthnDb from "../services/db/webauthn";
 import { textColumnInJson } from "../services/db/json-array";
+import { parseStoredSendFileMetadata } from "../services/sends/file-metadata";
 import { errorResponse } from "../utils/response";
 
 export const requireFolder = createMiddleware<HonoEnv>(async (c, next) => {
@@ -137,13 +138,9 @@ export const requireSend = createMiddleware<HonoEnv>(async (c, next) => {
 export const requireSendFile = createMiddleware<HonoEnv>(async (c, next) => {
 	const fileId = c.req.param("fileId");
 	if (!fileId) return errorResponse("Send file not found", 404);
-	let storedFileId = "";
-	try {
-		const data = JSON.parse(c.get("send").data) as { id?: unknown };
-		storedFileId = typeof data.id === "string" ? data.id : "";
-	} catch {
-		return errorResponse("Invalid Send file data", 500);
-	}
+	const metadata = parseStoredSendFileMetadata(c.get("send").data);
+	if (!metadata) return errorResponse("Invalid Send file data", 500);
+	const storedFileId = metadata.fileId;
 	if (storedFileId !== fileId) {
 		return errorResponse("Send file does not match send data.", 400);
 	}

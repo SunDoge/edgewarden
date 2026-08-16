@@ -12,6 +12,7 @@ import {
 	normalizeCustomEquivalentDomains,
 	normalizeEquivalentDomains,
 	normalizeExcludedGlobalTypes,
+	parseStoredDomainSettings,
 } from "../services/domain-rules";
 import { now } from "../utils/time";
 
@@ -32,17 +33,17 @@ export const getDomains = factory.createHandlers(async (c) => {
 
 	const settings = await domainSettingsDb.getDomainSettings(db, user.id);
 
-	const equivalentDomains = settings
-		? (JSON.parse(settings.equivalent_domains) as string[][])
-		: [];
-	const customEquivalentDomains = settings
-		? normalizeCustomEquivalentDomains(
-				JSON.parse(settings.custom_equivalent_domains),
-			)
-		: [];
-	const excludedGlobalEquivalentDomains = settings
-		? (JSON.parse(settings.excluded_global_equivalent_domains) as number[])
-		: [];
+	const {
+		equivalentDomains,
+		customEquivalentDomains,
+		excludedGlobalEquivalentDomains,
+	} = settings
+		? parseStoredDomainSettings(settings)
+		: {
+				equivalentDomains: [],
+				customEquivalentDomains: [],
+				excludedGlobalEquivalentDomains: [],
+			};
 
 	return c.json(
 		buildDomainsResponse(
@@ -62,14 +63,11 @@ const updateDomainsHandler = async (
 	const db = c.get("db");
 
 	const current = await domainSettingsDb.getDomainSettings(db, user.id);
-	const currentCustomEquivalentDomains = current
-		? normalizeCustomEquivalentDomains(
-				JSON.parse(current.custom_equivalent_domains),
-			)
-		: [];
-	const currentExcludedGlobalEquivalentDomains = current
-		? (JSON.parse(current.excluded_global_equivalent_domains) as number[])
-		: [];
+	const currentSettings = current ? parseStoredDomainSettings(current) : null;
+	const currentCustomEquivalentDomains =
+		currentSettings?.customEquivalentDomains ?? [];
+	const currentExcludedGlobalEquivalentDomains =
+		currentSettings?.excludedGlobalEquivalentDomains ?? [];
 
 	const equivalentDomainsRaw = firstPresent(payload, [
 		"equivalentDomains",

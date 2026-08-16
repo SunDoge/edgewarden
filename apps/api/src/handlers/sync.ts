@@ -17,7 +17,7 @@ import * as usersDb from "../services/db/users";
 import * as webauthnDb from "../services/db/webauthn";
 import {
 	buildDomainsResponse,
-	normalizeCustomEquivalentDomains,
+	parseStoredDomainSettings,
 } from "../services/domain-rules";
 import { sendToResponse } from "../services/sends/presentation";
 import type { Folders } from "../types/db";
@@ -241,19 +241,18 @@ async function buildSyncPayload(c: Context<HonoEnv>) {
 		object: "profile",
 	};
 
-	const equivalentDomains = domainSettings
-		? (JSON.parse(domainSettings.equivalent_domains) as string[][])
-		: [];
-	const customEquivalentDomains = domainSettings
-		? normalizeCustomEquivalentDomains(
-				JSON.parse(domainSettings.custom_equivalent_domains),
-			)
-		: [];
-	const excludedGlobalEquivalentDomains = domainSettings
-		? (JSON.parse(
-				domainSettings.excluded_global_equivalent_domains,
-			) as number[])
-		: [];
+	const storedDomains = domainSettings
+		? parseStoredDomainSettings(domainSettings)
+		: {
+				equivalentDomains: [],
+				customEquivalentDomains: [],
+				excludedGlobalEquivalentDomains: [],
+			};
+	const {
+		equivalentDomains,
+		customEquivalentDomains,
+		excludedGlobalEquivalentDomains,
+	} = storedDomains;
 
 	const domains = buildDomainsResponse(
 		equivalentDomains,

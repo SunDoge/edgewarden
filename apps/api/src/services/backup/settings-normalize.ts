@@ -358,7 +358,11 @@ export function parseBackupSettings(
 ): BackupSettings {
 	if (!raw) return getDefaultBackupSettings(fallbackTimezone);
 	try {
-		const parsed = JSON.parse(raw) as Record<string, unknown>;
+		const parsed = safeParseJsonWithSchema(
+			raw,
+			v.record(v.string(), v.unknown()),
+		);
+		if (!parsed) return getDefaultBackupSettings(fallbackTimezone);
 		if (Array.isArray(parsed.destinations)) {
 			const globalTimezone = assertValidTimeZone(
 				asTrimmedString(parsed.timezone) ||
@@ -461,3 +465,5 @@ export function requireBackupDestination(
 	}
 	return destination;
 }
+import { safeParseJsonWithSchema } from "@edgewarden/shared";
+import * as v from "valibot";

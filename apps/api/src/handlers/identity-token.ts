@@ -46,9 +46,11 @@ export const connectToken = factory.createHandlers(async (c) => {
 		const token = String(body.token || "").trim();
 		let deviceResponse: unknown = body.deviceResponse;
 		if (typeof deviceResponse === "string") {
-			try {
-				deviceResponse = JSON.parse(deviceResponse);
-			} catch {
+			deviceResponse = safeParseJsonWithSchema(
+				deviceResponse,
+				v.record(v.string(), v.unknown()),
+			);
+			if (!deviceResponse) {
 				return identityErrorResponse(
 					"Invalid passkey response",
 					"invalid_request",
@@ -238,3 +240,5 @@ export const connectToken = factory.createHandlers(async (c) => {
 		400,
 	);
 });
+import { safeParseJsonWithSchema } from "@edgewarden/shared";
+import * as v from "valibot";
