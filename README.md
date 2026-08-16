@@ -4,6 +4,14 @@ Edgewarden is a Bitwarden-compatible password manager designed for Cloudflare Wo
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/SunDoge/edgewarden)
 
+## Platform boundary
+
+Edgewarden is intentionally Cloudflare-native. The complete server must run on Cloudflare Workers and bindings that Workers can access directly, such as D1, R2, KV and Durable Objects. A feature is implemented only when it can be made reliable and secure within Worker execution, networking, storage and scheduling constraints.
+
+Optional outbound integrations, such as Bitwarden Push Relay, Turnstile, S3 and WebDAV, may be supported when they are usable directly from a Worker and do not require an Edgewarden companion server. Edgewarden will not add a required Node.js daemon, container, host filesystem, local SMTP server, LDAP connector or other always-on sidecar merely to imitate the official server. Features that require those facilities are documented as unsupported instead of being exposed as incomplete compatibility shims.
+
+The precise personal, organization and platform-dependent feature boundary is maintained in [Supported product scope](docs/support-scope.md).
+
 ## Deploy to Cloudflare
 
 Click the button above, connect GitHub, and accept the detected build and deploy commands:
