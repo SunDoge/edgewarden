@@ -28,6 +28,7 @@ import { registerAuthScenarios } from "./test-support/auth-scenarios";
 import { registerDatabaseMaintenanceScenarios } from "./test-support/database-maintenance-scenarios";
 import { registerInfrastructureScenarios } from "./test-support/infrastructure-scenarios";
 import { registerMaintenanceReliabilityScenarios } from "./test-support/maintenance-reliability-scenarios";
+import { createOrganizationBackupFixture } from "./test-support/organization-backup-fixture";
 import { registerSendScenarios } from "./test-support/send-scenarios";
 import { registerVaultScenarios } from "./test-support/vault-scenarios";
 
@@ -48,9 +49,6 @@ let cipherId = "";
 let sendId = "";
 let sendAccessId = "";
 let memberAccessToken = "";
-let organizationBackup = new Uint8Array();
-let backedUpOrganizationId = "";
-let backedUpCollectionId = "";
 let r2Values: Map<string, Uint8Array>;
 
 function request(
@@ -190,24 +188,6 @@ describe("Edgewarden API", () => {
 		},
 		get sendId() {
 			return sendId;
-		},
-		get organizationBackup() {
-			return organizationBackup;
-		},
-		set organizationBackup(value) {
-			organizationBackup = value;
-		},
-		get backedUpOrganizationId() {
-			return backedUpOrganizationId;
-		},
-		set backedUpOrganizationId(value) {
-			backedUpOrganizationId = value;
-		},
-		get backedUpCollectionId() {
-			return backedUpCollectionId;
-		},
-		set backedUpCollectionId(value) {
-			backedUpCollectionId = value;
 		},
 		request,
 		email: EMAIL,
@@ -846,18 +826,17 @@ describe("Edgewarden API", () => {
 	}, 15_000);
 
 	test("restores a complete organization backup without API credentials", async () => {
-		assert.ok(organizationBackup.byteLength > 0);
-		const owner = await testDatabase
-			.prepare("SELECT id FROM users WHERE email = ?")
-			.bind(EMAIL)
-			.first<{ id: string }>();
-		assert.ok(owner?.id);
+		const fixture = await createOrganizationBackupFixture({
+			database: testDatabase,
+			request,
+			masterPasswordHash: MASTER_PASSWORD_HASH,
+		});
 		const restored = await importBackupArchiveBytes(
-			organizationBackup,
+			fixture.archive,
 			testDatabase,
 			null,
 			DATA_ENCRYPTION_SECRET,
-			owner.id,
+			fixture.userId,
 			true,
 		);
 		assert.ok(restored.result.imported.organizations > 0);
@@ -866,13 +845,13 @@ describe("Edgewarden API", () => {
 		assert.ok(
 			await testDatabase
 				.prepare("SELECT id FROM organizations WHERE id = ?")
-				.bind(backedUpOrganizationId)
+				.bind(fixture.organizationId)
 				.first(),
 		);
 		assert.ok(
 			await testDatabase
 				.prepare("SELECT id FROM collections WHERE id = ?")
-				.bind(backedUpCollectionId)
+				.bind(fixture.collectionId)
 				.first(),
 		);
 		assert.deepEqual(
@@ -880,7 +859,7 @@ describe("Edgewarden API", () => {
 				.prepare(
 					"SELECT api_key_hash, api_key_encrypted FROM users WHERE id = ?",
 				)
-				.bind(owner.id)
+				.bind(fixture.userId)
 				.first<{
 					api_key_hash: string | null;
 					api_key_encrypted: string | null;
@@ -894,7 +873,7 @@ describe("Edgewarden API", () => {
 		assert.equal(
 			(
 				await request("/api/accounts/profile", {
-					headers: { authorization: `Bearer ${accessToken}` },
+					headers: { authorization: `Bearer ${fixture.accessToken}` },
 				})
 			).status,
 			401,

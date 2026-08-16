@@ -16,9 +16,6 @@ export interface AdminOrganizationScenarioContext {
 	memberAccessToken: string;
 	readonly cipherId: string;
 	readonly sendId: string;
-	organizationBackup: Uint8Array;
-	backedUpOrganizationId: string;
-	backedUpCollectionId: string;
 	request: (path: string, init?: RequestInit) => Promise<Response>;
 	email: string;
 	memberEmail: string;
@@ -1355,13 +1352,11 @@ export function registerAdminOrganizationScenarios(
 			200,
 			await backupResponse.clone().text(),
 		);
-		context.organizationBackup = new Uint8Array(
+		const organizationBackup = new Uint8Array(
 			await backupResponse.arrayBuffer(),
 		);
 		const backupDb = JSON.parse(
-			new TextDecoder().decode(
-				unzipSync(context.organizationBackup)["db.json"],
-			),
+			new TextDecoder().decode(unzipSync(organizationBackup)["db.json"]),
 		) as {
 			users: Array<Record<string, unknown>>;
 			organizations: Array<{ id: string }>;
@@ -1382,9 +1377,6 @@ export function registerAdminOrganizationScenarios(
 					row.cipher_id === cipher.id && row.collection_id === collectionId,
 			),
 		);
-		context.backedUpOrganizationId = orgId;
-		context.backedUpCollectionId = collectionId;
-
 		const beforeMemberRevision = await context.database
 			.prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
 			.bind(restrictedUser.id)
