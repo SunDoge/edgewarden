@@ -22,6 +22,7 @@ import {
 	type ApiTestHarness,
 	createApiTestHarness,
 } from "./test-support/api-harness";
+import { createBackupRestoreFixture } from "./test-support/backup-restore-fixture";
 import { registerAuthReliabilityScenarios } from "./test-support/auth-reliability-scenarios";
 import { registerAuthScenarios } from "./test-support/auth-scenarios";
 import { registerDatabaseMaintenanceScenarios } from "./test-support/database-maintenance-scenarios";
@@ -258,13 +259,15 @@ describe("Edgewarden API", () => {
 	});
 
 	test("restores attachment bytes atomically and cleans failed staging", async () => {
-		const owner = await testDatabase
-			.prepare("SELECT id FROM users WHERE email = ?")
-			.bind(EMAIL)
-			.first<{ id: string }>();
-		assert.ok(owner?.id);
+		const fixture = await createBackupRestoreFixture({
+			database: testDatabase,
+			request,
+			masterPasswordHash: MASTER_PASSWORD_HASH,
+		});
+		const owner = { id: fixture.userId };
+		const restoreCipherId = fixture.cipherId;
 		const attachmentId = crypto.randomUUID();
-		const originalStorageKey = `attachments/${cipherId}/${attachmentId}.bin`;
+		const originalStorageKey = `attachments/${restoreCipherId}/${attachmentId}.bin`;
 		const attachmentBytes = new Uint8Array([0, 7, 23, 128, 254, 255]);
 		const fileSendId = crypto.randomUUID();
 		const sendFileId = crypto.randomUUID();
@@ -277,8 +280,7 @@ describe("Edgewarden API", () => {
 		const postBackupActorId = crypto.randomUUID();
 		const deviceTrustToken = `backup-must-not-export-${crypto.randomUUID()}`;
 		const anonymousChallenge = `restore-challenge-${crypto.randomUUID()}`;
-		const preRestoreRefreshToken = refreshToken;
-		assert.ok(preRestoreRefreshToken);
+		const preRestoreRefreshToken = fixture.refreshToken;
 		const timestamp = Math.floor(Date.now() / 1000);
 		await testDatabase
 			.prepare(
@@ -286,7 +288,7 @@ describe("Edgewarden API", () => {
 			)
 			.bind(
 				attachmentId,
-				cipherId,
+				restoreCipherId,
 				"encrypted-restore-name",
 				attachmentBytes.byteLength,
 				`${attachmentBytes.byteLength} Bytes`,
@@ -378,7 +380,7 @@ describe("Edgewarden API", () => {
 		assert.match(
 			String(
 				parsedArchive.payload.manifest.blobHashes?.[
-					`attachments/${cipherId}/${attachmentId}.bin`
+					`attachments/${restoreCipherId}/${attachmentId}.bin`
 				],
 			),
 			/^[0-9a-f]{64}$/,
@@ -451,7 +453,7 @@ describe("Edgewarden API", () => {
 		);
 		const externalAttachmentFiles = unzipSync(archive.bytes);
 		delete externalAttachmentFiles[
-			`attachments/${cipherId}/${attachmentId}.bin`
+			`attachments/${restoreCipherId}/${attachmentId}.bin`
 		];
 		await assert.rejects(
 			importRemoteBackupArchiveBytes(
@@ -468,7 +470,7 @@ describe("Edgewarden API", () => {
 				},
 			),
 			new RegExp(
-				`Unable to load remote backup attachment: attachments/${cipherId}/${attachmentId}\\.bin`,
+				`Unable to load remote backup attachment: attachments/${restoreCipherId}/${attachmentId}\\.bin`,
 			),
 		);
 		const corruptedAttachmentBytes = attachmentBytes.slice();
@@ -486,7 +488,7 @@ describe("Edgewarden API", () => {
 				},
 			),
 			new RegExp(
-				`Backup blob checksum mismatch: attachments/${cipherId}/${attachmentId}\\.bin`,
+				`Backup blob checksum mismatch: attachments/${restoreCipherId}/${attachmentId}\\.bin`,
 			),
 		);
 		assert.equal(
@@ -836,7 +838,7 @@ describe("Edgewarden API", () => {
 		assert.equal(
 			(
 				await request("/api/accounts/profile", {
-					headers: { authorization: `Bearer ${accessToken}` },
+					headers: { authorization: `Bearer ${fixture.accessToken}` },
 				})
 			).status,
 			401,
