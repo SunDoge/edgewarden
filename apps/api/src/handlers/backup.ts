@@ -33,7 +33,7 @@ import {
 	createRemoteBackupTransferSession,
 	pruneRemoteBackupArchives,
 } from "../services/backup/uploader";
-import { createBlobStore } from "../services/blob-store";
+import { createBlobStore, getR2StorageBinding } from "../services/blob-store";
 import { errorResponse } from "../utils/response";
 
 function ensureBackupBlobName(value: string): string {
@@ -160,6 +160,16 @@ export const updateBackupSettings = factory.createHandlers(
 						c.req.valid("json"),
 						previous,
 					);
+					if (
+						normalized.destinations.some(
+							(destination) => destination.type === "r2",
+						) &&
+						!getR2StorageBinding(c.env)
+					) {
+						throw new Error(
+							"R2 backup requires an active ATTACHMENTS_R2 binding",
+						);
+					}
 					await saveBackupSettings(
 						c.get("db"),
 						c.env.DATA_ENCRYPTION_SECRET,
@@ -212,7 +222,10 @@ export const runBackup = factory.createHandlers(
 				timeZone: destination.schedule.timezone,
 			});
 			await requireDataOperationLeaseRenewal(c.env.DB, lease);
-			const remoteSession = createRemoteBackupTransferSession(destination);
+			const r2Bucket = getR2StorageBinding(c.env);
+			const remoteSession = createRemoteBackupTransferSession(destination, {
+				r2Bucket,
+			});
 			const upload = await remoteSession.uploadArchive(
 				archive.bytes,
 				archive.fileName,
@@ -232,6 +245,7 @@ export const runBackup = factory.createHandlers(
 					destination,
 					destination.schedule.retentionCount,
 					archive.fileName,
+					{ r2Bucket },
 				);
 			}
 			await requireDataOperationLeaseRenewal(c.env.DB, lease);

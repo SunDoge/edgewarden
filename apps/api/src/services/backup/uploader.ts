@@ -17,6 +17,14 @@ import {
 	normalizeRelativePath,
 } from "./remote-utils";
 import {
+	deleteFromR2,
+	downloadFromR2,
+	existsInR2,
+	listR2Entries,
+	putToR2,
+	type R2BackupBucket,
+} from "./r2-adapter";
+import {
 	deleteFromS3,
 	downloadFromS3,
 	existsInS3,
@@ -121,6 +129,33 @@ export interface RemoteBackupTransferSession {
 	exists(relativePath: string): Promise<boolean>;
 }
 
+export interface RemoteBackupSessionBindings {
+	r2Bucket?: R2BackupBucket | null;
+}
+
+function createR2TransferSession(
+	bucket: R2BackupBucket | null | undefined,
+): RemoteBackupTransferSession {
+	if (!bucket) {
+		throw new Error("R2 backup requires an active ATTACHMENTS_R2 binding");
+	}
+	return {
+		provider: "r2",
+		uploadArchive: async (archive, fileName) => {
+			await putToR2(bucket, fileName, archive, {
+				contentType: "application/zip",
+			});
+			return { provider: "r2", remotePath: `backups/${fileName}` };
+		},
+		putFile: (relativePath, bytes, options) =>
+			putToR2(bucket, relativePath, bytes, options),
+		list: (relativePath) => listR2Entries(bucket, relativePath),
+		download: (relativePath) => downloadFromR2(bucket, relativePath),
+		deleteFile: (relativePath) => deleteFromR2(bucket, relativePath),
+		exists: (relativePath) => existsInR2(bucket, relativePath),
+	};
+}
+
 function resolveConfiguredDestinationAdapter(
 	destination: BackupDestinationRecord,
 ): ConfiguredDestinationAdapter {
@@ -173,7 +208,11 @@ function resolveConfiguredDestinationAdapter(
 
 export function createRemoteBackupTransferSession(
 	destination: BackupDestinationRecord,
+	bindings: RemoteBackupSessionBindings = {},
 ): RemoteBackupTransferSession {
+	if (destination.type === "r2") {
+		return createR2TransferSession(bindings.r2Bucket);
+	}
 	const adapter = resolveConfiguredDestinationAdapter(destination);
 	const ensuredDirectories =
 		adapter.provider === "webdav" ? new Set<string>() : null;
@@ -301,16 +340,17 @@ export async function pruneRemoteBackupArchives(
 	destination: BackupDestinationRecord,
 	retentionCount: number | null,
 	preferredFileName?: string,
+	bindings: RemoteBackupSessionBindings = {},
 ): Promise<number> {
 	if (retentionCount === null) return 0;
-	const adapter = resolveConfiguredDestinationAdapter(destination);
-	const listing = await adapter.list(adapter.config, "");
+	const session = createRemoteBackupTransferSession(destination, bindings);
+	const listing = await session.list("");
 	const backupFiles = listing.items
 		.filter((item) => !item.isDirectory && isBackupArchiveName(item.name))
 		.sort((a, b) => compareBackupItemsByRecency(a, b, preferredFileName));
 	if (backupFiles.length <= retentionCount) return 0;
 	for (const item of backupFiles.slice(retentionCount)) {
-		await adapter.deleteFile(adapter.config, item.path);
+		await session.deleteFile(item.path);
 	}
 	return backupFiles.length - retentionCount;
 }

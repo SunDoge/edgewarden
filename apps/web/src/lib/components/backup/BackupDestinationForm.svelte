@@ -1,5 +1,6 @@
 <script lang="ts">
 import { Info, Save, Trash2 } from "@lucide/svelte";
+import * as Alert from "$lib/components/ui/alert/index.js";
 import { Button } from "$lib/components/ui/button/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
 import { Checkbox } from "$lib/components/ui/checkbox/index.js";
@@ -26,7 +27,7 @@ let {
 <!-- Config Form Card -->
 <Card.Root>
 	<Card.Header class="flex-row items-start justify-between">
-		<div><Card.Title>备份服务配置</Card.Title><Card.Description>修改远程 WebDAV 或 S3 连接密钥及桶目录</Card.Description></div>
+		<div><Card.Title>备份服务配置</Card.Title><Card.Description>配置原生 R2、WebDAV 或 S3 备份目的地</Card.Description></div>
 		<Card.Action class="flex gap-2">
 			<Button variant="ghost" size="sm" onclick={onDelete} disabled={saving} class="text-red-500 hover:text-red-600">
 				<Trash2 data-icon="inline-start" />
@@ -51,7 +52,7 @@ let {
 			<Input id="backup-name" type="text" bind:value={form.name} placeholder="例如：我的 Nextcloud 备份" />
 		</Field.Field>
 		<Field.Field>
-			<Field.Label>存储协议</Field.Label><Select.Root type="single" value={form.type} onValueChange={(value) => form.type = value as typeof form.type}><Select.Trigger class="w-full">{form.type === "webdav" ? "WebDAV 协议" : "S3 兼容协议"}</Select.Trigger><Select.Content><Select.Group><Select.Item value="webdav">WebDAV 协议</Select.Item><Select.Item value="s3">S3 兼容协议</Select.Item></Select.Group></Select.Content></Select.Root>
+			<Field.Label>存储协议</Field.Label><Select.Root type="single" value={form.type} onValueChange={(value) => form.type = value as typeof form.type}><Select.Trigger class="w-full">{form.type === "r2" ? "Cloudflare R2" : form.type === "webdav" ? "WebDAV 协议" : "S3 兼容协议"}</Select.Trigger><Select.Content><Select.Group><Select.Item value="r2">Cloudflare R2</Select.Item><Select.Item value="webdav">WebDAV 协议</Select.Item><Select.Item value="s3">S3 兼容协议</Select.Item></Select.Group></Select.Content></Select.Root>
 		</Field.Field>
 		<Field.Field class="md:col-span-2" orientation="horizontal">
 			<Checkbox id="attachments" bind:checked={form.includeAttachments} />
@@ -64,7 +65,15 @@ let {
 	<Separator />
 
 	<!-- WebDAV Protocol Fields -->
-	{#if form.type === "webdav"}
+	{#if form.type === "r2"}
+		<Alert.Root>
+			<Info />
+			<Alert.Title>使用 Worker 的原生 R2 存储</Alert.Title>
+			<Alert.Description>
+				备份会写入 ATTACHMENTS_R2 bucket 的 backups/ 前缀，无需额外密钥。KV 部署无法使用此目的地。
+			</Alert.Description>
+		</Alert.Root>
+	{:else if form.type === "webdav"}
 		<Field.FieldSet>
 			<Field.FieldLegend>WebDAV 存储节点设置</Field.FieldLegend>
 			<Field.FieldGroup class="grid grid-cols-1 md:grid-cols-2">

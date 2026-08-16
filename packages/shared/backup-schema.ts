@@ -2,10 +2,11 @@ export const BACKUP_DEFAULT_TIMEZONE = "UTC";
 export const BACKUP_DEFAULT_RETENTION_COUNT = 30;
 export const BACKUP_DEFAULT_S3_REGION = "auto";
 export const BACKUP_DEFAULT_REMOTE_PATH = "edgewarden";
+export const BACKUP_R2_ROOT_PATH = "backups";
 export const BACKUP_DEFAULT_INTERVAL_HOURS = 24;
 export const BACKUP_DEFAULT_START_TIME = "03:00";
 
-export type BackupDestinationType = "s3" | "webdav";
+export type BackupDestinationType = "r2" | "s3" | "webdav";
 export type S3BackupAddressingStyle = "path-style" | "virtual-hosted-style";
 
 export interface S3BackupDestination {
@@ -25,7 +26,12 @@ export interface WebDavBackupDestination {
 	remotePath: string;
 }
 
+export interface R2BackupDestination {
+	rootPath: typeof BACKUP_R2_ROOT_PATH;
+}
+
 export type BackupDestinationConfig =
+	| R2BackupDestination
 	| S3BackupDestination
 	| WebDavBackupDestination;
 
@@ -100,6 +106,9 @@ export function createDefaultBackupScheduleConfig(
 export function createDefaultBackupDestinationConfig(
 	type: BackupDestinationType,
 ): BackupDestinationConfig {
+	if (type === "r2") {
+		return { rootPath: BACKUP_R2_ROOT_PATH };
+	}
 	if (type === "s3") {
 		return {
 			endpoint: "",
@@ -123,6 +132,7 @@ export function createDefaultBackupDestinationName(
 	type: BackupDestinationType,
 	index: number,
 ): string {
+	if (type === "r2") return `Cloudflare R2 ${index}`;
 	if (type === "s3") return `S3 ${index}`;
 	return `WebDAV ${index}`;
 }
@@ -157,7 +167,7 @@ export function createDefaultBackupSettings(
 ): BackupSettings {
 	return {
 		destinations: [
-			createBackupDestinationRecord("webdav", 1, {
+			createBackupDestinationRecord("r2", 1, {
 				timezone,
 				name: options.destinationName,
 			}),

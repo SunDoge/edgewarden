@@ -36,6 +36,23 @@ const destination: BackupDestinationRecord = {
 };
 
 describe("backup destination form", () => {
+	it("uses the reserved native R2 prefix", () => {
+		const form = backupDestinationToForm({
+			...destination,
+			type: "r2",
+			destination: { rootPath: "backups" },
+		});
+		form.name = " ";
+
+		const updated = applyBackupDestinationForm(destination, form);
+
+		expect(updated).toMatchObject({
+			name: "Cloudflare R2 备份",
+			type: "r2",
+			destination: { rootPath: "backups" },
+		});
+	});
+
 	it("maps stored configuration into editable form state", () => {
 		const form = backupDestinationToForm(destination);
 		expect(form).toMatchObject({

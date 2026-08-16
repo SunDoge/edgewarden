@@ -45,6 +45,8 @@ pnpm deploy:kv
 
 The KV deployment uses `wrangler.kv.jsonc`, resolves or creates both D1 and the named KV namespace, and never declares or provisions an R2 bucket. Account-specific IDs exist only in the temporary deployment config. KV limits each encrypted object to 25 MiB. Do not switch an existing deployment between R2 and KV without first migrating or backing up its stored objects.
 
+On an R2 deployment, the backup center can use the existing `ATTACHMENTS_R2` binding directly. Native backups are stored under the reserved `backups/` prefix; no additional bucket or R2 API credentials are required. See [Backup and restore](docs/operations.md#backup-and-restore) for the archive layout and isolation tradeoffs.
+
 ## Manual deployment
 
 The repository pins Node.js 26 and installs the latest pnpm release through `mise.toml`. For local development, install the toolchain and dependencies, create `.dev.vars` from `.dev.vars.example`, then run:

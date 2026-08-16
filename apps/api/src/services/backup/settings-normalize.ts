@@ -2,6 +2,7 @@ import {
 	BACKUP_DEFAULT_INTERVAL_HOURS,
 	BACKUP_DEFAULT_START_TIME,
 	BACKUP_DEFAULT_TIMEZONE,
+	BACKUP_R2_ROOT_PATH,
 	type BackupDestinationConfig,
 	type BackupDestinationRecord,
 	type BackupDestinationType,
@@ -13,6 +14,7 @@ import {
 	createDefaultBackupScheduleConfig,
 	createDefaultBackupSettings as createSharedDefaultBackupSettings,
 	type S3BackupAddressingStyle,
+	type R2BackupDestination,
 	type S3BackupDestination,
 	type WebDavBackupDestination,
 } from "@edgewarden/shared";
@@ -158,6 +160,9 @@ function normalizeDestination(
 	destination: unknown,
 	allowIncomplete = false,
 ): BackupDestinationConfig {
+	if (destinationType === "r2") {
+		return { rootPath: BACKUP_R2_ROOT_PATH } satisfies R2BackupDestination;
+	}
 	if (destinationType === "s3")
 		return normalizeS3Destination(destination, allowIncomplete);
 	return normalizeWebDavDestination(destination, allowIncomplete);
@@ -199,7 +204,7 @@ function defaultDestinationName(
 function getDestinationType(raw: unknown): BackupDestinationType {
 	const value = asTrimmedString(raw);
 	if (value === "e3") return "s3";
-	if (value === "s3" || value === "webdav") return value;
+	if (value === "r2" || value === "s3" || value === "webdav") return value;
 	throw new Error("Backup destination type is invalid");
 }
 

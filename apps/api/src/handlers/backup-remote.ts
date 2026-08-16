@@ -28,6 +28,7 @@ export const listRemoteBackups = factory.createHandlers(
 			const { session } = await loadRemoteBackupSession(
 				c.get("db"),
 				c.env.DATA_ENCRYPTION_SECRET,
+				c.env,
 				destinationId,
 			);
 			return c.json(await session.list(path));
@@ -48,6 +49,7 @@ export const downloadRemoteBackup = factory.createHandlers(
 			const { session } = await loadRemoteBackupSession(
 				c.get("db"),
 				c.env.DATA_ENCRYPTION_SECRET,
+				c.env,
 				destinationId,
 			);
 			const file = await session.download(path);
@@ -76,6 +78,7 @@ export const inspectRemoteBackup = factory.createHandlers(
 			const { session } = await loadRemoteBackupSession(
 				c.get("db"),
 				c.env.DATA_ENCRYPTION_SECRET,
+				c.env,
 				destinationId,
 			);
 			const file = await session.download(path);
@@ -125,6 +128,7 @@ export const deleteRemoteBackup = factory.createHandlers(
 			const { session } = await loadRemoteBackupSession(
 				c.get("db"),
 				c.env.DATA_ENCRYPTION_SECRET,
+				c.env,
 				destinationId,
 			);
 			await session.deleteFile(path);
@@ -158,6 +162,7 @@ export const restoreRemoteBackup = factory.createHandlers(
 			const { session } = await loadRemoteBackupSession(
 				c.get("db"),
 				c.env.DATA_ENCRYPTION_SECRET,
+				c.env,
 				destinationId,
 			);
 			const file = await session.download(path);
