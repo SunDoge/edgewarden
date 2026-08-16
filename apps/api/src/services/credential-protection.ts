@@ -1,3 +1,6 @@
+import { parseJsonWithSchema } from "@edgewarden/shared";
+import * as v from "valibot";
+
 const ENVELOPE_VERSION = 1;
 
 type CredentialPurpose =
@@ -12,6 +15,12 @@ interface EncryptedEnvelope {
 	iv: string;
 	data: string;
 }
+
+const EncryptedEnvelopeSchema = v.object({
+	v: v.literal(ENVELOPE_VERSION),
+	iv: v.pipe(v.string(), v.minLength(1)),
+	data: v.pipe(v.string(), v.minLength(1)),
+});
 
 function bytesBase64(value: Uint8Array): string {
 	let binary = "";
@@ -64,12 +73,10 @@ export async function decryptCredential(
 	secret: string,
 	purpose: CredentialPurpose,
 ): Promise<string> {
-	const envelope = JSON.parse(value) as EncryptedEnvelope;
-	if (
-		envelope.v !== ENVELOPE_VERSION ||
-		typeof envelope.iv !== "string" ||
-		typeof envelope.data !== "string"
-	) {
+	let envelope: EncryptedEnvelope;
+	try {
+		envelope = parseJsonWithSchema(value, EncryptedEnvelopeSchema);
+	} catch {
 		throw new Error("Unsupported encrypted credential envelope");
 	}
 	const plaintext = await crypto.subtle.decrypt(

@@ -51,21 +51,11 @@ export class VaultRealtimeClient {
 			const socket = this.#createSocket(url.toString());
 			this.#socket = socket;
 			socket.addEventListener("message", (event) => {
-				try {
-					const message = JSON.parse(String(event.data)) as {
-						type?: unknown;
-						revisionDate?: unknown;
-					};
-					if (
-						message.type === "vault-revision" &&
-						typeof message.revisionDate === "number" &&
-						Number.isFinite(message.revisionDate)
-					) {
-						void this.#onRevision(message.revisionDate);
-					}
-				} catch {
-					// Ignore malformed or unrelated realtime messages.
-				}
+				const message = safeParseJsonWithSchema(
+					String(event.data),
+					VaultRevisionMessageSchema,
+				);
+				if (message) void this.#onRevision(message.revisionDate);
 			});
 			socket.addEventListener("close", () => {
 				if (this.#socket === socket) this.#socket = null;
@@ -87,3 +77,10 @@ export class VaultRealtimeClient {
 		}, this.#reconnectDelayMs);
 	}
 }
+import { safeParseJsonWithSchema } from "@edgewarden/shared";
+import * as v from "valibot";
+
+const VaultRevisionMessageSchema = v.object({
+	type: v.literal("vault-revision"),
+	revisionDate: v.pipe(v.number(), v.finite()),
+});

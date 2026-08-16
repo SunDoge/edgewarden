@@ -1,5 +1,6 @@
-import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
+import { EDGEWARDEN_VERSION, parseJsonWithSchema } from "@edgewarden/shared";
 import { unzipSync, zipSync } from "fflate";
+import * as v from "valibot";
 import {
 	type BlobStore,
 	getStoredAttachmentObjectKey,
@@ -91,6 +92,57 @@ export interface BackupPayload {
 		sends?: SqlRow[];
 	};
 }
+
+const BackupBlobSchema = v.object({
+	blobName: v.string(),
+	sizeBytes: v.pipe(v.number(), v.integer(), v.minValue(0)),
+});
+const BackupManifestSchema = v.object({
+	formatVersion: v.picklist([1, 2, 3, 4]),
+	exportedAt: v.string(),
+	appVersion: v.string(),
+	storageKind: v.nullable(v.picklist(["kv", "r2"])),
+	tableCounts: v.record(v.string(), v.number()),
+	includes: v.object({
+		attachments: v.boolean(),
+		fileSends: v.optional(v.boolean()),
+	}),
+	blobSummary: v.object({
+		attachmentFiles: v.pipe(v.number(), v.integer(), v.minValue(0)),
+		sendFiles: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
+		totalBytes: v.pipe(v.number(), v.integer(), v.minValue(0)),
+		largestObjectBytes: v.pipe(v.number(), v.integer(), v.minValue(0)),
+	}),
+	attachmentBlobs: v.optional(
+		v.array(
+			v.object({
+				...BackupBlobSchema.entries,
+				cipherId: v.string(),
+				attachmentId: v.string(),
+			}),
+		),
+	),
+	sendBlobs: v.optional(
+		v.array(
+			v.object({
+				...BackupBlobSchema.entries,
+				sendId: v.string(),
+				fileId: v.string(),
+			}),
+		),
+	),
+	blobHashes: v.optional(v.record(v.string(), v.string())),
+});
+const BackupDatabaseSchema = v.custom<BackupPayload["db"]>((input) => {
+	if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+	return Object.values(input).every(
+		(rows) =>
+			Array.isArray(rows) &&
+			rows.every(
+				(row) => !!row && typeof row === "object" && !Array.isArray(row),
+			),
+	);
+}, "Backup database must contain arrays of SQL rows");
 
 const BACKUP_DB_TABLES = [
 	"config",
@@ -337,8 +389,11 @@ export function parseBackupArchive(
 	let manifest: BackupManifest;
 	let db: BackupPayload["db"];
 	try {
-		manifest = JSON.parse(decoder.decode(manifestBytes)) as BackupManifest;
-		db = JSON.parse(decoder.decode(dbBytes)) as BackupPayload["db"];
+		manifest = parseJsonWithSchema(
+			decoder.decode(manifestBytes),
+			BackupManifestSchema,
+		);
+		db = parseJsonWithSchema(decoder.decode(dbBytes), BackupDatabaseSchema);
 	} catch {
 		throw new Error("Backup archive contains invalid JSON metadata");
 	}

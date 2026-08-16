@@ -1,9 +1,20 @@
+import { parseJsonWithSchema } from "@edgewarden/shared";
 import type { CompiledQuery, Kysely } from "kysely";
+import * as v from "valibot";
 import type { DB } from "../types/db";
 import type { YubicoCredentials } from "../utils/yubico";
 import type { WorkerBindings } from "../worker-bindings";
 
 export const YUBICO_CONFIG_KEY = "security.yubico.credentials.v1";
+
+const EncryptedYubicoConfigSchema = v.object({
+	iv: v.pipe(v.string(), v.minLength(1)),
+	data: v.pipe(v.string(), v.minLength(1)),
+});
+const YubicoCredentialsSchema = v.object({
+	clientId: v.pipe(v.string(), v.minLength(1)),
+	secretKey: v.pipe(v.string(), v.minLength(1)),
+});
 
 function bytesBase64(value: Uint8Array): string {
 	let binary = "";
@@ -66,16 +77,20 @@ export async function loadYubicoCredentials(
 		.executeTakeFirst();
 	if (!row) return null;
 	try {
-		const encrypted = JSON.parse(row.value) as { iv: string; data: string };
+		const encrypted = parseJsonWithSchema(
+			row.value,
+			EncryptedYubicoConfigSchema,
+		);
 		const plaintext = await crypto.subtle.decrypt(
 			{ name: "AES-GCM", iv: base64Bytes(encrypted.iv) },
 			await encryptionKey(env.DATA_ENCRYPTION_SECRET),
 			base64Bytes(encrypted.data),
 		);
-		const parsed = JSON.parse(
+		const parsed = parseJsonWithSchema(
 			new TextDecoder().decode(plaintext),
-		) as YubicoCredentials;
-		return parsed.clientId && parsed.secretKey ? parsed : null;
+			YubicoCredentialsSchema,
+		);
+		return parsed;
 	} catch {
 		return null;
 	}

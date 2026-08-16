@@ -144,7 +144,11 @@ export function parseBackupSettingsEnvelope(
 ): BackupSettingsEnvelopeV2 | null {
 	if (!raw) return null;
 	try {
-		const parsed = JSON.parse(raw) as Record<string, unknown>;
+		const parsed = safeParseJsonWithSchema(
+			raw,
+			v.record(v.string(), v.unknown()),
+		);
+		if (!parsed) return null;
 		if (!isPlainObject(parsed) || Number(parsed.version) !== 2) return null;
 		const runtime = parsed.runtime;
 		const portable = parsed.portable;
@@ -279,3 +283,5 @@ export async function decryptBackupSettingsRuntime(
 	);
 	return new TextDecoder().decode(plaintext);
 }
+import { safeParseJsonWithSchema } from "@edgewarden/shared";
+import * as v from "valibot";

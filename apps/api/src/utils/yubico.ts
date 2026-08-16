@@ -1,3 +1,6 @@
+import { safeParseJsonWithSchema } from "@edgewarden/shared";
+import * as v from "valibot";
+
 const PUBLIC_ID_LENGTH = 12;
 const MIN_OTP_LENGTH = 32;
 const MAX_OTP_LENGTH = 48;
@@ -14,13 +17,16 @@ export interface YubikeyConfig {
 }
 
 const EMPTY_YUBIKEY_CONFIG: YubikeyConfig = { keys: [], nfc: false };
+const YubikeyConfigStorageSchema = v.object({
+	keys: v.array(v.unknown()),
+	nfc: v.boolean(),
+});
 
 export function parseYubikeyConfig(value: unknown): YubikeyConfig {
 	if (typeof value !== "string") return EMPTY_YUBIKEY_CONFIG;
 	try {
-		const parsed = JSON.parse(value) as { keys?: unknown; nfc?: unknown };
-		if (!Array.isArray(parsed.keys) || typeof parsed.nfc !== "boolean")
-			return EMPTY_YUBIKEY_CONFIG;
+		const parsed = safeParseJsonWithSchema(value, YubikeyConfigStorageSchema);
+		if (!parsed) return EMPTY_YUBIKEY_CONFIG;
 		const keys = parsed.keys
 			.filter((key): key is string => typeof key === "string")
 			.map((key) => key.trim().toLowerCase())

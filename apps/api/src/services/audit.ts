@@ -1,4 +1,6 @@
+import { safeParseJsonWithSchema } from "@edgewarden/shared";
 import { type CompiledQuery, type Kysely, type RawBuilder, sql } from "kysely";
+import * as v from "valibot";
 import type { DB } from "../types/db";
 import { now } from "../utils/time";
 import { textColumnInJson } from "./db/json-array";
@@ -53,6 +55,14 @@ const DEFAULT_AUDIT_SETTINGS: AuditLogSettings = {
 	retentionDays: null,
 	maxEntries: null,
 };
+const AuditLogSettingsStorageSchema = v.partial(
+	v.object({
+		retentionDays: v.nullable(v.picklist([7, 30, 90, 180, 365])),
+		maxEntries: v.nullable(
+			v.pipe(v.number(), v.integer(), v.minValue(100), v.maxValue(1_000_000)),
+		),
+	}),
+);
 
 export function isAuditTombstoneAction(action: string): boolean {
 	return (
@@ -71,25 +81,16 @@ export async function getAuditLogSettings(
 		.where("key", "=", AUDIT_SETTINGS_KEY)
 		.executeTakeFirst();
 	if (!row) return DEFAULT_AUDIT_SETTINGS;
-	try {
-		const value = JSON.parse(row.value) as Partial<AuditLogSettings>;
-		const retentionDays = [7, 30, 90, 180, 365].includes(
-			Number(value.retentionDays),
-		)
-			? (Number(value.retentionDays) as AuditLogSettings["retentionDays"])
-			: null;
-		const maxEntries =
-			Number.isInteger(value.maxEntries) &&
-			Number(value.maxEntries) >= 100 &&
-			Number(value.maxEntries) <= 1_000_000
-				? Number(value.maxEntries)
-				: null;
-		return retentionDays
-			? { retentionDays, maxEntries: null }
-			: { retentionDays: null, maxEntries };
-	} catch {
-		return DEFAULT_AUDIT_SETTINGS;
-	}
+	const value = safeParseJsonWithSchema(
+		row.value,
+		AuditLogSettingsStorageSchema,
+	);
+	if (!value) return DEFAULT_AUDIT_SETTINGS;
+	const retentionDays = value.retentionDays ?? null;
+	const maxEntries = value.maxEntries ?? null;
+	return retentionDays
+		? { retentionDays, maxEntries: null }
+		: { retentionDays: null, maxEntries };
 }
 
 export async function applyAuditLogRetention(

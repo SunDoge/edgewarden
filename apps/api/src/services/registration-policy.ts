@@ -1,4 +1,6 @@
+import { safeParseJsonWithSchema } from "@edgewarden/shared";
 import type { CompiledQuery, Kysely } from "kysely";
+import * as v from "valibot";
 import type { DB } from "../types/db";
 import type { WorkerBindings } from "../worker-bindings";
 import { getConfigValue, setConfigValueQuery } from "./db/config";
@@ -10,6 +12,13 @@ export interface RegistrationPolicy {
 	signupsAllowed: boolean;
 	invitationsAllowed: boolean;
 }
+
+const RegistrationPolicyStorageSchema = v.partial(
+	v.object({
+		signupsAllowed: v.boolean(),
+		invitationsAllowed: v.boolean(),
+	}),
+);
 
 function booleanSetting(value: string | undefined, fallback: boolean): boolean {
 	if (value === undefined) return fallback;
@@ -32,21 +41,16 @@ export async function loadRegistrationPolicy(
 	const fallback = defaultRegistrationPolicy(env);
 	const value = await getConfigValue(db, REGISTRATION_CONFIG_KEY);
 	if (!value) return fallback;
-	try {
-		const parsed = JSON.parse(value) as Partial<RegistrationPolicy>;
-		return {
-			signupsAllowed:
-				typeof parsed.signupsAllowed === "boolean"
-					? parsed.signupsAllowed
-					: fallback.signupsAllowed,
-			invitationsAllowed:
-				typeof parsed.invitationsAllowed === "boolean"
-					? parsed.invitationsAllowed
-					: fallback.invitationsAllowed,
-		};
-	} catch {
-		return fallback;
-	}
+	const parsed = safeParseJsonWithSchema(
+		value,
+		RegistrationPolicyStorageSchema,
+	);
+	if (!parsed) return fallback;
+	return {
+		signupsAllowed: parsed.signupsAllowed ?? fallback.signupsAllowed,
+		invitationsAllowed:
+			parsed.invitationsAllowed ?? fallback.invitationsAllowed,
+	};
 }
 
 export function registrationPolicyQuery(

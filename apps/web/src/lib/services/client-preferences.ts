@@ -15,26 +15,20 @@ export const DEFAULT_CLIENT_PREFERENCES: ClientPreferences = {
 	lockTimeoutMinutes: 15,
 	sessionTimeoutAction: "lock",
 };
-
-function isPreferences(value: unknown): value is ClientPreferences {
-	if (!value || typeof value !== "object") return false;
-	const item = value as Record<string, unknown>;
-	return (
-		["system", "light", "dark"].includes(String(item.theme)) &&
-		[0, 1, 5, 15, 30].includes(Number(item.lockTimeoutMinutes)) &&
-		["lock", "logout"].includes(String(item.sessionTimeoutAction))
-	);
-}
+const ClientPreferencesSchema = v.object({
+	theme: v.picklist(["system", "light", "dark"]),
+	lockTimeoutMinutes: v.picklist([0, 1, 5, 15, 30]),
+	sessionTimeoutAction: v.picklist(["lock", "logout"]),
+});
 
 export function loadClientPreferences(
 	storage: Pick<Storage, "getItem"> = localStorage,
 ): ClientPreferences {
-	try {
-		const parsed: unknown = JSON.parse(storage.getItem(STORAGE_KEY) ?? "null");
-		return isPreferences(parsed) ? parsed : { ...DEFAULT_CLIENT_PREFERENCES };
-	} catch {
-		return { ...DEFAULT_CLIENT_PREFERENCES };
-	}
+	const parsed = safeParseJsonWithSchema(
+		storage.getItem(STORAGE_KEY) ?? "null",
+		ClientPreferencesSchema,
+	);
+	return parsed ?? { ...DEFAULT_CLIENT_PREFERENCES };
 }
 
 export function saveClientPreferences(
@@ -75,3 +69,5 @@ export function applyThemePreference(
 export function clientPreferencesStorageKey(): string {
 	return STORAGE_KEY;
 }
+import { safeParseJsonWithSchema } from "@edgewarden/shared";
+import * as v from "valibot";

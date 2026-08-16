@@ -1,4 +1,6 @@
+import { safeParseJsonWithSchema } from "@edgewarden/shared";
 import type { Kysely, Selectable } from "kysely";
+import * as v from "valibot";
 import type { DB, Sends } from "../../types/db";
 import { decodeBase64Url, encodeBase64Url } from "../../utils/base64-url";
 import { now } from "../../utils/time";
@@ -39,6 +41,8 @@ export function fromAccessId(accessId: string): string | null {
 }
 
 type StoredSend = Selectable<Sends>;
+const StoredSendDataSchema = v.record(v.string(), v.unknown());
+const SendEmailsStorageSchema = v.array(v.string());
 
 export function isSendAvailable(send: StoredSend): boolean {
 	const timestamp = now();
@@ -54,19 +58,16 @@ export function isSendAvailable(send: StoredSend): boolean {
 export function parseStoredSendData(
 	send: Pick<StoredSend, "data">,
 ): Record<string, unknown> {
-	try {
-		const data = JSON.parse(send.data) as Record<string, unknown>;
-		if (data.id === undefined && data.Id !== undefined) data.id = data.Id;
-		if (data.size === undefined && data.Size !== undefined)
-			data.size = data.Size;
-		if (data.sizeName === undefined && data.SizeName !== undefined)
-			data.sizeName = data.SizeName;
-		if (data.fileName === undefined && data.FileName !== undefined)
-			data.fileName = data.FileName;
-		return data;
-	} catch {
-		return {};
-	}
+	const parsed = safeParseJsonWithSchema(send.data, StoredSendDataSchema);
+	if (!parsed) return {};
+	const data = { ...parsed };
+	if (data.id === undefined && data.Id !== undefined) data.id = data.Id;
+	if (data.size === undefined && data.Size !== undefined) data.size = data.Size;
+	if (data.sizeName === undefined && data.SizeName !== undefined)
+		data.sizeName = data.SizeName;
+	if (data.fileName === undefined && data.FileName !== undefined)
+		data.fileName = data.FileName;
+	return data;
 }
 
 export function serializeSendEmails(
@@ -77,12 +78,7 @@ export function serializeSendEmails(
 
 function parseSendEmails(emails: string | null): string[] | null {
 	if (!emails) return null;
-	try {
-		const parsed = JSON.parse(emails);
-		return Array.isArray(parsed) ? parsed : null;
-	} catch {
-		return null;
-	}
+	return safeParseJsonWithSchema(emails, SendEmailsStorageSchema);
 }
 
 export function parseInteger(value: unknown): number | null {
