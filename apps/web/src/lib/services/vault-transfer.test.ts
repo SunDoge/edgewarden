@@ -270,6 +270,15 @@ describe("vault import and export", () => {
 		expect(parsed.folders[0].name).toBe("Work");
 	});
 
+	it("rejects malformed CSV instead of importing a truncated secret", () => {
+		expect(() =>
+			parseVaultImport(
+				'name,username,password\r\nExample,me,"unterminated',
+				"csv",
+			),
+		).toThrow(/CSV 格式错误/);
+	});
+
 	it("round-trips login values through Bitwarden-compatible CSV", () => {
 		const source = {
 			folders: [{ id: "f", name: "Work" }],

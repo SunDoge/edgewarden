@@ -63,12 +63,15 @@ describe("S3 backup adapter", () => {
 				modifiedAt: "2026-08-12T01:02:03.000Z",
 			},
 		]);
-		const requestedUrl = new URL(String(vi.mocked(fetch).mock.calls[0]?.[0]));
+		const request = vi.mocked(fetch).mock.calls[0]?.[0];
+		expect(request).toBeInstanceOf(Request);
+		const requestedUrl = new URL((request as Request).url);
 		expect(requestedUrl.pathname).toBe("/backups");
 		expect(requestedUrl.searchParams.get("list-type")).toBe("2");
 		expect(requestedUrl.searchParams.get("prefix")).toBe("edgewarden/");
-		expect(vi.mocked(fetch).mock.calls[0]?.[1]?.signal).toBeInstanceOf(
-			AbortSignal,
+		expect((request as Request).signal).toBeInstanceOf(AbortSignal);
+		expect((request as Request).headers.get("Authorization")).toMatch(
+			/^AWS4-HMAC-SHA256 /,
 		);
 	});
 
@@ -81,13 +84,18 @@ describe("S3 backup adapter", () => {
 		await putToS3(config, "folder/my backup.zip", new Uint8Array([1, 2]));
 
 		expect(fetchMock).toHaveBeenCalledOnce();
-		expect(fetchMock.mock.calls[0]?.[0]).toBe(
+		const request = fetchMock.mock.calls[0]?.[0];
+		expect(request).toBeInstanceOf(Request);
+		expect((request as Request).url).toBe(
 			"https://s3.example.test/backups/edgewarden/folder/my%20backup.zip",
 		);
-		expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+		expect(request as Request).toMatchObject({
 			method: "PUT",
 			signal: expect.any(AbortSignal),
 		});
+		expect((request as Request).headers.get("Authorization")).toMatch(
+			/^AWS4-HMAC-SHA256 /,
+		);
 	});
 
 	it("rejects oversized backup downloads before buffering", async () => {
