@@ -40,7 +40,7 @@ export const connectToken = factory.createHandlers(async (c) => {
 
 	const body = c.get("tokenRequest");
 	const grantType = body.grant_type;
-	if (grantType === "password") return handlePasswordGrant(c as any);
+	if (grantType === "password") return handlePasswordGrant(c);
 
 	if (grantType === "webauthn") {
 		const token = String(body.token || "").trim();
@@ -79,7 +79,7 @@ export const connectToken = factory.createHandlers(async (c) => {
 					scope: "Authentication",
 				},
 			);
-		} catch (error: any) {
+		} catch (error: unknown) {
 			await safeWriteAuditEvent(db, {
 				actorUserId: null,
 				action: "auth.passkey.login.failed",
@@ -89,7 +89,10 @@ export const connectToken = factory.createHandlers(async (c) => {
 				targetId: null,
 				metadata: {
 					grantType,
-					reason: error.message || "assertion_failed",
+					reason:
+						error instanceof Error && error.message
+							? error.message
+							: "assertion_failed",
 					...auditRequestMetadata(c.req.raw),
 				},
 			});

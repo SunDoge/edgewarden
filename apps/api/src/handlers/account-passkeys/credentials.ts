@@ -17,7 +17,10 @@ import {
 	handleGetAccountPasskeyAssertionOptions,
 	verifyUserSecret,
 } from "../../services/account-passkey-auth";
-import { auditEventInsertQuery, auditRequestMetadata } from "../../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+} from "../../services/audit";
 import { invalidateUserCache } from "../../services/auth";
 import {
 	conditionalAccountPasskeyClaimQuery,
@@ -285,8 +288,13 @@ export const updateAccountPasskeyEncryption = factory.createHandlers(
 					expectedUserId: user.id,
 				},
 			);
-		} catch (error: any) {
-			return errorResponse(error.message || "Passkey assertion failed", 400);
+		} catch (error: unknown) {
+			return errorResponse(
+				error instanceof Error && error.message
+					? error.message
+					: "Passkey assertion failed",
+				400,
+			);
 		}
 
 		const ts = now();
