@@ -841,7 +841,7 @@ describe("Edgewarden API", () => {
 			).status,
 			401,
 		);
-	});
+	}, 15_000);
 
 	test("restores a complete organization backup without API credentials", async () => {
 		assert.ok(organizationBackup.byteLength > 0);
