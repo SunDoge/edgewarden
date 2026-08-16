@@ -2,7 +2,7 @@ import type { BackupDestinationRecord } from "./types";
 
 export interface BackupDestinationForm {
 	name: string;
-	type: "s3" | "webdav";
+	type: "r2" | "s3" | "webdav";
 	includeAttachments: boolean;
 	s3Endpoint: string;
 	s3Bucket: string;
@@ -25,7 +25,7 @@ export interface BackupDestinationForm {
 export function createDefaultBackupDestinationForm(): BackupDestinationForm {
 	return {
 		name: "",
-		type: "webdav",
+		type: "r2",
 		includeAttachments: false,
 		s3Endpoint: "",
 		s3Bucket: "",
@@ -62,7 +62,7 @@ export function backupDestinationToForm(
 		form.s3RootPath = destination.destination.rootPath || "edgewarden";
 		form.s3AddressingStyle =
 			destination.destination.addressingStyle || "path-style";
-	} else {
+	} else if (destination.type === "webdav") {
 		form.davBaseUrl = destination.destination.baseUrl || "";
 		form.davUsername = destination.destination.username || "";
 		form.davPassword = destination.destination.password || "";
@@ -82,26 +82,34 @@ export function applyBackupDestinationForm(
 ): BackupDestinationRecord {
 	return {
 		...destination,
-		name: form.name.trim() || (form.type === "s3" ? "S3 备份" : "WebDAV 备份"),
+		name:
+			form.name.trim() ||
+			(form.type === "r2"
+				? "Cloudflare R2 备份"
+				: form.type === "s3"
+					? "S3 备份"
+					: "WebDAV 备份"),
 		type: form.type,
 		includeAttachments: form.includeAttachments,
 		destination:
-			form.type === "s3"
-				? {
-						endpoint: form.s3Endpoint.trim(),
-						bucket: form.s3Bucket.trim(),
-						addressingStyle: form.s3AddressingStyle,
-						region: form.s3Region.trim(),
-						accessKeyId: form.s3AccessKeyId.trim(),
-						secretAccessKey: form.s3SecretAccessKey,
-						rootPath: form.s3RootPath.trim(),
-					}
-				: {
-						baseUrl: form.davBaseUrl.trim(),
-						username: form.davUsername.trim(),
-						password: form.davPassword,
-						remotePath: form.davRemotePath.trim(),
-					},
+			form.type === "r2"
+				? { rootPath: "backups" }
+				: form.type === "s3"
+					? {
+							endpoint: form.s3Endpoint.trim(),
+							bucket: form.s3Bucket.trim(),
+							addressingStyle: form.s3AddressingStyle,
+							region: form.s3Region.trim(),
+							accessKeyId: form.s3AccessKeyId.trim(),
+							secretAccessKey: form.s3SecretAccessKey,
+							rootPath: form.s3RootPath.trim(),
+						}
+					: {
+							baseUrl: form.davBaseUrl.trim(),
+							username: form.davUsername.trim(),
+							password: form.davPassword,
+							remotePath: form.davRemotePath.trim(),
+						},
 		schedule: {
 			enabled: form.scheduleEnabled,
 			intervalHours: form.scheduleInterval,

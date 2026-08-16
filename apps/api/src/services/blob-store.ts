@@ -92,6 +92,11 @@ function getR2Storage(env: CloudflareBindings): R2Bucket {
 	return (bindings.ATTACHMENTS_R2 || bindings.ATTACHMENTS) as R2Bucket;
 }
 
+/** Returns the native R2 binding only when R2 is the active blob backend. */
+export function getR2StorageBinding(env: CloudflareBindings): R2Bucket | null {
+	return getBlobStorageKind(env) === "r2" ? getR2Storage(env) : null;
+}
+
 export function getBlobStorageMaxBytes(
 	env: CloudflareBindings,
 	configuredLimit: number,

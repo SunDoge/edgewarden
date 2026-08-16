@@ -103,14 +103,9 @@ function addDestination() {
 	const newDest: BackupDestinationRecord = {
 		id: newId,
 		name: "新建备份目的地",
-		type: "webdav",
+		type: "r2",
 		includeAttachments: false,
-		destination: {
-			baseUrl: "",
-			username: "",
-			password: "",
-			remotePath: "edgewarden",
-		},
+		destination: { rootPath: "backups" },
 		schedule: {
 			enabled: false,
 			intervalHours: 24,

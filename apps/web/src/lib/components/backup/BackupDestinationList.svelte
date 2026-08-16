@@ -35,7 +35,7 @@ let {
 				<Badge variant="outline" class="uppercase">{destination.type}</Badge>
 			</Button>
 		{:else}
-			<Empty.Root><Empty.Header><Empty.Media variant="icon"><Plus /></Empty.Media><Empty.Title>未配置备份目的地</Empty.Title><Empty.Description>添加 R2 或 KV 目的地以启用自动备份。</Empty.Description></Empty.Header><Empty.Content><Button size="sm" onclick={onAdd}><Plus data-icon="inline-start" />添加目的地</Button></Empty.Content></Empty.Root>
+			<Empty.Root><Empty.Header><Empty.Media variant="icon"><Plus /></Empty.Media><Empty.Title>未配置备份目的地</Empty.Title><Empty.Description>添加 R2、WebDAV 或 S3 目的地以启用自动备份。</Empty.Description></Empty.Header><Empty.Content><Button size="sm" onclick={onAdd}><Plus data-icon="inline-start" />添加目的地</Button></Empty.Content></Empty.Root>
 		{/each}
 	</Card.Content>
 </Card.Root>

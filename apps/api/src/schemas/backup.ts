@@ -12,7 +12,7 @@ export const BackupSettingsSchema = v.looseObject({
 			v.looseObject({
 				id: v.optional(v.string()),
 				name: v.optional(v.string()),
-				type: v.picklist(["s3", "e3", "webdav"]),
+				type: v.picklist(["r2", "s3", "e3", "webdav"]),
 				includeAttachments: v.optional(v.boolean()),
 				schedule: v.optional(v.record(v.string(), v.unknown())),
 				destination: v.record(v.string(), v.unknown()),

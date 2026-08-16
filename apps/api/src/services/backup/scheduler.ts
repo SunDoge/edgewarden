@@ -2,7 +2,7 @@ import { D1Dialect } from "@sundoge/kysely-d1";
 import { Kysely, sql } from "kysely";
 import type { DB } from "../../types/db";
 import { safeWriteAuditEvent } from "../audit";
-import { createBlobStore } from "../blob-store";
+import { createBlobStore, getR2StorageBinding } from "../blob-store";
 import { assertBackupArchiveIntegrity, buildBackupArchive } from "./archive";
 import {
 	getBackupLocalDateKey,
@@ -85,7 +85,10 @@ export async function runScheduledBackupIfDue(
 					timeZone: destination.schedule.timezone,
 				});
 				await requireDataOperationLeaseRenewal(env.DB, lease);
-				const session = createRemoteBackupTransferSession(destination);
+				const r2Bucket = getR2StorageBinding(env);
+				const session = createRemoteBackupTransferSession(destination, {
+					r2Bucket,
+				});
 				const upload = await session.uploadArchive(
 					archive.bytes,
 					archive.fileName,
@@ -104,6 +107,7 @@ export async function runScheduledBackupIfDue(
 						destination,
 						destination.schedule.retentionCount,
 						archive.fileName,
+						{ r2Bucket },
 					);
 				}
 				await requireDataOperationLeaseRenewal(env.DB, lease);

@@ -1,7 +1,7 @@
 export interface BackupDestinationRecord {
 	id: string;
 	name: string;
-	type: "s3" | "webdav";
+	type: "r2" | "s3" | "webdav";
 	includeAttachments: boolean;
 	destination: {
 		endpoint?: string;
