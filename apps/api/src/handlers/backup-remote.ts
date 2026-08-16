@@ -18,13 +18,13 @@ import {
 	requireDataOperationLeaseRenewal,
 } from "../services/backup/operation-lease";
 import { createBlobStore } from "../services/blob-store";
-import { errorResponse } from "../utils/response";
+import { errorResponse, withErrorResponse } from "../utils/response";
 
 export const listRemoteBackups = factory.createHandlers(
 	vValidator("query", BackupRemoteQuerySchema),
-	async (c) => {
-		const { destinationId, path } = c.req.valid("query");
-		try {
+	async (c) =>
+		withErrorResponse(async () => {
+			const { destinationId, path } = c.req.valid("query");
 			const { session } = await loadRemoteBackupSession(
 				c.get("db"),
 				c.env.DATA_ENCRYPTION_SECRET,
@@ -32,20 +32,14 @@ export const listRemoteBackups = factory.createHandlers(
 				destinationId,
 			);
 			return c.json(await session.list(path));
-		} catch (error: any) {
-			return errorResponse(
-				error.message || "Failed to list remote backups",
-				500,
-			);
-		}
-	},
+		}, "Failed to list remote backups"),
 );
 
 export const downloadRemoteBackup = factory.createHandlers(
 	vValidator("query", BackupRemoteFileQuerySchema),
-	async (c) => {
-		const { destinationId, path } = c.req.valid("query");
-		try {
+	async (c) =>
+		withErrorResponse(async () => {
+			const { destinationId, path } = c.req.valid("query");
 			const { session } = await loadRemoteBackupSession(
 				c.get("db"),
 				c.env.DATA_ENCRYPTION_SECRET,
@@ -61,20 +55,14 @@ export const downloadRemoteBackup = factory.createHandlers(
 					"Cache-Control": "no-store",
 				},
 			});
-		} catch (error: any) {
-			return errorResponse(
-				error.message || "Failed to download remote backup",
-				500,
-			);
-		}
-	},
+		}, "Failed to download remote backup"),
 );
 
 export const inspectRemoteBackup = factory.createHandlers(
 	vValidator("query", BackupRemoteFileQuerySchema),
-	async (c) => {
-		const { destinationId, path } = c.req.valid("query");
-		try {
+	async (c) =>
+		withErrorResponse(async () => {
+			const { destinationId, path } = c.req.valid("query");
 			const { session } = await loadRemoteBackupSession(
 				c.get("db"),
 				c.env.DATA_ENCRYPTION_SECRET,
@@ -111,20 +99,14 @@ export const inspectRemoteBackup = factory.createHandlers(
 							: "Backup file checksum does not match its filename"),
 				},
 			});
-		} catch (error: any) {
-			return errorResponse(
-				error.message || "Failed to inspect remote backup",
-				500,
-			);
-		}
-	},
+		}, "Failed to inspect remote backup"),
 );
 
 export const deleteRemoteBackup = factory.createHandlers(
 	vValidator("query", BackupRemoteFileQuerySchema),
-	async (c) => {
-		const { destinationId, path } = c.req.valid("query");
-		try {
+	async (c) =>
+		withErrorResponse(async () => {
+			const { destinationId, path } = c.req.valid("query");
 			const { session } = await loadRemoteBackupSession(
 				c.get("db"),
 				c.env.DATA_ENCRYPTION_SECRET,
@@ -133,73 +115,63 @@ export const deleteRemoteBackup = factory.createHandlers(
 			);
 			await session.deleteFile(path);
 			return new Response(null, { status: 204 });
-		} catch (error: any) {
-			return errorResponse(
-				error.message || "Failed to delete remote backup file",
-				500,
-			);
-		}
-	},
+		}, "Failed to delete remote backup file"),
 );
 
 export const restoreRemoteBackup = factory.createHandlers(
 	vValidator("json", BackupRemoteRestoreSchema),
-	async (c) => {
-		const body = c.req.valid("json");
-		const { destinationId, path, replaceExisting, allowChecksumMismatch } =
-			body;
-		const lease = await acquireDataOperationLease(
-			c.env.DB,
-			"backup.restore_remote",
-		);
-		if (!lease) {
-			return errorResponse(
-				"Another backup, restore, or maintenance operation is running",
-				409,
-			);
-		}
-		try {
-			const { session } = await loadRemoteBackupSession(
-				c.get("db"),
-				c.env.DATA_ENCRYPTION_SECRET,
-				c.env,
-				destinationId,
-			);
-			const file = await session.download(path);
-			await requireDataOperationLeaseRenewal(c.env.DB, lease);
-			const checksumOk = await verifyBackupArchiveFileNameChecksum(
-				file.bytes,
-				file.fileName,
-			);
-			if (!checksumOk && !allowChecksumMismatch) {
-				throw new Error("Backup file checksum does not match its filename");
-			}
-
-			const imported = await importRemoteBackupArchiveBytes(
-				file.bytes,
+	async (c) =>
+		withErrorResponse(async () => {
+			const body = c.req.valid("json");
+			const { destinationId, path, replaceExisting, allowChecksumMismatch } =
+				body;
+			const lease = await acquireDataOperationLease(
 				c.env.DB,
-				createBlobStore(c.env),
-				c.env.DATA_ENCRYPTION_SECRET,
-				c.get("user").id,
-				!!replaceExisting,
-				{
-					loadAttachment: async (blobName: string) => {
-						const blob = await session.download(blobName);
-						await requireDataOperationLeaseRenewal(c.env.DB, lease);
-						return blob.bytes;
+				"backup.restore_remote",
+			);
+			if (!lease) {
+				return errorResponse(
+					"Another backup, restore, or maintenance operation is running",
+					409,
+				);
+			}
+			try {
+				const { session } = await loadRemoteBackupSession(
+					c.get("db"),
+					c.env.DATA_ENCRYPTION_SECRET,
+					c.env,
+					destinationId,
+				);
+				const file = await session.download(path);
+				await requireDataOperationLeaseRenewal(c.env.DB, lease);
+				const checksumOk = await verifyBackupArchiveFileNameChecksum(
+					file.bytes,
+					file.fileName,
+				);
+				if (!checksumOk && !allowChecksumMismatch) {
+					throw new Error("Backup file checksum does not match its filename");
+				}
+
+				const imported = await importRemoteBackupArchiveBytes(
+					file.bytes,
+					c.env.DB,
+					createBlobStore(c.env),
+					c.env.DATA_ENCRYPTION_SECRET,
+					c.get("user").id,
+					!!replaceExisting,
+					{
+						loadAttachment: async (blobName: string) => {
+							const blob = await session.download(blobName);
+							await requireDataOperationLeaseRenewal(c.env.DB, lease);
+							return blob.bytes;
+						},
 					},
-				},
-				async () => requireDataOperationLeaseRenewal(c.env.DB, lease),
-				file.fileName,
-			);
-			return c.json(imported.result);
-		} catch (error: any) {
-			return errorResponse(
-				error.message || "Failed to restore remote backup",
-				500,
-			);
-		} finally {
-			await releaseDataOperationLease(c.env.DB, lease).catch(() => undefined);
-		}
-	},
+					async () => requireDataOperationLeaseRenewal(c.env.DB, lease),
+					file.fileName,
+				);
+				return c.json(imported.result);
+			} finally {
+				await releaseDataOperationLease(c.env.DB, lease).catch(() => undefined);
+			}
+		}, "Failed to restore remote backup"),
 );
