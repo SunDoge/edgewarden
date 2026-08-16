@@ -11,6 +11,36 @@ happen to exist today. A broken supported workflow is a compatibility bug. A
 feature listed as out of scope is not implicitly planned just because the
 official server implements it.
 
+## Cloudflare platform rule
+
+The Edgewarden server must remain deployable as one Cloudflare Worker plus
+Cloudflare bindings. New server features are accepted only when they can be
+implemented reliably within the Worker request/event model and the documented
+limits of D1, R2, KV, Durable Objects, Queues, Cron Triggers and direct outbound
+`fetch()` calls.
+
+An optional third-party HTTP service may be integrated when the Worker can call
+it directly and Edgewarden continues to operate without a separately hosted
+companion process. This is why Turnstile, Bitwarden Push Relay, WebDAV and
+S3-compatible backup targets fit the architecture.
+
+The following dependencies do not fit the architecture and will be documented
+as unsupported rather than emulated with a fragile partial implementation:
+
+- An always-running Node.js, .NET or Rust process, container, or background
+  daemon.
+- A persistent host filesystem or a filesystem shared between requests.
+- A locally hosted SMTP server, LDAP/Active Directory connector, directory-sync
+  agent, or similar sidecar.
+- Arbitrary inbound TCP/UDP services or protocols that cannot be terminated by
+  Workers HTTP/WebSocket handling.
+- Correctness that depends on long in-request jobs, process-local timers, or
+  mutable in-memory state surviving between Worker invocations.
+
+Cloudflare adding a suitable managed primitive may make a previously excluded
+feature feasible. Such a feature still requires a security and compatibility
+review before it enters the supported scope.
+
 ## Support levels
 
 | Level | Meaning |
@@ -115,7 +145,9 @@ The following official-server areas are not part of the compatibility promise:
   basic organization model can express.
 - Emergency access.
 - Mail delivery, password-hint email, invite email, and email verification
-  workflows. Deployments use bootstrap secrets and direct invitation instead.
+  workflows. Edgewarden does not require an SMTP sidecar; deployments currently
+  use bootstrap secrets and direct invitation instead. A future implementation
+  would need a Worker-native, optional delivery binding or HTTP provider.
 - Official web-vault administrative pages or exact visual parity with the
   Bitwarden web vault.
 - Hosting every non-password-manager Bitwarden product.
@@ -130,8 +162,8 @@ official Bitwarden Server parity:
 - Configurable registration, deployment-password bootstrap, and one-time
   email-bound registration invites.
 - Encrypted full-instance backup and restore, including attachment files,
-  remote R2/S3 destinations, integrity manifests, and pre-restore relationship
-  validation.
+  remote R2/S3/WebDAV destinations, integrity manifests, and pre-restore
+  relationship validation.
 - D1-backed immutable audit tombstones and administrative security logs.
 - Administration UI for users, registration, invitations, backup, storage,
   audit, and Push Relay status.
@@ -154,4 +186,3 @@ Unknown encrypted cipher fields should be preserved whenever possible. New
 cryptographic account formats, key rotation protocols, or required sync fields
 must be reviewed against the official server before Edgewarden advertises the
 corresponding capability.
-
