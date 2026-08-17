@@ -4,6 +4,7 @@ import { Button } from "$lib/components/ui/button/index.js";
 import * as Empty from "$lib/components/ui/empty/index.js";
 import { Separator } from "$lib/components/ui/separator/index.js";
 import { Skeleton } from "$lib/components/ui/skeleton/index.js";
+import { fade } from "svelte/transition";
 import type { VaultEditorForm as VaultEditorDraft } from "$lib/services/vault-editor";
 import VaultEditorForm from "./VaultEditorForm.svelte";
 import VaultItemDetail from "./VaultItemDetail.svelte";
@@ -59,6 +60,8 @@ let {
 
 <section class="{visible ? 'flex' : 'hidden'} absolute inset-0 z-10 w-full flex-col overflow-y-auto border-l bg-background p-4 md:static md:flex md:w-96 md:shrink-0 md:p-6">
 	<div class="mb-4 md:hidden"><Button variant="ghost" size="sm" onclick={onBack}><ArrowLeft />返回列表</Button></div>
+	{#key isCreating ? "create" : isEditing ? `edit-${selectedItem?.id ?? "new"}` : selectedItem?.id ?? (isSyncing ? "syncing" : "empty")}
+	<div class="min-h-0 flex-1" transition:fade={{ duration: 140 }}>
 	{#if isCreating || isEditing}
 		<VaultEditorForm bind:form={editor} {isCreating} {isEditing} {folders} {organizations} {collections} {onSave} {onDelete} {onCancel} />
 	{:else if selectedItem}
@@ -72,4 +75,6 @@ let {
 	{:else}
 		<Empty.Root class="h-full"><Empty.Media variant="icon"><Lock /></Empty.Media><Empty.Header><Empty.Title>选择一个项目查看详情</Empty.Title><Empty.Description>点击列表中任何条目，将在此显示解密数据。</Empty.Description></Empty.Header></Empty.Root>
 	{/if}
+	</div>
+	{/key}
 </section>

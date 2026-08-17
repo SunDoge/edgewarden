@@ -1,5 +1,6 @@
 <script lang="ts">
 import { onMount } from "svelte";
+import { fade } from "svelte/transition";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import {
@@ -121,5 +122,7 @@ $effect(() => {
 </script>
 
 {#if ready}
-	{@render children()}
+	<div class="min-h-screen" transition:fade={{ duration: 140 }}>
+		{@render children()}
+	</div>
 {/if}

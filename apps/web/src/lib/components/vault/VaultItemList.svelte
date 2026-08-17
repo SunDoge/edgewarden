@@ -18,6 +18,7 @@ import { Input } from "$lib/components/ui/input/index.js";
 import * as Select from "$lib/components/ui/select/index.js";
 import { Skeleton } from "$lib/components/ui/skeleton/index.js";
 import { match } from "ts-pattern";
+import { fade, slide } from "svelte/transition";
 import { cn } from "$lib/utils";
 import { m } from "$lib/paraglide/messages.js";
 import type {
@@ -141,7 +142,7 @@ function sortModeLabel(mode: VaultSort) {
 			</Select.Root>
 		</div>
 		{#if activeCategory === "duplicates" && duplicateGroupCount > 0}
-			<div class="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+			<div transition:slide={{ duration: 160 }} class="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
 				<span>共 {duplicateGroupCount} 组、{items.length} 项；每组应至少保留一项。</span>
 				{#if duplicateMode === "exact"}
 					<Button size="sm" variant="outline" onclick={onSelectRedundant}>选择每组除最新外的项目</Button>
@@ -149,7 +150,7 @@ function sortModeLabel(mode: VaultSort) {
 			</div>
 		{/if}
 		{#if selectedCount}
-			<div class="flex flex-wrap items-center gap-2 text-sm">
+			<div transition:slide={{ duration: 160 }} class="flex flex-wrap items-center gap-2 text-sm">
 				<span>已选择 {selectedCount} 项</span>
 				{#if activeCategory === "trash"}
 					<Button size="sm" variant="outline" onclick={() => onBulkAction("restore")}><RotateCcw data-icon="inline-start" />恢复</Button><Button size="sm" variant="destructive" onclick={() => onBulkAction("permanent")}><Trash2 data-icon="inline-start" />永久删除</Button>
@@ -165,9 +166,9 @@ function sortModeLabel(mode: VaultSort) {
 
 	<div bind:this={listContainer} bind:clientHeight={viewportHeight} onscroll={(event) => { const top = event.currentTarget.scrollTop; const bucket = Math.floor(Math.max(0, top) / rowHeight); if (bucket !== currentBucket) { currentBucket = bucket; scrollTop = top; } }} class="flex-1 overflow-y-auto">
 		{#if isSyncing}
-			<div class="divide-y">{#each Array(6) as _}<div class="flex w-full items-center gap-3.5 p-4"><Skeleton class="size-10 shrink-0 rounded-xl" /><div class="flex min-w-0 flex-1 flex-col gap-2 py-1"><Skeleton class="h-3.5 w-1/3" /><Skeleton class="h-2.5 w-1/2" /></div></div>{/each}</div>
+			<div class="divide-y" transition:fade={{ duration: 120 }}>{#each Array(6) as _}<div class="flex w-full items-center gap-3.5 p-4"><Skeleton class="size-10 shrink-0 rounded-xl" /><div class="flex min-w-0 flex-1 flex-col gap-2 py-1"><Skeleton class="h-3.5 w-1/3" /><Skeleton class="h-2.5 w-1/2" /></div></div>{/each}</div>
 		{:else if error}
-			<div class="p-4">
+			<div class="p-4" transition:fade={{ duration: 140 }}>
 				<Alert.Root variant="destructive">
 					<TriangleAlert />
 					<Alert.Title>{m.vault_load_error_title()}</Alert.Title>
@@ -175,7 +176,7 @@ function sortModeLabel(mode: VaultSort) {
 				</Alert.Root>
 			</div>
 		{:else if items.length === 0}
-			<Empty.Root><Empty.Header><Empty.Media variant="icon"><Lock /></Empty.Media><Empty.Title>找不到符合要求的条目</Empty.Title><Empty.Description>调整搜索或筛选条件，或者添加一个新条目。</Empty.Description></Empty.Header></Empty.Root>
+			<div transition:fade={{ duration: 140 }}><Empty.Root><Empty.Header><Empty.Media variant="icon"><Lock /></Empty.Media><Empty.Title>找不到符合要求的条目</Empty.Title><Empty.Description>调整搜索或筛选条件，或者添加一个新条目。</Empty.Description></Empty.Header></Empty.Root></div>
 		{:else}
 			<div style="padding-top: {padTop}px; padding-bottom: {padBottom}px;" class="divide-y">
 				{#each visibleItems as item (item.id)}
