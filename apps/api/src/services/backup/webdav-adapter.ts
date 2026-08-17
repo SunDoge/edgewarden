@@ -1,3 +1,5 @@
+import { XMLParser, XMLValidator } from "fast-xml-parser";
+import * as v from "valibot";
 import type { WebDavBackupDestination } from "./config";
 import {
 	MAX_BACKUP_ARCHIVE_BYTES,
@@ -20,14 +22,83 @@ import {
 	basename,
 	buildJoinedPath,
 	encodePathSegments,
-	extractXmlBlocks,
-	extractXmlFirst,
 	normalizeRelativePath,
 	parentPath,
 	parseHttpDate,
 	sortRemoteItems,
 	trimSlashes,
 } from "./remote-utils";
+
+const XmlObjectSchema = v.record(v.string(), v.unknown());
+
+function asXmlObject(value: unknown): Record<string, unknown> | null {
+	const result = v.safeParse(XmlObjectSchema, value);
+	return result.success ? result.output : null;
+}
+
+function asXmlArray(value: unknown): unknown[] {
+	return Array.isArray(value) ? value : value === undefined ? [] : [value];
+}
+
+function xmlText(value: unknown): string | null {
+	if (typeof value === "string" || typeof value === "number") {
+		return String(value).trim() || null;
+	}
+	const object = asXmlObject(value);
+	return object ? xmlText(object["#text"]) : null;
+}
+
+function isSuccessfulPropStat(propStat: Record<string, unknown>): boolean {
+	const status = xmlText(propStat.status);
+	return !status || /\s2\d\d(?:\s|$)/.test(status);
+}
+
+function responseProperties(
+	response: Record<string, unknown>,
+): Record<string, unknown> {
+	for (const value of asXmlArray(response.propstat)) {
+		const propStat = asXmlObject(value);
+		if (!propStat || !isSuccessfulPropStat(propStat)) continue;
+		const properties = asXmlObject(propStat.prop);
+		if (properties) return properties;
+	}
+	return asXmlObject(response.prop) || {};
+}
+
+function parseWebDavResponses(xml: string): Record<string, unknown>[] {
+	if (XMLValidator.validate(xml) !== true) {
+		throw new Error("WebDAV listing returned invalid XML");
+	}
+	// Keep parser state request-local; Worker isolates may process overlapping requests.
+	const parser = new XMLParser({
+		ignoreAttributes: false,
+		maxNestedTags: 64,
+		processEntities: {
+			enabled: true,
+			maxEntityCount: 32,
+			maxEntitySize: 1_024,
+			maxExpandedLength: 64 * 1_024,
+			maxTotalExpansions: 256,
+		},
+		parseTagValue: false,
+		removeNSPrefix: true,
+		trimValues: true,
+		isArray: (tagName) => tagName === "response" || tagName === "propstat",
+	});
+	let parsed: unknown;
+	try {
+		parsed = parser.parse(xml) as unknown;
+	} catch (error) {
+		throw new Error("WebDAV listing returned invalid XML", { cause: error });
+	}
+	const document = asXmlObject(parsed);
+	const multiStatus = document ? asXmlObject(document.multistatus) : null;
+	if (!multiStatus) throw new Error("WebDAV listing returned invalid XML");
+	return asXmlArray(multiStatus.response).flatMap((value) => {
+		const response = asXmlObject(value);
+		return response ? [response] : [];
+	});
+}
 
 function toBasicAuthHeader(username: string, password: string): string {
 	const token = btoa(`${username}:${password}`);
@@ -203,8 +274,8 @@ export async function listWebDavEntries(
 	);
 	const rootFullPath = trimSlashes(config.remotePath);
 	const items: RemoteBackupItem[] = [];
-	for (const block of extractXmlBlocks(xml, "response")) {
-		const href = extractXmlFirst(block, "href");
+	for (const responseEntry of parseWebDavResponses(xml)) {
+		const href = xmlText(responseEntry.href);
 		if (!href) continue;
 		const fullPath = trimSlashes(parseWebDavResponsePath(config.baseUrl, href));
 		if (!fullPath) continue;
@@ -223,10 +294,11 @@ export async function listWebDavEntries(
 		const directParent = parentPath(relative);
 		if ((directParent || "") !== currentPath) continue;
 
-		const resourceTypeBlock = extractXmlFirst(block, "resourcetype") || "";
-		const isDirectory = /<(?:[^:>]+:)?collection\b/i.test(resourceTypeBlock);
-		const sizeRaw = extractXmlFirst(block, "getcontentlength");
-		const modifiedAtRaw = extractXmlFirst(block, "getlastmodified");
+		const properties = responseProperties(responseEntry);
+		const resourceType = asXmlObject(properties.resourcetype);
+		const isDirectory = !!resourceType && "collection" in resourceType;
+		const sizeRaw = xmlText(properties.getcontentlength);
+		const modifiedAtRaw = xmlText(properties.getlastmodified);
 		items.push({
 			path: relative,
 			name: basename(relative) || relative,

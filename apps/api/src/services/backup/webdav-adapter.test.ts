@@ -66,6 +66,77 @@ describe("WebDAV backup adapter", () => {
 		);
 	});
 
+	it("selects successful propstat values across default namespaces", async () => {
+		const xml = `<?xml version="1.0" encoding="utf-8"?>
+			<multistatus xmlns="DAV:">
+				<response><href>/dav/edgewarden/</href></response>
+				<response>
+					<href>/dav/edgewarden/Daily%20Backups/</href>
+					<propstat>
+						<prop><getcontentlength>999</getcontentlength></prop>
+						<status>HTTP/1.1 404 Not Found</status>
+					</propstat>
+					<propstat>
+						<prop>
+							<resourcetype><collection/></resourcetype>
+							<getlastmodified>Thu, 13 Aug 2026 01:02:03 GMT</getlastmodified>
+						</prop>
+						<status>HTTP/1.1 200 OK</status>
+					</propstat>
+				</response>
+				<response>
+					<href>/dav/edgewarden/backup&amp;copy.zip</href>
+					<propstat><prop><getcontentlength>7</getcontentlength></prop></propstat>
+				</response>
+			</multistatus>`;
+		globalThis.fetch = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(new Response(xml, { status: 207 }));
+
+		const result = await listWebDavEntries(config, "");
+
+		expect(result.items).toEqual([
+			{
+				path: "Daily Backups",
+				name: "Daily Backups",
+				isDirectory: true,
+				size: null,
+				modifiedAt: "2026-08-13T01:02:03.000Z",
+			},
+			{
+				path: "backup&copy.zip",
+				name: "backup&copy.zip",
+				isDirectory: false,
+				size: 7,
+				modifiedAt: null,
+			},
+		]);
+	});
+
+	it("rejects successful responses that are not WebDAV multistatus XML", async () => {
+		globalThis.fetch = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(
+				new Response("<html><body>OK</body></html>", { status: 207 }),
+			);
+
+		await expect(listWebDavEntries(config, "")).rejects.toThrow(
+			"WebDAV listing returned invalid XML",
+		);
+	});
+
+	it("normalizes malformed XML parser errors", async () => {
+		globalThis.fetch = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(
+				new Response("<multistatus><response></multistatus>", { status: 207 }),
+			);
+
+		await expect(listWebDavEntries(config, "")).rejects.toThrow(
+			"WebDAV listing returned invalid XML",
+		);
+	});
+
 	it("creates missing path segments before uploading a file", async () => {
 		const fetchMock = vi
 			.fn<typeof fetch>()

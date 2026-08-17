@@ -26,6 +26,7 @@
 		"@simplewebauthn/server": "^13.3.1",
 		"@sundoge/kysely-d1": "^0.2.0",
 		"aws4fetch": "^1.0.20",
+		"fast-xml-parser": "^5.10.1",
 		"hono": "^4.12.26",
 		"kysely": "0.28.17",
 		"otpauth": "^9.5.1",
