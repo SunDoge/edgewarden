@@ -35,6 +35,10 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 			body: JSON.stringify({ name: "API Test", masterPasswordHint: null }),
 		});
 		assert.equal(profileAlias.status, 200, await profileAlias.clone().text());
+		const profile = await profileAlias.json<Record<string, unknown>>();
+		assert.ok("accountKeys" in profile);
+		assert.equal(profile.verifyDevices, false);
+		assert.deepEqual(profile.organizationsNew, profile.organizations);
 		const folderResponse = await request("/api/folders", {
 			method: "POST",
 			headers: { ...auth, "content-type": "application/json" },
@@ -1205,6 +1209,68 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		const secondaryToken = (
 			await secondaryLogin.json<{ access_token: string }>()
 		).access_token;
+		const secondaryKeys = await request("/api/devices/secondary-device/keys", {
+			method: "PUT",
+			headers: {
+				authorization: `Bearer ${secondaryToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({
+				encryptedUserKey: "secondary-user-key",
+				encryptedPublicKey: "secondary-public-key",
+				encryptedPrivateKey: "secondary-private-key",
+			}),
+		});
+		assert.equal(secondaryKeys.status, 200, await secondaryKeys.clone().text());
+		const rotated = await request("/api/devices/update-trust", {
+			method: "POST",
+			headers: { ...auth, "content-type": "application/json" },
+			body: JSON.stringify({
+				masterPasswordHash: MASTER_PASSWORD_HASH,
+				currentDevice: {
+					encryptedUserKey: "rotated-current-user-key",
+					encryptedPublicKey: "rotated-current-public-key",
+				},
+				otherDevices: [
+					{
+						deviceId: "secondary-device",
+						encryptedUserKey: "rotated-secondary-user-key",
+						encryptedPublicKey: "rotated-secondary-public-key",
+					},
+				],
+			}),
+		});
+		assert.equal(rotated.status, 204, await rotated.clone().text());
+		assert.deepEqual(
+			await context.database
+				.prepare(
+					"SELECT encrypted_user_key, encrypted_public_key, encrypted_private_key FROM devices WHERE device_identifier = 'secondary-device'",
+				)
+				.first(),
+			{
+				encrypted_user_key: "rotated-secondary-user-key",
+				encrypted_public_key: "rotated-secondary-public-key",
+				encrypted_private_key: "secondary-private-key",
+			},
+		);
+		const untrusted = await request("/api/devices/untrust", {
+			method: "POST",
+			headers: { ...auth, "content-type": "application/json" },
+			body: JSON.stringify({ devices: ["secondary-device"] }),
+		});
+		assert.equal(untrusted.status, 204, await untrusted.clone().text());
+		assert.deepEqual(
+			await context.database
+				.prepare(
+					"SELECT encrypted_user_key, encrypted_public_key, encrypted_private_key FROM devices WHERE device_identifier = 'secondary-device'",
+				)
+				.first(),
+			{
+				encrypted_user_key: null,
+				encrypted_public_key: null,
+				encrypted_private_key: null,
+			},
+		);
 		const bulkRemoved = await request("/api/devices/delete", {
 			method: "POST",
 			headers: { ...auth, "content-type": "application/json" },

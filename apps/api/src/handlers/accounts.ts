@@ -24,6 +24,7 @@ import {
 import * as revisionsDb from "../services/db/revisions";
 import * as usersDb from "../services/db/users";
 import * as webauthnDb from "../services/db/webauthn";
+import { buildAccountKeys } from "../utils/user-decryption";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
 import { userYubicoPublicIds } from "../utils/yubico";
@@ -31,6 +32,7 @@ import { userYubicoPublicIds } from "../utils/yubico";
 function buildProfileResponse(
 	user: NonNullable<Awaited<ReturnType<typeof usersDb.getUserById>>>,
 	twoFactorPasskeys = 0,
+	organizations: Array<Record<string, unknown>> = [],
 ) {
 	return {
 		id: user.id,
@@ -48,6 +50,7 @@ function buildProfileResponse(
 		key: user.key,
 		privateKey: user.private_key,
 		publicKey: user.public_key,
+		accountKeys: buildAccountKeys(user),
 		securityStamp: user.security_stamp,
 		forcePasswordReset: false,
 		usesKeyConnector: false,
@@ -57,8 +60,51 @@ function buildProfileResponse(
 		kdfMemory: user.kdf_memory ?? null,
 		kdfParallelism: user.kdf_parallelism ?? null,
 		creationDate: toIso(user.created_at),
+		verifyDevices: false,
+		organizations,
+		organizationsNew: organizations,
+		providers: [],
+		providerOrganizations: [],
 		object: "profile",
 	};
+}
+
+async function getProfileOrganizations(
+	db: Parameters<typeof usersDb.getUserById>[0],
+	userId: string,
+): Promise<Array<Record<string, unknown>>> {
+	const rows = await db
+		.selectFrom("org_members as member")
+		.innerJoin("organizations as org", "org.id", "member.org_id")
+		.select([
+			"member.org_id",
+			"member.key",
+			"member.role",
+			"member.status",
+			"member.access_all",
+			"org.name",
+			"org.public_key",
+			"org.private_key",
+			"org.created_at",
+			"org.updated_at",
+		])
+		.where("member.user_id", "=", userId)
+		.where("member.status", "=", "confirmed")
+		.where("org.deletion_requested_at", "is", null)
+		.execute();
+	return rows.map((row) => ({
+		id: row.org_id,
+		name: row.name,
+		key: row.key,
+		publicKey: row.public_key,
+		privateKey: row.private_key,
+		role: row.role,
+		status: row.status,
+		accessAll: Boolean(row.access_all),
+		creationDate: toIso(row.created_at),
+		revisionDate: toIso(row.updated_at),
+		object: "profileOrganization",
+	}));
 }
 
 // GET /api/accounts/profile
@@ -69,7 +115,13 @@ export const getProfile = factory.createHandlers(async (c) => {
 		user.id,
 		"twoFactor",
 	);
-	return c.json(buildProfileResponse(user, count));
+	return c.json(
+		buildProfileResponse(
+			user,
+			count,
+			await getProfileOrganizations(c.get("db"), user.id),
+		),
+	);
 });
 
 // PUT /api/accounts/profile
@@ -105,7 +157,13 @@ export const updateProfile = factory.createHandlers(
 			user.id,
 			"twoFactor",
 		);
-		return c.json(buildProfileResponse(updated, count));
+		return c.json(
+			buildProfileResponse(
+				updated,
+				count,
+				await getProfileOrganizations(db, updated.id),
+			),
+		);
 	},
 );
 

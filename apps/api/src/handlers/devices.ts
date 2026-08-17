@@ -9,6 +9,8 @@ import {
 	DeviceKeysSchema,
 	DeviceNameSchema,
 	DevicePushTokenSchema,
+	UntrustDevicesSchema,
+	UpdateDevicesTrustSchema,
 } from "../schemas/requests";
 import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import { invalidateUserCache, verifyPassword } from "../services/auth";
@@ -20,6 +22,7 @@ import {
 } from "../services/db/batch";
 import * as devicesDb from "../services/db/devices";
 import { textColumnInJson } from "../services/db/json-array";
+import * as usersDb from "../services/db/users";
 import {
 	getPushRelayStatus,
 	logPushRelayFailure,
@@ -27,6 +30,7 @@ import {
 	unregisterPushDevice,
 } from "../services/push-relay";
 import type { Devices } from "../types/db";
+import { decodeBase64Url } from "../utils/base64-url";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
 
@@ -82,18 +86,160 @@ export const listDevices = factory.createHandlers(async (c) => {
 });
 
 export const getKnownDevice = factory.createHandlers(async (c) => {
-	const identifier =
-		c.req.header("X-Device-Identifier") ??
-		c.req.query("deviceIdentifier") ??
-		"";
-	if (!identifier) return c.json(false);
-	const device = await devicesDb.getDevice(
-		c.get("db"),
-		c.get("user").id,
-		identifier,
-	);
+	const encodedEmail = c.req.header("X-Request-Email") ?? "";
+	const identifier = c.req.header("X-Device-Identifier") ?? "";
+	const bytes = decodeBase64Url(encodedEmail);
+	if (!bytes || !identifier) return c.json(false);
+	let email: string;
+	try {
+		email = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false })
+			.decode(bytes)
+			.trim()
+			.toLowerCase();
+	} catch {
+		return c.json(false);
+	}
+	const user = await usersDb.getUserByEmail(c.get("db"), email);
+	const device = user
+		? await devicesDb.getDevice(c.get("db"), user.id, identifier)
+		: null;
 	return c.json(Boolean(device));
 });
+
+export const updateDevicesTrust = factory.createHandlers(
+	vValidator("json", UpdateDevicesTrustSchema),
+	async (c) => {
+		const db = c.get("db");
+		const user = c.get("user");
+		const body = c.req.valid("json");
+		if (
+			!(await verifyPassword(
+				body.masterPasswordHash,
+				user.master_password_hash,
+				user.email,
+			))
+		)
+			return errorResponse("User verification failed", 400);
+		const currentIdentifier = c.get("payload").did ?? "";
+		const devices = await devicesDb.getDevicesByUserId(db, user.id);
+		const current = devices.find(
+			(device) => device.device_identifier === currentIdentifier,
+		);
+		if (!current) return errorResponse("Device not found", 404);
+		const updates = new Map(
+			body.otherDevices.map((device) => [device.deviceId, device]),
+		);
+		if (updates.has(currentIdentifier))
+			return errorResponse("Current device cannot be an optional rotation", 400);
+		if ([...updates.keys()].some((id) => !devices.some((device) => device.device_identifier === id)))
+			return errorResponse("Device not found", 404);
+
+		const timestamp = now();
+		const rotationToken = crypto.randomUUID();
+		const expectedDevices = JSON.stringify(
+			devices.map((device) => ({
+				id: device.device_identifier,
+				mutationToken: device.mutation_token,
+			})),
+		);
+		const [claimed] = await c.get("dbDialect").batch([
+			db
+				.updateTable("devices")
+				.set({
+					encrypted_user_key: body.currentDevice.encryptedUserKey,
+					encrypted_public_key: body.currentDevice.encryptedPublicKey,
+					updated_at: sql<number>`MAX(updated_at + 1, ${timestamp})`,
+					mutation_token: rotationToken,
+				})
+				.where("user_id", "=", user.id)
+				.where("device_identifier", "=", currentIdentifier)
+				.where(sql<boolean>`NOT EXISTS (
+					SELECT 1 FROM json_each(${expectedDevices}) expected
+					LEFT JOIN devices device
+					  ON device.user_id = ${user.id}
+					 AND device.device_identifier = json_extract(expected.value, '$.id')
+					WHERE device.device_identifier IS NULL
+					   OR device.mutation_token IS NOT json_extract(expected.value, '$.mutationToken')
+				)`)
+				.compile(),
+			...devices
+				.filter(
+					(device) =>
+						device.device_identifier !== currentIdentifier &&
+						device.encrypted_user_key &&
+						device.encrypted_public_key &&
+						device.encrypted_private_key,
+				)
+				.map((device) => {
+					const update = updates.get(device.device_identifier);
+					return db
+						.updateTable("devices")
+						.set({
+							encrypted_user_key: update?.encryptedUserKey ?? null,
+							encrypted_public_key: update?.encryptedPublicKey ?? null,
+							encrypted_private_key: update
+								? device.encrypted_private_key
+								: null,
+							updated_at: sql<number>`MAX(updated_at + 1, ${timestamp})`,
+							mutation_token: rotationToken,
+						})
+						.where("user_id", "=", user.id)
+						.where("device_identifier", "=", device.device_identifier)
+						.where(sql<boolean>`mutation_token IS ${device.mutation_token}`)
+						.where((eb) =>
+							eb.exists(
+								db
+									.selectFrom("devices as current_device")
+									.select("current_device.device_identifier")
+									.where("current_device.user_id", "=", user.id)
+									.where(
+										"current_device.device_identifier",
+										"=",
+										currentIdentifier,
+									)
+									.where("current_device.mutation_token", "=", rotationToken),
+							),
+						)
+						.compile();
+				}),
+		]);
+		if (claimed.numAffectedRows !== 1n)
+			return errorResponse("Device trust changed by another request", 409);
+		return new Response(null, { status: 204 });
+	},
+);
+
+export const untrustDevices = factory.createHandlers(
+	vValidator("json", UntrustDevicesSchema),
+	async (c) => {
+		const db = c.get("db");
+		const userId = c.get("user").id;
+		const ids = c.req.valid("json").devices;
+		const owned = ids.length
+			? await db
+					.selectFrom("devices")
+					.select("device_identifier")
+					.where("user_id", "=", userId)
+					.where(textColumnInJson("device_identifier", ids))
+					.execute()
+			: [];
+		if (owned.length !== ids.length) return errorResponse("Forbidden", 403);
+		if (ids.length) {
+			await db
+				.updateTable("devices")
+				.set({
+					encrypted_user_key: null,
+					encrypted_public_key: null,
+					encrypted_private_key: null,
+					updated_at: now(),
+				})
+				.where("user_id", "=", userId)
+				.where(textColumnInJson("device_identifier", ids))
+				.execute();
+		}
+		return new Response(null, { status: 204 });
+	},
+);
 
 export const getDevice = factory.createHandlers(async (c) =>
 	c.json(deviceToResponse(c.get("device"))),

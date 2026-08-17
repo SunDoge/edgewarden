@@ -63,9 +63,11 @@ import {
 	getDevice,
 	getKnownDevice,
 	listDevices,
+	untrustDevices,
 	updateDeviceKeys,
 	updateDeviceName,
 	updateDevicePushToken,
+	updateDevicesTrust,
 } from "../handlers/devices";
 import { getDomains, updateDomains } from "../handlers/domains";
 import {
@@ -215,6 +217,8 @@ const folderAndDeviceRoutes = new Hono<HonoEnv>()
 	.delete("/api/devices/:id", requireDevice, ...deleteDevice)
 	.put("/api/devices/:id/name", requireDevice, ...updateDeviceName)
 	.put("/api/devices/:id/keys", requireDevice, ...updateDeviceKeys)
+	.post("/api/devices/update-trust", ...updateDevicesTrust)
+	.post("/api/devices/untrust", ...untrustDevices)
 	.delete("/api/devices", ...deleteAllDevices);
 
 const requestAndSettingsRoutes = new Hono<HonoEnv>()

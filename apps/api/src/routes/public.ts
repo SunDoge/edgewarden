@@ -7,6 +7,7 @@ import {
 	getFillAssistManifest,
 } from "../handlers/fill-assist";
 import { getWebsiteIcon } from "../handlers/icons";
+import { getKnownDevice } from "../handlers/devices";
 import {
 	connectToken,
 	getPasskeyAssertionOptions,
@@ -53,6 +54,7 @@ export const publicRouter = new Hono<HonoEnv>()
 	)
 	.post("/identity/connect/revoke", revocationRequestValidator, ...revokeToken)
 	.post("/identity/accounts/recover-2fa", ...recoverTwoFactor)
+	.get("/api/devices/knowndevice", ...getKnownDevice)
 	.get("/fill-assist/manifest.json", ...getFillAssistManifest)
 	.get("/fill-assist/:filename", ...getFillAssistFile)
 	.get("/.well-known/assetlinks/check", ...checkDigitalAssetLink)

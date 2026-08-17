@@ -43,6 +43,63 @@ export const DeviceKeysSchema = v.pipe(
 	),
 );
 
+const deviceTrustKeys = v.pipe(
+	v.looseObject({
+		encryptedUserKey: v.optional(v.string()),
+		EncryptedUserKey: v.optional(v.string()),
+		encryptedPublicKey: v.optional(v.string()),
+		EncryptedPublicKey: v.optional(v.string()),
+	}),
+	v.transform((body) => ({
+		encryptedUserKey: body.encryptedUserKey ?? body.EncryptedUserKey ?? "",
+		encryptedPublicKey:
+			body.encryptedPublicKey ?? body.EncryptedPublicKey ?? "",
+	})),
+	v.check(
+		(body) => Object.values(body).every((value) => value.length > 0),
+		"Encrypted user and public keys are required",
+	),
+);
+
+export const UpdateDevicesTrustSchema = v.pipe(
+	v.looseObject({
+		masterPasswordHash: nonEmptyString,
+		currentDevice: deviceTrustKeys,
+		otherDevices: v.optional(
+			v.array(
+				v.pipe(
+					v.intersect([
+						deviceTrustKeys,
+						v.looseObject({
+							deviceId: v.optional(v.string()),
+							DeviceId: v.optional(v.string()),
+						}),
+					]),
+					v.transform((device) => ({
+						...device,
+						deviceId: device.deviceId ?? device.DeviceId ?? "",
+					})),
+					v.check((device) => device.deviceId.length > 0, "Device id is required"),
+				),
+			),
+			[],
+		),
+	}),
+	v.check(
+		(body) =>
+			new Set(body.otherDevices.map((device) => device.deviceId)).size ===
+			body.otherDevices.length,
+		"Device ids must be unique",
+	),
+);
+
+export const UntrustDevicesSchema = v.pipe(
+	v.looseObject({
+		devices: v.array(nonEmptyString),
+	}),
+	v.transform((body) => ({ devices: [...new Set(body.devices)] })),
+);
+
 export const AuthRequestCreateSchema = v.pipe(
 	v.looseObject({
 		email: v.pipe(v.string(), v.email()),

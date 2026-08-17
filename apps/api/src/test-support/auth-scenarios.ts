@@ -133,6 +133,27 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
 		assert.equal(tokenBody.token_type, "Bearer");
 		context.accessToken = tokenBody.access_token;
 		context.refreshToken = tokenBody.refresh_token;
+		const encodedEmail = btoa(EMAIL)
+			.replace(/\+/g, "-")
+			.replace(/\//g, "_")
+			.replace(/=+$/, "");
+		const knownDevice = await request("/api/devices/knowndevice", {
+			headers: {
+				"X-Request-Email": encodedEmail,
+				"X-Device-Identifier": "api-test-device",
+			},
+		});
+		assert.equal(knownDevice.status, 200);
+		assert.equal(await knownDevice.json<boolean>(), true);
+		assert.equal(
+			await request("/api/devices/knowndevice", {
+				headers: {
+					"X-Request-Email": encodedEmail,
+					"X-Device-Identifier": "unknown-device",
+				},
+			}).then((response) => response.json<boolean>()),
+			false,
+		);
 		assert.deepEqual(
 			await context.database
 				.prepare(
