@@ -10,7 +10,10 @@ import {
 } from "../../schemas/admin";
 import { deleteAccountData } from "../../services/account-deletion";
 import { verifyAdminPassword } from "../../services/admin-auth";
-import { auditEventInsertQuery, auditRequestMetadata } from "../../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+} from "../../services/audit";
 import { invalidateUserCache } from "../../services/auth";
 import {
 	decryptCredential,
@@ -86,10 +89,7 @@ export const createAdminInvite = factory.createHandlers(
 	vValidator("json", CreateInviteSchema),
 	async (c) => {
 		const body = c.req.valid("json");
-		const passwordError = await verifyAdminPassword(
-			c,
-			body.masterPasswordHash,
-		);
+		const passwordError = await verifyAdminPassword(c, body.masterPasswordHash);
 		if (passwordError) return passwordError;
 		const ts = now();
 		const rawCode = Array.from(
@@ -100,24 +100,21 @@ export const createAdminInvite = factory.createHandlers(
 		const db = c.get("db");
 		const normalizedEmail = body.email.trim().toLowerCase();
 		await c.get("dbDialect").batch([
-			db
-				.insertInto("invites")
-				.values({
-					code,
-					code_encrypted: await encryptCredential(
-						rawCode,
-						c.env.DATA_ENCRYPTION_SECRET,
-						"invite-code",
-					),
-					email: normalizedEmail,
-					created_by: c.get("user").id,
-					used_by: null,
-					expires_at: ts + body.expiresInHours * 3600,
-					status: "active",
-					created_at: ts,
-					updated_at: ts,
-				})
-				.compile(),
+			db.insertInto("invites").values({
+				code,
+				code_encrypted: await encryptCredential(
+					rawCode,
+					c.env.DATA_ENCRYPTION_SECRET,
+					"invite-code",
+				),
+				email: normalizedEmail,
+				created_by: c.get("user").id,
+				used_by: null,
+				expires_at: ts + body.expiresInHours * 3600,
+				status: "active",
+				created_at: ts,
+				updated_at: ts,
+			}),
 			auditEventInsertQuery(
 				db,
 				{
@@ -171,7 +168,7 @@ export const deleteAdminInvite = factory.createHandlers(
 				},
 				sql<boolean>`EXISTS (SELECT 1 FROM invites WHERE code = ${code})`,
 			),
-			db.deleteFrom("invites").where("code", "=", code).compile(),
+			db.deleteFrom("invites").where("code", "=", code),
 		]);
 		if (!Number(result.numAffectedRows))
 			return errorResponse("Invite not found", 404);
@@ -219,7 +216,7 @@ export const deleteAdminInvites = factory.createHandlers(
 				eligible,
 				timestamp,
 			),
-			query.compile(),
+			query,
 		]);
 		return c.json({ deleted: Number(result.numAffectedRows) });
 	},

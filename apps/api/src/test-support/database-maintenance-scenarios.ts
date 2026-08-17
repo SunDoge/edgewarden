@@ -155,8 +155,7 @@ export function registerDatabaseMaintenanceScenarios(
 				db
 					.updateTable("org_members")
 					.set({ status: "confirmed", updated_at: timestamp })
-					.where("id", "=", member.id)
-					.compile(),
+					.where("id", "=", member.id),
 				organizationRevisionQuery(db, member.org_id, timestamp),
 			]);
 			const after = await db
@@ -206,7 +205,7 @@ export function registerDatabaseMaintenanceScenarios(
 			for (let attempt = 0; attempt < 2; attempt += 1) {
 				await executeBatch(dialect, [
 					collectionRevisionQuery(db, collectionId, timestamp),
-					db.deleteFrom("collections").where("id", "=", collectionId).compile(),
+					db.deleteFrom("collections").where("id", "=", collectionId),
 				]);
 			}
 			const after = await db
@@ -262,8 +261,7 @@ export function registerDatabaseMaintenanceScenarios(
 							storage_key: storageKey,
 							created_at: timestamp,
 						})
-						.onConflict((conflict) => conflict.column("id").doNothing())
-						.compile(),
+						.onConflict((conflict) => conflict.column("id").doNothing()),
 					attachmentCipherUpdateQuery(
 						db,
 						cipher.id,
@@ -361,8 +359,7 @@ export function registerDatabaseMaintenanceScenarios(
 						.set({ deleted_at: timestamp, deletion_token: deletionToken })
 						.where("id", "=", attachmentId)
 						.where("cipher_id", "=", cipher.id)
-						.where("deleted_at", "is", null)
-						.compile(),
+						.where("deleted_at", "is", null),
 					deletedAttachmentCipherUpdateQuery(
 						db,
 						cipher.id,
@@ -465,7 +462,7 @@ export function registerDatabaseMaintenanceScenarios(
 			for (let attempt = 0; attempt < 2; attempt += 1) {
 				await executeBatch(dialect, [
 					organizationMemberRevisionQuery(db, memberId, timestamp),
-					db.deleteFrom("org_members").where("id", "=", memberId).compile(),
+					db.deleteFrom("org_members").where("id", "=", memberId),
 				]);
 			}
 			const after = await db
@@ -523,10 +520,7 @@ export function registerDatabaseMaintenanceScenarios(
 			for (let attempt = 0; attempt < 2; attempt += 1) {
 				await executeBatch(dialect, [
 					webauthnCredentialRevisionQuery(db, user.id, credentialId, timestamp),
-					db
-						.deleteFrom("webauthn_credentials")
-						.where("id", "=", credentialId)
-						.compile(),
+					db.deleteFrom("webauthn_credentials").where("id", "=", credentialId),
 				]);
 			}
 			const after = await db
@@ -576,8 +570,7 @@ export function registerDatabaseMaintenanceScenarios(
 							updated_at: timestamp,
 						})
 						.where("id", "=", user.id)
-						.where("totp_recovery_code", "=", recoveryCode)
-						.compile(),
+						.where("totp_recovery_code", "=", recoveryCode),
 					conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
 				]);
 				affected.push(updated.numAffectedRows ?? 0n);
@@ -862,8 +855,7 @@ export function registerDatabaseMaintenanceScenarios(
 							updated_at: timestamp,
 						})
 						.where("id", "=", user.id)
-						.where("master_password_hash", "=", user.master_password_hash)
-						.compile(),
+						.where("master_password_hash", "=", user.master_password_hash),
 					conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
 				]);
 				affected.push(updated.numAffectedRows ?? 0n);
@@ -2353,16 +2345,13 @@ export function registerDatabaseMaintenanceScenarios(
 				.executeTakeFirstOrThrow();
 			const folderId = crypto.randomUUID();
 			const timestamp = Math.floor(Date.now() / 1000);
-			const insert = db
-				.insertInto("folders")
-				.values({
-					id: folderId,
-					user_id: user.id,
-					name: "atomic-folder",
-					created_at: timestamp,
-					updated_at: timestamp,
-				})
-				.compile();
+			const insert = db.insertInto("folders").values({
+				id: folderId,
+				user_id: user.id,
+				name: "atomic-folder",
+				created_at: timestamp,
+				updated_at: timestamp,
+			});
 
 			await assert.rejects(() => executeBatch(dialect, [insert, insert]));
 			const rolledBack = await db

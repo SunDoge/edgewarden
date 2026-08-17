@@ -10,7 +10,10 @@ import {
 } from "../../schemas/admin";
 import { deleteAccountData } from "../../services/account-deletion";
 import { verifyAdminPassword } from "../../services/admin-auth";
-import { auditEventInsertQuery, auditRequestMetadata } from "../../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+} from "../../services/audit";
 import { invalidateUserCache } from "../../services/auth";
 import {
 	decryptCredential,
@@ -88,10 +91,7 @@ export const updateAdminRegistrationPolicy = factory.createHandlers(
 	vValidator("json", RegistrationPolicySchema),
 	async (c) => {
 		const body = c.req.valid("json");
-		const passwordError = await verifyAdminPassword(
-			c,
-			body.masterPasswordHash,
-		);
+		const passwordError = await verifyAdminPassword(c, body.masterPasswordHash);
 		if (passwordError) return passwordError;
 		const policy = {
 			signupsAllowed: body.signupsAllowed,

@@ -188,8 +188,7 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
 					storage_key: objectKey,
 					created_at: ts,
 				})
-				.onConflict((conflict) => conflict.column("id").doNothing())
-				.compile(),
+				.onConflict((conflict) => conflict.column("id").doNothing()),
 			attachmentCipherUpdateQuery(
 				c.get("db"),
 				cipher.id,
@@ -243,45 +242,42 @@ export const deleteAttachment = factory.createHandlers(async (c) => {
 		return errorResponse("Attachment not found", 404);
 	const ts = Math.max(now(), cipher.updated_at + 1);
 	const deletionToken = crypto.randomUUID();
-	const [deleted] = await c
-		.get("dbDialect")
-		.batch([
-			c
-				.get("db")
-				.updateTable("attachments")
-				.set({ deleted_at: ts, deletion_token: deletionToken })
-				.where("id", "=", id)
-				.where("cipher_id", "=", cipher.id)
-				.where("deleted_at", "is", null)
-				.compile(),
-			deletedAttachmentCipherUpdateQuery(
-				c.get("db"),
-				cipher.id,
-				id,
-				deletionToken,
-				ts,
-			),
-			deletedAttachmentRevisionQuery(c.get("db"), id, deletionToken, ts),
-			auditEventInsertQuery(
-				c.get("db"),
-				{
-					actorUserId: c.get("user").id,
-					action: "attachment.delete",
-					category: "vault",
-					targetType: "attachment",
-					targetId: id,
-					metadata: {
-						...auditRequestMetadata(c.req.raw),
-						cipherId: cipher.id,
-					},
+	const [deleted] = await c.get("dbDialect").batch([
+		c
+			.get("db")
+			.updateTable("attachments")
+			.set({ deleted_at: ts, deletion_token: deletionToken })
+			.where("id", "=", id)
+			.where("cipher_id", "=", cipher.id)
+			.where("deleted_at", "is", null),
+		deletedAttachmentCipherUpdateQuery(
+			c.get("db"),
+			cipher.id,
+			id,
+			deletionToken,
+			ts,
+		),
+		deletedAttachmentRevisionQuery(c.get("db"), id, deletionToken, ts),
+		auditEventInsertQuery(
+			c.get("db"),
+			{
+				actorUserId: c.get("user").id,
+				action: "attachment.delete",
+				category: "vault",
+				targetType: "attachment",
+				targetId: id,
+				metadata: {
+					...auditRequestMetadata(c.req.raw),
+					cipherId: cipher.id,
 				},
-				sql<boolean>`EXISTS (
+			},
+			sql<boolean>`EXISTS (
 					SELECT 1 FROM attachments
 					WHERE id = ${id} AND deletion_token = ${deletionToken}
 				)`,
-				ts,
-			),
-		]);
+			ts,
+		),
+	]);
 	if (deleted.numAffectedRows !== 1n)
 		return errorResponse("Attachment not found", 404);
 	return new Response(null, { status: 204 });

@@ -1,4 +1,7 @@
-import type { D1Dialect } from "./db/d1-dialect";
+import type {
+	D1Dialect,
+	EdgewardenBatchQuery,
+} from "./db/d1-dialect";
 import { type Kysely, sql } from "kysely";
 import type { DB } from "../types/db";
 import { now } from "../utils/time";
@@ -23,7 +26,7 @@ export async function deleteAccountData(
 		.where("id", "=", userId)
 		.where("security_stamp", "=", deletionToken)
 		.where("deletion_requested_at", "=", timestamp);
-	const statements = [
+	const statements: EdgewardenBatchQuery[] = [
 		db
 			.updateTable("users")
 			.set({
@@ -44,8 +47,7 @@ export async function deleteAccountData(
 							.where("status", "=", "confirmed"),
 					),
 				),
-			)
-			.compile(),
+			),
 		db
 			.updateTable("ciphers")
 			.set({
@@ -54,24 +56,20 @@ export async function deleteAccountData(
 				updated_at: timestamp,
 			})
 			.where("user_id", "=", userId)
-			.where(({ exists }) => exists(ownsDeletion))
-			.compile(),
+			.where(({ exists }) => exists(ownsDeletion)),
 		db
 			.updateTable("sends")
 			.set({ deletion_date: timestamp, updated_at: timestamp })
 			.where("user_id", "=", userId)
-			.where(({ exists }) => exists(ownsDeletion))
-			.compile(),
+			.where(({ exists }) => exists(ownsDeletion)),
 		db
 			.deleteFrom("refresh_tokens")
 			.where("user_id", "=", userId)
-			.where(({ exists }) => exists(ownsDeletion))
-			.compile(),
+			.where(({ exists }) => exists(ownsDeletion)),
 		db
 			.deleteFrom("org_members")
 			.where("user_id", "=", userId)
-			.where(({ exists }) => exists(ownsDeletion))
-			.compile(),
+			.where(({ exists }) => exists(ownsDeletion)),
 	];
 	if (auditEvent)
 		statements.push(

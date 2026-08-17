@@ -259,8 +259,7 @@ export async function handlePasswordGrant(
 						updated_at: timestamp,
 					})
 					.where("id", "=", user.id)
-					.where("totp_recovery_code", "=", user.totp_recovery_code)
-					.compile(),
+					.where("totp_recovery_code", "=", user.totp_recovery_code),
 				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
 				conditionalTwoFactorCredentialDeletionQuery(db, user.id, securityStamp),
 				conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),

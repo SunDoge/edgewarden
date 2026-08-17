@@ -183,8 +183,7 @@ function disableAuthenticatorHandler(providerResponse: boolean) {
 						updated_at: ts,
 					})
 					.where("id", "=", user.id)
-					.where("totp_secret", "=", user.totp_secret)
-					.compile(),
+					.where("totp_secret", "=", user.totp_secret),
 				conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
 				conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
 				auditEventInsertQuery(
@@ -301,8 +300,7 @@ export const recoverTwoFactor = factory.createHandlers(
 					updated_at: ts,
 				})
 				.where("id", "=", user.id)
-				.where("totp_recovery_code", "=", user.totp_recovery_code)
-				.compile(),
+				.where("totp_recovery_code", "=", user.totp_recovery_code),
 			conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
 			conditionalTwoFactorCredentialDeletionQuery(db, user.id, securityStamp),
 			conditionalUserRevisionQuery(db, user.id, securityStamp, ts),

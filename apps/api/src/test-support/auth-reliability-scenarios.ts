@@ -801,10 +801,7 @@ export function registerAuthReliabilityScenarios(
 					expectedSecurityStamp: originalStamp,
 					sessionTime: timestamp,
 				}),
-				db
-					.deleteFrom("refresh_tokens")
-					.where("token", "=", oldTokenHash)
-					.compile(),
+				db.deleteFrom("refresh_tokens").where("token", "=", oldTokenHash),
 			]);
 			return inserted.numAffectedRows ?? 0n;
 		};

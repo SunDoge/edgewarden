@@ -74,42 +74,33 @@ export const createOrganization = factory.createHandlers(
 		const collectionId = crypto.randomUUID();
 		const ts = now();
 		await executeBatch(c.get("dbDialect"), [
-			db
-				.insertInto("organizations")
-				.values({
-					id: orgId,
-					name: body.name,
-					public_key: body.publicKey ?? null,
-					private_key: body.encryptedPrivateKey ?? null,
-					created_at: ts,
-					updated_at: ts,
-				})
-				.compile(),
-			db
-				.insertInto("org_members")
-				.values({
-					id: memberId,
-					org_id: orgId,
-					user_id: user.id,
-					email: user.email,
-					role: "owner",
-					status: "confirmed",
-					access_all: 1,
-					key: body.key,
-					created_at: ts,
-					updated_at: ts,
-				})
-				.compile(),
-			db
-				.insertInto("collections")
-				.values({
-					id: collectionId,
-					org_id: orgId,
-					name: body.collectionName,
-					created_at: ts,
-					updated_at: ts,
-				})
-				.compile(),
+			db.insertInto("organizations").values({
+				id: orgId,
+				name: body.name,
+				public_key: body.publicKey ?? null,
+				private_key: body.encryptedPrivateKey ?? null,
+				created_at: ts,
+				updated_at: ts,
+			}),
+			db.insertInto("org_members").values({
+				id: memberId,
+				org_id: orgId,
+				user_id: user.id,
+				email: user.email,
+				role: "owner",
+				status: "confirmed",
+				access_all: 1,
+				key: body.key,
+				created_at: ts,
+				updated_at: ts,
+			}),
+			db.insertInto("collections").values({
+				id: collectionId,
+				org_id: orgId,
+				name: body.collectionName,
+				created_at: ts,
+				updated_at: ts,
+			}),
 			revisionQuery(db, user.id, ts),
 			auditEventInsertQuery(
 				db,
@@ -184,8 +175,7 @@ export const updateOrganization = factory.createHandlers(
 								sql<boolean>`current_owner.mutation_token IS ${member.mutation_token}`,
 							),
 					),
-				)
-				.compile(),
+				),
 			conditionalOrganizationRevisionQuery(
 				db,
 				member.org_id,
@@ -258,8 +248,7 @@ export const deleteOrganization = factory.createHandlers(
 								sql<boolean>`current_owner.mutation_token IS ${member.mutation_token}`,
 							),
 					),
-				)
-				.compile(),
+				),
 			db
 				.updateTable("ciphers")
 				.set({
@@ -269,8 +258,7 @@ export const deleteOrganization = factory.createHandlers(
 					mutation_token: deletionToken,
 				})
 				.where("org_id", "=", orgId)
-				.where(({ exists }) => exists(ownsDeletion))
-				.compile(),
+				.where(({ exists }) => exists(ownsDeletion)),
 			db
 				.updateTable("sends")
 				.set({
@@ -278,8 +266,7 @@ export const deleteOrganization = factory.createHandlers(
 					updated_at: sql<number>`MAX(updated_at + 1, ${timestamp})`,
 				})
 				.where("org_id", "=", orgId)
-				.where(({ exists }) => exists(ownsDeletion))
-				.compile(),
+				.where(({ exists }) => exists(ownsDeletion)),
 			conditionalOrganizationRevisionQuery(db, orgId, deletionToken, timestamp),
 			auditEventInsertQuery(
 				db,

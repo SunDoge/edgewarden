@@ -148,10 +148,17 @@ export const updateProfile = factory.createHandlers(
 		query = user.master_password_hint
 			? query.where("master_password_hint", "=", user.master_password_hint)
 			: query.where("master_password_hint", "is", null);
-		const [changed] = await c.get("dbDialect").batch([
-			query.compile(),
-			conditionalUserUpdatedAtRevisionQuery(db, user.id, updatedAt, updatedAt),
-		]);
+		const [changed] = await c
+			.get("dbDialect")
+			.batch([
+				query,
+				conditionalUserUpdatedAtRevisionQuery(
+					db,
+					user.id,
+					updatedAt,
+					updatedAt,
+				),
+			]);
 		if (changed.numAffectedRows !== 1n)
 			return errorResponse("Profile was changed by another request.", 409);
 		invalidateUserCache(user.id);
@@ -240,8 +247,7 @@ export const changePassword = factory.createHandlers(
 					updated_at: ts,
 				})
 				.where("id", "=", user.id)
-				.where("master_password_hash", "=", user.master_password_hash)
-				.compile(),
+				.where("master_password_hash", "=", user.master_password_hash),
 			conditionalRefreshTokenDeletionQuery(db, user.id, newStamp),
 			conditionalUserRevisionQuery(db, user.id, newStamp, ts),
 		]);

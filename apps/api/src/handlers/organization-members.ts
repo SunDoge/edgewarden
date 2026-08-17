@@ -236,8 +236,7 @@ export const inviteOrganizationMember = factory.createHandlers(
 								)
 							)`),
 						),
-				)
-				.compile(),
+				),
 			...access.collections.map((item) =>
 				organizationMemberCollectionAccessQuery(
 					db,
@@ -370,8 +369,7 @@ export const updateOrganizationMember = factory.createHandlers(
 							  and collection.org_id = ${actor.org_id}
 						)
 					)`),
-				)
-				.compile(),
+				),
 			db
 				.deleteFrom("collection_members")
 				.where("org_member_id", "=", target.id)
@@ -383,8 +381,7 @@ export const updateOrganizationMember = factory.createHandlers(
 							.where("id", "=", target.id)
 							.where("mutation_token", "=", mutationToken),
 					),
-				)
-				.compile(),
+				),
 			...access.collections.map((item) =>
 				organizationMemberCollectionAccessQuery(
 					db,
@@ -455,8 +452,7 @@ export const removeOrganizationMember = factory.createHandlers(async (c) => {
 							sql<boolean>`current_actor.mutation_token IS ${actor.mutation_token}`,
 						),
 				),
-			)
-			.compile(),
+			),
 		conditionalOrganizationMemberRevisionQuery(db, target.id, mutationToken),
 		auditEventInsertQuery(
 			db,
@@ -480,8 +476,7 @@ export const removeOrganizationMember = factory.createHandlers(async (c) => {
 			.deleteFrom("org_members")
 			.where("id", "=", target.id)
 			.where("org_id", "=", actor.org_id)
-			.where("mutation_token", "=", mutationToken)
-			.compile(),
+			.where("mutation_token", "=", mutationToken),
 	]);
 	// D1 may include cascaded collection_members rows in the DELETE change
 	// count. The claim must affect exactly one member; the final delete only

@@ -10,7 +10,10 @@ import {
 } from "../../schemas/admin";
 import { deleteAccountData } from "../../services/account-deletion";
 import { verifyAdminPassword } from "../../services/admin-auth";
-import { auditEventInsertQuery, auditRequestMetadata } from "../../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+} from "../../services/audit";
 import { invalidateUserCache } from "../../services/auth";
 import {
 	decryptCredential,
@@ -33,10 +36,7 @@ export const setAdminUserStatus = factory.createHandlers(
 	vValidator("json", SetUserStatusSchema),
 	async (c) => {
 		const body = c.req.valid("json");
-		const passwordError = await verifyAdminPassword(
-			c,
-			body.masterPasswordHash,
-		);
+		const passwordError = await verifyAdminPassword(c, body.masterPasswordHash);
 		if (passwordError) return passwordError;
 		const targetId = c.req.param("id");
 		if (!targetId) return errorResponse("User id required", 400);
@@ -64,8 +64,7 @@ export const setAdminUserStatus = factory.createHandlers(
 			})
 			.where("id", "=", targetId)
 			.where("status", "=", target.status)
-			.where("deletion_requested_at", "is", null)
-			.compile();
+			.where("deletion_requested_at", "is", null);
 		const [updated] = await c.get("dbDialect").batch([
 			update,
 			...(body.status === "banned"
@@ -106,10 +105,7 @@ export const deleteAdminUser = factory.createHandlers(
 	vValidator("json", AdminPasswordSchema),
 	async (c) => {
 		const body = c.req.valid("json");
-		const passwordError = await verifyAdminPassword(
-			c,
-			body.masterPasswordHash,
-		);
+		const passwordError = await verifyAdminPassword(c, body.masterPasswordHash);
 		if (passwordError) return passwordError;
 		const targetId = c.req.param("id");
 		if (!targetId) return errorResponse("User id required", 400);

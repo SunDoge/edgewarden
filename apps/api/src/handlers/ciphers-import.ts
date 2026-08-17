@@ -1,5 +1,5 @@
 import { vValidator } from "@hono/valibot-validator";
-import type { CompiledQuery } from "kysely";
+import type { EdgewardenBatchQuery } from "../services/db/d1-dialect";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { CipherImportSchema } from "../schemas/ciphers";
@@ -26,7 +26,7 @@ export const importCiphers = factory.createHandlers(
 
 		const timestamp = now();
 		const folderIdMap = new Map<number, string>();
-		const queries: CompiledQuery[] = [];
+		const queries: EdgewardenBatchQuery[] = [];
 		const ownedFolderIds = new Set(
 			(await foldersDb.getFoldersByUserId(db, user.id)).map(
 				(folder) => folder.id,
@@ -42,16 +42,13 @@ export const importCiphers = factory.createHandlers(
 			const folderId = crypto.randomUUID();
 			folderIdMap.set(index, folderId);
 			queries.push(
-				db
-					.insertInto("folders")
-					.values({
-						id: folderId,
-						user_id: user.id,
-						name: folders[index].name,
-						created_at: timestamp,
-						updated_at: timestamp,
-					})
-					.compile(),
+				db.insertInto("folders").values({
+					id: folderId,
+					user_id: user.id,
+					name: folders[index].name,
+					created_at: timestamp,
+					updated_at: timestamp,
+				}),
 			);
 		}
 
@@ -76,28 +73,25 @@ export const importCiphers = factory.createHandlers(
 			const sourceId = cipher.id ? String(cipher.id).trim() || null : null;
 			const cipherId = crypto.randomUUID();
 			queries.push(
-				db
-					.insertInto("ciphers")
-					.values({
-						id: cipherId,
-						user_id: user.id,
-						org_id: null,
-						type: cipher.type,
-						folder_id: folderId,
-						name: cipher.name,
-						notes: cipher.notes ?? null,
-						favorite: cipher.favorite ? 1 : 0,
-						data: buildCipherData(cipher),
-						fields: cipher.fields ? JSON.stringify(cipher.fields) : null,
-						password_history: cipher.passwordHistory
-							? JSON.stringify(cipher.passwordHistory)
-							: null,
-						reprompt: cipher.reprompt ?? 0,
-						key: cipher.key ?? null,
-						created_at: timestamp,
-						updated_at: timestamp,
-					})
-					.compile(),
+				db.insertInto("ciphers").values({
+					id: cipherId,
+					user_id: user.id,
+					org_id: null,
+					type: cipher.type,
+					folder_id: folderId,
+					name: cipher.name,
+					notes: cipher.notes ?? null,
+					favorite: cipher.favorite ? 1 : 0,
+					data: buildCipherData(cipher),
+					fields: cipher.fields ? JSON.stringify(cipher.fields) : null,
+					password_history: cipher.passwordHistory
+						? JSON.stringify(cipher.passwordHistory)
+						: null,
+					reprompt: cipher.reprompt ?? 0,
+					key: cipher.key ?? null,
+					created_at: timestamp,
+					updated_at: timestamp,
+				}),
 			);
 			cipherMap.push({ index, sourceId, id: cipherId });
 		}
