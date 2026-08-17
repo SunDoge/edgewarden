@@ -8,6 +8,7 @@ import {
 	Upload,
 } from "@lucide/svelte";
 import { onMount } from "svelte";
+import { slide } from "svelte/transition";
 import { goto } from "$app/navigation";
 import { Button } from "$lib/components/ui/button/index.js";
 import * as Alert from "$lib/components/ui/alert/index.js";
@@ -290,7 +291,7 @@ async function handleImport(strategy?: "skip" | "all") {
 					</Field.Field>
 
 					{#if pendingImport}<div class="rounded-md border bg-muted p-3 text-xs"><p class="font-medium">导入预览</p><p>{pendingImport.folders.length} 个文件夹，{pendingImport.items.length} 个条目</p>{#if pendingImport.warnings.length}<p class="mt-1 text-amber-600">{pendingImport.warnings.length} 条格式警告</p>{/if}</div>{/if}
-						{#if encryptedImport}<Field.Field><Field.Label for="import-password">加密导出密码</Field.Label><Input id="import-password" type="password" autocomplete="off" bind:value={importPassword} placeholder="仅在浏览器内用于解密" /><Field.Description>密码和解密后的内容不会发送到服务器。</Field.Description></Field.Field>{/if}
+						{#if encryptedImport}<div transition:slide={{ duration: 160 }}><Field.Field><Field.Label for="import-password">加密导出密码</Field.Label><Input id="import-password" type="password" autocomplete="off" bind:value={importPassword} placeholder="仅在浏览器内用于解密" /><Field.Description>密码和解密后的内容不会发送到服务器。</Field.Description></Field.Field></div>{/if}
 					{#if deduplicationReview}
 						<Alert.Root class="flex flex-col gap-3">
 							<p class="font-semibold">写入前检测到重复内容</p>
@@ -316,7 +317,7 @@ async function handleImport(strategy?: "skip" | "all") {
 						{/if}
 					</Button>
 					{#if importing}
-					<div class="flex flex-col gap-1.5" aria-live="polite">
+					<div class="flex flex-col gap-1.5" aria-live="polite" transition:slide={{ duration: 160 }}>
 						<div class="flex justify-between text-xs text-muted-foreground">
 								<span>{importProgressLabel}</span>
 								<span>{importProgress}%</span>
