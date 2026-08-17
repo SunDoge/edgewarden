@@ -1,0 +1,49 @@
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"name": "edgewarden-tunnel",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-08-11",
+	"compatibility_flags": ["nodejs_compat"],
+	"vars": {
+		"WS_PATH": "/ws",
+		"ALLOWED_PORTS": "80,443",
+		"MAX_PENDING_BYTES": "2097152",
+		"MAX_FRAME_BYTES": "1048576",
+		"CONNECT_TIMEOUT_MS": "10000"
+	},
+	"secrets": {
+		"required": ["VLESS_UUIDS"]
+	},
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 0.05
+	},
+	"env": {
+		"staging": {
+			"name": "edgewarden-tunnel-staging",
+			"vars": {
+				"WS_PATH": "/ws",
+				"ALLOWED_PORTS": "80,443",
+				"MAX_PENDING_BYTES": "2097152",
+				"MAX_FRAME_BYTES": "1048576",
+				"CONNECT_TIMEOUT_MS": "10000"
+			},
+			"secrets": {
+				"required": ["VLESS_UUIDS"]
+			}
+		},
+		"production": {
+			"name": "edgewarden-tunnel",
+			"vars": {
+				"WS_PATH": "/ws",
+				"ALLOWED_PORTS": "80,443",
+				"MAX_PENDING_BYTES": "2097152",
+				"MAX_FRAME_BYTES": "1048576",
+				"CONNECT_TIMEOUT_MS": "10000"
+			},
+			"secrets": {
+				"required": ["VLESS_UUIDS"]
+			}
+		}
+	}
+}

@@ -1,0 +1,17 @@
+{
+	"name": "@edgewarden/tunnel",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"cf-typegen": "wrangler types worker-configuration.d.ts --config wrangler.jsonc --env-interface CloudflareBindings",
+		"check": "tsc --noEmit",
+		"dev": "wrangler dev --config wrangler.jsonc",
+		"deploy": "wrangler deploy --config wrangler.jsonc --minify",
+		"test": "vitest run"
+	},
+	"devDependencies": {
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.9",
+		"wrangler": "^4.120.1"
+	}
+}
