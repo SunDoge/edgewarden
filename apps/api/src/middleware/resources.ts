@@ -120,7 +120,7 @@ export const requireCipherWrite = createMiddleware<HonoEnv>(async (c, next) => {
 		)
 		.where("read_only", "=", 0)
 		.execute();
-	if (writable.length !== links.length) return errorResponse("Forbidden", 403);
+	if (!writable.length) return errorResponse("Forbidden", 403);
 	await next();
 });
 

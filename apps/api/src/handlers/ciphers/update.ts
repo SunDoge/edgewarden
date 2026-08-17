@@ -8,9 +8,10 @@ import {
 	conditionalCipherRevisionQuery,
 	getCipherCollectionIds,
 	getCipherPermissions,
+	getVisibleCipherCollectionIds,
 	organizationCipherViewStateQuery,
+	resolveOrganizationCipherCollectionsForUpdate,
 	revisionQueriesForCipher,
-	validateOrganizationCollections,
 } from "../../services/ciphers/access";
 import {
 	buildCipherData,
@@ -28,7 +29,11 @@ import { now } from "../../utils/time";
 export const getCipher = factory.createHandlers(async (c) => {
 	const cipher = c.get("cipher");
 	const db = c.get("db");
-	const collectionIds = await getCipherCollectionIds(db, cipher.id);
+	const collectionIds = await getVisibleCipherCollectionIds(
+		db,
+		cipher.id,
+		c.get("orgMember"),
+	);
 	const permissions = await getCipherPermissions(
 		db,
 		cipher,
@@ -55,7 +60,7 @@ export const updateCipher = factory.createHandlers(
 		const cipher = c.get("cipher");
 		if ((body.organizationId ?? null) !== (cipher.org_id ?? null))
 			return errorResponse("Cipher ownership cannot be changed", 400);
-		const collectionIds = body.collectionIds ?? [];
+		let collectionIds = body.collectionIds ?? [];
 		if (!cipher.org_id && collectionIds.length)
 			return errorResponse("Personal ciphers cannot use collections", 400);
 		if (
@@ -65,17 +70,22 @@ export const updateCipher = factory.createHandlers(
 			return errorResponse("Folder not found", 400);
 		}
 		if (cipher.org_id) {
-			const access = await validateOrganizationCollections(
+			const member = c.get("orgMember");
+			if (!member) return errorResponse("Organization not found", 404);
+			const currentCollectionIds = await getCipherCollectionIds(db, cipher.id);
+			const access = await resolveOrganizationCipherCollectionsForUpdate(
 				db,
-				user.id,
+				member,
 				cipher.org_id,
+				currentCollectionIds,
 				collectionIds,
 			);
-			if ("error" in access && access.error)
+			if ("error" in access)
 				return errorResponse(
 					access.error,
 					access.error.includes("not found") ? 404 : 403,
 				);
+			collectionIds = access.collectionIds;
 		}
 		if (body.lastKnownRevisionDate) {
 			const expectedRevision = Math.floor(
@@ -179,7 +189,11 @@ export const updateCipher = factory.createHandlers(
 			cipherToResponse(
 				updated,
 				await attachmentsDb.listByCipherIds(db, [updated.id]),
-				collectionIds,
+				await getVisibleCipherCollectionIds(
+					db,
+					updated.id,
+					c.get("orgMember"),
+				),
 			),
 		);
 	},

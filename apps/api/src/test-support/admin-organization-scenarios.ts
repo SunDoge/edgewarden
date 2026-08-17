@@ -1105,6 +1105,7 @@ export function registerAdminOrganizationScenarios(
 			.run();
 
 		const secondCollectionId = crypto.randomUUID();
+		const inaccessibleCollectionId = crypto.randomUUID();
 		await context.database.batch([
 			context.database
 				.prepare(
@@ -1119,14 +1120,30 @@ export function registerAdminOrganizationScenarios(
 				),
 			context.database
 				.prepare(
-					"INSERT INTO collection_members (collection_id,org_member_id,read_only,hide_passwords) VALUES (?,?,1,0)",
+					"INSERT INTO collection_members (collection_id,org_member_id,read_only,hide_passwords) VALUES (?,?,0,1)",
 				)
 				.bind(secondCollectionId, restrictedMemberId),
+			context.database
+				.prepare(
+					"INSERT INTO collections (id,org_id,name,created_at,updated_at) VALUES (?,?,?,?,?)",
+				)
+				.bind(
+					inaccessibleCollectionId,
+					orgId,
+					"inaccessible-collection",
+					timestamp,
+					timestamp,
+				),
 			context.database
 				.prepare(
 					"INSERT INTO cipher_collections (cipher_id,collection_id) VALUES (?,?)",
 				)
 				.bind(cipher.id, secondCollectionId),
+			context.database
+				.prepare(
+					"INSERT INTO cipher_collections (cipher_id,collection_id) VALUES (?,?)",
+				)
+				.bind(cipher.id, inaccessibleCollectionId),
 		]);
 		const restrictedSync = await request("/api/sync", {
 			headers: { authorization: `Bearer ${context.memberAccessToken}` },
@@ -1137,7 +1154,12 @@ export function registerAdminOrganizationScenarios(
 			await restrictedSync.clone().text(),
 		);
 		const restrictedSyncBody = await restrictedSync.json<{
-			ciphers: Array<{ id: string; collectionIds: string[] }>;
+			ciphers: Array<{
+				id: string;
+				collectionIds: string[];
+				edit: boolean;
+				viewPassword: boolean;
+			}>;
 			collections: Array<{
 				id: string;
 				externalId: string | null;
@@ -1154,6 +1176,11 @@ export function registerAdminOrganizationScenarios(
 		assert.deepEqual(
 			new Set(syncedCipherRows[0].collectionIds),
 			new Set([collectionId, secondCollectionId]),
+		);
+		assert.deepEqual(
+			[syncedCipherRows[0].edit, syncedCipherRows[0].viewPassword],
+			[true, true],
+			"permissions from multiple collections use the most permissive grant",
 		);
 		assert.deepEqual(
 			restrictedSyncBody.collections
@@ -1175,6 +1202,45 @@ export function registerAdminOrganizationScenarios(
 				},
 			],
 		);
+		const mixedPermissionUpdate = await request(`/api/ciphers/${cipher.id}`, {
+			method: "PUT",
+			headers: {
+				authorization: `Bearer ${context.memberAccessToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({
+				...payload,
+				name: "member-updated-encrypted-name",
+				collectionIds: [collectionId, secondCollectionId],
+			}),
+		});
+		assert.equal(
+			mixedPermissionUpdate.status,
+			200,
+			await mixedPermissionUpdate.clone().text(),
+		);
+		assert.deepEqual(
+			new Set(
+				(
+					await mixedPermissionUpdate.json<{ collectionIds: string[] }>()
+				).collectionIds,
+			),
+			new Set([collectionId, secondCollectionId]),
+		);
+		assert.deepEqual(
+			new Set(
+				(
+					await context.database
+						.prepare(
+							"SELECT collection_id FROM cipher_collections WHERE cipher_id = ?",
+						)
+						.bind(cipher.id)
+						.all<{ collection_id: string }>()
+				).results.map((row) => row.collection_id),
+			),
+			new Set([collectionId, secondCollectionId, inaccessibleCollectionId]),
+			"updating through a writable collection preserves inaccessible assignments",
+		);
 		await context.database.batch([
 			context.database
 				.prepare(
@@ -1184,6 +1250,14 @@ export function registerAdminOrganizationScenarios(
 			context.database
 				.prepare("DELETE FROM collections WHERE id = ?")
 				.bind(secondCollectionId),
+			context.database
+				.prepare(
+					"DELETE FROM cipher_collections WHERE cipher_id = ? AND collection_id = ?",
+				)
+				.bind(cipher.id, inaccessibleCollectionId),
+			context.database
+				.prepare("DELETE FROM collections WHERE id = ?")
+				.bind(inaccessibleCollectionId),
 		]);
 
 		const visible = await request(`/api/ciphers/${cipher.id}`, {
