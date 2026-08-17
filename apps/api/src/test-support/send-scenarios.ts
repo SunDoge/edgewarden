@@ -222,6 +222,63 @@ export function registerSendScenarios(context: SendScenarioContext): void {
 		);
 	});
 
+	test.each(["remove-password", "remove-auth"])(
+		"%s removes every Send authentication mechanism",
+		async (endpoint) => {
+			const auth = {
+				authorization: `Bearer ${context.accessToken}`,
+				"content-type": "application/json",
+			};
+			const created = await request("/api/sends", {
+				method: "POST",
+				headers: auth,
+				body: JSON.stringify({
+					type: 0,
+					name: `authenticated-send-${endpoint}`,
+					key: "encrypted-key",
+					text: { text: "encrypted-text", hidden: false },
+					password: "send-password",
+					emails: ["reader@example.com"],
+					authType: 0,
+					deletionDate: new Date(Date.now() + 86_400_000).toISOString(),
+				}),
+			});
+			assert.equal(created.status, 200, await created.clone().text());
+			const sendId = (await created.json<{ id: string }>()).id;
+			const removed = await request(`/api/sends/${sendId}/${endpoint}`, {
+				method: "PUT",
+				headers: auth,
+			});
+			assert.equal(removed.status, 200, await removed.clone().text());
+			assert.deepEqual(
+				await removed
+					.json<{
+						password: string | null;
+						emails: string[] | null;
+						authType: number;
+					}>()
+					.then((body) => [body.password, body.emails, body.authType]),
+				[null, null, 2],
+			);
+			assert.deepEqual(
+				await context.database
+					.prepare(
+						"SELECT password_hash, password_salt, password_iterations, password_algorithm, emails, auth_type FROM sends WHERE id = ?",
+					)
+					.bind(sendId)
+					.first(),
+				{
+					password_hash: null,
+					password_salt: null,
+					password_iterations: null,
+					password_algorithm: null,
+					emails: null,
+					auth_type: 2,
+				},
+			);
+		},
+	);
+
 	test("validates passkey requests before WebAuthn processing", async () => {
 		const auth = { authorization: `Bearer ${context.accessToken}` };
 		const invalidOptions = await request("/api/webauthn/attestation-options", {
