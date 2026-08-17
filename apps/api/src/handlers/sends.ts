@@ -293,14 +293,11 @@ export const deleteSend = factory.createHandlers(async (c) => {
 	return new Response(null, { status: 200 });
 });
 
-export const removeSendPassword = factory.createHandlers(async (c) => {
+const removeSendAuthentication = factory.createHandlers(async (c) => {
 	const db = c.get("db");
 	const user = c.get("user");
 	const send = c.get("send");
 	const sendId = send.id;
-
-	const sendCopy = { ...send };
-	await setSendPassword(sendCopy, null);
 
 	const ts = now();
 	const [updatedResult] = await c.get("dbDialect").batch([
@@ -311,7 +308,8 @@ export const removeSendPassword = factory.createHandlers(async (c) => {
 				password_salt: null,
 				password_iterations: null,
 				password_algorithm: null,
-				auth_type: sendCopy.auth_type,
+				auth_type: 2,
+				emails: null,
 				updated_at: ts,
 			})
 			.where("id", "=", sendId)
@@ -328,32 +326,11 @@ export const removeSendPassword = factory.createHandlers(async (c) => {
 	return c.json(sendToResponse(updated));
 });
 
-export const removeSendAuth = factory.createHandlers(async (c) => {
-	const db = c.get("db");
-	const user = c.get("user");
-	const send = c.get("send");
-	const sendId = send.id;
-
-	const ts = now();
-	const [updatedResult] = await c
-		.get("dbDialect")
-		.batch([
-			db
-				.updateTable("sends")
-				.set({ auth_type: 2, emails: null, updated_at: ts })
-				.where("id", "=", sendId)
-				.where("user_id", "=", user.id)
-				.where("purge_token", "is", null)
-				.compile(),
-			unclaimedSendRevisionQuery(db, user.id, [sendId], ts),
-		]);
-	if (updatedResult.numAffectedRows !== 1n)
-		return errorResponse("Send is being purged", 409);
-
-	const updated = await sendsDb.getSendById(db, sendId);
-	if (!updated) return errorResponse("Send not found", 404);
-	return c.json(sendToResponse(updated));
-});
+// The legacy endpoint is an alias in the official API. Both remove every Send
+// authentication mechanism so clients cannot observe an authType that
+// disagrees with persisted password or email requirements.
+export const removeSendPassword = removeSendAuthentication;
+export const removeSendAuth = removeSendAuthentication;
 
 export {
 	createFileSend,
