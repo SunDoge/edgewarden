@@ -40,7 +40,7 @@ function folderToResponse(folder: Selectable<Folders>) {
 	};
 }
 
-async function buildSyncPayload(c: Context<HonoEnv>) {
+async function buildSyncPayload(c: Context<HonoEnv>, excludeDomains: boolean) {
 	const db = c.get("db");
 	const userId = c.get("user").id;
 	const user = (await usersDb.getUserById(db, userId)) ?? c.get("user");
@@ -49,7 +49,9 @@ async function buildSyncPayload(c: Context<HonoEnv>) {
 	// a single D1 session faster and can make adapters overlap session requests.
 	const personalCiphers = await ciphersDb.getAllCiphersByUserId(db, user.id);
 	const folders = await foldersDb.getFoldersByUserId(db, user.id);
-	const domainSettings = await domainSettingsDb.getDomainSettings(db, user.id);
+	const domainSettings = excludeDomains
+		? null
+		: await domainSettingsDb.getDomainSettings(db, user.id);
 	const accountCredentials =
 		await webauthnDb.listAllAccountPasskeyCredentialsByUserId(db, user.id);
 	const accountPasskeys = accountCredentials.filter(
@@ -254,11 +256,13 @@ async function buildSyncPayload(c: Context<HonoEnv>) {
 		excludedGlobalEquivalentDomains,
 	} = storedDomains;
 
-	const domains = buildDomainsResponse(
-		equivalentDomains,
-		customEquivalentDomains,
-		excludedGlobalEquivalentDomains,
-	);
+	const domains = excludeDomains
+		? null
+		: buildDomainsResponse(
+				equivalentDomains,
+				customEquivalentDomains,
+				excludedGlobalEquivalentDomains,
+			);
 
 	return {
 		profile,
@@ -332,9 +336,10 @@ async function buildSyncPayload(c: Context<HonoEnv>) {
 export const sync = factory.createHandlers(async (c) => {
 	const db = c.get("db");
 	const userId = c.get("user").id;
+	const excludeDomains = c.req.query("excludeDomains") === "true";
 	const payload = await readAtStableRevision({
 		readRevision: () => getRevisionValue(db, userId),
-		read: () => buildSyncPayload(c),
+		read: () => buildSyncPayload(c, excludeDomains),
 	});
 	if (!payload) {
 		return c.json(

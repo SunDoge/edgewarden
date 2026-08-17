@@ -19,6 +19,25 @@ export function revisionQuery(
 		.compile();
 }
 
+export function conditionalUserUpdatedAtRevisionQuery(
+	db: Kysely<DB>,
+	userId: string,
+	updatedAt: number,
+	timestamp = now(),
+) {
+	return sql`
+		INSERT INTO user_revisions (user_id, revision_date)
+		SELECT id, ${timestamp}
+		FROM users
+		WHERE id = ${userId}
+		  AND updated_at = ${updatedAt}
+		ON CONFLICT(user_id) DO UPDATE SET revision_date = MAX(
+			user_revisions.revision_date + 1,
+			excluded.revision_date
+		)
+	`.compile(db);
+}
+
 export function organizationRevisionQuery(
 	db: Kysely<DB>,
 	organizationId: string,

@@ -114,6 +114,9 @@ describe("Edgewarden API", () => {
 		email: EMAIL,
 	});
 	registerVaultScenarios({
+		get bindings() {
+			return bindings;
+		},
 		get database() {
 			return testDatabase;
 		},
