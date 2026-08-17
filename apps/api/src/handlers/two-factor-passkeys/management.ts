@@ -5,7 +5,7 @@ import {
 	verifyAuthenticationResponse,
 	verifyRegistrationResponse,
 } from "@simplewebauthn/server";
-import type { D1Dialect } from "@sundoge/kysely-d1";
+import type { D1Dialect } from "../../services/db/d1-dialect";
 import { sql } from "kysely";
 import { factory } from "../../http/factory";
 import {
@@ -13,7 +13,10 @@ import {
 	TwoFactorPasskeyDeleteSchema,
 	TwoFactorPasskeyRegistrationSchema,
 } from "../../schemas/passkeys";
-import { auditEventInsertQuery, auditRequestMetadata } from "../../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+} from "../../services/audit";
 import { invalidateUserCache, verifyPassword } from "../../services/auth";
 import { encryptCredential } from "../../services/credential-protection";
 import {
@@ -42,7 +45,13 @@ import { bytesToBase64Url } from "../../utils/passkey";
 import { errorResponse, jsonResponse } from "../../utils/response";
 import { now } from "../../utils/time";
 
-import { challengeHash, MAX_TWO_FACTOR_PASSKEYS, recoveryCode, settings, verifySecret } from "./shared";
+import {
+	challengeHash,
+	MAX_TWO_FACTOR_PASSKEYS,
+	recoveryCode,
+	settings,
+	verifySecret,
+} from "./shared";
 
 // Registration and deletion bind credential changes, recovery material, revision writes, and audit records in guarded D1 batches.
 export const getTwoFactorPasskeys = factory.createHandlers(

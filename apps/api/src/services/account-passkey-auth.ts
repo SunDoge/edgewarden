@@ -2,7 +2,7 @@ import {
 	generateAuthenticationOptions,
 	verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
-import type { D1Dialect } from "@sundoge/kysely-d1";
+import type { D1Dialect } from "./db/d1-dialect";
 import {
 	createAccountPasskeyToken,
 	getAccountPasskeyRpConfig,

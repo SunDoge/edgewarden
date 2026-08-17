@@ -1,4 +1,4 @@
-import type { D1Dialect } from "@sundoge/kysely-d1";
+import type { D1Dialect } from "../d1-dialect";
 import type { CompiledQuery } from "kysely";
 
 // D1 limits batch size; chunking preserves order while keeping each request within the platform limit.

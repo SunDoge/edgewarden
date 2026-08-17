@@ -24,11 +24,11 @@
 		"@edgewarden/shared": "workspace:*",
 		"@hono/valibot-validator": "^0.6.1",
 		"@simplewebauthn/server": "^13.3.1",
-		"@sundoge/kysely-d1": "^0.2.0",
+		"@sundoge/kysely-d1": "^0.3.0",
 		"aws4fetch": "^1.0.20",
 		"fast-xml-parser": "^5.10.1",
 		"hono": "^4.12.26",
-		"kysely": "0.28.17",
+		"kysely": "0.29.2",
 		"otpauth": "^9.5.1",
 		"valibot": "^1.4.1"
 	},
