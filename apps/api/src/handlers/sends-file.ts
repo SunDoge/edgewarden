@@ -124,7 +124,7 @@ export const createFileSend = factory.createHandlers(
 		}
 
 		await executeBatch(c.get("dbDialect"), [
-			db.insertInto("sends").values(send).compile(),
+			db.insertInto("sends").values(send),
 			revisionQuery(db, user.id, ts),
 		]);
 

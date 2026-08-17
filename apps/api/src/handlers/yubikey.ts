@@ -169,8 +169,7 @@ export const disableYubikeys = factory.createHandlers(
 					updated_at: ts,
 				})
 				.where("id", "=", user.id)
-				.where("yubikey_config", "=", user.yubikey_config)
-				.compile(),
+				.where("yubikey_config", "=", user.yubikey_config),
 			conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
 			conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
 			auditEventInsertQuery(

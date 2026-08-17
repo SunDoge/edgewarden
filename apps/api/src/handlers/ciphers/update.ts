@@ -1,9 +1,13 @@
 import { vValidator } from "@hono/valibot-validator";
-import { type CompiledQuery, sql } from "kysely";
+import { sql } from "kysely";
+import type { EdgewardenBatchQuery } from "../../services/db/d1-dialect";
 import { LIMITS } from "../../config";
 import { factory } from "../../http/factory";
 import { CipherSchema } from "../../schemas/ciphers";
-import { auditEventInsertQuery, auditRequestMetadata } from "../../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+} from "../../services/audit";
 import {
 	conditionalCipherRevisionQuery,
 	getCipherCollectionIds,
@@ -123,14 +127,13 @@ export const updateCipher = factory.createHandlers(
 			.where("id", "=", cipher.id)
 			.$if(Boolean(body.lastKnownRevisionDate), (query) =>
 				query.where("updated_at", "=", cipher.updated_at),
-			)
-			.compile();
+			);
 		const committedCipher = db
 			.selectFrom("ciphers")
 			.select("id")
 			.where("id", "=", cipher.id)
 			.where("mutation_token", "=", mutationToken);
-		const followupQueries: CompiledQuery[] = [
+		const followupQueries: EdgewardenBatchQuery[] = [
 			...(cipher.org_id
 				? [
 						organizationCipherViewStateQuery(db, {
@@ -147,8 +150,7 @@ export const updateCipher = factory.createHandlers(
 			db
 				.deleteFrom("cipher_collections")
 				.where("cipher_id", "=", cipher.id)
-				.where(({ exists }) => exists(committedCipher))
-				.compile(),
+				.where(({ exists }) => exists(committedCipher)),
 			...collectionIds.map((collectionId) =>
 				db
 					.insertInto("cipher_collections")
@@ -160,8 +162,7 @@ export const updateCipher = factory.createHandlers(
 								sql<string>`${collectionId}`.as("collection_id"),
 							])
 							.where(({ exists }) => exists(committedCipher)),
-					)
-					.compile(),
+					),
 			),
 			conditionalCipherRevisionQuery(db, cipher.id, mutationToken, ts),
 		];
@@ -189,11 +190,7 @@ export const updateCipher = factory.createHandlers(
 			cipherToResponse(
 				updated,
 				await attachmentsDb.listByCipherIds(db, [updated.id]),
-				await getVisibleCipherCollectionIds(
-					db,
-					updated.id,
-					c.get("orgMember"),
-				),
+				await getVisibleCipherCollectionIds(db, updated.id, c.get("orgMember")),
 			),
 		);
 	},

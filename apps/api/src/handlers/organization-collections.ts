@@ -132,16 +132,13 @@ export const createCollection = factory.createHandlers(
 		const id = crypto.randomUUID();
 		const ts = now();
 		await executeBatch(c.get("dbDialect"), [
-			db
-				.insertInto("collections")
-				.values({
-					id,
-					org_id: orgId,
-					name: c.req.valid("json").name,
-					created_at: ts,
-					updated_at: ts,
-				})
-				.compile(),
+			db.insertInto("collections").values({
+				id,
+				org_id: orgId,
+				name: c.req.valid("json").name,
+				created_at: ts,
+				updated_at: ts,
+			}),
 			collectionRevisionQuery(db, id, ts),
 		]);
 		return c.json(
@@ -173,8 +170,7 @@ export const updateCollection = factory.createHandlers(
 					mutation_token: mutationToken,
 				})
 				.where("id", "=", collection.id)
-				.where(sql<boolean>`mutation_token IS ${collection.mutation_token}`)
-				.compile(),
+				.where(sql<boolean>`mutation_token IS ${collection.mutation_token}`),
 			conditionalCollectionRevisionQuery(
 				c.get("db"),
 				collection.id,
@@ -215,8 +211,7 @@ export const deleteCollection = factory.createHandlers(async (c) => {
 						where other_link.cipher_id = current_link.cipher_id
 							and other_link.collection_id <> collections.id
 					)
-			)`)
-			.compile(),
+			)`),
 		conditionalCollectionRevisionQuery(db, collection.id, mutationToken, ts),
 		auditEventInsertQuery(
 			db,
@@ -239,8 +234,7 @@ export const deleteCollection = factory.createHandlers(async (c) => {
 		db
 			.deleteFrom("collections")
 			.where("id", "=", collection.id)
-			.where("mutation_token", "=", mutationToken)
-			.compile(),
+			.where("mutation_token", "=", mutationToken),
 	]);
 	if (claimed.numAffectedRows !== 1n || deleted.numAffectedRows !== 1n)
 		return errorResponse(

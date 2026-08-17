@@ -124,10 +124,7 @@ export async function refreshIdentitySession(args: {
 			expectedSecurityStamp: user.security_stamp,
 			sessionTime,
 		}),
-		args.db
-			.deleteFrom("refresh_tokens")
-			.where("token", "=", oldTokenHash)
-			.compile(),
+		args.db.deleteFrom("refresh_tokens").where("token", "=", oldTokenHash),
 	]);
 	if (Number(inserted.numAffectedRows ?? 0n) !== 1) {
 		return { ok: false, reason: "invalid_refresh_token" };

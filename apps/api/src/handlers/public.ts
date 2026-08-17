@@ -7,6 +7,7 @@ import { RegisterSchema } from "../schemas/accounts";
 import { hashPasswordServer } from "../services/auth";
 import { hashCredential } from "../services/credential-protection";
 import { executeBatch, revisionQuery } from "../services/db/batch";
+import type { EdgewardenBatchQuery } from "../services/db/d1-dialect";
 import { getConfigValue } from "../services/db/config";
 import * as usersDb from "../services/db/users";
 import {
@@ -144,15 +145,16 @@ export const registerAccount = factory.createHandlers(
 							.where("key", "=", inviteConsumptionLockKey(invite.code))
 							.where("value", "=", userId),
 					)
-					.compile()
-			: db.insertInto("users").values(userValues).compile();
-		const statements = [userInsert, revisionQuery(db, userId, ts)];
+			: db.insertInto("users").values(userValues);
+		const statements: EdgewardenBatchQuery[] = [
+			userInsert,
+			revisionQuery(db, userId, ts),
+		];
 		if (isBootstrap)
 			statements.unshift(
 				db
 					.insertInto("config")
-					.values({ key: BOOTSTRAP_LOCK_KEY, value: userId })
-					.compile(),
+					.values({ key: BOOTSTRAP_LOCK_KEY, value: userId }),
 			);
 		if (invite) {
 			statements.unshift(
@@ -173,8 +175,7 @@ export const registerAccount = factory.createHandlers(
 					.where("code", "=", invite.code)
 					.where("status", "=", "active")
 					.where("expires_at", ">", ts)
-					.where(sql<boolean>`lower(trim(email)) = ${email}`)
-					.compile(),
+					.where(sql<boolean>`lower(trim(email)) = ${email}`),
 			);
 		}
 		try {

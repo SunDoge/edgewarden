@@ -47,8 +47,7 @@ export const createFolder = factory.createHandlers(
 		await executeBatch(c.get("dbDialect"), [
 			db
 				.insertInto("folders")
-				.values({ id, user_id: userId, name, created_at: ts, updated_at: ts })
-				.compile(),
+				.values({ id, user_id: userId, name, created_at: ts, updated_at: ts }),
 			folderRevisionQuery(db, userId, [id], ts),
 		]);
 		const folder = await foldersDb.getFolderById(db, id, userId);
@@ -79,8 +78,7 @@ export const updateFolder = factory.createHandlers(
 					.set({ name, updated_at: ts, mutation_token: mutationToken })
 					.where("id", "=", id)
 					.where("user_id", "=", userId)
-					.where(sql<boolean>`mutation_token IS ${existing.mutation_token}`)
-					.compile(),
+					.where(sql<boolean>`mutation_token IS ${existing.mutation_token}`),
 				conditionalFolderRevisionQuery(db, userId, mutationToken, ts),
 			]);
 		if (updatedResult.numAffectedRows !== 1n)
@@ -104,8 +102,7 @@ export const deleteFolder = factory.createHandlers(async (c) => {
 			.set({ mutation_token: mutationToken })
 			.where("id", "=", id)
 			.where("user_id", "=", userId)
-			.where(sql<boolean>`mutation_token IS ${folder.mutation_token}`)
-			.compile(),
+			.where(sql<boolean>`mutation_token IS ${folder.mutation_token}`),
 		conditionalFolderRevisionQuery(db, userId, mutationToken, ts),
 		db
 			.updateTable("ciphers")
@@ -123,8 +120,7 @@ export const deleteFolder = factory.createHandlers(async (c) => {
 						.where("id", "=", id)
 						.where("mutation_token", "=", mutationToken),
 				),
-			)
-			.compile(),
+			),
 		db
 			.updateTable("cipher_user_settings")
 			.set({ folder_id: null, updated_at: ts })
@@ -138,8 +134,7 @@ export const deleteFolder = factory.createHandlers(async (c) => {
 						.where("id", "=", id)
 						.where("mutation_token", "=", mutationToken),
 				),
-			)
-			.compile(),
+			),
 		auditEventInsertQuery(
 			db,
 			{
@@ -162,8 +157,7 @@ export const deleteFolder = factory.createHandlers(async (c) => {
 			.deleteFrom("folders")
 			.where("id", "=", id)
 			.where("user_id", "=", userId)
-			.where("mutation_token", "=", mutationToken)
-			.compile(),
+			.where("mutation_token", "=", mutationToken),
 	]);
 	return new Response(null, { status: 200 });
 });
@@ -193,8 +187,7 @@ export const deleteFolders = factory.createHandlers(
 					SELECT 1 FROM json_each(${expectedState}) expected
 					WHERE json_extract(expected.value, '$.id') = folders.id
 					  AND folders.mutation_token IS json_extract(expected.value, '$.mutation_token')
-				)`)
-				.compile(),
+				)`),
 			conditionalFolderRevisionQuery(db, userId, mutationToken, ts),
 			db
 				.updateTable("ciphers")
@@ -213,8 +206,7 @@ export const deleteFolders = factory.createHandlers(
 							.where("user_id", "=", userId)
 							.where("mutation_token", "=", mutationToken),
 					),
-				)
-				.compile(),
+				),
 			db
 				.updateTable("cipher_user_settings")
 				.set({ folder_id: null, updated_at: ts })
@@ -229,8 +221,7 @@ export const deleteFolders = factory.createHandlers(
 							.where("user_id", "=", userId)
 							.where("mutation_token", "=", mutationToken),
 					),
-				)
-				.compile(),
+				),
 			auditEventInsertQuery(
 				db,
 				{
@@ -250,8 +241,7 @@ export const deleteFolders = factory.createHandlers(
 			db
 				.deleteFrom("folders")
 				.where("user_id", "=", userId)
-				.where("mutation_token", "=", mutationToken)
-				.compile(),
+				.where("mutation_token", "=", mutationToken),
 		]);
 		return new Response(null, { status: 204 });
 	},

@@ -1,4 +1,7 @@
-import type { D1Dialect } from "../db/d1-dialect";
+import type {
+	D1Dialect,
+	EdgewardenBatchQuery,
+} from "../db/d1-dialect";
 import {
 	type CompiledQuery,
 	type Kysely,
@@ -204,8 +207,8 @@ export async function executeFencedPersonalCipherBulkMutation(
 	buildUpdate: (
 		mutationToken: string,
 		expectedState: RawBuilder<boolean>,
-	) => CompiledQuery,
-	buildFollowups: (mutationToken: string) => CompiledQuery[] = () => [],
+	) => EdgewardenBatchQuery,
+	buildFollowups: (mutationToken: string) => EdgewardenBatchQuery[] = () => [],
 ): Promise<number> {
 	if (!candidates.length) return 0;
 	const mutationToken = crypto.randomUUID();
@@ -317,8 +320,7 @@ export function organizationCipherViewStateQuery(
 				archived_at: args.archivedAt,
 				updated_at: args.updatedAt,
 			}),
-		)
-		.compile();
+		);
 }
 
 export function visibleOrganizationCipherViewBulkUpsertQuery(

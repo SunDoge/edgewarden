@@ -1,9 +1,12 @@
 import { vValidator } from "@hono/valibot-validator";
-import { type CompiledQuery, sql } from "kysely";
+import { sql } from "kysely";
 import { LIMITS } from "../../config";
 import { factory } from "../../http/factory";
 import { CipherSchema } from "../../schemas/ciphers";
-import { auditEventInsertQuery, auditRequestMetadata } from "../../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+} from "../../services/audit";
 import {
 	conditionalCipherRevisionQuery,
 	getCipherCollectionIds,
@@ -82,27 +85,23 @@ export const createCipher = factory.createHandlers(
 			org_id: organizationId,
 		};
 		await executeBatch(c.get("dbDialect"), [
-			db.insertInto("ciphers").values(values).compile(),
+			db.insertInto("ciphers").values(values),
 			...(organizationId
 				? [
-						db
-							.insertInto("cipher_user_settings")
-							.values({
-								cipher_id: id,
-								user_id: user.id,
-								folder_id: body.folderId ?? null,
-								favorite: body.favorite ? 1 : 0,
-								archived_at: null,
-								updated_at: ts,
-							})
-							.compile(),
+						db.insertInto("cipher_user_settings").values({
+							cipher_id: id,
+							user_id: user.id,
+							folder_id: body.folderId ?? null,
+							favorite: body.favorite ? 1 : 0,
+							archived_at: null,
+							updated_at: ts,
+						}),
 					]
 				: []),
 			...collectionIds.map((collectionId) =>
 				db
 					.insertInto("cipher_collections")
-					.values({ cipher_id: id, collection_id: collectionId })
-					.compile(),
+					.values({ cipher_id: id, collection_id: collectionId }),
 			),
 			...(await revisionQueriesForCipher(db, owner, ts)),
 		]);

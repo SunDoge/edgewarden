@@ -130,8 +130,15 @@ export const updateDevicesTrust = factory.createHandlers(
 			body.otherDevices.map((device) => [device.deviceId, device]),
 		);
 		if (updates.has(currentIdentifier))
-			return errorResponse("Current device cannot be an optional rotation", 400);
-		if ([...updates.keys()].some((id) => !devices.some((device) => device.device_identifier === id)))
+			return errorResponse(
+				"Current device cannot be an optional rotation",
+				400,
+			);
+		if (
+			[...updates.keys()].some(
+				(id) => !devices.some((device) => device.device_identifier === id),
+			)
+		)
 			return errorResponse("Device not found", 404);
 
 		const timestamp = now();
@@ -160,8 +167,7 @@ export const updateDevicesTrust = factory.createHandlers(
 					 AND device.device_identifier = json_extract(expected.value, '$.id')
 					WHERE device.device_identifier IS NULL
 					   OR device.mutation_token IS NOT json_extract(expected.value, '$.mutationToken')
-				)`)
-				.compile(),
+				)`),
 			...devices
 				.filter(
 					(device) =>
@@ -199,8 +205,7 @@ export const updateDevicesTrust = factory.createHandlers(
 									)
 									.where("current_device.mutation_token", "=", rotationToken),
 							),
-						)
-						.compile();
+						);
 				}),
 		]);
 		if (claimed.numAffectedRows !== 1n)
@@ -305,14 +310,12 @@ export const deleteDevice = factory.createHandlers(async (c) => {
 			.deleteFrom("refresh_tokens")
 			.where("user_id", "=", userId)
 			.where("device_identifier", "=", id)
-			.where(({ exists }) => exists(currentDevice))
-			.compile(),
+			.where(({ exists }) => exists(currentDevice)),
 		db
 			.deleteFrom("device_trust_tokens")
 			.where("user_id", "=", userId)
 			.where("device_identifier", "=", id)
-			.where(({ exists }) => exists(currentDevice))
-			.compile(),
+			.where(({ exists }) => exists(currentDevice)),
 		auditEventInsertQuery(
 			db,
 			{
@@ -337,8 +340,7 @@ export const deleteDevice = factory.createHandlers(async (c) => {
 			.where("user_id", "=", userId)
 			.where("device_identifier", "=", id)
 			.where(sql<boolean>`session_stamp IS ${device.session_stamp}`)
-			.where(sql<boolean>`mutation_token IS ${device.mutation_token}`)
-			.compile(),
+			.where(sql<boolean>`mutation_token IS ${device.mutation_token}`),
 	]);
 	if (deleted.numAffectedRows !== 1n)
 		return errorResponse("Device not found", 404);
@@ -388,13 +390,11 @@ export const deleteDevices = factory.createHandlers(
 				db
 					.deleteFrom("refresh_tokens")
 					.where("user_id", "=", userId)
-					.where(matchesRefreshDevice)
-					.compile(),
+					.where(matchesRefreshDevice),
 				db
 					.deleteFrom("device_trust_tokens")
 					.where("user_id", "=", userId)
-					.where(matchesTrustedDevice)
-					.compile(),
+					.where(matchesTrustedDevice),
 				auditEventInsertQuery(
 					db,
 					{
@@ -422,8 +422,7 @@ export const deleteDevices = factory.createHandlers(
 							where json_extract(expected.value, '$.device_identifier') = devices.device_identifier
 							  and devices.session_stamp is json_extract(expected.value, '$.session_stamp')
 							  and devices.mutation_token is json_extract(expected.value, '$.mutation_token')
-						)`)
-					.compile(),
+						)`),
 			]);
 			const deletedCount = Number(deleted.numAffectedRows ?? 0n);
 			if (deletedCount) {

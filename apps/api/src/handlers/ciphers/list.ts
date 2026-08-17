@@ -1,9 +1,12 @@
 import { vValidator } from "@hono/valibot-validator";
-import { type CompiledQuery, sql } from "kysely";
+import { sql } from "kysely";
 import { LIMITS } from "../../config";
 import { factory } from "../../http/factory";
 import { CipherSchema } from "../../schemas/ciphers";
-import { auditEventInsertQuery, auditRequestMetadata } from "../../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+} from "../../services/audit";
 import {
 	conditionalCipherRevisionQuery,
 	getCipherCollectionIds,

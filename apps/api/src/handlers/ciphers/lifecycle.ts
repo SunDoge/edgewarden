@@ -1,9 +1,12 @@
 import { vValidator } from "@hono/valibot-validator";
-import { type CompiledQuery, sql } from "kysely";
+import { sql } from "kysely";
 import { LIMITS } from "../../config";
 import { factory } from "../../http/factory";
 import { CipherSchema } from "../../schemas/ciphers";
-import { auditEventInsertQuery, auditRequestMetadata } from "../../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+} from "../../services/audit";
 import {
 	conditionalCipherRevisionQuery,
 	getCipherPermissions,
@@ -43,8 +46,7 @@ export const deleteCipher = factory.createHandlers(async (c) => {
 			})
 			.where("id", "=", cipher.id)
 			.where("deleted_at", "is", null)
-			.where(sql<boolean>`mutation_token IS ${cipher.mutation_token}`)
-			.compile(),
+			.where(sql<boolean>`mutation_token IS ${cipher.mutation_token}`),
 		conditionalCipherRevisionQuery(
 			db,
 			cipher.id,
@@ -94,8 +96,7 @@ export const hardDeleteCipher = factory.createHandlers(async (c) => {
 				mutation_token: mutationToken,
 			})
 			.where("id", "=", cipherId)
-			.where(sql<boolean>`mutation_token IS ${cipher.mutation_token}`)
-			.compile(),
+			.where(sql<boolean>`mutation_token IS ${cipher.mutation_token}`),
 		conditionalCipherRevisionQuery(
 			db,
 			cipherId,
@@ -144,8 +145,7 @@ export const restoreCipher = factory.createHandlers(async (c) => {
 			.where("id", "=", id)
 			.where("deleted_at", "is not", null)
 			.where("purge_token", "is", null)
-			.where(sql<boolean>`mutation_token IS ${existing.mutation_token}`)
-			.compile(),
+			.where(sql<boolean>`mutation_token IS ${existing.mutation_token}`),
 		conditionalCipherRevisionQuery(db, id, mutationToken, ts),
 	]);
 	if (restored.numAffectedRows !== 1n)
@@ -180,8 +180,7 @@ export const archiveCipher = factory.createHandlers(async (c) => {
 				.where("id", "=", cipher.id)
 				.where("deleted_at", "is", null)
 				.$if(!cipher.org_id, (query) => query.where("archived_at", "is", null))
-				.where(sql<boolean>`mutation_token IS ${cipher.mutation_token}`)
-				.compile(),
+				.where(sql<boolean>`mutation_token IS ${cipher.mutation_token}`),
 			...(cipher.org_id
 				? [
 						organizationCipherViewStateQuery(db, {
@@ -210,11 +209,7 @@ export const archiveCipher = factory.createHandlers(async (c) => {
 		cipherToResponse(
 			updated,
 			await attachmentsDb.listByCipherIds(db, [cipher.id]),
-			await getVisibleCipherCollectionIds(
-				db,
-				cipher.id,
-				c.get("orgMember"),
-			),
+			await getVisibleCipherCollectionIds(db, cipher.id, c.get("orgMember")),
 		),
 	);
 });
@@ -240,8 +235,7 @@ export const unarchiveCipher = factory.createHandlers(async (c) => {
 				.$if(!cipher.org_id, (query) =>
 					query.where("archived_at", "is not", null),
 				)
-				.where(sql<boolean>`mutation_token IS ${cipher.mutation_token}`)
-				.compile(),
+				.where(sql<boolean>`mutation_token IS ${cipher.mutation_token}`),
 			...(cipher.org_id
 				? [
 						organizationCipherViewStateQuery(db, {
@@ -270,11 +264,7 @@ export const unarchiveCipher = factory.createHandlers(async (c) => {
 		cipherToResponse(
 			updated,
 			await attachmentsDb.listByCipherIds(db, [cipher.id]),
-			await getVisibleCipherCollectionIds(
-				db,
-				cipher.id,
-				c.get("orgMember"),
-			),
+			await getVisibleCipherCollectionIds(db, cipher.id, c.get("orgMember")),
 		),
 	);
 });

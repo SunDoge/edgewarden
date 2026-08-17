@@ -114,7 +114,7 @@ export const createTextSend = factory.createHandlers(
 		}
 
 		await executeBatch(c.get("dbDialect"), [
-			db.insertInto("sends").values(send).compile(),
+			db.insertInto("sends").values(send),
 			revisionQuery(db, user.id, ts),
 		]);
 
@@ -158,8 +158,7 @@ export const deleteSends = factory.createHandlers(
 				.set({ deletion_date: ts, updated_at: ts })
 				.where(textColumnInJson("id", ids))
 				.where("user_id", "=", user.id)
-				.where("deletion_date", ">", ts)
-				.compile(),
+				.where("deletion_date", ">", ts),
 		]);
 		return new Response(null, { status: 200 });
 	},
@@ -242,8 +241,7 @@ export const updateSend = factory.createHandlers(
 				.set({ ...updateData, updated_at: ts })
 				.where("id", "=", sendId)
 				.where("user_id", "=", user.id)
-				.where("purge_token", "is", null)
-				.compile(),
+				.where("purge_token", "is", null),
 			unclaimedSendRevisionQuery(db, user.id, [sendId], ts),
 		]);
 		if (updatedResult.numAffectedRows !== 1n)
@@ -287,8 +285,7 @@ export const deleteSend = factory.createHandlers(async (c) => {
 			.set({ deletion_date: ts, updated_at: ts })
 			.where("id", "=", sendId)
 			.where("user_id", "=", user.id)
-			.where("deletion_date", ">", ts)
-			.compile(),
+			.where("deletion_date", ">", ts),
 	]);
 	return new Response(null, { status: 200 });
 });
@@ -314,8 +311,7 @@ const removeSendAuthentication = factory.createHandlers(async (c) => {
 			})
 			.where("id", "=", sendId)
 			.where("user_id", "=", user.id)
-			.where("purge_token", "is", null)
-			.compile(),
+			.where("purge_token", "is", null),
 		unclaimedSendRevisionQuery(db, user.id, [sendId], ts),
 	]);
 	if (updatedResult.numAffectedRows !== 1n)

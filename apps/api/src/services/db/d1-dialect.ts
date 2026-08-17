@@ -1,20 +1,30 @@
 import {
+	batch,
+	type BatchQuery,
 	D1Dialect as KyselyD1Dialect,
-	prepareStatement,
 } from "@sundoge/kysely-d1";
 import type { CompiledQuery, QueryResult } from "kysely";
 
-type QueryOutput<Query> =
-	Query extends CompiledQuery<infer Output> ? Output : never;
+export type EdgewardenBatchQuery = BatchQuery | CompiledQuery;
 
-type CompiledBatchResult<Queries extends readonly CompiledQuery[]> = {
+type QueryOutput<Query> = Query extends BatchQuery<infer Output>
+	? Output
+	: Query extends CompiledQuery<infer Output>
+		? Output
+		: never;
+
+type EdgewardenBatchResult<Queries extends readonly EdgewardenBatchQuery[]> = {
 	-readonly [Index in keyof Queries]: QueryResult<QueryOutput<Queries[Index]>>;
 };
 
+function isCompiledQuery(query: EdgewardenBatchQuery): query is CompiledQuery {
+	return "sql" in query && "parameters" in query;
+}
+
 /**
- * Edgewarden builds reusable batches from compiled queries. The upstream 0.3
- * helper accepts query builders instead, so keep this small adapter at the D1
- * boundary rather than coupling handlers to the binding API.
+ * Bind the standalone upstream batch helper to the request's D1 database.
+ * Standard queries stay as builders; only Kysely raw SQL, which requires an
+ * executor to compile, may arrive in its already-compiled representation.
  */
 export class D1Dialect extends KyselyD1Dialect {
 	readonly #database: D1Database;
@@ -24,24 +34,19 @@ export class D1Dialect extends KyselyD1Dialect {
 		this.#database = database;
 	}
 
-	async batch<const Queries extends readonly CompiledQuery[]>(
+	async batch<const Queries extends readonly EdgewardenBatchQuery[]>(
 		queries: Queries,
-	): Promise<CompiledBatchResult<Queries>> {
-		if (queries.length === 0) {
-			return [] as unknown as CompiledBatchResult<Queries>;
-		}
-		const statements = queries.map((query) =>
-			prepareStatement(this.#database, query),
+	): Promise<EdgewardenBatchResult<Queries>> {
+		const builders = queries.map((query) =>
+			isCompiledQuery(query)
+				? {
+						compile: () => query,
+						execute: async () => [],
+					}
+				: query,
 		);
-		const results = await this.#database.batch<unknown>(statements);
-		return results.map((result) => ({
-			rows: result.results ?? [],
-			numAffectedRows:
-				result.meta?.changes == null ? undefined : BigInt(result.meta.changes),
-			insertId:
-				result.meta?.last_row_id == null
-					? undefined
-					: BigInt(result.meta.last_row_id),
-		})) as unknown as CompiledBatchResult<Queries>;
+		return batch(this.#database, builders) as unknown as Promise<
+			EdgewardenBatchResult<Queries>
+		>;
 	}
 }

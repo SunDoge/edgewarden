@@ -45,8 +45,7 @@ export const deleteCiphers = factory.createHandlers(
 					})
 					.where("user_id", "=", user.id)
 					.where("deleted_at", "is", null)
-					.where(expectedState)
-					.compile(),
+					.where(expectedState),
 			(mutationToken) => [
 				auditEventInsertQuery(
 					db,
@@ -103,8 +102,7 @@ export const moveCiphers = factory.createHandlers(
 					})
 					.where("user_id", "=", userId)
 					.where("deleted_at", "is", null)
-					.where(expectedState)
-					.compile(),
+					.where(expectedState),
 		);
 		const [organizationViews] = await c.get("dbDialect").batch([
 			visibleOrganizationCipherViewBulkUpsertQuery(db, {
@@ -153,8 +151,7 @@ export const hardDeleteCiphers = factory.createHandlers(
 						mutation_token: mutationToken,
 					})
 					.where("user_id", "=", user.id)
-					.where(expectedState)
-					.compile(),
+					.where(expectedState),
 			(mutationToken) => [
 				auditEventInsertQuery(
 					db,
@@ -211,8 +208,7 @@ export const archiveCiphers = factory.createHandlers(
 					.where("user_id", "=", user.id)
 					.where("deleted_at", "is", null)
 					.where("archived_at", "is", null)
-					.where(expectedState)
-					.compile(),
+					.where(expectedState),
 		);
 		const [organizationViews] = await c.get("dbDialect").batch([
 			visibleOrganizationCipherViewBulkUpsertQuery(db, {
@@ -260,8 +256,7 @@ export const unarchiveCiphers = factory.createHandlers(
 					.where("user_id", "=", user.id)
 					.where("deleted_at", "is", null)
 					.where("archived_at", "is not", null)
-					.where(expectedState)
-					.compile(),
+					.where(expectedState),
 		);
 		const [organizationViews] = await c.get("dbDialect").batch([
 			visibleOrganizationCipherViewBulkUpsertQuery(db, {
@@ -313,8 +308,7 @@ export const restoreCiphers = factory.createHandlers(
 					.where("deleted_at", "is not", null)
 					.where("purge_after", ">", ts)
 					.where("purge_token", "is", null)
-					.where(expectedState)
-					.compile(),
+					.where(expectedState),
 		);
 		return new Response(null, { status: 200 });
 	},
