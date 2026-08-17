@@ -25,6 +25,32 @@ export async function getCipherCollectionIds(
 	).map((row) => row.collection_id);
 }
 
+export async function getVisibleCipherCollectionIds(
+	db: Kysely<DB>,
+	cipherId: string,
+	member: Selectable<OrgMembers> | undefined,
+): Promise<string[]> {
+	if (
+		!member ||
+		member.access_all === 1 ||
+		["manager", "admin", "owner"].includes(member.role)
+	) {
+		return getCipherCollectionIds(db, cipherId);
+	}
+	return (
+		await db
+			.selectFrom("cipher_collections as link")
+			.innerJoin("collection_members as access", (join) =>
+				join
+					.onRef("access.collection_id", "=", "link.collection_id")
+					.on("access.org_member_id", "=", member.id),
+			)
+			.select("link.collection_id")
+			.where("link.cipher_id", "=", cipherId)
+			.execute()
+	).map((row) => row.collection_id);
+}
+
 export async function getCipherPermissions(
 	db: Kysely<DB>,
 	cipher: Selectable<Ciphers>,
@@ -48,12 +74,63 @@ export async function getCipherPermissions(
 				.execute()
 		: [];
 	return {
-		edit:
-			access.length === collectionIds.length &&
-			access.every((row) => row.read_only !== 1),
-		viewPassword:
-			access.length === collectionIds.length &&
-			access.every((row) => row.hide_passwords !== 1),
+		// Bitwarden combines duplicate collection grants using the most permissive
+		// matching grant. A cipher in one writable and one read-only collection is
+		// therefore writable; inaccessible collections do not weaken that grant.
+		edit: access.some((row) => row.read_only !== 1),
+		viewPassword: access.some((row) => row.hide_passwords !== 1),
+	};
+}
+
+export async function resolveOrganizationCipherCollectionsForUpdate(
+	db: Kysely<DB>,
+	member: Selectable<OrgMembers>,
+	organizationId: string,
+	currentCollectionIds: string[],
+	requestedCollectionIds: string[],
+): Promise<{ collectionIds: string[] } | { error: string }> {
+	const requestedIds = [...new Set(requestedCollectionIds)];
+	if (!requestedIds.length) return { error: "At least one collection is required" };
+	const requestedCollections = await db
+		.selectFrom("collections")
+		.select("id")
+		.where("org_id", "=", organizationId)
+		.where(textColumnInJson("id", requestedIds))
+		.execute();
+	if (requestedCollections.length !== requestedIds.length)
+		return { error: "Collection not found" };
+	if (
+		member.access_all === 1 ||
+		["manager", "admin", "owner"].includes(member.role)
+	) {
+		return { collectionIds: requestedIds };
+	}
+
+	const candidateIds = [...new Set([...currentCollectionIds, ...requestedIds])];
+	const access = await db
+		.selectFrom("collection_members")
+		.select(["collection_id", "read_only"])
+		.where("org_member_id", "=", member.id)
+		.where(textColumnInJson("collection_id", candidateIds))
+		.execute();
+	const writableIds = new Set(
+		access
+			.filter((row) => row.read_only !== 1)
+			.map((row) => row.collection_id),
+	);
+	if (!currentCollectionIds.some((id) => writableIds.has(id)))
+		return { error: "Collection is read-only" };
+	const currentIds = new Set(currentCollectionIds);
+	if (requestedIds.some((id) => !currentIds.has(id) && !writableIds.has(id)))
+		return { error: "Collection is read-only" };
+
+	// Only writable assignments are replaceable by this member. Preserve every
+	// existing read-only or inaccessible assignment, matching the official
+	// CollectionCipher_UpdateCollections behavior.
+	const retainedIds = currentCollectionIds.filter((id) => !writableIds.has(id));
+	const requestedWritableIds = requestedIds.filter((id) => writableIds.has(id));
+	return {
+		collectionIds: [...new Set([...retainedIds, ...requestedWritableIds])],
 	};
 }
 

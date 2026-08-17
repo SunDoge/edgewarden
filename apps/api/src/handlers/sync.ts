@@ -294,9 +294,11 @@ async function buildSyncPayload(c: Context<HonoEnv>) {
 				attachmentsByCipher.get(cipher.id),
 				collectionIds,
 				{
-					edit: !restrictedAccess.some((access) => access?.read_only === 1),
-					viewPassword: !restrictedAccess.some(
-						(access) => access?.hide_passwords === 1,
+					edit: restrictedAccess.some(
+						(access) => access?.read_only !== 1,
+					),
+					viewPassword: restrictedAccess.some(
+						(access) => access?.hide_passwords !== 1,
 					),
 				},
 				"cipher",

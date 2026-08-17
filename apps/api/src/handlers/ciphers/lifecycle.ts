@@ -6,8 +6,8 @@ import { CipherSchema } from "../../schemas/ciphers";
 import { auditEventInsertQuery, auditRequestMetadata } from "../../services/audit";
 import {
 	conditionalCipherRevisionQuery,
-	getCipherCollectionIds,
 	getCipherPermissions,
+	getVisibleCipherCollectionIds,
 	organizationCipherViewStateQuery,
 	revisionQueriesForCipher,
 	validateOrganizationCollections,
@@ -156,7 +156,7 @@ export const restoreCipher = factory.createHandlers(async (c) => {
 		cipherToResponse(
 			cipher,
 			await attachmentsDb.listByCipherIds(db, [cipher.id]),
-			await getCipherCollectionIds(db, id),
+			await getVisibleCipherCollectionIds(db, id, c.get("orgMember")),
 		),
 	);
 });
@@ -210,7 +210,11 @@ export const archiveCipher = factory.createHandlers(async (c) => {
 		cipherToResponse(
 			updated,
 			await attachmentsDb.listByCipherIds(db, [cipher.id]),
-			await getCipherCollectionIds(db, cipher.id),
+			await getVisibleCipherCollectionIds(
+				db,
+				cipher.id,
+				c.get("orgMember"),
+			),
 		),
 	);
 });
@@ -266,7 +270,11 @@ export const unarchiveCipher = factory.createHandlers(async (c) => {
 		cipherToResponse(
 			updated,
 			await attachmentsDb.listByCipherIds(db, [cipher.id]),
-			await getCipherCollectionIds(db, cipher.id),
+			await getVisibleCipherCollectionIds(
+				db,
+				cipher.id,
+				c.get("orgMember"),
+			),
 		),
 	);
 });
