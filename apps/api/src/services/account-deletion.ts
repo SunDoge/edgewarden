@@ -1,4 +1,4 @@
-import type { D1Dialect } from "@sundoge/kysely-d1";
+import type { D1Dialect } from "./db/d1-dialect";
 import { type Kysely, sql } from "kysely";
 import type { DB } from "../types/db";
 import { now } from "../utils/time";

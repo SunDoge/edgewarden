@@ -1,4 +1,4 @@
-import type { D1Dialect } from "@sundoge/kysely-d1";
+import type { D1Dialect } from "../db/d1-dialect";
 import {
 	type CompiledQuery,
 	type Kysely,
@@ -90,7 +90,8 @@ export async function resolveOrganizationCipherCollectionsForUpdate(
 	requestedCollectionIds: string[],
 ): Promise<{ collectionIds: string[] } | { error: string }> {
 	const requestedIds = [...new Set(requestedCollectionIds)];
-	if (!requestedIds.length) return { error: "At least one collection is required" };
+	if (!requestedIds.length)
+		return { error: "At least one collection is required" };
 	const requestedCollections = await db
 		.selectFrom("collections")
 		.select("id")
@@ -114,9 +115,7 @@ export async function resolveOrganizationCipherCollectionsForUpdate(
 		.where(textColumnInJson("collection_id", candidateIds))
 		.execute();
 	const writableIds = new Set(
-		access
-			.filter((row) => row.read_only !== 1)
-			.map((row) => row.collection_id),
+		access.filter((row) => row.read_only !== 1).map((row) => row.collection_id),
 	);
 	if (!currentCollectionIds.some((id) => writableIds.has(id)))
 		return { error: "Collection is read-only" };

@@ -14,3 +14,5 @@ minimumReleaseAgeExclude:
   # This Wrangler version already existed in the reviewed Bun lockfile before
   # the pnpm migration, so it is not a newly introduced dependency update.
   - wrangler@4.120.1
+  # Reviewed adapter release required by the D1/Kysely upgrade.
+  - '@sundoge/kysely-d1@0.3.0'
