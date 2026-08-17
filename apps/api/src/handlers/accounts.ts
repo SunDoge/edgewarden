@@ -19,6 +19,7 @@ import {
 } from "../services/credential-protection";
 import {
 	conditionalRefreshTokenDeletionQuery,
+	conditionalUserUpdatedAtRevisionQuery,
 	conditionalUserRevisionQuery,
 } from "../services/db/batch";
 import * as revisionsDb from "../services/db/revisions";
@@ -131,6 +132,7 @@ export const updateProfile = factory.createHandlers(
 		const body = c.req.valid("json");
 		const user = c.get("user");
 		const db = c.get("db");
+		const updatedAt = Math.max(now(), user.updated_at + 1);
 
 		let query = db
 			.updateTable("users")
@@ -138,15 +140,19 @@ export const updateProfile = factory.createHandlers(
 				name: body.name ?? user.name,
 				master_password_hint:
 					body.masterPasswordHint ?? user.master_password_hint,
-				updated_at: now(),
+				updated_at: updatedAt,
 			})
 			.where("id", "=", user.id)
-			.where("name", "=", user.name);
+			.where("name", "=", user.name)
+			.where("updated_at", "=", user.updated_at);
 		query = user.master_password_hint
 			? query.where("master_password_hint", "=", user.master_password_hint)
 			: query.where("master_password_hint", "is", null);
-		const changed = await query.executeTakeFirst();
-		if (changed.numUpdatedRows !== 1n)
+		const [changed] = await c.get("dbDialect").batch([
+			query.compile(),
+			conditionalUserUpdatedAtRevisionQuery(db, user.id, updatedAt, updatedAt),
+		]);
+		if (changed.numAffectedRows !== 1n)
 			return errorResponse("Profile was changed by another request.", 409);
 		invalidateUserCache(user.id);
 

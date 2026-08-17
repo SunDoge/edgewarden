@@ -9,6 +9,7 @@ import { invalidateUserCache } from "../services/auth";
 import { hashCredential } from "../services/credential-protection";
 
 export interface VaultScenarioContext {
+	readonly bindings: CloudflareBindings;
 	readonly database: D1Database;
 	readonly accessToken: string;
 	readonly memberAccessToken: string;
@@ -111,6 +112,18 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		assert.equal(typeof syncBody.folders[0].creationDate, "string");
 		assert.deepEqual(syncBody.policiesNew, []);
 		assert.ok(syncBody.userDecryption.masterPasswordUnlock);
+		const syncWithoutDomains = await request("/api/sync?excludeDomains=true", {
+			headers: auth,
+		});
+		assert.equal(
+			syncWithoutDomains.status,
+			200,
+			await syncWithoutDomains.clone().text(),
+		);
+		assert.equal(
+			(await syncWithoutDomains.json<{ domains: unknown }>()).domains,
+			null,
+		);
 
 		const updatePayload = {
 			type: 1,
@@ -154,6 +167,58 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 			(await currentResponse.json<{ name: string }>()).name,
 			"newer-encrypted-name",
 		);
+	});
+
+	test("publishes sync notifications only after sync state changes", async () => {
+		const auth = {
+			authorization: `Bearer ${context.accessToken}`,
+			"content-type": "application/json",
+		};
+		const originalRealtime = context.bindings.REALTIME;
+		let broadcasts = 0;
+		context.bindings.REALTIME = {
+			getByName: () => ({
+				fetch: async () => {
+					broadcasts += 1;
+					return new Response(null, { status: 204 });
+				},
+			}),
+		} as unknown as CloudflareBindings["REALTIME"];
+		const original = await context.database
+			.prepare("SELECT name, master_password_hint FROM users WHERE email = ?")
+			.bind(EMAIL)
+			.first<{ name: string | null; master_password_hint: string | null }>();
+		assert.ok(original);
+		try {
+			const verification = await request("/api/accounts/verify-password", {
+				method: "POST",
+				headers: auth,
+				body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
+			});
+			assert.equal(verification.status, 200);
+			assert.equal(broadcasts, 0);
+
+			const changed = await request("/api/accounts/profile", {
+				method: "PUT",
+				headers: auth,
+				body: JSON.stringify({
+					name: `Notification Test ${crypto.randomUUID()}`,
+					masterPasswordHint: original.master_password_hint,
+				}),
+			});
+			assert.equal(changed.status, 200, await changed.clone().text());
+			assert.equal(broadcasts, 1);
+		} finally {
+			await request("/api/accounts/profile", {
+				method: "PUT",
+				headers: auth,
+				body: JSON.stringify({
+					name: original.name,
+					masterPasswordHint: original.master_password_hint,
+				}),
+			});
+			context.bindings.REALTIME = originalRealtime;
+		}
 	});
 
 	test("commits follow-up work only for the winning concurrent Cipher update", async () => {
