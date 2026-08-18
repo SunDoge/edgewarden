@@ -19,7 +19,10 @@ describe("OrganizationCollectionsCard", () => {
 		const addButton = screen.getByRole("button", { name: "添加集合" });
 		expect(addButton).toBeDisabled();
 
-		await user.type(screen.getByRole("textbox", { name: "新集合名称" }), "共享");
+		await user.type(
+			screen.getByRole("textbox", { name: "新集合名称" }),
+			"共享",
+		);
 		expect(addButton).toBeEnabled();
 		await user.click(addButton);
 		expect(onadd).toHaveBeenCalledOnce();

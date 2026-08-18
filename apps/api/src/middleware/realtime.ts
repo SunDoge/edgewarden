@@ -8,7 +8,8 @@ import {
 import { publishMutationVaultChange } from "../services/realtime";
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-const SYNC_STATE_PATH = /^\/api\/(?:accounts(?:$|\/(?:profile|keys|password))|ciphers(?:\/|$)|folders(?:\/|$)|sends(?:\/|$)|settings\/domains(?:\/|$)|organizations(?:\/|$)|two-factor(?:\/|$)|webauthn(?:\/|$)|yubico-enrollment(?:\/|$))/;
+const SYNC_STATE_PATH =
+	/^\/api\/(?:accounts(?:$|\/(?:profile|keys|password))|ciphers(?:\/|$)|folders(?:\/|$)|sends(?:\/|$)|settings\/domains(?:\/|$)|organizations(?:\/|$)|two-factor(?:\/|$)|webauthn(?:\/|$)|yubico-enrollment(?:\/|$))/;
 const AUTH_REQUEST_PATH = /^\/api\/auth-requests(?:\/|$)/;
 
 export const realtimeMutationMiddleware = createMiddleware<HonoEnv>(

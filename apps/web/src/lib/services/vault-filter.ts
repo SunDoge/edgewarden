@@ -127,7 +127,10 @@ export function findRedundantDuplicateCipherIds(
 ): Set<string> {
 	const byId = new Map(items.map((item) => [item.id, item]));
 	const isReadOnly = (id: string) =>
-		Boolean((byId.get(id) as (CipherResponse & { readOnly?: boolean }) | undefined)?.readOnly);
+		Boolean(
+			(byId.get(id) as (CipherResponse & { readOnly?: boolean }) | undefined)
+				?.readOnly,
+		);
 	return new Set(
 		findDuplicateCipherGroups(items, mode).flatMap((ids) =>
 			ids

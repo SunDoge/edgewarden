@@ -78,9 +78,7 @@ export async function deleteDevicesApi(ids: string[]): Promise<void> {
 export async function deleteAllDevicesApi(
 	masterPasswordHash: string,
 ): Promise<void> {
-	rpcVoid(
-		await rpc.api.devices.$delete({ json: { masterPasswordHash } }),
-	);
+	rpcVoid(await rpc.api.devices.$delete({ json: { masterPasswordHash } }));
 }
 
 export async function deleteAccountApi(

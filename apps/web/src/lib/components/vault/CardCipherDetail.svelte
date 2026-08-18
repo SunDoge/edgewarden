@@ -2,7 +2,11 @@
 import { Check, Copy, Eye, EyeOff } from "@lucide/svelte";
 import { Button } from "$lib/components/ui/button/index.js";
 
-let { card, copiedField, onCopy }: {
+let {
+	card,
+	copiedField,
+	onCopy,
+}: {
 	card: Record<string, any>;
 	copiedField: string | null;
 	onCopy: (value: string, field: string) => void;

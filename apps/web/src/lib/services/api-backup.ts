@@ -55,9 +55,11 @@ export async function deleteRemoteBackupApi(
 	destinationId: string,
 	path: string,
 ): Promise<void> {
-	rpcVoid(await rpc.api.admin.backup.remote.file.$delete({
-		query: { destinationId, path },
-	}));
+	rpcVoid(
+		await rpc.api.admin.backup.remote.file.$delete({
+			query: { destinationId, path },
+		}),
+	);
 }
 
 export async function restoreRemoteBackupApi(

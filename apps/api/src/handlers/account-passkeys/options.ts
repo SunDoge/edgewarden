@@ -17,7 +17,10 @@ import {
 	handleGetAccountPasskeyAssertionOptions,
 	verifyUserSecret,
 } from "../../services/account-passkey-auth";
-import { auditEventInsertQuery, auditRequestMetadata } from "../../services/audit";
+import {
+	auditEventInsertQuery,
+	auditRequestMetadata,
+} from "../../services/audit";
 import { invalidateUserCache } from "../../services/auth";
 import {
 	conditionalAccountPasskeyClaimQuery,

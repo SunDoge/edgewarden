@@ -15,9 +15,7 @@ export function createVaultEventBus(channel: VaultChannel, sourceId: string) {
 			channel.postMessage({ sourceId, event } satisfies VaultEventEnvelope);
 		},
 		subscribe(handler: (event: VaultEvent) => void): () => void {
-			const listener = (
-				message: MessageEvent<VaultEventEnvelope>,
-			) => {
+			const listener = (message: MessageEvent<VaultEventEnvelope>) => {
 				if (message.data?.sourceId === sourceId || !message.data?.event) return;
 				handler(message.data.event);
 			};

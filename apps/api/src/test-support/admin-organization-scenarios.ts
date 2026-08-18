@@ -1221,9 +1221,8 @@ export function registerAdminOrganizationScenarios(
 		);
 		assert.deepEqual(
 			new Set(
-				(
-					await mixedPermissionUpdate.json<{ collectionIds: string[] }>()
-				).collectionIds,
+				(await mixedPermissionUpdate.json<{ collectionIds: string[] }>())
+					.collectionIds,
 			),
 			new Set([collectionId, secondCollectionId]),
 		);

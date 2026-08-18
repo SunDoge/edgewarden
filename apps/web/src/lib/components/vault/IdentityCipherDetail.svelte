@@ -2,7 +2,11 @@
 import { Check, Copy } from "@lucide/svelte";
 import { Button } from "$lib/components/ui/button/index.js";
 
-let { identity, copiedField, onCopy }: {
+let {
+	identity,
+	copiedField,
+	onCopy,
+}: {
 	identity: Record<string, any>;
 	copiedField: string | null;
 	onCopy: (value: string, field: string) => void;
@@ -14,7 +18,17 @@ const copyFields = $derived([
 	["证件号码", identity?.number, "id-number"],
 ] as const);
 let fullAddress = $derived(
-	[identity?.address1, identity?.address2, identity?.address3, identity?.city, identity?.state, identity?.postalCode, identity?.country].filter(Boolean).join(", "),
+	[
+		identity?.address1,
+		identity?.address2,
+		identity?.address3,
+		identity?.city,
+		identity?.state,
+		identity?.postalCode,
+		identity?.country,
+	]
+		.filter(Boolean)
+		.join(", "),
 );
 </script>
 

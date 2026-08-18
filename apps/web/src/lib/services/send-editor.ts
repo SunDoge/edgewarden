@@ -30,7 +30,10 @@ export function createSendEditorDraft(): SendEditorDraft {
 	};
 }
 
-export function sendToEditorDraft(send: any, now = Date.now()): SendEditorDraft {
+export function sendToEditorDraft(
+	send: any,
+	now = Date.now(),
+): SendEditorDraft {
 	return {
 		type: send.type,
 		name: send.name,

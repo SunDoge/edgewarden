@@ -1,7 +1,4 @@
-import type {
-	D1Dialect,
-	EdgewardenBatchQuery,
-} from "../db/d1-dialect";
+import type { D1Dialect, EdgewardenBatchQuery } from "../db/d1-dialect";
 import {
 	type CompiledQuery,
 	type Kysely,

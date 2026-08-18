@@ -92,7 +92,11 @@ async function createAndUploadFileSend(
 	keys: SendKeys,
 ) {
 	const fileBytes = new Uint8Array(await file.arrayBuffer());
-	const encryptedFileBytes = await encryptBwFileData(fileBytes, keys.enc, keys.mac);
+	const encryptedFileBytes = await encryptBwFileData(
+		fileBytes,
+		keys.enc,
+		keys.mac,
+	);
 	payload.file = {
 		fileName: await encryptBw(
 			new TextEncoder().encode(file.name),

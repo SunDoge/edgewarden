@@ -1,40 +1,40 @@
 <script lang="ts">
-	import VaultFolderSidebar from "./VaultFolderSidebar.svelte";
-	import VaultSidebar from "./VaultSidebar.svelte";
-	import * as Sheet from "$lib/components/ui/sheet/index.js";
-	import type { VaultCategory } from "$lib/services/vault-filter";
+import VaultFolderSidebar from "./VaultFolderSidebar.svelte";
+import VaultSidebar from "./VaultSidebar.svelte";
+import * as Sheet from "$lib/components/ui/sheet/index.js";
+import type { VaultCategory } from "$lib/services/vault-filter";
 
-	let {
-		mobileOpen = $bindable(false),
-		activeCategory = $bindable<VaultCategory>("all"),
-		activeFolder = $bindable<string | null>(null),
-		duplicateCount,
-		duplicateFolderCount,
-		mergingDuplicateFolders,
-		onCreate,
-		onCreateFolder,
-		onRenameFolder,
-		onDeleteFolder,
-		onDeleteAllFolders,
-		onMergeDuplicateFolders,
-	}: {
-		mobileOpen: boolean;
-		activeCategory: VaultCategory;
-		activeFolder: string | null;
-		duplicateCount: number;
-		duplicateFolderCount: number;
-		mergingDuplicateFolders: boolean;
-		onCreate: () => void;
-		onCreateFolder: () => void;
-		onRenameFolder: (folder: any) => void;
-		onDeleteFolder: (folder: any) => void;
-		onDeleteAllFolders: () => void;
-		onMergeDuplicateFolders: () => void;
-	} = $props();
+let {
+	mobileOpen = $bindable(false),
+	activeCategory = $bindable<VaultCategory>("all"),
+	activeFolder = $bindable<string | null>(null),
+	duplicateCount,
+	duplicateFolderCount,
+	mergingDuplicateFolders,
+	onCreate,
+	onCreateFolder,
+	onRenameFolder,
+	onDeleteFolder,
+	onDeleteAllFolders,
+	onMergeDuplicateFolders,
+}: {
+	mobileOpen: boolean;
+	activeCategory: VaultCategory;
+	activeFolder: string | null;
+	duplicateCount: number;
+	duplicateFolderCount: number;
+	mergingDuplicateFolders: boolean;
+	onCreate: () => void;
+	onCreateFolder: () => void;
+	onRenameFolder: (folder: any) => void;
+	onDeleteFolder: (folder: any) => void;
+	onDeleteAllFolders: () => void;
+	onMergeDuplicateFolders: () => void;
+} = $props();
 
-	function closeMobile() {
-		mobileOpen = false;
-	}
+function closeMobile() {
+	mobileOpen = false;
+}
 </script>
 
 <!-- Sheet owns focus trapping and keyboard dismissal for the mobile navigation. -->

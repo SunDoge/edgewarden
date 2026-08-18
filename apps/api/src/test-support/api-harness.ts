@@ -46,9 +46,12 @@ export async function expectJson<T>(
 	try {
 		return JSON.parse(text) as T;
 	} catch (error) {
-		throw new Error(`Expected a JSON response, received: ${text || "<empty body>"}`, {
-			cause: error,
-		});
+		throw new Error(
+			`Expected a JSON response, received: ${text || "<empty body>"}`,
+			{
+				cause: error,
+			},
+		);
 	}
 }
 
@@ -58,7 +61,12 @@ function jsonInit<TBody>(
 ): RequestInit {
 	const headers = new Headers(init.headers);
 	headers.set("content-type", "application/json");
-	return { ...init, method: init.method ?? "POST", headers, body: JSON.stringify(body) };
+	return {
+		...init,
+		method: init.method ?? "POST",
+		headers,
+		body: JSON.stringify(body),
+	};
 }
 
 async function applyMigrations(database: D1Database): Promise<void> {
@@ -183,7 +191,12 @@ export async function createApiTestHarness(secrets: {
 			passThroughOnException() {},
 			props: {},
 		} as ExecutionContext;
-		const response = await app.request(path, init, bindings, testExecutionContext);
+		const response = await app.request(
+			path,
+			init,
+			bindings,
+			testExecutionContext,
+		);
 		// Awaiting waitUntil work makes background side effects deterministic in tests.
 		await Promise.all(backgroundTasks);
 		return response;

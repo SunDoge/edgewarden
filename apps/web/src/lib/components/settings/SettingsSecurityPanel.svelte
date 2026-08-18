@@ -21,7 +21,12 @@ let {
 	onMessage,
 	onError,
 }: {
-	profile: { email: string; kdfIterations: number; role: string; twoFactorEnabled: boolean };
+	profile: {
+		email: string;
+		kdfIterations: number;
+		role: string;
+		twoFactorEnabled: boolean;
+	};
 	recoveryCode: string;
 	busy: string;
 	onCopy: (value: string) => void | Promise<void>;

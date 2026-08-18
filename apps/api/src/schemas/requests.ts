@@ -79,7 +79,10 @@ export const UpdateDevicesTrustSchema = v.pipe(
 						...device,
 						deviceId: device.deviceId ?? device.DeviceId ?? "",
 					})),
-					v.check((device) => device.deviceId.length > 0, "Device id is required"),
+					v.check(
+						(device) => device.deviceId.length > 0,
+						"Device id is required",
+					),
 				),
 			),
 			[],

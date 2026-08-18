@@ -7,11 +7,12 @@ import type { CompiledQuery, QueryResult } from "kysely";
 
 export type EdgewardenBatchQuery = BatchQuery | CompiledQuery;
 
-type QueryOutput<Query> = Query extends BatchQuery<infer Output>
-	? Output
-	: Query extends CompiledQuery<infer Output>
+type QueryOutput<Query> =
+	Query extends BatchQuery<infer Output>
 		? Output
-		: never;
+		: Query extends CompiledQuery<infer Output>
+			? Output
+			: never;
 
 type EdgewardenBatchResult<Queries extends readonly EdgewardenBatchQuery[]> = {
 	-readonly [Index in keyof Queries]: QueryResult<QueryOutput<Queries[Index]>>;

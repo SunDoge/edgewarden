@@ -13,9 +13,10 @@ import { match } from "ts-pattern";
 
 export function cipherDomain(item: CipherResponse): string | null {
 	if (item.type !== CipherType.Login) return null;
-	const login = item.login as
-		| { uri?: unknown; uris?: Array<{ uri?: unknown }> }
-		| null;
+	const login = item.login as {
+		uri?: unknown;
+		uris?: Array<{ uri?: unknown }>;
+	} | null;
 	const uri = login?.uri ?? login?.uris?.[0]?.uri;
 	if (typeof uri !== "string" || !uri.trim()) return null;
 	try {

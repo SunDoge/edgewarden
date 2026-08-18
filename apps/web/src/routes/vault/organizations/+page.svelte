@@ -40,13 +40,7 @@ import * as Select from "$lib/components/ui/select/index.js";
 import { Spinner } from "$lib/components/ui/spinner/index.js";
 import OrganizationCollectionsCard from "$lib/components/organizations/OrganizationCollectionsCard.svelte";
 import OrganizationMembersCard from "$lib/components/organizations/OrganizationMembersCard.svelte";
-import {
-	ArrowLeft,
-	Building2,
-	Pencil,
-	Plus,
-	Trash2,
-} from "@lucide/svelte";
+import { ArrowLeft, Building2, Pencil, Plus, Trash2 } from "@lucide/svelte";
 
 let organizations = $state<any[]>([]);
 let selected = $state<any>(null);
