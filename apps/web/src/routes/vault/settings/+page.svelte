@@ -23,6 +23,7 @@ import { vault, syncVaultData, logout } from "$lib/stores/vault.svelte";
 import { Button } from "$lib/components/ui/button/index.js";
 import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
 import AccountSecurityDialogs from "$lib/components/settings/AccountSecurityDialogs.svelte";
+import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
 import DeviceManager from "$lib/components/settings/DeviceManager.svelte";
 import SettingsGeneralPanel from "$lib/components/settings/SettingsGeneralPanel.svelte";
 import SettingsSecurityPanel from "$lib/components/settings/SettingsSecurityPanel.svelte";
@@ -270,12 +271,7 @@ async function changeMasterPassword() {
 
 <svelte:head><title>账户与安全 · Edgewarden</title></svelte:head>
 
-<main class="mx-auto flex max-w-5xl flex-col gap-6 p-4 md:p-8">
-	<header class="flex items-center gap-3">
-		<Button variant="ghost" size="icon" onclick={() => goto("/vault")} aria-label="返回保险库"><ArrowLeft /></Button>
-		<div><h1 class="text-2xl font-semibold">账户与安全</h1><p class="text-sm text-muted-foreground">管理资料、API Key、两步验证和登录设备。</p></div>
-	</header>
-
+<VaultPageShell title="账户与安全" description="管理资料、API Key、两步验证和登录设备。" width="default">
 	{#if error}<Alert.Root variant="destructive"><Alert.Title>操作失败</Alert.Title><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
 	{#if message}<Alert.Root><Alert.Title>设置已更新</Alert.Title><Alert.Description>{message}</Alert.Description></Alert.Root>{/if}
 
@@ -290,7 +286,7 @@ async function changeMasterPassword() {
 			<Tabs.Content value="danger"><Card.Root class="border-destructive/40"><Card.Header><Card.Title>删除账户</Card.Title><Card.Description>永久删除个人保险库、Sends、设备、通行密钥和账户资料。若你仍拥有组织，必须先删除或转移组织。</Card.Description></Card.Header><Card.Content><Button variant="destructive" onclick={() => deleteAccountOpen = true}>永久删除账户</Button></Card.Content></Card.Root></Tabs.Content>
 		</Tabs.Root>
 	{/if}
-</main>
+</VaultPageShell>
 
 <AccountSecurityDialogs
 	bind:deleteAccountOpen

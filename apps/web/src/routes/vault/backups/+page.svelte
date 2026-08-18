@@ -12,6 +12,7 @@ import { goto } from "$app/navigation";
 import BackupDestinationForm from "$lib/components/backup/BackupDestinationForm.svelte";
 import BackupDestinationList from "$lib/components/backup/BackupDestinationList.svelte";
 import RemoteBackupManager from "$lib/components/backup/RemoteBackupManager.svelte";
+import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
 import {
 	applyBackupDestinationForm,
 	backupDestinationToForm,
@@ -263,24 +264,7 @@ function showSuccess(msg: string) {
 	<title>云备份中心 - Edgewarden</title>
 </svelte:head>
 
-<div class="flex min-h-screen flex-col bg-background p-3 sm:p-6">
-	<div class="mx-auto flex w-full min-w-0 max-w-6xl flex-1 flex-col gap-6">
-		<!-- Header -->
-		<div class="flex items-center justify-between">
-			<div class="flex items-center gap-3">
-				<Button variant="outline" size="icon" onclick={() => goto("/vault")} aria-label="返回保险库">
-					<ArrowLeft />
-				</Button>
-				<div>
-					<h1 class="flex items-center gap-2 text-xl font-bold">
-						<Database class="size-5 text-primary" />
-						云备份中心
-					</h1>
-					<p class="mt-0.5 text-xs text-muted-foreground">配置与管理整个密码库实例的安全备份，可导出为标准的端到端加密备份包</p>
-				</div>
-			</div>
-		</div>
-
+<VaultPageShell title="云备份中心" description="配置与管理整个密码库实例的安全备份，可导出为标准的端到端加密备份包。">
 		<!-- Alerts -->
 		{#if error}
 			<Alert.Root variant="destructive"><AlertCircle /><Alert.Title>操作失败</Alert.Title><Alert.Description>{error}</Alert.Description></Alert.Root>
@@ -342,8 +326,7 @@ function showSuccess(msg: string) {
 				</div>
 			</div>
 		{/if}
-	</div>
-</div>
+</VaultPageShell>
 
 <AlertDialog.Root bind:open={deleteConfirmOpen}>
 	<AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>删除备份目的地</AlertDialog.Title><AlertDialog.Description>配置将被删除，但已经存在的远程备份文件不会被删除。</AlertDialog.Description></AlertDialog.Header><AlertDialog.Footer><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action class="bg-destructive text-destructive-foreground hover:bg-destructive/90" onclick={deleteDestination}>确认删除</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content>

@@ -2,30 +2,19 @@
 import type { FolderResponse } from "@edgewarden/shared";
 import {
 	Archive,
-	Building2,
 	Combine,
 	Copy,
 	CreditCard,
-	Database,
 	Edit,
 	FileText,
 	Folder,
-	Globe,
 	KeyRound,
 	Lock,
 	Plus,
-	ScrollText,
-	Settings,
-	Share2,
-	ShieldAlert,
 	Star,
 	Trash2,
-	Upload,
 	User,
-	UserRoundCog,
-	WandSparkles,
 } from "@lucide/svelte";
-import { goto } from "$app/navigation";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Badge } from "$lib/components/ui/badge/index.js";
 import { Separator } from "$lib/components/ui/separator/index.js";
@@ -106,32 +95,10 @@ const cipherTypes = [
 	{ id: "securenote" as const, label: "安全便签", icon: FileText },
 ];
 
-const tools = [
-	{ href: "/vault/totp", label: "验证码", icon: KeyRound },
-	{ href: "/vault/password-health", label: "密码健康", icon: ShieldAlert },
-	{ href: "/vault/domains", label: "域名等效规则", icon: Globe },
-	{ href: "/vault/sends", label: "Send 传输中心", icon: Share2 },
-	{ href: "/vault/import-export", label: "导入与导出", icon: Upload },
-	{ href: "/vault/organizations", label: "组织共享", icon: Building2 },
-	{ href: "/vault/settings", label: "账户与安全", icon: Settings },
-	{ href: "/vault/generator", label: "密码生成器", icon: WandSparkles },
-];
-
-const adminTools = [
-	{ href: "/vault/admin", label: "用户与邀请", icon: UserRoundCog },
-	{ href: "/vault/logs", label: "审计日志", icon: ScrollText },
-	{ href: "/vault/backups", label: "云备份中心", icon: Database },
-];
-
 function selectCategory(category: VaultCategory) {
 	activeCategory = category;
 	activeFolder = null;
 	onNavigate?.();
-}
-
-function navigateTo(href: string) {
-	onNavigate?.();
-	void goto(href);
 }
 </script>
 
@@ -167,28 +134,10 @@ function navigateTo(href: string) {
 			</Button>
 		{/each}
 
-		<Separator class="my-2" />
-		<p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">工具与设置</p>
-		{#each tools as item (item.href)}
-			<Button variant="ghost" class="w-full justify-start" onclick={() => navigateTo(item.href)}>
-				<item.icon />
-				<span>{item.label}</span>
-			</Button>
-		{/each}
-
-		{#if vault.profile?.role === "admin"}
-			<Separator class="my-2" />
-			<p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">管理</p>
-			{#each adminTools as item (item.href)}
-				<Button variant="ghost" class="w-full justify-start" onclick={() => navigateTo(item.href)}>
-					<item.icon />
-					<span>{item.label}</span>
-				</Button>
-			{/each}
-		{/if}
 	</nav>
 
-	<section class="mt-6 flex flex-col gap-1 md:hidden" aria-labelledby="folders-heading">
+	<Separator class="my-4" />
+	<nav class="flex flex-col gap-1" aria-labelledby="folders-heading">
 		<div class="mb-2 flex items-center justify-between px-3">
 			<p id="folders-heading" class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">文件夹</p>
 			<div class="flex items-center gap-1">
@@ -216,5 +165,5 @@ function navigateTo(href: string) {
 		{:else}
 			<p class="px-3 text-xs italic text-muted-foreground">暂无文件夹</p>
 		{/each}
-	</section>
+	</nav>
 </aside>

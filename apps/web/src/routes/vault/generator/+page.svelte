@@ -6,6 +6,7 @@ import { Input } from "$lib/components/ui/input/index.js";
 import * as Field from "$lib/components/ui/field/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
 import * as Tabs from "$lib/components/ui/tabs/index.js";
+import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
 import * as Select from "$lib/components/ui/select/index.js";
 import { Textarea } from "$lib/components/ui/textarea/index.js";
 import { Switch } from "$lib/components/ui/switch/index.js";
@@ -221,8 +222,7 @@ $effect(() => {
 
 <svelte:head><title>密码生成器 · Edgewarden</title></svelte:head>
 
-<main class="mx-auto flex max-w-3xl flex-col gap-6 p-4 md:p-8">
-	<header class="flex items-center gap-3"><Button variant="ghost" size="icon" onclick={() => goto("/vault")} aria-label="返回保险库"><ArrowLeft /></Button><div><h1 class="text-2xl font-semibold">密码生成器</h1><p class="text-sm text-muted-foreground">所有内容仅在本机使用加密随机数生成。</p></div></header>
+<VaultPageShell title="密码生成器" description="所有内容仅在本机使用加密随机数生成。" width="compact">
 
 	<Tabs.Root value={mode} onValueChange={changeMode}>
 		<Tabs.List class="grid h-auto grid-cols-2 md:grid-cols-6">
@@ -270,4 +270,4 @@ $effect(() => {
 			</Card.Content>
 		</Card.Root>
 	</Tabs.Root>
-</main>
+</VaultPageShell>

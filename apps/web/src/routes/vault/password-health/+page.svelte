@@ -15,6 +15,7 @@ import {
 	type PasswordHealthReport,
 } from "$lib/services/password-health";
 import { syncVaultData, vault } from "$lib/stores/vault.svelte";
+import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
 import {
 	AlertTriangle,
 	ArrowLeft,
@@ -90,8 +91,8 @@ function toggleReveal(id: string) {
 
 <svelte:head><title>密码健康 - Edgewarden</title></svelte:head>
 
-<main class="min-h-screen bg-muted/30 p-4 md:p-6"><div class="mx-auto flex max-w-5xl flex-col gap-6">
-	<header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div class="flex min-w-0 items-start gap-2 sm:items-center sm:gap-3"><Button variant="ghost" size="icon" class="shrink-0" onclick={() => goto("/vault")} aria-label="返回保险库"><ArrowLeft data-icon /></Button><div class="min-w-0"><h1 class="text-xl font-semibold sm:text-2xl">密码健康</h1><p class="text-sm text-muted-foreground">只向 Have I Been Pwned 发送 SHA-1 摘要前 5 位；密码和完整摘要不会离开浏览器。</p></div></div><Button class="self-end sm:self-auto" onclick={scan} disabled={scanning || vault.isSyncing}>{#if scanning}<Spinner data-icon="inline-start" />{:else}<ShieldAlert data-icon="inline-start" />{/if}{report ? "重新检查" : "开始检查"}</Button></header>
+<VaultPageShell title="密码健康" description="只向 Have I Been Pwned 发送 SHA-1 摘要前 5 位；密码和完整摘要不会离开浏览器。" width="default">
+	{#snippet actions()}<Button onclick={scan} disabled={scanning || vault.isSyncing}>{#if scanning}<Spinner data-icon="inline-start" />{:else}<ShieldAlert data-icon="inline-start" />{/if}{report ? "重新检查" : "开始检查"}</Button>{/snippet}
 	{#if scanError}<Alert.Root variant="destructive"><Alert.Title>检查失败</Alert.Title><Alert.Description>{scanError}</Alert.Description></Alert.Root>{/if}
 	{#if scanning}<Card.Root><Card.Content class="flex flex-col gap-2 pt-6"><div class="flex justify-between text-sm text-muted-foreground"><span>正在检查密码</span><span>{progress.checked} / {progress.total}</span></div><Progress value={progress.checked} max={Math.max(progress.total, 1)} /></Card.Content></Card.Root>{/if}
 	{#if report}<ToggleGroup.Root type="single" variant="outline" spacing={2} value={filter} onValueChange={(value) => { if (value) filter = value as typeof filter; }} class="grid w-full grid-cols-2 sm:grid-cols-4">
@@ -101,4 +102,4 @@ function toggleReveal(id: string) {
 		<ToggleGroup.Item value="all" class="h-auto flex-col items-start p-4"><span class="text-2xl font-semibold">{report.eligibleCount}</span><span class="text-xs text-muted-foreground">已检查</span></ToggleGroup.Item>
 	</ToggleGroup.Root><div class="flex flex-col gap-2">{#each filteredItems as risk (risk.cipherId)}{@const cipher = vault.ciphers.find((item) => item.id === risk.cipherId)}<Card.Root><Card.Content class="flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap"><Button variant="ghost" class="h-auto min-w-0 flex-1 justify-start p-1 text-left" onclick={() => goto(`/vault?cipher=${encodeURIComponent(risk.cipherId)}`)}><span class="min-w-0"><span class="block truncate font-semibold">{cipher?.name ?? "未知条目"}</span><span class="block truncate text-xs text-muted-foreground">{cipher?.login?.username ?? ""}</span><span class="mt-1 block truncate font-mono text-xs">{revealed.has(risk.cipherId) ? cipher?.login?.password : "••••••••••••"}</span></span></Button><Button variant="ghost" size="icon-sm" onclick={() => toggleReveal(risk.cipherId)} aria-label="显示或隐藏密码">{#if revealed.has(risk.cipherId)}<EyeOff data-icon />{:else}<Eye data-icon />{/if}</Button><div class="flex w-full flex-wrap gap-1 sm:w-auto sm:justify-end">{#if risk.exposedCount === null}<Badge variant="outline">查询不可用</Badge>{:else if risk.exposedCount > 0}<Badge variant="destructive">泄露 {risk.exposedCount} 次</Badge>{/if}{#if risk.reusedCount > 1}<Badge variant="secondary">重复 {risk.reusedCount} 项</Badge>{/if}{#if risk.weak}<Badge variant="secondary">弱密码</Badge>{/if}</div></Card.Content></Card.Root>{/each}{#if !filteredItems.length}<Empty.Root><Empty.Header><Empty.Media variant="icon"><CheckCircle2 /></Empty.Media><Empty.Title>未发现密码风险</Empty.Title><Empty.Description>当前筛选条件下没有需要处理的条目。</Empty.Description></Empty.Header></Empty.Root>{/if}</div>
 	{:else if !scanning}<Empty.Root><Empty.Header><Empty.Media variant="icon"><AlertTriangle /></Empty.Media><Empty.Title>检查密码健康</Empty.Title><Empty.Description>检查会在浏览器中计算摘要，并使用 k-anonymity 查询泄露次数。</Empty.Description></Empty.Header><Empty.Content><Button onclick={scan}><ShieldAlert data-icon="inline-start" />开始检查</Button></Empty.Content></Empty.Root>{/if}
-</div></main>
+</VaultPageShell>

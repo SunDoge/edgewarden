@@ -40,6 +40,7 @@ import * as Select from "$lib/components/ui/select/index.js";
 import { Spinner } from "$lib/components/ui/spinner/index.js";
 import OrganizationCollectionsCard from "$lib/components/organizations/OrganizationCollectionsCard.svelte";
 import OrganizationMembersCard from "$lib/components/organizations/OrganizationMembersCard.svelte";
+import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
 import { ArrowLeft, Building2, Pencil, Plus, Trash2 } from "@lucide/svelte";
 
 let organizations = $state<any[]>([]);
@@ -353,8 +354,8 @@ async function removeOrganization() {
 
 <svelte:head><title>组织共享 · Edgewarden</title></svelte:head>
 
-<main class="mx-auto flex max-w-6xl flex-col gap-6 p-4 md:p-8">
-	<header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div class="flex min-w-0 items-start gap-2 sm:items-center sm:gap-3"><Button variant="ghost" size="icon" class="shrink-0" onclick={() => goto("/vault")} aria-label="返回"><ArrowLeft data-icon /></Button><div class="min-w-0"><h1 class="text-xl font-semibold sm:text-2xl">组织共享</h1><p class="text-sm text-muted-foreground">组织密钥只在成员设备上解封，服务器无法读取共享条目。</p></div></div><Button class="self-end sm:self-auto" onclick={() => createOpen = true}><Plus data-icon="inline-start" />创建组织</Button></header>
+<VaultPageShell title="组织共享" description="组织密钥只在成员设备上解封，服务器无法读取共享条目。">
+	{#snippet actions()}<Button onclick={() => createOpen = true}><Plus data-icon="inline-start" />创建组织</Button>{/snippet}
 	{#if error}<Alert.Root variant="destructive"><Alert.Title>操作失败</Alert.Title><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
 	{#if loading}<div class="flex items-center justify-center gap-2 py-12 text-muted-foreground"><Spinner />正在加载…</div>{:else}
 		<div class="grid gap-6 md:grid-cols-[16rem_1fr]">
@@ -367,7 +368,7 @@ async function removeOrganization() {
 			{#if selected.role === "owner"}<Card.Root class="border-destructive/30"><Card.Header><Card.Title>删除组织</Card.Title><Card.Description>此操作会永久删除组织集合、共享条目和成员关系。</Card.Description></Card.Header><Card.Content class="flex flex-col gap-2 sm:flex-row"><Input type="password" bind:value={deletePassword} autocomplete="current-password" placeholder="输入主密码确认" /><Button variant="destructive" onclick={removeOrganization} disabled={!deletePassword || busy === "delete-org"}>永久删除</Button></Card.Content></Card.Root>{/if}</div>{/if}
 		</div>
 	{/if}
-</main>
+</VaultPageShell>
 
 <Dialog.Root bind:open={createOpen}><Dialog.Content><Dialog.Header><Dialog.Title>创建组织</Dialog.Title><Dialog.Description>浏览器会生成独立组织密钥和 RSA 密钥对。</Dialog.Description></Dialog.Header><Field.Group><Field.Field><Field.Label for="organization-name">组织名称</Field.Label><Input id="organization-name" bind:value={organizationName} /></Field.Field><Field.Field><Field.Label for="collection-name">初始集合</Field.Label><Input id="collection-name" bind:value={initialCollectionName} /></Field.Field></Field.Group><Dialog.Footer><Button variant="outline" onclick={() => createOpen = false}>取消</Button><Button onclick={createOrganization} disabled={!organizationName.trim() || !initialCollectionName.trim() || busy === "create"}>创建</Button></Dialog.Footer></Dialog.Content></Dialog.Root>
 

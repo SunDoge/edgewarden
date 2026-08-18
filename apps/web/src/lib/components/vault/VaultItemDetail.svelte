@@ -92,11 +92,11 @@ function copyToClipboard(text: string, fieldName: string) {
 											const target = e.currentTarget as HTMLImageElement;
 											target.style.display = "none";
 											const fallback = target.nextElementSibling as HTMLElement | null;
-											if (fallback) fallback.classList.remove("hidden");
+											if (fallback) fallback.classList.remove("invisible");
 										}}
 										style="opacity: 0; transition: opacity 0.2s;"
 									/>
-									<div class="absolute inset-0 flex items-center justify-center hidden">
+									<div class="invisible absolute inset-0 flex items-center justify-center">
 										<IconComp class="size-6" />
 									</div>
 								{:else}

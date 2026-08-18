@@ -1,5 +1,4 @@
 <script lang="ts">
-import VaultFolderSidebar from "./VaultFolderSidebar.svelte";
 import VaultSidebar from "./VaultSidebar.svelte";
 import * as Sheet from "$lib/components/ui/sheet/index.js";
 import type { VaultCategory } from "$lib/services/vault-filter";
@@ -67,17 +66,6 @@ function closeMobile() {
 		bind:activeFolder
 		{duplicateCount}
 		{onCreate}
-		{onCreateFolder}
-		{onRenameFolder}
-		{onDeleteFolder}
-		{onDeleteAllFolders}
-		{onMergeDuplicateFolders}
-		{duplicateFolderCount}
-		{mergingDuplicateFolders}
-	/>
-	<VaultFolderSidebar
-		bind:activeCategory
-		bind:activeFolder
 		{onCreateFolder}
 		{onRenameFolder}
 		{onDeleteFolder}

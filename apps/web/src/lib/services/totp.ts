@@ -134,7 +134,7 @@ async function generateSteamCode(
 export async function calcTotpNow(
 	rawSecret: string,
 	nowMs: number = Date.now(),
-): Promise<{ code: string; remain: number } | null> {
+): Promise<{ code: string; remain: number; period: number } | null> {
 	const config = parseTotpConfig(rawSecret);
 	if (!config.secret) return null;
 	const epoch = Math.floor(nowMs / 1000);
@@ -143,7 +143,7 @@ export async function calcTotpNow(
 
 	if (config.steam) {
 		const code = await generateSteamCode(config.secret, counter);
-		return code ? { code, remain } : null;
+		return code ? { code, remain, period: config.period } : null;
 	}
 
 	try {
@@ -153,7 +153,11 @@ export async function calcTotpNow(
 			digits: config.digits,
 			period: config.period,
 		});
-		return { code: totp.generate({ timestamp: nowMs }), remain };
+		return {
+			code: totp.generate({ timestamp: nowMs }),
+			remain,
+			period: config.period,
+		};
 	} catch {
 		return null;
 	}

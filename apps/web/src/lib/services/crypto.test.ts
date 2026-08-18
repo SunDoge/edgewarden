@@ -158,7 +158,7 @@ describe("frontend crypto utils", () => {
 			"otpauth://totp/Test?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&algorithm=SHA1&digits=8&period=30",
 			59_000,
 		);
-		expect(result).toEqual({ code: "94287082", remain: 1 });
+		expect(result).toEqual({ code: "94287082", remain: 1, period: 30 });
 	});
 
 	it("rejects HOTP and malformed TOTP URIs", async () => {
@@ -175,7 +175,7 @@ describe("frontend crypto utils", () => {
 			"steam://GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
 			59_000,
 		);
-		expect(result).toEqual({ code: "PV9M4", remain: 1 });
+		expect(result).toEqual({ code: "PV9M4", remain: 1, period: 30 });
 	});
 
 	it("round-trips a cipher with a per-item key", async () => {

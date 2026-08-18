@@ -33,6 +33,7 @@ import {
 	updateAdminRegistrationPolicyApi,
 } from "$lib/services/api";
 import { vault } from "$lib/stores/vault.svelte";
+import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
 
 let users = $state<any[]>([]);
 let invites = $state<any[]>([]);
@@ -130,8 +131,8 @@ onMount(() => {
 
 <svelte:head><title>用户管理 - Edgewarden</title></svelte:head>
 
-<main class="min-h-screen bg-muted/30 p-4 md:p-6"><div class="mx-auto flex max-w-6xl flex-col gap-6">
-	<header class="flex items-start justify-between gap-2 sm:items-center"><div class="flex min-w-0 items-start gap-2 sm:items-center sm:gap-3"><Button variant="ghost" size="icon" class="shrink-0" onclick={() => goto("/vault")} aria-label="返回保险库"><ArrowLeft /></Button><div class="min-w-0"><h1 class="text-xl font-bold sm:text-2xl">用户与邀请</h1><p class="text-sm text-muted-foreground">敏感管理操作需要重新输入主密码。</p></div></div><Button variant="outline" size="icon" class="shrink-0 sm:hidden" onclick={refresh} disabled={busy !== null} aria-label="刷新"><RefreshCw /></Button><Button variant="outline" class="hidden shrink-0 sm:inline-flex" onclick={refresh} disabled={busy !== null}><RefreshCw data-icon="inline-start" />刷新</Button></header>
+<VaultPageShell title="用户与邀请" description="敏感管理操作需要重新输入主密码。">
+	{#snippet actions()}<Button variant="outline" onclick={refresh} disabled={busy !== null}><RefreshCw data-icon="inline-start" />刷新</Button>{/snippet}
 	{#if error}<Alert.Root variant="destructive"><ShieldAlert /><Alert.Title>管理操作失败</Alert.Title><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
 	<Field.Group><Field.Field><Field.Label for="admin-password">当前主密码</Field.Label><Input id="admin-password" type="password" bind:value={masterPassword} autocomplete="current-password" /><Field.Description>仅用于在浏览器中派生验证摘要，不会保存。</Field.Description></Field.Field></Field.Group>
 
@@ -151,6 +152,6 @@ onMount(() => {
 	<section class="min-w-0 rounded-lg border bg-card"><header class="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 class="font-semibold">用户</h2><p class="text-xs text-muted-foreground">{userSearchQuery.trim() ? `${filteredUsers.length} / ${users.length}` : users.length} 个账户</p></div><div class="flex items-center gap-2"><div class="relative min-w-0 sm:w-72"><Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input type="search" class="pl-9" bind:value={userSearchQuery} placeholder="搜索姓名、邮箱、角色或状态" aria-label="搜索用户" /></div><UserRoundCog class="hidden shrink-0 sm:block" /></div></header><div class="overflow-x-auto"><Table.Root><Table.Header><Table.Row><Table.Head>账户</Table.Head><Table.Head>角色</Table.Head><Table.Head>状态</Table.Head><Table.Head>两步验证</Table.Head><Table.Head class="text-end">操作</Table.Head></Table.Row></Table.Header><Table.Body>{#each filteredUsers as user (user.id)}<Table.Row><Table.Cell><p class="font-medium">{user.name || "未命名"}</p><p class="text-xs text-muted-foreground">{user.email}</p></Table.Cell><Table.Cell><Badge variant="outline">{user.role}</Badge></Table.Cell><Table.Cell><Badge variant={user.status === "active" ? "secondary" : "destructive"}>{user.status}</Badge></Table.Cell><Table.Cell>{user.twoFactorEnabled ? "已启用" : "未启用"}</Table.Cell><Table.Cell class="text-end"><div class="flex justify-end gap-2"><Button size="sm" variant="outline" disabled={busy !== null || user.id === vault.profile?.id} onclick={() => run(`status-${user.id}`, (hash) => setAdminUserStatusApi(user.id, user.status === "active" ? "banned" : "active", hash))}>{user.status === "active" ? "封禁" : "启用"}</Button><Button size="sm" variant="destructive" disabled={busy !== null || user.id === vault.profile?.id} onclick={() => deleteUser = user}><Trash2 data-icon="inline-start" />删除</Button></div></Table.Cell></Table.Row>{:else}<Table.Row><Table.Cell colspan={5} class="h-24 text-center text-muted-foreground">没有匹配的用户</Table.Cell></Table.Row>{/each}</Table.Body></Table.Root></div></section>
 		</Tabs.Content>
 	</Tabs.Root>
-</div></main>
+</VaultPageShell>
 
 <AlertDialog.Root open={deleteUser !== null} onOpenChange={(open) => { if (!open) deleteUser = null; }}><AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>永久删除用户</AlertDialog.Title><AlertDialog.Description>将永久删除 {deleteUser?.email} 及其全部保险库数据、设备和会话。此操作无法撤销。</AlertDialog.Description></AlertDialog.Header><AlertDialog.Footer><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action class="bg-destructive text-destructive-foreground hover:bg-destructive/90" onclick={confirmDeleteUser}>确认删除</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content></AlertDialog.Root>

@@ -22,6 +22,7 @@ import { Checkbox } from "$lib/components/ui/checkbox/index.js";
 import * as Empty from "$lib/components/ui/empty/index.js";
 import SendEditorForm from "$lib/components/sends/SendEditorForm.svelte";
 import SendDetail from "$lib/components/sends/SendDetail.svelte";
+import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
 import { Input } from "$lib/components/ui/input/index.js";
 import { Separator } from "$lib/components/ui/separator/index.js";
 import { Spinner } from "$lib/components/ui/spinner/index.js";
@@ -224,22 +225,8 @@ function copyShareLink(send: any) {
 	<title>Send 传输中心 - Edgewarden</title>
 </svelte:head>
 
-<div class="flex min-h-screen flex-col bg-muted/30">
-	<!-- Navbar -->
-	<header class="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-2 sm:px-4 md:px-6">
-		<div class="flex items-center gap-2.5">
-			<Button variant="ghost" size="sm" onclick={() => goto("/vault")} class="mr-1" aria-label="返回保险库">
-				<ArrowLeft />
-				<span class="hidden sm:inline">返回保险库</span>
-			</Button>
-			<Separator orientation="vertical" class="h-4" />
-			<span class="flex items-center gap-2 text-base font-bold sm:text-lg">
-				<Share2 class="size-5 text-primary" />
-				Send 传输中心
-			</span>
-		</div>
-
-		<div class="flex items-center gap-2">
+<VaultPageShell title="Send 传输中心" description="创建和管理端到端加密的临时分享。" width="full" fill>
+	{#snippet actions()}
 			<Button
 				variant="ghost" size="sm"
 				onclick={loadSends}
@@ -248,8 +235,7 @@ function copyShareLink(send: any) {
 			>
 				{#if loading}<Spinner />{:else}<RefreshCw data-icon />{/if}
 			</Button>
-		</div>
-	</header>
+	{/snippet}
 
 	<div class="relative flex flex-1 overflow-hidden">
 		<!-- Left Panel: Sends List -->
@@ -352,7 +338,7 @@ function copyShareLink(send: any) {
 			{/if}
 		</section>
 	</div>
-</div>
+</VaultPageShell>
 
 <AlertDialog.Root open={deleteTarget !== null} onOpenChange={(open) => { if (!open) deleteTarget = null; }}>
 	<AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>确认删除 Send</AlertDialog.Title><AlertDialog.Description>{deleteTarget?.kind === "bulk" ? `将永久删除选中的 ${selectedIdList.length} 个 Send。` : "此 Send 将被永久删除。"} 此操作无法撤销。</AlertDialog.Description></AlertDialog.Header><AlertDialog.Footer><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action class="bg-destructive text-destructive-foreground hover:bg-destructive/90" onclick={confirmDelete}>确认删除</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content>

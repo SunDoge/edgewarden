@@ -7,7 +7,6 @@ import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import VaultDetailPanel from "$lib/components/vault/VaultDetailPanel.svelte";
 import VaultDialogs from "$lib/components/vault/VaultDialogs.svelte";
-import VaultHeader from "$lib/components/vault/VaultHeader.svelte";
 import VaultItemList from "$lib/components/vault/VaultItemList.svelte";
 import VaultNavigation from "$lib/components/vault/VaultNavigation.svelte";
 import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
@@ -56,7 +55,6 @@ import {
 } from "$lib/services/vault-folder-actions";
 import {
 	getOrganizationKey,
-	logout,
 	syncVaultData,
 	vault,
 } from "$lib/stores/vault.svelte";
@@ -267,11 +265,6 @@ async function executeMergeDuplicateFolders() {
 	} finally {
 		mergingDuplicateFolders = false;
 	}
-}
-
-async function handleLogout() {
-	await logout();
-	goto("/login");
 }
 
 async function refreshSelectedItem(id: string) {
@@ -618,10 +611,7 @@ async function toggleFavorite(item: any) {
 	<title>我的保险库 - Edgewarden</title>
 </svelte:head>
 
-<div class="flex h-screen flex-col overflow-hidden bg-muted/30">
-	<VaultHeader onOpenNavigation={() => mobileSidebarOpen = true} onLogout={handleLogout} />
-
-	<div class="relative flex flex-1 overflow-hidden">
+<div class="relative flex h-full overflow-hidden">
 		<VaultNavigation
 			bind:mobileOpen={mobileSidebarOpen}
 			bind:activeCategory
@@ -656,6 +646,7 @@ async function toggleFavorite(item: any) {
 			onSelectRedundant={selectRedundantDuplicates}
 			onMove={() => { moveFolderId = null; moveDialogOpen = true; }}
 			onSelectItem={() => mobileDetailOpen = true}
+			onOpenFilters={() => (mobileSidebarOpen = true)}
 		/>
 		</div>
 
@@ -683,7 +674,6 @@ async function toggleFavorite(item: any) {
 			onAttachmentDownload={handleAttachmentDownload}
 			onAttachmentDelete={handleAttachmentDelete}
 		/>
-	</div>
 </div>
 
 <VaultDialogs

@@ -1,6 +1,5 @@
 <script lang="ts">
 import { onMount } from "svelte";
-import { fade } from "svelte/transition";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import {
@@ -19,10 +18,18 @@ import {
 } from "$lib/services/client-preferences";
 import { SessionTimeout } from "$lib/services/session-timeout";
 import { restoreWebSession } from "$lib/services/rpc";
+import VaultAppNavigation from "$lib/components/vault/VaultAppNavigation.svelte";
+import VaultHeader from "$lib/components/vault/VaultHeader.svelte";
 
 let { children } = $props();
 let ready = $state(false);
 let preferencesVersion = $state(0);
+let mobileNavigationOpen = $state(false);
+
+async function handleLogout() {
+	await logout();
+	await goto("/login");
+}
 
 onMount(() => {
 	let disposed = false;
@@ -122,7 +129,15 @@ $effect(() => {
 </script>
 
 {#if ready}
-	<div class="min-h-screen" transition:fade={{ duration: 140 }}>
-		{@render children()}
-	</div>
+	{#if page.url.pathname === "/vault/unlock"}
+		<div class="min-h-screen">{@render children()}</div>
+	{:else}
+		<div class="flex h-screen flex-col overflow-hidden bg-muted/30">
+			<VaultHeader onOpenNavigation={() => (mobileNavigationOpen = true)} onLogout={handleLogout} />
+			<div class="relative flex min-h-0 flex-1 overflow-hidden">
+				<VaultAppNavigation bind:mobileOpen={mobileNavigationOpen} />
+				<div class="min-w-0 flex-1 overflow-auto">{@render children()}</div>
+			</div>
+		</div>
+	{/if}
 {/if}

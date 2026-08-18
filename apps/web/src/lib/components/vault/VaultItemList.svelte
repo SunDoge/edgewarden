@@ -2,6 +2,7 @@
 import {
 	Archive,
 	ArchiveRestore,
+	ListFilter,
 	Folder,
 	Lock,
 	RotateCcw,
@@ -50,6 +51,7 @@ let {
 	onSelectRedundant,
 	onMove,
 	onSelectItem,
+	onOpenFilters,
 }: {
 	items: any[];
 	isSyncing: boolean;
@@ -70,6 +72,7 @@ let {
 	onSelectRedundant: () => void;
 	onMove: () => void;
 	onSelectItem?: (item: any) => void;
+	onOpenFilters?: () => void;
 } = $props();
 
 const rowHeight = 72;
@@ -105,7 +108,7 @@ function revealIcon(event: Event) {
 function hideBrokenIcon(event: Event) {
 	const image = event.currentTarget as HTMLImageElement;
 	image.style.display = "none";
-	image.nextElementSibling?.classList.remove("hidden");
+	image.nextElementSibling?.classList.remove("invisible");
 }
 
 function duplicateModeLabel(mode: DuplicateMode) {
@@ -129,6 +132,7 @@ function sortModeLabel(mode: VaultSort) {
 <section class="flex flex-1 flex-col overflow-hidden border-r bg-background">
 	<div class="flex shrink-0 flex-col gap-3 border-b p-4">
 		<div class="flex flex-wrap gap-2 sm:flex-nowrap">
+			<Button variant="outline" size="icon" class="md:hidden" onclick={onOpenFilters} aria-label="打开保险库筛选"><ListFilter data-icon /></Button>
 			<div class="relative flex-1"><Search class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input type="search" placeholder="搜索您的保险库项..." class="pl-10" bind:value={searchQuery} /></div>
 			{#if activeCategory === "duplicates"}
 				<Select.Root type="single" bind:value={duplicateMode}>
@@ -182,7 +186,7 @@ function sortModeLabel(mode: VaultSort) {
 				{#each visibleItems as item (item.id)}
 					{@const Icon = cipherTypeIcon(item.type)}
 					<div class="flex items-center"><Checkbox checked={!!selectedIds[item.id]} onCheckedChange={() => onToggleSelection(item.id)} aria-label={`选择 ${item.name}`} class="ml-3" /><Button variant="ghost" class={cn("h-auto w-full justify-start gap-3.5 rounded-none border-l-2 border-transparent p-4 text-left", selectedItem?.id === item.id && "border-primary bg-muted/60")} onclick={() => { selectedItem = item; onSelectItem?.(item); }}>
-						<div class="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-muted text-muted-foreground">{#if cipherDomain(item)}<img src="/icons/{encodeURIComponent(cipherDomain(item) ?? '')}/icon.png" alt="" class="size-5.5 rounded-md object-contain" onload={revealIcon} onerror={hideBrokenIcon} style="opacity: 0; transition: opacity 0.2s;" /><div class="absolute inset-0 hidden items-center justify-center"><Icon class="size-5" /></div>{:else}<Icon class="size-5" />{/if}</div>
+						<div class="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-muted text-muted-foreground">{#if cipherDomain(item)}<img src="/icons/{encodeURIComponent(cipherDomain(item) ?? '')}/icon.png" alt="" class="size-5.5 rounded-md object-contain" onload={revealIcon} onerror={hideBrokenIcon} style="opacity: 0; transition: opacity 0.2s;" /><div class="invisible absolute inset-0 flex items-center justify-center"><Icon class="size-5" /></div>{:else}<Icon class="size-5" />{/if}</div>
 						<div class="min-w-0 flex-1"><div class="flex items-center gap-1.5"><h4 class="truncate text-sm font-semibold text-foreground">{item.name}</h4>{#if item.favorite}<Star class="size-3 shrink-0 fill-current text-amber-400" />{/if}</div><p class="mt-0.5 truncate text-xs text-muted-foreground">{item.login?.username || cipherTypeName(item.type)}</p></div>
 					</Button></div>
 				{/each}

@@ -21,6 +21,25 @@ let { children } = $props();
 let networkStatus = $state<NetworkStatus>("checking");
 
 onMount(() => {
+	if (import.meta.env.DEV) {
+		void navigator.serviceWorker
+			?.getRegistrations()
+			.then((registrations) =>
+				Promise.all(
+					registrations.map((registration) => registration.unregister()),
+				),
+			);
+		void caches
+			?.keys()
+			.then((keys) =>
+				Promise.all(
+					keys
+						.filter((key) => key.startsWith("edgewarden-shell-"))
+						.map((key) => caches.delete(key)),
+				),
+			);
+	}
+
 	syncDocumentLocale();
 
 	const media = matchMedia("(prefers-color-scheme: dark)");

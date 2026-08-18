@@ -20,6 +20,7 @@ import { Progress } from "$lib/components/ui/progress/index.js";
 import * as Select from "$lib/components/ui/select/index.js";
 import { Separator } from "$lib/components/ui/separator/index.js";
 import { Spinner } from "$lib/components/ui/spinner/index.js";
+import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
 import { importCiphersApi } from "$lib/services/api";
 import {
 	buildBitwardenCsv,
@@ -232,17 +233,7 @@ async function handleImport(strategy?: "skip" | "all") {
 	<title>数据导入与导出 - Edgewarden</title>
 </svelte:head>
 
-<div class="flex min-h-screen flex-col bg-muted/30">
-	<header class="flex h-14 shrink-0 items-center justify-between border-b bg-background px-3 sm:px-6">
-		<div class="flex items-center gap-2.5">
-			<Button variant="ghost" size="icon" onclick={() => goto("/vault")} class="size-8 rounded-lg">
-				<ArrowLeft data-icon />
-			</Button>
-			<span class="text-base font-semibold text-foreground sm:text-lg">数据导入与导出</span>
-		</div>
-	</header>
-
-	<main class="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4 p-4 sm:gap-6 md:p-8">
+<VaultPageShell title="数据导入与导出" description="在 Edgewarden 与兼容格式之间安全迁移保险库数据。" width="default">
 		{#if errorMsg}
 			<Alert.Root variant="destructive"><ShieldAlert /><Alert.Title>操作失败</Alert.Title><Alert.Description>{errorMsg}</Alert.Description></Alert.Root>
 		{/if}
@@ -352,8 +343,7 @@ async function handleImport(strategy?: "skip" | "all") {
 				</Field.Group></Card.Content>
 			</Card.Root>
 		</div>
-	</main>
-</div>
+</VaultPageShell>
 
 <AlertDialog.Root bind:open={exportConfirmOpen}>
 	<AlertDialog.Content>

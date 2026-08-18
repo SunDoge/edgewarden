@@ -12,6 +12,7 @@ import { Spinner } from "$lib/components/ui/spinner/index.js";
 import CustomEquivalentDomains from "$lib/components/domains/CustomEquivalentDomains.svelte";
 import { normalizeEquivalentDomainRule } from "$lib/services/equivalent-domains";
 import GlobalEquivalentDomains from "$lib/components/domains/GlobalEquivalentDomains.svelte";
+import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
 import {
 	ArrowLeft,
 	Save,
@@ -138,20 +139,8 @@ function showTimedError(msg: string) {
 	<title>域名等效规则 - Edgewarden</title>
 </svelte:head>
 
-<div class="flex min-h-screen flex-col bg-muted/30">
-	<!-- Navbar Header -->
-	<header class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-background px-3 py-2 sm:h-14 sm:flex-nowrap sm:px-6 sm:py-0">
-		<div class="flex items-center gap-3">
-			<Button variant="ghost" size="icon" onclick={() => goto("/vault")} aria-label="返回保险库">
-				<ArrowLeft />
-			</Button>
-			<div class="flex items-center gap-2">
-				<Globe class="size-5 text-primary" />
-				<h1 class="text-base font-bold">域名等效规则</h1>
-			</div>
-		</div>
-
-		<div class="flex items-center gap-2">
+<VaultPageShell title="域名等效规则" description="管理自动填充时视为同一站点的域名组合。">
+	{#snippet actions()}
 			<Button
 				variant="outline"
 				size="sm"
@@ -169,10 +158,7 @@ function showTimedError(msg: string) {
 				{#if saving}<Spinner data-icon="inline-start" />{:else}<Save data-icon="inline-start" />{/if}
 				{saving ? "保存中..." : "保存"}<span class="hidden sm:inline">并应用</span>
 			</Button>
-		</div>
-	</header>
-
-	<main class="mx-auto flex w-full min-w-0 max-w-6xl flex-1 flex-col gap-6 overflow-y-auto p-3 sm:p-6 md:p-8">
+	{/snippet}
 		<!-- Notification Alerts -->
 		{#if error}
 			<Alert.Root variant="destructive"><AlertCircle /><Alert.Title>操作提示</Alert.Title><Alert.Description>{error}</Alert.Description></Alert.Root>
@@ -209,5 +195,4 @@ function showTimedError(msg: string) {
 				
 			</div>
 		{/if}
-	</main>
-</div>
+</VaultPageShell>
