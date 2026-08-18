@@ -96,12 +96,14 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		const syncBody = await sync.json<{
 			profile: Record<string, unknown>;
 			folders: Array<Record<string, unknown>>;
-			ciphers: unknown[];
+			ciphers: Array<{ edit: boolean; viewPassword: boolean }>;
 			policiesNew: unknown[];
 			userDecryption: Record<string, unknown>;
 		}>();
 		assert.equal(syncBody.folders.length, 1);
 		assert.equal(syncBody.ciphers.length, 1);
+		assert.equal(syncBody.ciphers[0].edit, true);
+		assert.equal(syncBody.ciphers[0].viewPassword, true);
 		assert.equal(typeof syncBody.profile.creationDate, "string");
 		assert.equal(syncBody.profile.verifyDevices, false);
 		assert.ok("accountKeys" in syncBody.profile);

@@ -32,6 +32,10 @@ type BwOptions = {
 
 const execFileAsync = promisify(execFile);
 
+function step(message: string): void {
+	console.log(`[bw smoke] ${message}`);
+}
+
 async function bw(args: string[], options: BwOptions = {}): Promise<string> {
 	const { stdout, stderr } = await execFileAsync("bw", args, {
 		env: {
@@ -76,13 +80,16 @@ async function cleanup(): Promise<void> {
 }
 
 try {
+	step("配置测试服务器");
 	await bw(["config", "server", server], { quiet: true });
+	step("登录并执行首次同步");
 	session = await bw(
 		["login", email, "--passwordenv", "BW_PASSWORD", "--raw"],
 		{ quiet: true },
 	);
 	await bw(["sync"], { session, quiet: true });
 
+	step("创建并读取文件夹和密码项");
 	const folder = JSON.parse(
 		await bw(
 			[
@@ -134,6 +141,7 @@ try {
 		throw new Error("CLI item did not round-trip through sync");
 	}
 
+	step("编辑密码项");
 	const edited = JSON.parse(
 		await bw(
 			[
@@ -149,6 +157,7 @@ try {
 		throw new Error("CLI item update did not round-trip");
 	}
 
+	step("使用独立 CLI 配置验证云端同步");
 	await bw(["config", "server", server], {
 		quiet: true,
 		appDataDirectory: verificationDirectory,
@@ -173,6 +182,7 @@ try {
 		throw new Error("Independent CLI did not receive the saved item update");
 	}
 
+	step("上传并下载附件");
 	attachmentPath = join(appDataDirectory, "encrypted-smoke-attachment.bin");
 	const attachmentBytes = crypto.getRandomValues(new Uint8Array(64));
 	await writeFile(attachmentPath, attachmentBytes);
@@ -204,12 +214,14 @@ try {
 		throw new Error("CLI attachment bytes did not round-trip");
 	}
 
+	step("锁定、解锁并再次同步");
 	await bw(["lock"], { quiet: true });
 	session = await bw(["unlock", "--passwordenv", "BW_PASSWORD", "--raw"], {
 		quiet: true,
 	});
 	await bw(["sync"], { session, quiet: true });
 
+	step("清理测试数据");
 	await bw(["delete", "item", itemId, "--permanent"], { session, quiet: true });
 	itemId = "";
 	await bw(["delete", "folder", folderId], { session, quiet: true });

@@ -289,21 +289,22 @@ async function buildSyncPayload(c: Context<HonoEnv>, excludeDomains: boolean) {
 				collectionIdsByCipher
 					.get(cipher.id)
 					?.map((link) => link.collection_id) ?? [];
-			const restrictedAccess =
-				cipher.org_id && !allAccessOrgIds.includes(cipher.org_id)
-					? collectionIds.map((id) => restrictedAccessByCollection.get(id))
-					: [];
+			const hasUnrestrictedAccess =
+				!cipher.org_id || allAccessOrgIds.includes(cipher.org_id);
+			const restrictedAccess = !hasUnrestrictedAccess
+				? collectionIds.map((id) => restrictedAccessByCollection.get(id))
+				: [];
 			return cipherToResponse(
 				cipher,
 				attachmentsByCipher.get(cipher.id),
 				collectionIds,
 				{
-					edit: restrictedAccess.some(
-						(access) => access?.read_only !== 1,
-					),
-					viewPassword: restrictedAccess.some(
-						(access) => access?.hide_passwords !== 1,
-					),
+					edit:
+						hasUnrestrictedAccess ||
+						restrictedAccess.some((access) => access?.read_only !== 1),
+					viewPassword:
+						hasUnrestrictedAccess ||
+						restrictedAccess.some((access) => access?.hide_passwords !== 1),
 				},
 				"cipher",
 			);
