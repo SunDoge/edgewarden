@@ -3,6 +3,10 @@
 	"name": "edgewarden",
 	"main": "apps/api/src/index.ts",
 	"compatibility_date": "2026-06-22",
+	"dev": {
+		"port": 8787,
+		"inspector_port": 9229
+	},
 	"assets": {
 		"directory": "apps/web/build",
 		"binding": "ASSETS",
