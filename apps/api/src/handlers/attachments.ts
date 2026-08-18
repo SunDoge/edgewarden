@@ -9,9 +9,13 @@ import {
 	createAttachmentUploadObjectKey,
 	getBlobObject,
 	getBlobStorageMaxBytes,
-	getStoredAttachmentObjectKey,
 	putBlobObject,
 } from "../services/blob-store";
+import {
+	getCipherPermissions,
+	getVisibleCipherCollectionIds,
+} from "../services/ciphers/access";
+import { cipherToResponse } from "../services/ciphers/presentation";
 import * as attachmentsDb from "../services/db/attachments";
 import {
 	attachmentCipherUpdateQuery,
@@ -28,7 +32,9 @@ import {
 	parseDirectUploadPayload,
 } from "../utils/direct-upload";
 import {
+	createAttachmentDownloadToken,
 	createAttachmentUploadToken,
+	verifyAttachmentDownloadToken,
 	verifyAttachmentUploadToken,
 } from "../utils/jwt";
 import { errorResponse } from "../utils/response";
@@ -95,6 +101,31 @@ export const createAttachment = factory.createHandlers(
 			return errorResponse("Attachment storage limit exceeded", 413);
 
 		const id = crypto.randomUUID();
+		const db = c.get("db");
+		const attachments = await attachmentsDb.listByCipherIds(db, [cipher.id]);
+		const collectionIds = await getVisibleCipherCollectionIds(
+			db,
+			cipher.id,
+			c.get("orgMember"),
+		);
+		const permissions = await getCipherPermissions(
+			db,
+			cipher,
+			c.get("orgMember"),
+			collectionIds,
+		);
+		const pendingAttachment = {
+			id,
+			cipher_id: cipher.id,
+			file_name: body.fileName,
+			size: body.fileSize,
+			size_name: sizeName(body.fileSize),
+			key: body.key,
+			storage_key: null,
+			deleted_at: null,
+			deletion_token: null,
+			created_at: now(),
+		};
 		const token = await createAttachmentUploadToken(
 			c.get("user").id,
 			cipher.id,
@@ -110,6 +141,13 @@ export const createAttachment = factory.createHandlers(
 			object: "attachment-fileUpload",
 			attachmentId: id,
 			fileUploadType: 1,
+			cipherResponse: cipherToResponse(
+				cipher,
+				[...attachments, pendingAttachment],
+				collectionIds,
+				permissions,
+				"cipher",
+			),
 			url: buildDirectUploadUrl(
 				c.req.raw,
 				`/api/ciphers/${cipher.id}/attachment/${id}`,
@@ -212,17 +250,51 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
 	return new Response(null, { status: 201 });
 });
 
-export const downloadAttachment = factory.createHandlers(async (c) => {
+export const getAttachment = factory.createHandlers(async (c) => {
 	const cipher = c.get("cipher");
 	const attachmentId = c.req.param("attachmentId");
 	if (!attachmentId) return errorResponse("Attachment id required", 400);
 	const attachment = await attachmentsDb.getById(c.get("db"), attachmentId);
 	if (!attachment || attachment.cipher_id !== cipher.id)
 		return errorResponse("Attachment not found", 404);
-	const object = await getBlobObject(
-		c.env,
-		getStoredAttachmentObjectKey(attachment),
+	const secret = getSafeJwtSecret(c.env);
+	if (!secret || !attachment.storage_key)
+		return errorResponse("Attachment content not found", 404);
+	const token = await createAttachmentDownloadToken(
+		c.get("user").id,
+		cipher.id,
+		attachment.id,
+		attachment.storage_key,
+		secret,
 	);
+	return c.json({
+		object: "attachment",
+		id: attachment.id,
+		url: buildDirectUploadUrl(c.req.raw, "/api/attachments/download", token),
+		fileName: attachment.file_name,
+		key: attachment.key,
+		size: String(attachment.size),
+		sizeName: attachment.size_name,
+	});
+});
+
+export const downloadAttachment = factory.createHandlers(async (c) => {
+	const secret = getSafeJwtSecret(c.env);
+	const token = c.req.query("token");
+	if (!secret || !token) return errorResponse("Download token required", 401);
+	const claims = await verifyAttachmentDownloadToken(token, secret);
+	if (!claims) return errorResponse("Invalid or expired download token", 401);
+	const attachment = await attachmentsDb.getById(
+		c.get("db"),
+		claims.attachmentId,
+	);
+	if (
+		!attachment ||
+		attachment.cipher_id !== claims.cipherId ||
+		attachment.storage_key !== claims.storageKey
+	)
+		return errorResponse("Attachment not found", 404);
+	const object = await getBlobObject(c.env, claims.storageKey);
 	if (!object?.body) return errorResponse("Attachment content not found", 404);
 	return new Response(object.body, {
 		headers: {

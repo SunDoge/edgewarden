@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { sign } from "hono/jwt";
 import { describe, test } from "vitest";
 import {
+	createAttachmentDownloadToken,
 	createAttachmentUploadToken,
 	createJWT,
 	createRealtimeTicket,
@@ -9,6 +10,7 @@ import {
 	createSendFileDownloadToken,
 	deriveJwtPurposeSecret,
 	hashRefreshToken,
+	verifyAttachmentDownloadToken,
 	verifyAttachmentUploadToken,
 	verifyJWT,
 	verifyRealtimeTicket,
@@ -182,6 +184,49 @@ describe("jwt utils", () => {
 					token,
 					"another-long-secret-key-that-is-invalid",
 				),
+				null,
+			);
+		});
+	});
+
+	describe("attachmentDownloadToken", () => {
+		test("binds a download URL to one stored attachment object", async () => {
+			const token = await createAttachmentDownloadToken(
+				"user-id",
+				"cipher-id",
+				"attachment-id",
+				"attachments/cipher-id/attachment-id.version.bin",
+				secret,
+			);
+			const verified = await verifyAttachmentDownloadToken(token, secret);
+			assert.deepEqual(
+				verified && [
+					verified.userId,
+					verified.cipherId,
+					verified.attachmentId,
+					verified.storageKey,
+					verified.typ,
+				],
+				[
+					"user-id",
+					"cipher-id",
+					"attachment-id",
+					"attachments/cipher-id/attachment-id.version.bin",
+					"attachment_download",
+				],
+			);
+		});
+
+		test("rejects a token signed for another purpose", async () => {
+			const uploadToken = await createAttachmentUploadToken(
+				"user-id",
+				"cipher-id",
+				"attachment-id",
+				{ fileName: "name", key: "key", fileSize: 1 },
+				secret,
+			);
+			assert.equal(
+				await verifyAttachmentDownloadToken(uploadToken, secret),
 				null,
 			);
 		});

@@ -199,7 +199,9 @@ export function cipherToResponse(
 		attachments: attachments.map((attachment) => ({
 			id: attachment.id,
 			fileName: attachment.file_name,
-			size: attachment.size,
+			// Bitwarden's AttachmentResponseModel serializes byte size as a string.
+			// Native clients deserialize this field strictly during delayed uploads.
+			size: String(attachment.size),
 			sizeName: attachment.size_name,
 			key: attachment.key,
 			object: "attachment",

@@ -167,9 +167,17 @@ export async function downloadAttachmentApi(
 	cipherId: string,
 	attachmentId: string,
 ): Promise<Uint8Array> {
-	const response = await rpc.api.ciphers[":id"].attachment[
+	const metadataResponse = await rpc.api.ciphers[":id"].attachment[
 		":attachmentId"
 	].$get({ param: { id: cipherId, attachmentId } });
+	if (!metadataResponse.ok)
+		throw new ApiError(
+			`附件下载失败 (${metadataResponse.status})`,
+			metadataResponse.status,
+			await metadataResponse.text().catch(() => null),
+		);
+	const metadata = (await metadataResponse.json()) as { url: string };
+	const response = await fetch(metadata.url);
 	if (!response.ok)
 		throw new ApiError(
 			`附件下载失败 (${response.status})`,

@@ -1,13 +1,13 @@
 import { Hono } from "hono";
 import type { HonoEnv } from "../env";
-import { uploadAttachment } from "../handlers/attachments";
+import { downloadAttachment, uploadAttachment } from "../handlers/attachments";
+import { getKnownDevice } from "../handlers/devices";
 import {
 	checkDigitalAssetLink,
 	getFillAssistFile,
 	getFillAssistManifest,
 } from "../handlers/fill-assist";
 import { getWebsiteIcon } from "../handlers/icons";
-import { getKnownDevice } from "../handlers/devices";
 import {
 	connectToken,
 	getPasskeyAssertionOptions,
@@ -60,6 +60,7 @@ export const publicRouter = new Hono<HonoEnv>()
 	.get("/.well-known/assetlinks/check", ...checkDigitalAssetLink)
 	.get("/icons/:host/icon.png", ...getWebsiteIcon)
 	.put("/api/ciphers/:id/attachment/:attachmentId", ...uploadAttachment)
+	.get("/api/attachments/download", ...downloadAttachment)
 	.post("/api/sends/access/:idOrAccessId", ...accessPublicSend)
 	.post("/api/sends/access", ...accessSendWithToken)
 	.post("/api/sends/access/file/:fileId", ...accessSendFileWithToken)

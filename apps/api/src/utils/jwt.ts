@@ -5,6 +5,7 @@ import { LIMITS } from "../config";
 export type JwtPurpose =
 	| "realtime"
 	| "attachment-upload"
+	| "attachment-download"
 	| "send-file-download"
 	| "send-file-upload"
 	| "send-access"
@@ -58,6 +59,15 @@ const AttachmentUploadClaimsSchema = v.object({
 	exp: v.number(),
 });
 
+const AttachmentDownloadClaimsSchema = v.object({
+	userId: v.pipe(v.string(), v.minLength(1)),
+	cipherId: v.pipe(v.string(), v.minLength(1)),
+	attachmentId: v.pipe(v.string(), v.minLength(1)),
+	storageKey: v.pipe(v.string(), v.minLength(1)),
+	typ: v.literal("attachment_download"),
+	exp: v.number(),
+});
+
 const SendFileDownloadClaimsSchema = v.object({
 	sendId: v.pipe(v.string(), v.minLength(1)),
 	fileId: v.pipe(v.string(), v.minLength(1)),
@@ -86,6 +96,9 @@ export type RealtimeTicketClaims = v.InferOutput<
 >;
 export type AttachmentUploadClaims = v.InferOutput<
 	typeof AttachmentUploadClaimsSchema
+>;
+export type AttachmentDownloadClaims = v.InferOutput<
+	typeof AttachmentDownloadClaimsSchema
 >;
 export type SendFileDownloadClaims = v.InferOutput<
 	typeof SendFileDownloadClaimsSchema
@@ -217,6 +230,39 @@ export async function verifyAttachmentUploadToken(
 		token,
 		await deriveJwtPurposeSecret(secret, "attachment-upload"),
 		AttachmentUploadClaimsSchema,
+	);
+}
+
+export async function createAttachmentDownloadToken(
+	userId: string,
+	cipherId: string,
+	attachmentId: string,
+	storageKey: string,
+	secret: string,
+): Promise<string> {
+	const payload: AttachmentDownloadClaims = {
+		userId,
+		cipherId,
+		attachmentId,
+		storageKey,
+		typ: "attachment_download",
+		exp:
+			Math.floor(Date.now() / 1000) + LIMITS.auth.fileDownloadTokenTtlSeconds,
+	};
+	return sign(
+		{ ...payload },
+		await deriveJwtPurposeSecret(secret, "attachment-download"),
+	);
+}
+
+export async function verifyAttachmentDownloadToken(
+	token: string,
+	secret: string,
+): Promise<AttachmentDownloadClaims | null> {
+	return verifyJwtClaims(
+		token,
+		await deriveJwtPurposeSecret(secret, "attachment-download"),
+		AttachmentDownloadClaimsSchema,
 	);
 }
 

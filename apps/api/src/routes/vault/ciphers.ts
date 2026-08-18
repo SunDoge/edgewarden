@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { HonoEnv } from "../../env";
-import { createAttachment, deleteAttachment, downloadAttachment } from "../../handlers/attachments";
+import { createAttachment, deleteAttachment, getAttachment } from "../../handlers/attachments";
 import {
 	archiveCipher, archiveCiphers, createCipher, deleteCiphers, getCipher,
 	hardDeleteCipher, hardDeleteCiphers, importCiphers, listCiphers, moveCiphers,
@@ -43,6 +43,6 @@ export const cipherArchiveRoutes = new Hono<HonoEnv>()
 
 export const attachmentRoutes = new Hono<HonoEnv>()
 	.post("/api/ciphers/:id/attachment/v2", requireCipher, requireCipherWrite, ...createAttachment)
-	.get("/api/ciphers/:id/attachment/:attachmentId", requireCipher, ...downloadAttachment)
+	.get("/api/ciphers/:id/attachment/:attachmentId", requireCipher, ...getAttachment)
 	.post("/api/ciphers/:id/attachment/:attachmentId/delete", requireCipher, requireCipherWrite, ...deleteAttachment)
 	.delete("/api/ciphers/:id/attachment/:attachmentId", requireCipher, requireCipherWrite, ...deleteAttachment);

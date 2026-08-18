@@ -1705,6 +1705,8 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		const encryptedBytes = new TextEncoder().encode(
 			"encrypted-attachment-payload",
 		);
+		const attachmentKey =
+			"2.AAAAAAAAAAAAAAAAAAAAAA==|AAAAAAAAAAAAAAAAAAAAAA==|AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 		const created = await request(
 			`/api/ciphers/${context.cipherId}/attachment/v2`,
 			{
@@ -1712,7 +1714,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 				headers: { ...auth, "content-type": "application/json" },
 				body: JSON.stringify({
 					fileName: "2.encrypted-file-name",
-					key: "2.encrypted-attachment-key",
+					key: attachmentKey,
 					fileSize: encryptedBytes.byteLength,
 				}),
 			},
@@ -1721,7 +1723,15 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		const metadata = await created.json<{
 			attachmentId: string;
 			url: string;
+			cipherResponse: {
+				id: string;
+				attachments: Array<{ id: string; key: string }>;
+			};
 		}>();
+		assert.equal(metadata.cipherResponse.id, context.cipherId);
+		const pendingAttachment = metadata.cipherResponse.attachments.at(-1);
+		assert.equal(pendingAttachment?.id, metadata.attachmentId);
+		assert.equal(pendingAttachment?.key, attachmentKey);
 		const beforeUpload = await request(`/api/ciphers/${context.cipherId}`, {
 			headers: auth,
 		});
@@ -1782,11 +1792,32 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 			{ headers: auth },
 		);
 		assert.equal(downloaded.status, 200, await downloaded.clone().text());
+		const downloadUrl = new URL((await downloaded.json<{ url: string }>()).url);
+		assert.equal((await request("/api/attachments/download")).status, 401);
+		const tamperedDownloadUrl = new URL(downloadUrl);
+		tamperedDownloadUrl.searchParams.set(
+			"token",
+			`${tamperedDownloadUrl.searchParams.get("token")}x`,
+		);
+		assert.equal(
+			(
+				await request(
+					`${tamperedDownloadUrl.pathname}${tamperedDownloadUrl.search}`,
+				)
+			).status,
+			401,
+		);
+		const downloadResponse = await request(
+			`${downloadUrl.pathname}${downloadUrl.search}`,
+		);
 		assert.deepEqual(
-			new Uint8Array(await downloaded.arrayBuffer()),
+			new Uint8Array(await downloadResponse.arrayBuffer()),
 			encryptedBytes,
 		);
-		assert.equal(downloaded.headers.get("cache-control"), "private, no-store");
+		assert.equal(
+			downloadResponse.headers.get("cache-control"),
+			"private, no-store",
+		);
 
 		const cipher = await request(`/api/ciphers/${context.cipherId}`, {
 			headers: auth,
@@ -1798,7 +1829,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 		).attachments[0];
 		assert.equal(attachment.id, metadata.attachmentId);
 		assert.equal(attachment.fileName, "2.encrypted-file-name");
-		assert.equal(attachment.key, "2.encrypted-attachment-key");
+		assert.equal(attachment.key, attachmentKey);
 
 		const backup = await request("/api/admin/backup/export", {
 			method: "POST",
@@ -1934,8 +1965,12 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 			`/api/ciphers/${context.cipherId}/attachment/${metadata.attachmentId}`,
 			{ headers: auth },
 		);
+		const downloadUrl = new URL((await downloaded.json<{ url: string }>()).url);
+		const downloadResponse = await request(
+			`${downloadUrl.pathname}${downloadUrl.search}`,
+		);
 		assert.deepEqual(
-			new Uint8Array(await downloaded.arrayBuffer()),
+			new Uint8Array(await downloadResponse.arrayBuffer()),
 			encryptedBytes,
 		);
 		await request(
