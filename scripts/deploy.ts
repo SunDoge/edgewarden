@@ -1,19 +1,24 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import {
+	createAttachmentDeploymentConfig,
+	type DeploymentConfig,
+} from "./wrangler-config.ts";
 
 const useKv = process.argv.includes("--kv");
 const healthOrigin = process.env.EDGEWARDEN_HEALTH_URL?.trim();
 const root = resolve(import.meta.dirname, "..");
-const sourceConfigPath = resolve(
-	root,
-	useKv ? "wrangler.kv.jsonc" : "wrangler.jsonc",
-);
+const sourceConfigPath = resolve(root, "wrangler.jsonc");
 const temporaryConfigPath = resolve(
 	root,
 	`.edgewarden-deploy-${process.pid}.jsonc`,
 );
-const sourceConfig = JSON.parse(readFileSync(sourceConfigPath, "utf8"));
+
+const sourceConfig = createAttachmentDeploymentConfig(
+	JSON.parse(readFileSync(sourceConfigPath, "utf8")) as DeploymentConfig,
+	useKv ? "kv" : "r2",
+);
 const database = sourceConfig.d1_databases?.find(
 	(entry) => entry.binding === "DB",
 );

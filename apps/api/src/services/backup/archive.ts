@@ -1,5 +1,5 @@
 import { EDGEWARDEN_VERSION, parseJsonWithSchema } from "@edgewarden/shared";
-import { unzipSync, zipSync } from "fflate";
+import { unzipSync, Zip, ZipPassThrough } from "fflate";
 import * as v from "valibot";
 import {
 	type BlobStore,
@@ -29,7 +29,6 @@ export {
 type SqlRow = Record<string, string | number | null>;
 
 const BACKUP_FORMAT_VERSION = 4;
-const BACKUP_TEXT_COMPRESSION_LEVEL = 0;
 const BACKUP_JSON_INDENT = 2;
 const MAX_BACKUP_ARCHIVE_ENTRY_COUNT = 10000;
 const MAX_BACKUP_EXTRACTED_BYTES = 64 * 1024 * 1024;
@@ -220,6 +219,11 @@ export interface BackupArchiveBundle {
 export interface BuildBackupArchiveOptions {
 	includeAttachments?: boolean;
 	blobStore?: BlobStore | null;
+	/** Store attachment blobs beside the archive instead of retaining them in memory and ZIP output. */
+	externalizeAttachment?: (
+		blobName: string,
+		bytes: Uint8Array,
+	) => Promise<void>;
 	progress?: BackupArchiveBuildProgressReporter;
 	checkpoint?: () => Promise<void>;
 	timeZone?: string;
@@ -328,17 +332,44 @@ function getStrictBlobEntries(db: BackupPayload["db"]): Array<{
 	return entries;
 }
 
-function createZipEntries(
-	files: Record<string, Uint8Array>,
-): Record<string, Uint8Array | [Uint8Array, { level: 0 | 1 | 6 }]> {
-	const entries: Record<
-		string,
-		Uint8Array | [Uint8Array, { level: 0 | 1 | 6 }]
-	> = {};
-	for (const [path, bytes] of Object.entries(files)) {
-		entries[path] = [bytes, { level: BACKUP_TEXT_COMPRESSION_LEVEL }];
+class IncrementalZipBuilder {
+	readonly #chunks: Uint8Array[] = [];
+	readonly #zip: Zip;
+	#error: Error | null = null;
+
+	constructor() {
+		this.#zip = new Zip((error, chunk) => {
+			if (error) {
+				this.#error = error;
+				return;
+			}
+			this.#chunks.push(chunk);
+		});
 	}
-	return entries;
+
+	add(path: string, bytes: Uint8Array): void {
+		if (this.#error) throw this.#error;
+		const entry = new ZipPassThrough(path);
+		this.#zip.add(entry);
+		entry.push(bytes, true);
+		if (this.#error) throw this.#error;
+	}
+
+	finish(): Uint8Array {
+		this.#zip.end();
+		if (this.#error) throw this.#error;
+		const byteLength = this.#chunks.reduce(
+			(total, chunk) => total + chunk.byteLength,
+			0,
+		);
+		const output = new Uint8Array(byteLength);
+		let offset = 0;
+		for (const chunk of this.#chunks) {
+			output.set(chunk, offset);
+			offset += chunk.byteLength;
+		}
+		return output;
+	}
 }
 
 export interface ParseBackupArchiveOptions {
@@ -583,6 +614,9 @@ export async function buildBackupArchive(
 		({ storageKey: _storageKey, ...blob }) => blob,
 	);
 	const allBlobs = [...attachmentBlobs, ...sendBlobs];
+	const attachmentBlobNames = new Set(
+		attachmentBlobs.map((blob) => blob.blobName),
+	);
 
 	const manifestBase = {
 		formatVersion: BACKUP_FORMAT_VERSION,
@@ -626,11 +660,10 @@ export async function buildBackupArchive(
 		blobHashes: {} as Record<string, string>,
 	} satisfies BackupManifest;
 
-	const files: Record<string, Uint8Array> = {
-		"manifest.json": encoder.encode(
-			JSON.stringify(manifestBase, null, BACKUP_JSON_INDENT),
-		),
-		"db.json": encoder.encode(
+	const archiveBuilder = new IncrementalZipBuilder();
+	archiveBuilder.add(
+		"db.json",
+		encoder.encode(
 			JSON.stringify(
 				{
 					config: exportedConfigRows,
@@ -655,7 +688,7 @@ export async function buildBackupArchive(
 				BACKUP_JSON_INDENT,
 			),
 		),
-	};
+	);
 
 	if (includeAttachments && options.blobStore) {
 		for (const blob of allBlobs) {
@@ -670,12 +703,20 @@ export async function buildBackupArchive(
 			if (bytes.byteLength !== blob.sizeBytes) {
 				throw new Error(`Backup blob size mismatch: ${blob.blobName}`);
 			}
-			files[blob.blobName] = bytes;
 			manifestBase.blobHashes[blob.blobName] = await sha256Hex(bytes);
+			if (
+				options.externalizeAttachment &&
+				attachmentBlobNames.has(blob.blobName)
+			) {
+				await options.externalizeAttachment(blob.blobName, bytes);
+			} else {
+				archiveBuilder.add(blob.blobName, bytes);
+			}
 		}
 	}
-	files["manifest.json"] = encoder.encode(
-		JSON.stringify(manifestBase, null, BACKUP_JSON_INDENT),
+	archiveBuilder.add(
+		"manifest.json",
+		encoder.encode(JSON.stringify(manifestBase, null, BACKUP_JSON_INDENT)),
 	);
 
 	await options.checkpoint?.();
@@ -688,7 +729,7 @@ export async function buildBackupArchive(
 			: "txt_backup_archive_progress_package_detail",
 		includeAttachments,
 	});
-	const bytes = zipSync(createZipEntries(files));
+	const bytes = archiveBuilder.finish();
 	validateArchiveSize(bytes);
 	const fileHashPrefix = await getBackupArchiveChecksumPrefix(bytes);
 	const backupTimeZone = options.timeZone || "UTC";
@@ -716,6 +757,7 @@ export async function assertBackupArchiveIntegrity(
 	bytes: Uint8Array,
 	fileName: string,
 	expectedByteLength?: number,
+	options: ParseBackupArchiveOptions = {},
 ): Promise<BackupPayload> {
 	if (
 		expectedByteLength !== undefined &&
@@ -726,18 +768,25 @@ export async function assertBackupArchiveIntegrity(
 	if (!(await verifyBackupArchiveFileNameChecksum(bytes, fileName))) {
 		throw new Error("Backup archive checksum does not match its filename");
 	}
-	const parsed = parseBackupArchive(bytes);
-	await assertBackupBlobIntegrity(parsed.payload, parsed.files);
+	const parsed = parseBackupArchive(bytes, options);
+	await assertBackupBlobIntegrity(parsed.payload, parsed.files, options);
 	return parsed.payload;
 }
 
 export async function assertBackupBlobIntegrity(
 	payload: BackupPayload,
 	files: Record<string, Uint8Array>,
+	options: ParseBackupArchiveOptions = {},
 ): Promise<void> {
 	if (payload.manifest.formatVersion < 4) return;
+	const externalAttachments = new Set(
+		options.allowExternalAttachmentBlobs
+			? (payload.manifest.attachmentBlobs ?? []).map((blob) => blob.blobName)
+			: [],
+	);
 	for (const { path, sizeBytes } of getStrictBlobEntries(payload.db)) {
 		const bytes = files[path];
+		if (!bytes && externalAttachments.has(path)) continue;
 		if (!bytes)
 			throw new Error(`Backup archive is missing required file: ${path}`);
 		if (bytes.byteLength !== sizeBytes) {

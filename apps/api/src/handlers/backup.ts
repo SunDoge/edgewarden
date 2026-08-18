@@ -215,17 +215,31 @@ export const runBackup = factory.createHandlers(
 			destination.runtime.lastErrorMessage = null;
 			await saveBackupSettings(db, secret, settings);
 
-			const archive = await buildBackupArchive(c.env.DB, date, {
-				includeAttachments: destination.includeAttachments,
-				blobStore,
-				checkpoint: () => requireFreshDataOperationLease(c.env.DB, lease),
-				timeZone: destination.schedule.timezone,
-			});
-			await requireDataOperationLeaseRenewal(c.env.DB, lease);
 			const r2Bucket = getR2StorageBinding(c.env);
 			const remoteSession = createRemoteBackupTransferSession(destination, {
 				r2Bucket,
 			});
+			const archive = await buildBackupArchive(c.env.DB, date, {
+				includeAttachments: destination.includeAttachments,
+				blobStore,
+				externalizeAttachment: async (blobName, bytes) => {
+					await remoteSession.putFile(blobName, bytes, {
+						contentType: "application/octet-stream",
+					});
+					const uploaded = await remoteSession.download(blobName);
+					if (
+						uploaded.bytes.byteLength !== bytes.byteLength ||
+						!uploaded.bytes.every((value, index) => value === bytes[index])
+					) {
+						throw new Error(
+							`Remote backup blob verification failed: ${blobName}`,
+						);
+					}
+				},
+				checkpoint: () => requireFreshDataOperationLease(c.env.DB, lease),
+				timeZone: destination.schedule.timezone,
+			});
+			await requireDataOperationLeaseRenewal(c.env.DB, lease);
 			const upload = await remoteSession.uploadArchive(
 				archive.bytes,
 				archive.fileName,
@@ -236,6 +250,7 @@ export const runBackup = factory.createHandlers(
 				remoteFile.bytes,
 				archive.fileName,
 				archive.bytes.byteLength,
+				{ allowExternalAttachmentBlobs: true },
 			);
 			await requireDataOperationLeaseRenewal(c.env.DB, lease);
 

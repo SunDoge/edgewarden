@@ -1,3 +1,4 @@
+import { DurableObject } from "cloudflare:workers";
 import {
 	encodeSignalRInvocation,
 	parseSignalRHandshake,
@@ -21,9 +22,10 @@ type SocketAttachment =
 			protocol: SignalRProtocol;
 	  };
 
-export class VaultRealtime {
-	constructor(private readonly state: DurableObjectState) {
-		this.state.setWebSocketAutoResponse(
+export class VaultRealtime extends DurableObject<CloudflareBindings> {
+	constructor(ctx: DurableObjectState, env: CloudflareBindings) {
+		super(ctx, env);
+		this.ctx.setWebSocketAutoResponse(
 			new WebSocketRequestResponsePair(
 				`{"type":6}${SIGNALR_RECORD_SEPARATOR}`,
 				`{"type":6}${SIGNALR_RECORD_SEPARATOR}`,
@@ -43,7 +45,7 @@ export class VaultRealtime {
 			}
 			const encoded = JSON.stringify(message);
 			const revisionDate = new Date(message.revisionDate * 1000).toISOString();
-			for (const socket of this.state.getWebSockets()) {
+			for (const socket of this.ctx.getWebSockets()) {
 				const attachment =
 					(socket.deserializeAttachment() as SocketAttachment | null) ?? null;
 				try {
@@ -70,7 +72,7 @@ export class VaultRealtime {
 		}
 		const pair = new WebSocketPair();
 		const [client, server] = Object.values(pair);
-		this.state.acceptWebSocket(server);
+		this.ctx.acceptWebSocket(server);
 		const signalR = url.searchParams.get("edgewarden_protocol") === "signalr";
 		server.serializeAttachment(
 			signalR

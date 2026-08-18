@@ -78,17 +78,31 @@ export async function runScheduledBackupIfDue(
 				destination.runtime.lastErrorMessage = null;
 				await saveBackupSettings(db, dataEncryptionSecret, settings);
 
-				const archive = await buildBackupArchive(env.DB, currentTime, {
-					includeAttachments: destination.includeAttachments,
-					blobStore,
-					checkpoint: () => requireFreshDataOperationLease(env.DB, lease),
-					timeZone: destination.schedule.timezone,
-				});
-				await requireDataOperationLeaseRenewal(env.DB, lease);
 				const r2Bucket = getR2StorageBinding(env);
 				const session = createRemoteBackupTransferSession(destination, {
 					r2Bucket,
 				});
+				const archive = await buildBackupArchive(env.DB, currentTime, {
+					includeAttachments: destination.includeAttachments,
+					blobStore,
+					externalizeAttachment: async (blobName, bytes) => {
+						await session.putFile(blobName, bytes, {
+							contentType: "application/octet-stream",
+						});
+						const uploaded = await session.download(blobName);
+						if (
+							uploaded.bytes.byteLength !== bytes.byteLength ||
+							!uploaded.bytes.every((value, index) => value === bytes[index])
+						) {
+							throw new Error(
+								`Remote backup blob verification failed: ${blobName}`,
+							);
+						}
+					},
+					checkpoint: () => requireFreshDataOperationLease(env.DB, lease),
+					timeZone: destination.schedule.timezone,
+				});
+				await requireDataOperationLeaseRenewal(env.DB, lease);
 				const upload = await session.uploadArchive(
 					archive.bytes,
 					archive.fileName,
@@ -99,6 +113,7 @@ export async function runScheduledBackupIfDue(
 					remoteFile.bytes,
 					archive.fileName,
 					archive.bytes.byteLength,
+					{ allowExternalAttachmentBlobs: true },
 				);
 				await requireDataOperationLeaseRenewal(env.DB, lease);
 

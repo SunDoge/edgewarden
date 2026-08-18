@@ -5,20 +5,26 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./src/index.ts"
+		},
+		"./contract": {
+			"types": "./dist/contract.d.ts",
+			"import": "./src/contract.ts"
 		}
 	},
 	"scripts": {
-		"dev": "mkdir -p ../web/build && wrangler dev --config ../../wrangler.jsonc",
+		"predev": "mkdir -p ../web/build && pnpm run db:apply:local",
+		"dev": "wrangler dev --config ../../wrangler.jsonc",
 		"deploy": "wrangler deploy --config ../../wrangler.jsonc --minify",
-		"deploy:kv": "wrangler deploy --config ../../wrangler.kv.jsonc --minify",
+		"deploy:kv": "node ../../scripts/deploy.ts --kv",
 		"cf-typegen": "wrangler types worker-configuration.d.ts --config ../../wrangler.jsonc --env-interface CloudflareBindings",
 		"db:apply:local": "wrangler d1 migrations apply DB --config ../../wrangler.jsonc --local",
 		"db:apply:remote": "wrangler d1 migrations apply DB --config ../../wrangler.jsonc --remote",
-		"db:apply:remote:kv": "wrangler d1 migrations apply DB --config ../../wrangler.kv.jsonc --remote",
+		"db:apply:remote:kv": "wrangler d1 migrations apply DB --config ../../wrangler.jsonc --remote",
 		"db:codegen": "node scripts/codegen.ts",
-		"rpc:types": "tsc --project tsconfig.rpc.json",
+		"rpc:types": "tsc --build tsconfig.rpc.json",
 		"check": "tsc --noEmit",
-		"test": "vitest run"
+		"pretest": "mkdir -p ../web/build",
+		"test": "vitest run && vitest run --config vitest.worker.config.ts"
 	},
 	"dependencies": {
 		"@edgewarden/shared": "workspace:*",
@@ -33,6 +39,7 @@
 		"valibot": "^1.4.1"
 	},
 	"devDependencies": {
+		"@cloudflare/vitest-pool-workers": "^0.21.3",
 		"@types/better-sqlite3": "^7.6.13",
 		"@types/node": "^26.0.0",
 		"better-sqlite3": "^12.4.1",

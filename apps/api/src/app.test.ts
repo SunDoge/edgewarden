@@ -3,6 +3,7 @@ import { unzipSync, zipSync } from "fflate";
 import { afterAll as after, beforeAll as before, describe, test } from "vitest";
 import { createDatabase } from "./middleware/db";
 import {
+	assertBackupArchiveIntegrity,
 	buildBackupArchive,
 	parseBackupArchive,
 } from "./services/backup/archive";
@@ -345,6 +346,26 @@ describe("Edgewarden API", () => {
 			},
 		});
 		assert.ok(backupCheckpoints >= 3);
+		const externalizedAttachments = new Map<string, Uint8Array>();
+		const remoteArchive = await buildBackupArchive(testDatabase, new Date(), {
+			includeAttachments: true,
+			blobStore,
+			externalizeAttachment: async (blobName, bytes) => {
+				externalizedAttachments.set(blobName, bytes.slice());
+			},
+		});
+		const remoteParsed = parseBackupArchive(remoteArchive.bytes, {
+			allowExternalAttachmentBlobs: true,
+		});
+		const externalizedPath = `attachments/${restoreCipherId}/${attachmentId}.bin`;
+		assert.ok(externalizedAttachments.has(externalizedPath));
+		assert.equal(remoteParsed.files[externalizedPath], undefined);
+		await assertBackupArchiveIntegrity(
+			remoteArchive.bytes,
+			remoteArchive.fileName,
+			remoteArchive.bytes.byteLength,
+			{ allowExternalAttachmentBlobs: true },
+		);
 		const metadataOnlyArchive = await buildBackupArchive(
 			testDatabase,
 			new Date(),

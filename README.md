@@ -51,7 +51,7 @@ R2 is the recommended storage backend for encrypted attachments and backup files
 pnpm deploy:kv
 ```
 
-The KV deployment uses `wrangler.kv.jsonc`, resolves or creates both D1 and the named KV namespace, and never declares or provisions an R2 bucket. Account-specific IDs exist only in the temporary deployment config. KV limits each encrypted object to 25 MiB. Do not switch an existing deployment between R2 and KV without first migrating or backing up its stored objects.
+The KV deployment derives a temporary KV variant from `wrangler.jsonc`, resolves or creates both D1 and the named KV namespace, and never declares or provisions an R2 bucket. Account-specific IDs exist only in the temporary deployment config. KV limits each encrypted object to 25 MiB. Do not switch an existing deployment between R2 and KV without first migrating or backing up its stored objects.
 
 On an R2 deployment, the backup center can use the existing `ATTACHMENTS_R2` binding directly. Native backups are stored under the reserved `backups/` prefix; no additional bucket or R2 API credentials are required. See [Backup and restore](docs/operations.md#backup-and-restore) for the archive layout and isolation tradeoffs.
 
@@ -71,7 +71,7 @@ Cloudflare Workers Builds does not need `mise`; the committed pnpm lockfile iden
 Useful migration commands:
 
 ```sh
-# Local D1 used by wrangler dev
+# Local D1 used by wrangler dev (also runs automatically before `pnpm dev`)
 pnpm db:migrate:local
 
 # Bound production D1; safe to run repeatedly
@@ -85,6 +85,7 @@ Normally `pnpm deploy` is sufficient. It stops before publishing if resource ini
 ```sh
 pnpm check
 pnpm test
+pnpm test:compat:bw:local # isolated local Worker and disposable account
 pnpm test:compat:bw   # requires BW_SERVER, BW_EMAIL, BW_PASSWORD
 pnpm domains:sync     # refresh generated Bitwarden global domain rules
 ```

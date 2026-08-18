@@ -1,4 +1,4 @@
-export { calcTotpNow, extractTotpSecret } from "./totp";
+export { calcTotpNow, extractTotpSecret } from "./totp.ts";
 
 /**
  * Web Cryptography helpers for Bitwarden-compatible encryption and key derivation.

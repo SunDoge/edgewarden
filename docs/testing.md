@@ -8,6 +8,7 @@ Edgewarden uses one test runner, Vitest, with small helpers for each runtime. Ch
 pnpm test                         # API and Web suites
 pnpm --filter @edgewarden/api test
 pnpm --filter @edgewarden/web test
+pnpm test:compat:bw:local        # isolated local Worker + disposable account
 pnpm test:compat:bw              # official Bitwarden CLI smoke test
 pnpm test:integration:cloudflare # deployed Worker smoke test
 ```
@@ -62,9 +63,11 @@ Prefer accessible role and label queries over CSS selectors. Test behavior visib
 
 ## Runtime and compatibility tests
 
-The API harness uses real Miniflare D1 and KV implementations while keeping R2, rate limiting, and realtime bindings deterministic. Add a separate `@cloudflare/vitest-pool-workers` suite only for behavior that depends on workerd runtime semantics and cannot be represented by this harness; moving the entire database-heavy suite would make fixtures harder to control without improving every test.
+The API harness uses real Miniflare D1 and KV implementations while keeping R2, rate limiting, and realtime bindings deterministic. `platform.worker.test.ts` runs separately through `@cloudflare/vitest-pool-workers` and verifies the generated configuration with real workerd D1, R2, and Durable Object bindings. Add focused `*.worker.test.ts` cases for behavior that depends on workerd runtime semantics; keep database-heavy business scenarios in the controllable API harness.
 
 Use the deployed Cloudflare smoke test for binding and deployment integration. Use the Bitwarden CLI smoke test for protocol compatibility. Neither replaces unit and integration tests because they require external state and are slower to diagnose.
+
+`test:compat:bw:local` creates a temporary Wrangler persistence directory, applies every migration, starts a self-signed HTTPS development Worker, registers a disposable account with the local `BOOTSTRAP_SECRET`, runs the same official CLI smoke suite, and removes the temporary state. It never modifies the normal `.wrangler/state` database.
 
 ## What to add with a change
 

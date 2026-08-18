@@ -8,7 +8,7 @@
 		"noEmit": true,
 		"allowImportingTsExtensions": true,
 		"lib": ["ESNext"],
-		"types": ["node"],
+		"types": ["node", "@cloudflare/vitest-pool-workers/types"],
 		"jsx": "react-jsx",
 		"jsxImportSource": "hono/jsx"
 	}

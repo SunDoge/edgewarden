@@ -2,7 +2,8 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "edgewarden",
 	"main": "apps/api/src/index.ts",
-	"compatibility_date": "2026-06-22",
+	"compatibility_date": "2026-08-11",
+	"compatibility_flags": ["nodejs_compat"],
 	"dev": {
 		"port": 8787,
 		"inspector_port": 9229

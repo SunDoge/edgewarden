@@ -1,4 +1,4 @@
-import type { AppType } from "@edgewarden/api";
+import type { AppType } from "@edgewarden/api/contract";
 import { hc } from "hono/client";
 import { getOrCreateDeviceIdentifier } from "./client-device";
 
