@@ -34,7 +34,11 @@ export const LIMITS = {
 		// Clients use this value to select backward-compatibility serializers.
 		// Keep it aligned with the newest Bitwarden protocol level we implement.
 		bitwardenServerVersion: "2026.6.0",
-		cipherKeyEncryptionFeatureEnabled: true,
+		// Edgewarden currently persists cipher keys as opaque legacy EncStrings. The
+		// newer cipher-key-encryption protocol uses a different key representation;
+		// advertising it makes current clients create keys that legacy attachment
+		// encryption cannot unwrap.
+		cipherKeyEncryptionFeatureEnabled: false,
 	},
 	performance: {
 		importItemLimit: 5000,

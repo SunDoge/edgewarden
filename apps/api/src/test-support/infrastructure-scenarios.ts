@@ -50,6 +50,7 @@ export function registerInfrastructureScenarios(
 		assert.equal(response.status, 200);
 		const body = await response.json<{
 			version: string;
+			featureStates: Record<string, boolean>;
 			environment: { cloudRegion: string; notifications: string };
 			push: { pushTechnology: number; vapidPublicKey: null };
 			communication: null;
@@ -59,6 +60,7 @@ export function registerInfrastructureScenarios(
 			};
 		}>();
 		assert.equal(body.version, "2026.6.0");
+		assert.equal(body.featureStates["cipher-key-encryption"], false);
 		assert.deepEqual(body.environment, {
 			cloudRegion: "self-hosted",
 			notifications: "https://vault.example.test/notifications",
