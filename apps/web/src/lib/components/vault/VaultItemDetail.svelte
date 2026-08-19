@@ -28,6 +28,12 @@ import {
 	cipherTypeIcon as getItemIcon,
 	cipherTypeName as getTypeName,
 } from "$lib/services/vault-item-display";
+import type {
+	VaultAttachment,
+	VaultCipher,
+	VaultFolder,
+	VaultTotp,
+} from "$lib/services/vault-types";
 
 let {
 	item,
@@ -43,9 +49,9 @@ let {
 	onAttachmentDownload,
 	onAttachmentDelete,
 }: {
-	item: any;
-	folders: Array<{ id: string; name: string }>;
-	totp: { code: string; remain: number } | null;
+	item: VaultCipher;
+	folders: VaultFolder[];
+	totp: VaultTotp | null;
 	attachmentBusy: string | null;
 	onFavorite: () => void;
 	onArchive: () => void;
@@ -53,8 +59,8 @@ let {
 	onEdit: () => void;
 	onDelete: () => void;
 	onAttachmentUpload: (event: Event) => void;
-	onAttachmentDownload: (attachment: any) => void;
-	onAttachmentDelete: (attachment: any) => void;
+	onAttachmentDownload: (attachment: VaultAttachment) => void;
+	onAttachmentDelete: (attachment: VaultAttachment) => void;
 } = $props();
 
 let copiedField = $state<string | null>(null);
@@ -194,7 +200,7 @@ function copyToClipboard(text: string, fieldName: string) {
 												<Eye />
 													{/if}
 												</Button>
-												<Button variant="ghost" size="icon" class="size-8" onclick={() => copyToClipboard(field.value, `field-${idx}`)}>
+								<Button variant="ghost" size="icon" class="size-8" onclick={() => copyToClipboard(String(field.value ?? ""), `field-${idx}`)}>
 											{#if copiedField === `field-${idx}`}<Check class="text-primary" />{:else}<Copy />{/if}
 												</Button>
 											</div>
@@ -202,7 +208,7 @@ function copyToClipboard(text: string, fieldName: string) {
 									{:else}
 										<div class="flex items-center justify-between rounded-lg border bg-background p-2">
 											<span class="text-sm font-medium truncate pr-2 select-all">{field.value || ""}</span>
-											<Button variant="ghost" size="icon" class="size-8" onclick={() => copyToClipboard(field.value, `field-${idx}`)}>
+							<Button variant="ghost" size="icon" class="size-8" onclick={() => copyToClipboard(String(field.value ?? ""), `field-${idx}`)}>
 										{#if copiedField === `field-${idx}`}<Check class="text-primary" />{:else}<Copy />{/if}
 											</Button>
 										</div>

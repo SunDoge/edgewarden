@@ -15,8 +15,9 @@ import {
 	deleteDevicesApi,
 	fetchDevicesApi,
 	renameDeviceApi,
-} from "$lib/services/api";
+} from "$lib/services/api-account";
 import { getCurrentDeviceIdentifier } from "$lib/services/client-device";
+import type { AccountDevice } from "$lib/services/account-types";
 
 let {
 	devices = $bindable(),
@@ -25,7 +26,7 @@ let {
 	onError,
 	onSessionRevoked,
 }: {
-	devices: any[];
+	devices: AccountDevice[];
 	passwordHash: (password: string) => Promise<string>;
 	onMessage: (message: string) => void;
 	onError: (error: unknown) => void;
@@ -35,19 +36,19 @@ let {
 } = $props();
 
 let busy = $state("");
-let editingDevice = $state<any>(null);
+let editingDevice = $state<AccountDevice | null>(null);
 let deviceName = $state("");
 let removeAllOpen = $state(false);
 let removeAllPassword = $state("");
 let selectedIds = $state<Record<string, boolean>>({});
 let removeTarget = $state<
-	{ kind: "single"; device: any } | { kind: "selected" } | null
+	{ kind: "single"; device: AccountDevice } | { kind: "selected" } | null
 >(null);
 let selectedIdList = $derived(
 	devices.filter((device) => selectedIds[device.id]).map((device) => device.id),
 );
 
-function startRename(device: any) {
+function startRename(device: AccountDevice) {
 	editingDevice = device;
 	deviceName = device.name ?? "";
 }
@@ -67,7 +68,7 @@ async function saveDeviceName() {
 	}
 }
 
-async function removeDevice(device: any) {
+async function removeDevice(device: AccountDevice) {
 	busy = `device-${device.id}`;
 	try {
 		await deleteDeviceApi(device.id);

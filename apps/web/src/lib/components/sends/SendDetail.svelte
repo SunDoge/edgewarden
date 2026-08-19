@@ -14,6 +14,7 @@ import {
 	Trash2,
 } from "@lucide/svelte";
 import { match } from "ts-pattern";
+import type { DecryptedSend } from "$lib/services/send-crypto";
 
 let {
 	send,
@@ -22,7 +23,7 @@ let {
 	onEdit,
 	onDelete,
 }: {
-	send: any;
+	send: DecryptedSend;
 	copied?: boolean;
 	onCopy: () => void;
 	onEdit: () => void;

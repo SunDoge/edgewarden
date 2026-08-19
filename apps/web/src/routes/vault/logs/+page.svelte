@@ -19,11 +19,12 @@ import {
 	fetchAuditLogSettingsApi,
 	listAuditLogsApi,
 	updateAuditLogSettingsApi,
-} from "$lib/services/api";
+} from "$lib/services/api-admin";
 import { vault } from "$lib/stores/vault.svelte";
 import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
+import type { AuditLogEntry } from "$lib/services/admin-types";
 
-let logs = $state<any[]>([]);
+let logs = $state<AuditLogEntry[]>([]);
 let total = $state(0);
 let offset = $state(0);
 let category = $state("all");

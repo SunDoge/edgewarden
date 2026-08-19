@@ -1,7 +1,12 @@
 import type { InferRequestType } from "hono/client";
 import { rpc, rpcJson, rpcVoid } from "./rpc";
+import type {
+	FileSendUpload,
+	OwnedSend,
+	PublicSend,
+	SendMutationPayload,
+} from "./send-types";
 
-type CreateSendPayload = InferRequestType<typeof rpc.api.sends.$post>["json"];
 type CreateFileSendPayload = InferRequestType<
 	typeof rpc.api.sends.file.v2.$post
 >["json"];
@@ -9,39 +14,38 @@ type UpdateSendPayload = InferRequestType<
 	(typeof rpc.api.sends)[":id"]["$put"]
 >["json"];
 
-export async function fetchSendsApi(): Promise<{ data: any[] }> {
+export async function fetchSendsApi(): Promise<{ data: OwnedSend[] }> {
 	const response = await rpc.api.sends.$get();
-	return rpcJson(response);
+	return (await rpcJson(response)) as { data: OwnedSend[] };
 }
 /**
  * 11. Create a send
  */
-export async function createSendApi(payload: CreateSendPayload): Promise<any> {
-	const response = await rpc.api.sends.$post({ json: payload });
-	return rpcJson(response);
+export async function createSendApi(payload: SendMutationPayload) {
+	const response = await rpc.api.sends.$post({
+		json: payload as InferRequestType<typeof rpc.api.sends.$post>["json"],
+	});
+	return (await rpcJson(response)) as OwnedSend;
 }
 /**
  * 12. Create a file send v2
  */
-export async function createFileSendApi(
-	payload: CreateFileSendPayload,
-): Promise<any> {
-	const response = await rpc.api.sends.file.v2.$post({ json: payload });
-	return rpcJson(response);
+export async function createFileSendApi(payload: SendMutationPayload) {
+	const response = await rpc.api.sends.file.v2.$post({
+		json: payload as CreateFileSendPayload,
+	});
+	return (await rpcJson(response)) as FileSendUpload;
 }
 
 /**
  * 13. Update a send
  */
-export async function updateSendApi(
-	id: string,
-	payload: UpdateSendPayload,
-): Promise<any> {
+export async function updateSendApi(id: string, payload: SendMutationPayload) {
 	const response = await rpc.api.sends[":id"].$put({
 		param: { id },
-		json: payload,
+		json: payload as UpdateSendPayload,
 	});
-	return rpcJson(response);
+	return (await rpcJson(response)) as OwnedSend;
 }
 
 /**
@@ -58,11 +62,11 @@ export async function deleteSendsApi(ids: string[]): Promise<void> {
 /**
  * 15. Remove send password
  */
-export async function removeSendPasswordApi(id: string): Promise<any> {
+export async function removeSendPasswordApi(id: string) {
 	const response = await rpc.api.sends[":id"]["remove-password"].$post({
 		param: { id },
 	});
-	return rpcJson(response);
+	return (await rpcJson(response)) as OwnedSend;
 }
 
 /**
@@ -71,12 +75,12 @@ export async function removeSendPasswordApi(id: string): Promise<any> {
 export async function accessSendPublicApi(
 	accessId: string,
 	payload?: { password?: string },
-): Promise<any> {
+): Promise<PublicSend> {
 	const response = await rpc.api.sends.access[":idOrAccessId"].$post({
 		param: { idOrAccessId: accessId },
 		json: payload ?? {},
 	});
-	return rpcJson(response);
+	return (await rpcJson(response)) as PublicSend;
 }
 
 export async function requestSendFileDownloadApi(

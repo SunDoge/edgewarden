@@ -15,7 +15,7 @@ import {
 	getAccountPasskeyAttestationOptionsApi,
 	listAccountPasskeysApi,
 	updateAccountPasskeyEncryptionApi,
-} from "$lib/services/api";
+} from "$lib/services/api-account";
 import {
 	bytesToBase64,
 	deriveMasterKey,
@@ -28,13 +28,8 @@ import {
 	createAccountPasskeyCredential,
 } from "$lib/services/passkeys";
 import { vault } from "$lib/stores/vault.svelte";
-
-interface AccountPasskey {
-	id: string;
-	name?: string | null;
-	creationDate?: string | null;
-	prfStatus: number;
-}
+import type { AccountPasskey } from "$lib/services/account-types";
+import type { PendingAccountPasskeyCredential } from "$lib/services/passkeys";
 
 let {
 	email,
@@ -57,7 +52,7 @@ let deletePasskey = $state<AccountPasskey | null>(null);
 let deletePassword = $state("");
 let enablePasskey = $state<AccountPasskey | null>(null);
 let enablePassword = $state("");
-let pendingLoginOnly = $state<any>(null);
+let pendingLoginOnly = $state<PendingAccountPasskeyCredential | null>(null);
 
 onMount(load);
 
@@ -107,7 +102,7 @@ async function createPasskey() {
 }
 
 async function persistPasskey(
-	pending: any,
+	pending: PendingAccountPasskeyCredential,
 	keySet: Record<string, string | undefined> = {},
 ) {
 	await createAccountPasskeyApi({

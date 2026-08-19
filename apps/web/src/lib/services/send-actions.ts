@@ -3,7 +3,7 @@ import {
 	createSendApi,
 	removeSendPasswordApi,
 	updateSendApi,
-} from "$lib/services/api";
+} from "$lib/services/api-sends";
 import { encryptBw, encryptBwFileData } from "$lib/services/crypto";
 import type { SendEditorDraft } from "$lib/services/send-editor";
 import {
@@ -11,7 +11,9 @@ import {
 	encryptSendMetadata,
 	wrapSendKey,
 	type SendKeys,
+	type DecryptedSend,
 } from "$lib/services/send-crypto";
+import type { SendMutationPayload } from "$lib/services/send-types";
 
 export function validateSendDraft(form: SendEditorDraft, isCreating: boolean) {
 	if (!form.name.trim()) throw new Error("名称不能为空！");
@@ -34,13 +36,14 @@ export async function saveOwnedSend({
 	vaultKeys,
 }: {
 	form: SendEditorDraft;
-	selectedSend: any | null;
+	selectedSend: DecryptedSend | null;
 	isCreating: boolean;
 	isEditing: boolean;
 	vaultKeys: { encKey: Uint8Array; macKey: Uint8Array };
 }) {
 	validateSendDraft(form, isCreating);
-	const keys: SendKeys = isEditing ? selectedSend._sendKeys : createSendKeys();
+	if (isEditing && !selectedSend) throw new Error("找不到要编辑的 Send");
+	const keys: SendKeys = selectedSend?._sendKeys ?? createSendKeys();
 	const encrypted = await encryptSendMetadata(
 		{
 			name: form.name,
@@ -49,10 +52,10 @@ export async function saveOwnedSend({
 		},
 		keys,
 	);
-	const encryptedSendKey = isEditing
+	const encryptedSendKey = selectedSend
 		? selectedSend.key
 		: await wrapSendKey(keys, vaultKeys.encKey, vaultKeys.macKey);
-	const payload: any = {
+	const payload: SendMutationPayload = {
 		type: form.type,
 		name: encrypted.name,
 		notes: encrypted.notes,
@@ -87,7 +90,7 @@ export async function saveOwnedSend({
 }
 
 async function createAndUploadFileSend(
-	payload: any,
+	payload: SendMutationPayload,
 	file: File,
 	keys: SendKeys,
 ) {

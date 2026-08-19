@@ -1,7 +1,16 @@
 import { rpc, rpcJson, rpcVoid } from "./rpc";
+import type {
+	ApiList,
+	OrganizationCollection,
+	OrganizationInvitee,
+	OrganizationMember,
+	OrganizationSummary,
+} from "./organization-types";
 
-export async function listOrganizationsApi(): Promise<any> {
-	return rpcJson(await rpc.api.organizations.$get());
+export async function listOrganizationsApi() {
+	return (await rpcJson(
+		await rpc.api.organizations.$get(),
+	)) as ApiList<OrganizationSummary>;
 }
 
 export async function createOrganizationApi(payload: {
@@ -10,14 +19,11 @@ export async function createOrganizationApi(payload: {
 	key: string;
 	publicKey: string;
 	encryptedPrivateKey: string;
-}): Promise<any> {
+}) {
 	return rpcJson(await rpc.api.organizations.$post({ json: payload }));
 }
 
-export async function updateOrganizationApi(
-	orgId: string,
-	name: string,
-): Promise<any> {
+export async function updateOrganizationApi(orgId: string, name: string) {
 	return rpcJson(
 		await rpc.api.organizations[":orgId"].$put({
 			param: { orgId },
@@ -38,22 +44,19 @@ export async function deleteOrganizationApi(
 	);
 }
 
-export async function getOrganizationInviteeApi(
-	orgId: string,
-	email: string,
-): Promise<any> {
-	return rpcJson(
+export async function getOrganizationInviteeApi(orgId: string, email: string) {
+	return (await rpcJson(
 		await rpc.api.organizations[":orgId"].invitee.$get({
 			param: { orgId },
 			query: { email },
 		}),
-	);
+	)) as OrganizationInvitee;
 }
 
-export async function listOrganizationMembersApi(orgId: string): Promise<any> {
-	return rpcJson(
+export async function listOrganizationMembersApi(orgId: string) {
+	return (await rpcJson(
 		await rpc.api.organizations[":orgId"].members.$get({ param: { orgId } }),
-	);
+	)) as ApiList<OrganizationMember>;
 }
 
 export async function inviteOrganizationMemberApi(
@@ -69,7 +72,7 @@ export async function inviteOrganizationMemberApi(
 		}>;
 		key: string;
 	},
-): Promise<any> {
+) {
 	return rpcJson(
 		await rpc.api.organizations[":orgId"].members.$post({
 			param: { orgId },
@@ -90,7 +93,7 @@ export async function updateOrganizationMemberApi(
 			hidePasswords: boolean;
 		}>;
 	},
-): Promise<any> {
+) {
 	return rpcJson(
 		await rpc.api.organizations[":orgId"].members[":memberId"].$put({
 			param: { orgId, memberId },
@@ -110,20 +113,18 @@ export async function removeOrganizationMemberApi(
 	);
 }
 
-export async function listOrganizationCollectionsApi(
-	orgId: string,
-): Promise<any> {
-	return rpcJson(
+export async function listOrganizationCollectionsApi(orgId: string) {
+	return (await rpcJson(
 		await rpc.api.organizations[":orgId"].collections.$get({
 			param: { orgId },
 		}),
-	);
+	)) as ApiList<OrganizationCollection>;
 }
 
 export async function createOrganizationCollectionApi(
 	orgId: string,
 	name: string,
-): Promise<any> {
+) {
 	return rpcJson(
 		await rpc.api.organizations[":orgId"].collections.$post({
 			param: { orgId },
@@ -136,7 +137,7 @@ export async function updateOrganizationCollectionApi(
 	orgId: string,
 	collectionId: string,
 	name: string,
-): Promise<any> {
+) {
 	return rpcJson(
 		await rpc.api.organizations[":orgId"].collections[":collectionId"].$put({
 			param: { orgId, collectionId },

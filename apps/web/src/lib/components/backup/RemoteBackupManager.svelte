@@ -10,11 +10,10 @@ import {
 	inspectRemoteBackupApi,
 	listRemoteBackupsApi,
 	restoreRemoteBackupApi,
-} from "$lib/services/api";
+} from "$lib/services/api-backup";
 import BackupRuntimePanel from "./BackupRuntimePanel.svelte";
-import RemoteBackupBrowser, {
-	type RemoteBackupItem,
-} from "./RemoteBackupBrowser.svelte";
+import RemoteBackupBrowser from "./RemoteBackupBrowser.svelte";
+import type { RemoteBackupItem } from "$lib/services/backup-types";
 import type { BackupDestinationRecord } from "./types";
 
 let {

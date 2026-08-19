@@ -3,61 +3,32 @@ import { CipherType } from "@edgewarden/shared";
 import { onMount } from "svelte";
 import { toast } from "svelte-sonner";
 import { match } from "ts-pattern";
-import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import VaultDetailPanel from "$lib/components/vault/VaultDetailPanel.svelte";
 import VaultDialogs from "$lib/components/vault/VaultDialogs.svelte";
 import VaultItemList from "$lib/components/vault/VaultItemList.svelte";
 import VaultNavigation from "$lib/components/vault/VaultNavigation.svelte";
 import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-import { formatTime } from "$lib/i18n/format";
-import { m } from "$lib/paraglide/messages.js";
-import {
-	archiveCipherApi,
-	deleteAttachmentApi,
-	deleteCipherApi,
-	hardDeleteCipherApi,
-	isLoggedIn,
-	restoreCipherApi,
-	unarchiveCipherApi,
-} from "$lib/services/api";
 import { calcTotpNow } from "$lib/services/crypto";
-import {
-	downloadVaultAttachment,
-	uploadVaultAttachment,
-} from "$lib/services/vault-attachments";
-import {
-	applyVaultBulkAction,
-	saveVaultCipher,
-	updateEncryptedVaultCipher,
-	type VaultBulkAction,
-} from "$lib/services/vault-cipher-actions";
-import {
-	createVaultEditorForm,
-	vaultCipherToEditorForm,
-} from "$lib/services/vault-editor";
+import type { VaultBulkAction } from "$lib/services/vault-cipher-actions";
 import {
 	type DuplicateMode,
 	filterAndSortVaultItems,
 	findDuplicateCipherGroups,
 	findDuplicateCipherIds,
-	findRedundantDuplicateCipherIds,
 	type VaultCategory,
 	type VaultSort,
 } from "$lib/services/vault-filter";
 import {
-	type FolderEditorMode,
 	findDuplicateFolderGroups,
 	mergeDuplicateVaultFolders,
-	removeAllVaultFolders,
-	removeVaultFolder,
-	saveVaultFolder,
 } from "$lib/services/vault-folder-actions";
-import {
-	getOrganizationKey,
-	syncVaultData,
-	vault,
-} from "$lib/stores/vault.svelte";
+import type { VaultAttachment } from "$lib/services/vault-types";
+import { createVaultFolderManager } from "$lib/services/vault-folder-manager.svelte";
+import { createVaultAttachmentManager } from "$lib/services/vault-attachment-manager.svelte";
+import { createVaultBulkManager } from "$lib/services/vault-bulk-manager.svelte";
+import { createVaultItemManager } from "$lib/services/vault-item-manager.svelte";
+import { syncVaultData, vault } from "$lib/stores/vault.svelte";
 
 // UI state
 let searchQuery = $state("");
@@ -65,111 +36,54 @@ let activeCategory = $state<VaultCategory>("all");
 let activeFolder = $state<string | null>(null);
 let sortMode = $state<VaultSort>("edited");
 let duplicateMode = $state<DuplicateMode>("exact");
-let selectedIds = $state<Record<string, boolean>>({});
-let moveDialogOpen = $state(false);
-let moveFolderId = $state<string | null>(null);
-let selectedItem = $state<any | null>(null);
 let totpLive = $state<{ code: string; remain: number } | null>(null);
-let deleteDialogOpen = $state(false);
-let deleteLoading = $state(false);
-let attachmentBusy = $state<string | null>(null);
 let mobileSidebarOpen = $state(false);
 let mobileDetailOpen = $state(false);
 let pendingConfirmation = $state<
 	| { kind: "merge-folders" }
-	| { kind: "delete-attachment"; attachment: any }
+	| { kind: "delete-attachment"; attachment: VaultAttachment }
 	| { kind: "bulk"; action: VaultBulkAction }
 	| null
 >(null);
 
-// Folder management dialog state
-let folderDialogOpen = $state(false);
-let folderDialogMode = $state<FolderEditorMode>("create");
-let folderDialogName = $state("");
-let folderDialogLoading = $state(false);
-let targetFolder = $state<any | null>(null);
-
-let deleteFolderDialogOpen = $state(false);
-let deleteFolderLoading = $state(false);
-let deleteAllFoldersDialogOpen = $state(false);
 let mergingDuplicateFolders = $state(false);
 
-function openCreateFolder() {
-	folderDialogMode = "create";
-	folderDialogName = "";
-	targetFolder = null;
-	folderDialogOpen = true;
-}
+const folderManager = createVaultFolderManager({
+	get: () => activeFolder,
+	set: (value) => (activeFolder = value),
+});
 
-function openRenameFolder(folder: any) {
-	folderDialogMode = "rename";
-	folderDialogName = folder.name;
-	targetFolder = folder;
-	folderDialogOpen = true;
-}
+const itemManager = createVaultItemManager({
+	activeFolder: () => activeFolder,
+	openDetail: () => (mobileDetailOpen = true),
+	closeDetail: () => (mobileDetailOpen = false),
+});
+const itemState = itemManager.state;
 
-function openDeleteFolder(folder: any) {
-	targetFolder = folder;
-	deleteFolderDialogOpen = true;
-}
+const attachmentManager = createVaultAttachmentManager({
+	selected: () => itemState.selected,
+	select: itemManager.select,
+	confirmDelete: (attachment) => {
+		pendingConfirmation = { kind: "delete-attachment", attachment };
+	},
+});
 
-async function handleFolderSubmit() {
-	if (!folderDialogName.trim()) return;
-	folderDialogLoading = true;
-	try {
-		await saveVaultFolder({
-			mode: folderDialogMode,
-			name: folderDialogName,
-			folderId: targetFolder?.id,
-			encKey: vault.symEncKey,
-			macKey: vault.symMacKey,
-		});
-
-		await syncVaultData();
-		folderDialogOpen = false;
-	} catch (e: any) {
-		toast.error("操作文件夹失败: " + (e.message || e));
-	} finally {
-		folderDialogLoading = false;
-	}
-}
-
-async function confirmDeleteFolder() {
-	if (!targetFolder) return;
-	deleteFolderLoading = true;
-	try {
-		await removeVaultFolder(targetFolder.id);
-		if (activeFolder === targetFolder.id) {
-			activeFolder = null;
-		}
-		await syncVaultData();
-		deleteFolderDialogOpen = false;
-	} catch (e: any) {
-		toast.error("删除文件夹失败: " + (e.message || e));
-	} finally {
-		deleteFolderLoading = false;
-	}
-}
-
-async function confirmDeleteAllFolders() {
-	if (!vault.folders.length) return;
-	deleteFolderLoading = true;
-	try {
-		await removeAllVaultFolders(vault.folders);
-		activeFolder = null;
-		await syncVaultData();
-		deleteAllFoldersDialogOpen = false;
-	} catch (e: any) {
-		toast.error("删除全部文件夹失败: " + (e.message || e));
-	} finally {
-		deleteFolderLoading = false;
-	}
-}
+const bulkManager = createVaultBulkManager({
+	duplicateMode: () => duplicateMode,
+	clearSelectedItem: () => itemManager.select(null),
+	confirm: (action) => {
+		pendingConfirmation = { kind: "bulk", action };
+	},
+	resolveOwnerKey: itemManager.resolveOwnerKey,
+});
 
 async function updateTotp() {
-	if (selectedItem?.type === CipherType.Login && selectedItem.login?.totp) {
+	if (
+		itemState.selected?.type === CipherType.Login &&
+		itemState.selected.login?.totp
+	) {
 		try {
-			const res = await calcTotpNow(selectedItem.login.totp);
+			const res = await calcTotpNow(itemState.selected.login.totp);
 			totpLive = res;
 		} catch {
 			totpLive = null;
@@ -180,7 +94,7 @@ async function updateTotp() {
 }
 
 $effect(() => {
-	selectedItem;
+	itemState.selected;
 	updateTotp();
 
 	const interval = window.setInterval(() => {
@@ -192,26 +106,12 @@ $effect(() => {
 	};
 });
 
-// Form editor state
-let isEditing = $state(false);
-let isCreating = $state(false);
-
-let editor = $state(createVaultEditorForm());
-
 onMount(async () => {
-	if (!isLoggedIn()) {
-		goto("/login");
-		return;
-	}
-	if (!vault.isUnlocked) {
-		goto("/vault/unlock");
-		return;
-	}
-	await syncVaultData();
 	const requestedCipherId = page.url.searchParams.get("cipher");
 	if (requestedCipherId) {
-		selectedItem =
-			vault.ciphers.find((cipher) => cipher.id === requestedCipherId) ?? null;
+		itemManager.select(
+			vault.ciphers.find((cipher) => cipher.id === requestedCipherId) ?? null,
+		);
 	}
 });
 
@@ -224,9 +124,6 @@ let filteredItems = $derived(
 		sort: sortMode,
 		duplicateMode,
 	}),
-);
-let selectedIdList = $derived(
-	Object.keys(selectedIds).filter((id) => selectedIds[id]),
 );
 let duplicateCount = $derived(
 	findDuplicateCipherIds(vault.ciphers, duplicateMode).size,
@@ -267,260 +164,6 @@ async function executeMergeDuplicateFolders() {
 	}
 }
 
-async function refreshSelectedItem(id: string) {
-	await syncVaultData();
-	selectedItem = vault.ciphers.find((cipher) => cipher.id === id) ?? null;
-}
-
-async function handleAttachmentUpload(event: Event) {
-	const input = event.currentTarget as HTMLInputElement;
-	const file = input.files?.[0];
-	const cipher = selectedItem;
-	input.value = "";
-	if (!file || !cipher || cipher.deletedDate || cipher.readOnly) return;
-	const ownerKey = cipher.organizationId
-		? getOrganizationKey(cipher.organizationId)
-		: vault.symEncKey && vault.symMacKey
-			? { encKey: vault.symEncKey, macKey: vault.symMacKey }
-			: null;
-	if (!ownerKey) {
-		toast.error("密钥未就绪，请重新解锁保险库");
-		return;
-	}
-	attachmentBusy = "upload";
-	try {
-		await uploadVaultAttachment(cipher, file, ownerKey);
-		await refreshSelectedItem(cipher.id);
-	} catch (error) {
-		toast.error(
-			`附件上传失败：${error instanceof Error ? error.message : String(error)}`,
-		);
-	} finally {
-		attachmentBusy = null;
-	}
-}
-
-async function handleAttachmentDownload(attachment: any) {
-	if (!selectedItem || !attachment?._keys) return;
-	attachmentBusy = attachment.id;
-	try {
-		const downloaded = await downloadVaultAttachment(
-			selectedItem.id,
-			attachment,
-		);
-		const bytes = downloaded.bytes.buffer.slice(
-			downloaded.bytes.byteOffset,
-			downloaded.bytes.byteOffset + downloaded.bytes.byteLength,
-		) as ArrayBuffer;
-		const url = URL.createObjectURL(new Blob([bytes]));
-		const anchor = document.createElement("a");
-		anchor.href = url;
-		anchor.download = downloaded.fileName;
-		anchor.click();
-		setTimeout(() => URL.revokeObjectURL(url), 0);
-	} catch (error) {
-		toast.error(
-			`附件下载失败：${error instanceof Error ? error.message : String(error)}`,
-		);
-	} finally {
-		attachmentBusy = null;
-	}
-}
-
-async function handleAttachmentDelete(attachment: any) {
-	const cipher = selectedItem;
-	if (cipher?.readOnly) {
-		toast.error("该组织条目为只读");
-		return;
-	}
-	if (!cipher) return;
-	pendingConfirmation = { kind: "delete-attachment", attachment };
-}
-
-async function executeAttachmentDelete(attachment: any) {
-	const cipher = selectedItem;
-	if (!cipher) return;
-	attachmentBusy = attachment.id;
-	try {
-		await deleteAttachmentApi(cipher.id, attachment.id);
-		await refreshSelectedItem(cipher.id);
-	} catch (error) {
-		toast.error(
-			`附件删除失败：${error instanceof Error ? error.message : String(error)}`,
-		);
-	} finally {
-		attachmentBusy = null;
-	}
-}
-
-function startCreate() {
-	selectedItem = null;
-	isEditing = false;
-	isCreating = true;
-	mobileDetailOpen = true;
-	editor = createVaultEditorForm(activeFolder);
-}
-
-function startEdit() {
-	if (!selectedItem) return;
-	if (selectedItem.readOnly) {
-		toast.error("该组织条目为只读");
-		return;
-	}
-	isCreating = false;
-	isEditing = true;
-	mobileDetailOpen = true;
-	editor = vaultCipherToEditorForm(selectedItem);
-}
-
-function cancelEdit() {
-	isCreating = false;
-	if (!selectedItem) mobileDetailOpen = false;
-	isEditing = false;
-}
-
-async function handleSaveCipher() {
-	let saved: Awaited<ReturnType<typeof saveVaultCipher>>;
-	try {
-		saved = await saveVaultCipher({
-			editor,
-			selectedItem,
-			isCreating,
-			isEditing,
-			resolveOwnerKey,
-		});
-	} catch (e: any) {
-		toast.error("保存失败：" + (e.message || e));
-		return;
-	}
-
-	// The mutation response is the server acknowledgement. Keep this separate
-	// from the following pull so a refresh failure is never reported as a save
-	// failure after D1 has already committed the encrypted item.
-	toast.success(
-		m.vault_saved_to_server({
-			time: formatTime(saved.revisionDate),
-		}),
-	);
-	isCreating = false;
-	isEditing = false;
-	selectedItem = null;
-	try {
-		await syncVaultData();
-	} catch {
-		// The server acknowledgement above remains authoritative even when the
-		// subsequent pull cannot refresh the local snapshot.
-	}
-	if (vault.isOffline || vault.status === "error") {
-		toast.warning(m.vault_saved_refresh_failed());
-	}
-}
-
-function handleDeleteCipher() {
-	if (!selectedItem) return;
-	if (selectedItem.readOnly) {
-		toast.error("该组织条目为只读");
-		return;
-	}
-	deleteDialogOpen = true;
-}
-
-async function confirmDeleteCipher() {
-	if (!selectedItem) return;
-	deleteLoading = true;
-	try {
-		if (selectedItem.deletedDate) await hardDeleteCipherApi(selectedItem.id);
-		else await deleteCipherApi(selectedItem.id);
-		deleteDialogOpen = false;
-		selectedItem = null;
-		isEditing = false;
-		await syncVaultData();
-	} catch (e: any) {
-		toast.error("删除失败：" + (e.message || e));
-	} finally {
-		deleteLoading = false;
-	}
-}
-
-async function restoreSelectedCipher() {
-	if (!selectedItem?.deletedDate) return;
-	if (selectedItem.readOnly) {
-		toast.error("该组织条目为只读");
-		return;
-	}
-	deleteLoading = true;
-	try {
-		await restoreCipherApi(selectedItem.id);
-		selectedItem = null;
-		await syncVaultData();
-	} catch (e: any) {
-		toast.error("恢复失败：" + (e.message || e));
-	} finally {
-		deleteLoading = false;
-	}
-}
-
-async function toggleArchiveSelected() {
-	if (!selectedItem || selectedItem.deletedDate) return;
-	if (selectedItem.readOnly) {
-		toast.error("该组织条目为只读");
-		return;
-	}
-	deleteLoading = true;
-	try {
-		if (selectedItem.archivedDate) await unarchiveCipherApi(selectedItem.id);
-		else await archiveCipherApi(selectedItem.id);
-		selectedItem = null;
-		await syncVaultData();
-	} catch (e: any) {
-		toast.error("归档操作失败：" + (e.message || e));
-	} finally {
-		deleteLoading = false;
-	}
-}
-
-function toggleSelection(id: string) {
-	selectedIds = { ...selectedIds, [id]: !selectedIds[id] };
-}
-
-function clearSelection() {
-	selectedIds = {};
-}
-
-function selectRedundantDuplicates() {
-	selectedIds = Object.fromEntries(
-		[...findRedundantDuplicateCipherIds(vault.ciphers, duplicateMode)].map(
-			(id) => [id, true],
-		),
-	);
-}
-
-async function runBulkAction(action: VaultBulkAction) {
-	if (!selectedIdList.length) return;
-	if (action === "delete" || action === "permanent") {
-		pendingConfirmation = { kind: "bulk", action };
-		return;
-	}
-	await executeBulkAction(action);
-}
-
-async function executeBulkAction(action: VaultBulkAction) {
-	const items = selectedIdList
-		.map((id) => vault.ciphers.find((cipher) => cipher.id === id))
-		.filter(Boolean) as any[];
-	deleteLoading = true;
-	try {
-		await applyVaultBulkAction(action, items);
-		clearSelection();
-		selectedItem = null;
-		await syncVaultData();
-	} catch (e: any) {
-		toast.error("批量操作失败：" + (e.message || e));
-	} finally {
-		deleteLoading = false;
-	}
-}
-
 async function confirmPendingAction() {
 	if (!pendingConfirmation) return;
 	const pending = pendingConfirmation;
@@ -528,9 +171,9 @@ async function confirmPendingAction() {
 	await match(pending)
 		.with({ kind: "merge-folders" }, () => executeMergeDuplicateFolders())
 		.with({ kind: "delete-attachment" }, ({ attachment }) =>
-			executeAttachmentDelete(attachment),
+			attachmentManager.remove(attachment),
 		)
-		.with({ kind: "bulk" }, ({ action }) => executeBulkAction(action))
+		.with({ kind: "bulk" }, ({ action }) => bulkManager.execute(action))
 		.exhaustive();
 }
 
@@ -547,63 +190,13 @@ function pendingConfirmationText(): string {
 		)
 		.with(
 			{ kind: "bulk", action: "permanent" },
-			() => `永久删除选中的 ${selectedIdList.length} 项？此操作无法撤销。`,
+			() => `永久删除选中的 ${bulkManager.count} 项？此操作无法撤销。`,
 		)
 		.with(
 			{ kind: "bulk" },
-			() => `将选中的 ${selectedIdList.length} 项移到回收站？`,
+			() => `将选中的 ${bulkManager.count} 项移到回收站？`,
 		)
 		.otherwise(() => "请确认此操作。");
-}
-
-function resolveOwnerKey(organizationId?: string | null) {
-	return organizationId
-		? getOrganizationKey(organizationId)
-		: vault.symEncKey && vault.symMacKey
-			? { encKey: vault.symEncKey, macKey: vault.symMacKey }
-			: null;
-}
-
-async function moveSelectedItems() {
-	deleteLoading = true;
-	try {
-		for (const id of selectedIdList) {
-			const item = vault.ciphers.find((cipher) => cipher.id === id);
-			if (item?.organizationId)
-				throw new Error("组织条目使用集合，不能移动到个人文件夹");
-			if (item && !item.deletedDate)
-				await updateEncryptedVaultCipher(
-					item,
-					{ folderId: moveFolderId },
-					resolveOwnerKey,
-				);
-		}
-		moveDialogOpen = false;
-		clearSelection();
-		await syncVaultData();
-	} catch (e: any) {
-		toast.error("移动失败：" + (e.message || e));
-	} finally {
-		deleteLoading = false;
-	}
-}
-
-async function toggleFavorite(item: any) {
-	deleteLoading = true;
-	try {
-		await updateEncryptedVaultCipher(
-			item,
-			{ favorite: !item.favorite },
-			resolveOwnerKey,
-		);
-		await syncVaultData();
-		selectedItem =
-			vault.ciphers.find((cipher) => cipher.id === item.id) ?? null;
-	} catch (e: any) {
-		toast.error("收藏操作失败：" + (e.message || e));
-	} finally {
-		deleteLoading = false;
-	}
 }
 </script>
 
@@ -619,11 +212,11 @@ async function toggleFavorite(item: any) {
 			{duplicateCount}
 			{duplicateFolderCount}
 			{mergingDuplicateFolders}
-			onCreate={startCreate}
-			onCreateFolder={openCreateFolder}
-			onRenameFolder={openRenameFolder}
-			onDeleteFolder={openDeleteFolder}
-			onDeleteAllFolders={() => (deleteAllFoldersDialogOpen = true)}
+			onCreate={itemManager.startCreate}
+			onCreateFolder={folderManager.openCreate}
+			onRenameFolder={folderManager.openRename}
+			onDeleteFolder={folderManager.openDelete}
+			onDeleteAllFolders={() => (folderManager.deleteAllDialogOpen = true)}
 			onMergeDuplicateFolders={mergeDuplicateFolders}
 		/>
 
@@ -637,14 +230,14 @@ async function toggleFavorite(item: any) {
 			bind:searchQuery
 			bind:duplicateMode
 			bind:sortMode
-			bind:selectedItem
-			{selectedIds}
-			selectedCount={selectedIdList.length}
-			onToggleSelection={toggleSelection}
-			onBulkAction={runBulkAction}
-			onClearSelection={clearSelection}
-			onSelectRedundant={selectRedundantDuplicates}
-			onMove={() => { moveFolderId = null; moveDialogOpen = true; }}
+			bind:selectedItem={itemState.selected}
+			selectedIds={bulkManager.selectedIds}
+			selectedCount={bulkManager.count}
+			onToggleSelection={bulkManager.toggle}
+			onBulkAction={bulkManager.run}
+			onClearSelection={bulkManager.clear}
+			onSelectRedundant={bulkManager.selectRedundant}
+			onMove={bulkManager.openMove}
 			onSelectItem={() => mobileDetailOpen = true}
 			onOpenFilters={() => (mobileSidebarOpen = true)}
 		/>
@@ -652,51 +245,55 @@ async function toggleFavorite(item: any) {
 
 		<VaultDetailPanel
 			visible={mobileDetailOpen}
-			{isCreating}
-			{isEditing}
-			bind:editor
-			{selectedItem}
+			isCreating={itemState.isCreating}
+			isEditing={itemState.isEditing}
+			bind:editor={itemState.editor}
+			selectedItem={itemState.selected}
 			folders={vault.folders}
 			organizations={vault.organizations}
 			collections={vault.collections}
 			totp={totpLive}
-			{attachmentBusy}
+			attachmentBusy={attachmentManager.busy}
 			isSyncing={vault.isSyncing}
-			onBack={() => { if (isCreating || isEditing) cancelEdit(); else mobileDetailOpen = false; }}
-			onSave={handleSaveCipher}
-			onDelete={handleDeleteCipher}
-			onCancel={cancelEdit}
-			onFavorite={() => toggleFavorite(selectedItem)}
-			onArchive={toggleArchiveSelected}
-			onRestore={restoreSelectedCipher}
-			onEdit={startEdit}
-			onAttachmentUpload={handleAttachmentUpload}
-			onAttachmentDownload={handleAttachmentDownload}
-			onAttachmentDelete={handleAttachmentDelete}
+			onBack={() => {
+				if (itemState.isCreating || itemState.isEditing)
+					itemManager.cancelEdit();
+				else mobileDetailOpen = false;
+			}}
+			onSave={itemManager.save}
+			onDelete={itemManager.requestDelete}
+			onCancel={itemManager.cancelEdit}
+			onFavorite={itemManager.toggleFavorite}
+			onArchive={itemManager.toggleArchive}
+			onRestore={itemManager.restore}
+			onEdit={itemManager.startEdit}
+			onAttachmentUpload={attachmentManager.upload}
+			onAttachmentDownload={attachmentManager.download}
+			onAttachmentDelete={attachmentManager.requestDelete}
 		/>
 </div>
 
 <VaultDialogs
-	bind:deleteOpen={deleteDialogOpen}
-	bind:deleteAllFoldersOpen={deleteAllFoldersDialogOpen}
-	bind:moveOpen={moveDialogOpen}
-	bind:folderOpen={folderDialogOpen}
-	bind:deleteFolderOpen={deleteFolderDialogOpen}
-	bind:moveFolderId
-	bind:folderName={folderDialogName}
-	selectedItemName={selectedItem?.name}
-	selectedItemDeleted={!!selectedItem?.deletedDate}
-	{deleteLoading}
+	bind:deleteOpen={itemState.deleteDialogOpen}
+	bind:deleteAllFoldersOpen={folderManager.deleteAllDialogOpen}
+	bind:moveOpen={bulkManager.moveDialogOpen}
+	bind:folderOpen={folderManager.dialogOpen}
+	bind:deleteFolderOpen={folderManager.deleteDialogOpen}
+	bind:moveFolderId={bulkManager.moveFolderId}
+	bind:folderName={folderManager.dialogName}
+	selectedItemName={itemState.selected?.name}
+	selectedItemDeleted={!!itemState.selected?.deletedDate}
+	deleteLoading={itemState.busy || bulkManager.busy}
 	folders={vault.folders}
-	selectedCount={selectedIdList.length}
-	folderMode={folderDialogMode}
-	folderLoading={folderDialogLoading || deleteFolderLoading}
-	targetFolderName={targetFolder?.name}
-	onDeleteItem={confirmDeleteCipher}
-	onDeleteAllFolders={confirmDeleteAllFolders}
-	onMoveItems={moveSelectedItems}
-	onSaveFolder={handleFolderSubmit}
-	onDeleteFolder={confirmDeleteFolder}
+	selectedCount={bulkManager.count}
+	folderMode={folderManager.dialogMode}
+	folderLoading={folderManager.dialogLoading || folderManager.deleteLoading}
+	targetFolderName={folderManager.target?.name}
+	onDeleteItem={itemManager.confirmDelete}
+	onDeleteAllFolders={folderManager.removeAll}
+	onMoveItems={bulkManager.move}
+	onSaveFolder={folderManager.save}
+	onDeleteFolder={folderManager.remove}
 />
 
 <AlertDialog.Root open={pendingConfirmation !== null} onOpenChange={(open) => { if (!open) pendingConfirmation = null; }}>

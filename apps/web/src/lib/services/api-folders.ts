@@ -17,9 +17,11 @@ export async function importCiphersApi(
 /**
  * Create an individual folder (client-side encrypted name)
  */
-export async function createFolderApi(payload: { name: string }): Promise<any> {
+export async function createFolderApi(payload: {
+	name: string;
+}): Promise<FolderResponse> {
 	const response = await rpc.api.folders.$post({ json: payload });
-	return rpcJson(response);
+	return (await rpcJson(response)) as FolderResponse;
 }
 
 /**
@@ -28,12 +30,12 @@ export async function createFolderApi(payload: { name: string }): Promise<any> {
 export async function updateFolderApi(
 	id: string,
 	payload: { name: string },
-): Promise<any> {
+): Promise<FolderResponse> {
 	const response = await rpc.api.folders[":id"].$put({
 		param: { id },
 		json: payload,
 	});
-	return rpcJson(response);
+	return (await rpcJson(response)) as FolderResponse;
 }
 
 /**
@@ -46,3 +48,4 @@ export async function deleteFolderApi(id: string): Promise<void> {
 export async function deleteFoldersApi(ids: string[]): Promise<void> {
 	rpcVoid(await rpc.api.folders.delete.$post({ json: { ids } }));
 }
+import type { FolderResponse } from "@edgewarden/shared";

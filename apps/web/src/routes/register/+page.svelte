@@ -1,7 +1,8 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { onMount } from "svelte";
-import { getRegistrationConfigApi, register } from "$lib/services/api";
+import { getRegistrationConfigApi, register } from "$lib/services/api-auth";
+import { errorMessage } from "$lib/services/error-message";
 import { Button } from "$lib/components/ui/button/index.js";
 import * as Alert from "$lib/components/ui/alert/index.js";
 import * as Empty from "$lib/components/ui/empty/index.js";
@@ -53,8 +54,8 @@ onMount(async () => {
 		if (config.turnstileEnabled && !config.turnstileSiteKey) {
 			error = "Turnstile 已启用，但服务器没有配置站点密钥。";
 		}
-	} catch (err: any) {
-		error = err.message || "无法加载注册配置。";
+	} catch (caught) {
+		error = errorMessage(caught, "无法加载注册配置。");
 	} finally {
 		configLoading = false;
 	}
@@ -122,8 +123,8 @@ async function handleSubmit(e: SubmitEvent) {
 		setTimeout(() => {
 			goto("/login");
 		}, 2000);
-	} catch (err: any) {
-		error = err.message || "注册失败，请稍后重试。";
+	} catch (caught) {
+		error = errorMessage(caught, "注册失败，请稍后重试。");
 		if (turnstileEnabled) turnstileWidget?.reset();
 	} finally {
 		loading = false;

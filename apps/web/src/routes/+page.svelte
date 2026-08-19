@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
-import { isLoggedIn } from "$lib/services/api";
+import { isLoggedIn } from "$lib/services/api-auth";
 import { restoreWebSession } from "$lib/services/rpc";
 import * as Empty from "$lib/components/ui/empty/index.js";
 import { Spinner } from "$lib/components/ui/spinner/index.js";

@@ -8,7 +8,7 @@ import { Spinner } from "$lib/components/ui/spinner/index.js";
 import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
 import TotpCountdown from "$lib/components/vault/TotpCountdown.svelte";
 import { calcTotpNow } from "$lib/services/crypto";
-import { syncVaultData, vault } from "$lib/stores/vault.svelte";
+import { vault } from "$lib/stores/vault.svelte";
 import { ArrowLeft, Check, Copy, KeyRound } from "@lucide/svelte";
 
 let codes = $state<
@@ -50,10 +50,7 @@ async function copyCode(id: string, value: string) {
 }
 
 onMount(() => {
-	void (async () => {
-		if (!vault.ciphers.length) await syncVaultData();
-		await refreshCodes();
-	})();
+	void refreshCodes();
 	timer = setInterval(() => void refreshCodes(), 1000);
 	return () => {
 		if (timer) clearInterval(timer);

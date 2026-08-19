@@ -1,6 +1,10 @@
 import { CipherType } from "@edgewarden/shared";
 import Papa from "papaparse";
-import type { TransferDocument } from "./vault-transfer";
+import type {
+	TransferDocument,
+	TransferItem,
+	TransferLogin,
+} from "./vault-transfer";
 
 const TYPE_KEYS: Record<number, string> = {
 	[CipherType.Login]: "login",
@@ -47,7 +51,7 @@ export function parseBitwardenCsv(text: string): TransferDocument {
 	const folders: Array<{ id: string; name: string }> = [];
 	const folderIds = new Map<string, string>();
 	const warnings: string[] = [];
-	const items = rows.slice(1).map((values, rowIndex) => {
+	const items: TransferItem[] = rows.slice(1).map((values, rowIndex) => {
 		const record = Object.fromEntries(
 			headers.map((header, index) => [header, values[index] ?? ""]),
 		);
@@ -124,15 +128,15 @@ export function buildBitwardenCsv(document: TransferDocument): string {
 		],
 	];
 	for (const item of document.items) {
-		const login = item.login ?? {};
+		const login: TransferLogin = item.login ?? {};
 		const csvType = item.type === CipherType.Login ? "login" : "note";
-		const typeKey = TYPE_KEYS[item.type];
+		const typeKey = item.type == null ? undefined : TYPE_KEYS[item.type];
 		const extraTypeData =
 			csvType === "note" && item.type !== CipherType.SecureNote && typeKey
 				? `\n\n[Edgewarden ${typeKey}]\n${JSON.stringify(item[typeKey] ?? {})}`
 				: "";
 		rows.push([
-			folderById.get(item.folderId) ?? "",
+			(item.folderId == null ? undefined : folderById.get(item.folderId)) ?? "",
 			item.favorite ? "1" : "0",
 			csvType,
 			item.name ?? "",

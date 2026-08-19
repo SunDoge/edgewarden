@@ -1,6 +1,7 @@
 import { CipherType, parseJsonWithSchema } from "@edgewarden/shared";
 import { match } from "ts-pattern";
 import * as v from "valibot";
+import type { VaultCipher } from "./vault-types";
 
 export interface CipherDraft {
 	type: CipherType;
@@ -21,17 +22,18 @@ export interface CipherDraft {
 	extraData: string;
 }
 
-export type CipherDraftPayload = Record<string, any> & {
+export type CipherDraftPayload = Record<string, unknown> & {
 	type: number;
 	name: string;
 	notes: string | null;
 	favorite: boolean;
 	folderId: string | null;
+	passwordHistory?: Array<{ password?: string; lastUsedDate?: string }> | null;
 };
 
 export function buildCipherPayload(
 	draft: CipherDraft,
-	selectedItem: any | null,
+	selectedItem: Partial<VaultCipher> | null,
 	editing: boolean,
 	now = new Date(),
 ): CipherDraftPayload {

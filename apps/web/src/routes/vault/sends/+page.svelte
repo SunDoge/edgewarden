@@ -6,9 +6,12 @@ import {
 	fetchSendsApi,
 	deleteSendApi,
 	deleteSendsApi,
-} from "$lib/services/api";
+} from "$lib/services/api-sends";
 import { vault } from "$lib/stores/vault.svelte";
-import { decryptOwnedSend } from "$lib/services/send-crypto";
+import {
+	decryptOwnedSend,
+	type DecryptedSend,
+} from "$lib/services/send-crypto";
 import { saveOwnedSend } from "$lib/services/send-actions";
 import {
 	createSendEditorDraft,
@@ -45,12 +48,12 @@ import {
 } from "@lucide/svelte";
 
 // State
-let sends = $state<any[]>([]);
+let sends = $state<DecryptedSend[]>([]);
 let loading = $state(true);
 let searchQuery = $state("");
 let typeFilter = $state<"all" | "text" | "file">("all");
 let selectedIds = $state<Record<string, boolean>>({});
-let selectedSend = $state<any | null>(null);
+let selectedSend = $state<DecryptedSend | null>(null);
 let mobileDetailOpen = $state(false);
 
 // Form editor state
@@ -65,10 +68,6 @@ let deleteTarget = $state<
 >(null);
 
 onMount(async () => {
-	if (!vault.isUnlocked) {
-		goto("/vault/unlock");
-		return;
-	}
 	await loadSends();
 });
 
@@ -93,8 +92,9 @@ async function loadSends() {
 			}
 		}
 		sends = decryptedList;
-	} catch (e: any) {
-		if (!cached.length) errorMsg = "加载 Send 列表失败：" + (e.message || e);
+	} catch (error) {
+		if (!cached.length)
+			errorMsg = `加载 Send 列表失败：${error instanceof Error ? error.message : String(error)}`;
 	} finally {
 		loading = false;
 	}
@@ -129,7 +129,7 @@ function startCreate() {
 	editor = createSendEditorDraft();
 }
 
-function startEdit(send: any) {
+function startEdit(send: DecryptedSend) {
 	selectedSend = send;
 	isEditing = true;
 	isCreating = false;
@@ -143,7 +143,7 @@ function cancelEdit() {
 	if (!selectedSend) mobileDetailOpen = false;
 }
 
-function selectSend(send: any) {
+function selectSend(send: DecryptedSend) {
 	selectedSend = send;
 	isCreating = false;
 	isEditing = false;
@@ -165,8 +165,8 @@ async function handleSaveSend() {
 		isEditing = false;
 		selectedSend = null;
 		await loadSends();
-	} catch (e: any) {
-		errorMsg = "保存失败：" + (e.message || e);
+	} catch (error) {
+		errorMsg = `保存失败：${error instanceof Error ? error.message : String(error)}`;
 	} finally {
 		loading = false;
 	}
@@ -178,8 +178,8 @@ async function handleDeleteSend(sendId: string) {
 		await deleteSendApi(sendId);
 		selectedSend = null;
 		await loadSends();
-	} catch (e: any) {
-		errorMsg = "删除失败：" + (e.message || e);
+	} catch (error) {
+		errorMsg = `删除失败：${error instanceof Error ? error.message : String(error)}`;
 	} finally {
 		loading = false;
 	}
@@ -193,8 +193,8 @@ async function handleBulkDelete() {
 		selectedIds = {};
 		selectedSend = null;
 		await loadSends();
-	} catch (e: any) {
-		errorMsg = "批量删除失败：" + (e.message || e);
+	} catch (error) {
+		errorMsg = `批量删除失败：${error instanceof Error ? error.message : String(error)}`;
 	} finally {
 		loading = false;
 	}
@@ -210,7 +210,7 @@ async function confirmDelete() {
 		.exhaustive();
 }
 
-function copyShareLink(send: any) {
+function copyShareLink(send: DecryptedSend) {
 	const origin = window.location.origin;
 	const link = `${origin}/sends/${send.accessId}#${send.shareKey}`;
 	navigator.clipboard.writeText(link);
@@ -218,6 +218,18 @@ function copyShareLink(send: any) {
 	setTimeout(() => {
 		if (copiedId === send.id) copiedId = null;
 	}, 2000);
+}
+
+function copySelectedShareLink() {
+	if (selectedSend) copyShareLink(selectedSend);
+}
+
+function editSelectedSend() {
+	if (selectedSend) startEdit(selectedSend);
+}
+
+function requestSelectedSendDelete() {
+	if (selectedSend) deleteTarget = { kind: "single", id: selectedSend.id };
 }
 </script>
 
@@ -329,9 +341,9 @@ function copyShareLink(send: any) {
 				<SendDetail
 					send={selectedSend}
 					copied={copiedId === selectedSend.id}
-					onCopy={() => copyShareLink(selectedSend)}
-					onEdit={() => startEdit(selectedSend)}
-					onDelete={() => deleteTarget = { kind: "single", id: selectedSend.id }}
+					onCopy={copySelectedShareLink}
+					onEdit={editSelectedSend}
+					onDelete={requestSelectedSendDelete}
 				/>
 			{:else}
 				<Empty.Root class="h-full"><Empty.Header><Empty.Media variant="icon"><Share2 /></Empty.Media><Empty.Title>选择一个 Send 查看传输详情</Empty.Title><Empty.Description>您创建的任何阅后即焚内容将在此列出，并附带管理统计。</Empty.Description></Empty.Header></Empty.Root>

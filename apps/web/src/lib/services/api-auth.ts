@@ -30,6 +30,20 @@ import {
 	setMemoryAccessToken,
 } from "./rpc";
 
+interface PasskeyLoginToken {
+	access_token?: string;
+	UserDecryptionOptions?: Record<string, unknown>;
+	userDecryptionOptions?: Record<string, unknown>;
+	KdfIterations?: number;
+	Key?: string;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+	return value !== null && typeof value === "object"
+		? (value as Record<string, unknown>)
+		: null;
+}
+
 export function getAccessToken(): string | null {
 	if (typeof window === "undefined") return null;
 	return getMemoryAccessToken();
@@ -206,11 +220,13 @@ export function twoFactorPasskeyChallengeFromError(
 		typeof error.payload !== "object"
 	)
 		return null;
-	const payload = error.payload as any;
-	const provider =
-		payload.TwoFactorProviders2?.["7"] ??
-		payload.CustomResponse?.TwoFactorProviders2?.["7"];
-	const challenge = provider?.Challenge ?? provider?.challenge;
+	const payload = error.payload as Record<string, unknown>;
+	const customResponse = asRecord(payload.CustomResponse);
+	const providers =
+		asRecord(payload.TwoFactorProviders2) ??
+		asRecord(customResponse?.TwoFactorProviders2);
+	const provider = asRecord(providers?.["7"]);
+	const challenge = asRecord(provider?.Challenge ?? provider?.challenge);
 	if (!challenge?.options || !challenge?.token) return null;
 	return { options: challenge.options, token: String(challenge.token) };
 }
@@ -222,9 +238,10 @@ export function twoFactorProvidersFromError(error: unknown): string[] {
 		typeof error.payload !== "object"
 	)
 		return [];
-	const payload = error.payload as any;
+	const payload = error.payload as Record<string, unknown>;
+	const customResponse = asRecord(payload.CustomResponse);
 	const providers =
-		payload.TwoFactorProviders ?? payload.CustomResponse?.TwoFactorProviders;
+		payload.TwoFactorProviders ?? customResponse?.TwoFactorProviders;
 	return Array.isArray(providers) ? providers.map(String) : [];
 }
 
@@ -238,9 +255,9 @@ export async function loginWithPasskeyApi(): Promise<{
 		profileKey: string;
 	};
 }> {
-	const options = await rpcJson<any>(
+	const options = (await rpcJson(
 		await rpc.identity.accounts.webauthn["assertion-options"].$get(),
-	);
+	)) as unknown as { options: unknown; token: string };
 	const assertion = await assertAccountPasskey(options);
 	const response = await rpc.identity.connect.token.$post({
 		form: {
@@ -250,7 +267,7 @@ export async function loginWithPasskeyApi(): Promise<{
 			deviceResponse: JSON.stringify(assertion.deviceResponse),
 		},
 	});
-	const token = await rpcJson<any>(response);
+	const token = (await rpcJson(response)) as unknown as PasskeyLoginToken;
 	if (!token.access_token) throw new Error("通行密钥登录未返回访问令牌");
 	const decryption =
 		token.UserDecryptionOptions ?? token.userDecryptionOptions ?? {};
@@ -271,14 +288,17 @@ export async function loginWithPasskeyApi(): Promise<{
 		};
 	}
 	const unlock =
-		decryption.MasterPasswordUnlock ?? decryption.masterPasswordUnlock ?? {};
+		asRecord(
+			decryption.MasterPasswordUnlock ?? decryption.masterPasswordUnlock,
+		) ?? {};
+	const unlockKdf = asRecord(unlock.Kdf ?? unlock.kdf) ?? {};
 	return {
 		accessToken: token.access_token,
 		masterPasswordUnlock: {
 			email: String(unlock.Salt ?? unlock.salt ?? ""),
 			iterations: Number(
-				unlock.Kdf?.Iterations ??
-					unlock.kdf?.iterations ??
+				unlockKdf.Iterations ??
+					unlockKdf.iterations ??
 					token.KdfIterations ??
 					600_000,
 			),

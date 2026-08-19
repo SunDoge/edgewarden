@@ -31,7 +31,19 @@ export function createSendEditorDraft(): SendEditorDraft {
 }
 
 export function sendToEditorDraft(
-	send: any,
+	send: Pick<DecryptedSend, "type" | "name" | "deletionDate"> &
+		Partial<
+			Pick<
+				DecryptedSend,
+				| "notes"
+				| "text"
+				| "maxAccessCount"
+				| "expirationDate"
+				| "password"
+				| "hideEmail"
+				| "disabled"
+			>
+		>,
 	now = Date.now(),
 ): SendEditorDraft {
 	return {
@@ -57,3 +69,4 @@ export function sendToEditorDraft(
 		disabled: Boolean(send.disabled),
 	};
 }
+import type { DecryptedSend } from "./send-crypto";

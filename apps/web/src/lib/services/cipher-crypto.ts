@@ -1,4 +1,5 @@
-import type { CipherResponse } from "@edgewarden/shared";
+import type { CipherInput, CipherResponse } from "@edgewarden/shared";
+import type { VaultCipher } from "./vault-types";
 import {
 	decryptBw,
 	decryptStr,
@@ -8,24 +9,28 @@ import {
 
 // ── Cipher Encryption & Decryption ──────────────────────────────────────────
 
-async function decryptObject(
-	obj: any,
+async function decryptObject<T>(
+	obj: T,
 	encKey: Uint8Array,
 	macKey: Uint8Array,
-): Promise<any> {
+): Promise<T> {
 	if (!obj || typeof obj !== "object") return obj;
-	const decrypted = Array.isArray(obj) ? [] : ({} as any);
-	for (const key of Object.keys(obj)) {
-		const val = obj[key];
+	const source = obj as Record<string, unknown>;
+	const decrypted: Record<string, unknown> | unknown[] = Array.isArray(obj)
+		? []
+		: {};
+	for (const key of Object.keys(source)) {
+		const val = source[key];
+		const target = decrypted as Record<string, unknown>;
 		if (typeof val === "string" && looksLikeCipherString(val)) {
-			decrypted[key] = await decryptStr(val, encKey, macKey);
+			target[key] = await decryptStr(val, encKey, macKey);
 		} else if (val && typeof val === "object") {
-			decrypted[key] = await decryptObject(val, encKey, macKey);
+			target[key] = await decryptObject(val, encKey, macKey);
 		} else {
-			decrypted[key] = val;
+			target[key] = val;
 		}
 	}
-	return decrypted;
+	return decrypted as T;
 }
 
 async function encryptObject(
@@ -77,7 +82,7 @@ export async function decryptCipher(
 	cipher: CipherResponse,
 	userEncKey: Uint8Array,
 	userMacKey: Uint8Array,
-): Promise<any> {
+): Promise<VaultCipher> {
 	let encKey = userEncKey;
 	let macKey = userMacKey;
 
@@ -88,7 +93,7 @@ export async function decryptCipher(
 		macKey = rawKey.slice(32, 64);
 	}
 
-	const decrypted = { ...cipher } as any;
+	const decrypted = { ...cipher } as unknown as Record<string, unknown>;
 
 	if (cipher.name && looksLikeCipherString(cipher.name)) {
 		decrypted.name = await decryptStr(cipher.name, encKey, macKey);
@@ -130,7 +135,7 @@ export async function decryptCipher(
 	if (cipher.passport)
 		decrypted.passport = await decryptObject(cipher.passport, encKey, macKey);
 	if (cipher.attachments?.length) {
-		decrypted.attachments = [];
+		const attachments = [];
 		for (const attachment of cipher.attachments) {
 			if (!attachment.key) throw new Error("Attachment key missing");
 			const rawAttachmentKey = await decryptBw(attachment.key, encKey, macKey);
@@ -138,7 +143,7 @@ export async function decryptCipher(
 				throw new Error("Invalid attachment key");
 			const attachmentEncKey = rawAttachmentKey.slice(0, 32);
 			const attachmentMacKey = rawAttachmentKey.slice(32, 64);
-			decrypted.attachments.push({
+			attachments.push({
 				...attachment,
 				fileName: await decryptStr(
 					attachment.fileName,
@@ -148,6 +153,7 @@ export async function decryptCipher(
 				_keys: { enc: attachmentEncKey, mac: attachmentMacKey },
 			});
 		}
+		decrypted.attachments = attachments;
 	}
 	if (cipher.fields) {
 		decrypted.fields = await decryptObject(cipher.fields, encKey, macKey);
@@ -160,33 +166,35 @@ export async function decryptCipher(
 		);
 	}
 
-	return decrypted;
+	return decrypted as unknown as VaultCipher;
 }
 
-export async function encryptCipher(
-	fields: {
-		type: number;
-		name: string;
-		notes: string | null;
-		favorite: boolean;
-		folderId: string | null;
-		organizationId?: string | null;
-		collectionIds?: string[];
-		login?: any;
-		card?: any;
-		identity?: any;
-		secureNote?: any;
-		sshKey?: any;
-		bankAccount?: any;
-		driversLicense?: any;
-		passport?: any;
-		fields?: any[] | null;
-		passwordHistory?: any[] | null;
-		key?: string | null;
-	},
+export interface PlainCipherInput extends Record<string, unknown> {
+	type: number;
+	name: string;
+	notes?: string | null;
+	favorite?: boolean;
+	folderId?: string | null;
+	organizationId?: string | null;
+	collectionIds?: string[];
+	key?: string | null;
+	login?: Record<string, unknown> | null;
+	card?: Record<string, unknown> | null;
+	identity?: Record<string, unknown> | null;
+	secureNote?: Record<string, unknown> | null;
+	sshKey?: Record<string, unknown> | null;
+	bankAccount?: Record<string, unknown> | null;
+	driversLicense?: Record<string, unknown> | null;
+	passport?: Record<string, unknown> | null;
+	fields?: Array<Record<string, unknown>> | null;
+	passwordHistory?: Array<Record<string, unknown>> | null;
+}
+
+export async function encryptCipher<T extends PlainCipherInput>(
+	fields: T,
 	userEncKey: Uint8Array,
 	userMacKey: Uint8Array,
-): Promise<any> {
+): Promise<T & CipherInput> {
 	let encKey = userEncKey;
 	let macKey = userMacKey;
 	let wrappedKey = fields.key || null;
@@ -215,7 +223,7 @@ export async function encryptCipher(
 		? await encryptBw(encoder.encode(fields.notes.trim()), encKey, macKey)
 		: null;
 
-	const payload: any = {
+	const payload: CipherInput = {
 		type: fields.type,
 		name: nameCipher,
 		notes: notesCipher,
@@ -245,21 +253,26 @@ export async function encryptCipher(
 										? ["passport", fields.passport]
 										: null;
 	if (typeData?.[1])
-		payload[typeData[0] as string] = await encryptObject(
-			typeData[1],
+		(payload as Record<string, unknown>)[typeData[0] as string] =
+			await encryptObject(
+				typeData[1],
+				encKey,
+				macKey,
+				typeData[0] === "login" ? isPlaintextLoginMetadata : undefined,
+			);
+	if (fields.fields?.length)
+		payload.fields = (await encryptObject(
+			fields.fields,
 			encKey,
 			macKey,
-			typeData[0] === "login" ? isPlaintextLoginMetadata : undefined,
-		);
-	if (fields.fields?.length)
-		payload.fields = await encryptObject(fields.fields, encKey, macKey);
+		)) as NonNullable<CipherInput["fields"]>;
 	if (fields.passwordHistory?.length)
-		payload.passwordHistory = await encryptObject(
+		payload.passwordHistory = (await encryptObject(
 			fields.passwordHistory,
 			encKey,
 			macKey,
 			isPlaintextPasswordHistoryMetadata,
-		);
+		)) as NonNullable<CipherInput["passwordHistory"]>;
 
-	return payload;
+	return payload as T & CipherInput;
 }

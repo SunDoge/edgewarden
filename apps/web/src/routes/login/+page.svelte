@@ -9,7 +9,8 @@ import {
 	loginWithPasskeyApi,
 	twoFactorPasskeyChallengeFromError,
 	twoFactorProvidersFromError,
-} from "$lib/services/api";
+} from "$lib/services/api-auth";
+import { errorMessage } from "$lib/services/error-message";
 import {
 	setMasterKey,
 	setSymmetricKeys,
@@ -120,18 +121,18 @@ async function submitPasswordLogin() {
 		setMasterKey(masterKey);
 		await syncVaultData(); // saves snapshot to IndexedDB for future offline use
 		goto("/vault");
-	} catch (err: any) {
-		if (isTwoFactorRequiredError(err)) {
+	} catch (caught) {
+		if (isTwoFactorRequiredError(caught)) {
 			twoFactorRequired = true;
-			twoFactorPasskeyChallenge = twoFactorPasskeyChallengeFromError(err);
-			availableTwoFactorProviders = twoFactorProvidersFromError(err);
+			twoFactorPasskeyChallenge = twoFactorPasskeyChallengeFromError(caught);
+			availableTwoFactorProviders = twoFactorProvidersFromError(caught);
 			if (
 				!availableTwoFactorProviders.includes("0") &&
 				availableTwoFactorProviders.includes("3")
 			)
 				twoFactorProvider = "3";
 			error = "请输入身份验证器验证码或恢复代码。";
-		} else error = err.message || "登录失败，请检查您的凭据。";
+		} else error = errorMessage(caught, "登录失败，请检查您的凭据。");
 		if (turnstileEnabled) turnstileWidget?.reset();
 	} finally {
 		loading = false;

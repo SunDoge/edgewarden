@@ -1,11 +1,13 @@
 import type {
-	CipherResponse,
 	CollectionResponse,
 	FolderResponse,
 	ProfileOrganizationResponse,
 	SyncResponse,
 } from "@edgewarden/shared";
-import { logout as apiLogout, syncVault } from "$lib/services/api";
+import type { VaultCipher } from "$lib/services/vault-types";
+import type { DecryptedSend } from "$lib/services/send-crypto";
+import { logout as apiLogout } from "$lib/services/api-auth";
+import { syncVault } from "$lib/services/api-vault";
 import {
 	base64ToBytes,
 	bytesToBase64,
@@ -34,11 +36,11 @@ import {
 type SyncStatus = "idle" | "syncing" | "offline" | "error";
 
 interface VaultState {
-	ciphers: CipherResponse[];
+	ciphers: VaultCipher[];
 	folders: FolderResponse[];
 	collections: CollectionResponse[];
 	organizations: ProfileOrganizationResponse[];
-	sends: Record<string, any>[];
+	sends: DecryptedSend[];
 	profile: SyncResponse["profile"] | null;
 	syncedAt: number | null;
 	status: SyncStatus;
@@ -105,6 +107,7 @@ let _vault = $state<VaultState>({
 	error: null,
 	warning: null,
 });
+let syncPromise: Promise<void> | null = null;
 
 // ── Public reactive surface ───────────────────────────────────────────────────
 
@@ -215,7 +218,7 @@ async function hydrateVaultSnapshot(
  * Pull vault from server; fall back to IndexedDB when offline.
  * Requires master key to already be set.
  */
-export async function syncVaultData(): Promise<void> {
+async function performVaultSync(): Promise<void> {
 	_vault.status = "syncing";
 	_vault.error = null;
 	_vault.warning = null;
@@ -262,8 +265,8 @@ export async function syncVaultData(): Promise<void> {
 			console.error("Failed to update encrypted vault cache", cacheError);
 			_vault.warning = "保险库已同步，但离线缓存更新失败。";
 		}
-	} catch (e: any) {
-		console.error("Sync error:", e);
+	} catch (error) {
+		console.error("Sync error:", error);
 		// Network unavailable — try the local cache
 		const cached = await loadVaultSnapshot();
 		if (cached) {
@@ -282,6 +285,20 @@ export async function syncVaultData(): Promise<void> {
 			throw new Error(_vault.error);
 		}
 	}
+}
+
+export function syncVaultData(): Promise<void> {
+	if (!syncPromise) {
+		syncPromise = performVaultSync().finally(() => {
+			syncPromise = null;
+		});
+	}
+	return syncPromise;
+}
+
+/** Ensure the first decrypted snapshot exists before rendering vault routes. */
+export function ensureVaultData(): Promise<void> {
+	return _vault.profile ? Promise.resolve() : syncVaultData();
 }
 
 /**

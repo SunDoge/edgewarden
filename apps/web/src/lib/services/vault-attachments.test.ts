@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 	safeName: vi.fn(),
 }));
 
-vi.mock("./api", () => ({
+vi.mock("./api-vault", () => ({
 	createAttachmentApi: mocks.create,
 	deleteAttachmentApi: mocks.remove,
 	downloadAttachmentApi: mocks.download,

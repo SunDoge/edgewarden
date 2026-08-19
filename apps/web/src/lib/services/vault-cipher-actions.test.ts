@@ -19,7 +19,7 @@ const cipher = vi.hoisted(() => ({
 	encrypt: vi.fn(),
 }));
 
-vi.mock("./api", () => ({
+vi.mock("./api-vault", () => ({
 	archiveCipherApi: api.archiveOne,
 	archiveCiphersApi: api.archiveMany,
 	createCipherApi: api.create,

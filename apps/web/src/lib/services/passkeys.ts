@@ -38,21 +38,42 @@ export class AccountPasskeyPrfUnavailableError extends Error {
 	}
 }
 
+type SerializedCredentialDescriptor = Omit<
+	PublicKeyCredentialDescriptor,
+	"id"
+> & { id: string };
+type SerializedCreationOptions = Omit<
+	PublicKeyCredentialCreationOptions,
+	"challenge" | "user" | "excludeCredentials"
+> & {
+	challenge: string;
+	user: Omit<PublicKeyCredentialUserEntity, "id"> & { id: string };
+	excludeCredentials?: SerializedCredentialDescriptor[];
+};
+type SerializedRequestOptions = Omit<
+	PublicKeyCredentialRequestOptions,
+	"challenge" | "allowCredentials"
+> & {
+	challenge: string;
+	allowCredentials?: SerializedCredentialDescriptor[];
+};
+
 function cloneCreationOptions(
-	options: any,
+	options: unknown,
 ): PublicKeyCredentialCreationOptions {
 	if (!options || typeof options !== "object") {
 		throw new Error("无效的通行密钥创建选项");
 	}
+	const source = options as SerializedCreationOptions;
 	return {
-		...options,
-		challenge: toBufferSource(base64UrlToBytes(options.challenge)),
+		...source,
+		challenge: toBufferSource(base64UrlToBytes(source.challenge)),
 		user: {
-			...options.user,
-			id: toBufferSource(base64UrlToBytes(options.user?.id)),
+			...source.user,
+			id: toBufferSource(base64UrlToBytes(source.user?.id)),
 		},
-		excludeCredentials: Array.isArray(options.excludeCredentials)
-			? options.excludeCredentials.map((credential: any) => ({
+		excludeCredentials: Array.isArray(source.excludeCredentials)
+			? source.excludeCredentials.map((credential) => ({
 					...credential,
 					id: toBufferSource(base64UrlToBytes(credential.id)),
 				}))
@@ -60,19 +81,22 @@ function cloneCreationOptions(
 	};
 }
 
-function cloneRequestOptions(options: any): PublicKeyCredentialRequestOptions {
+function cloneRequestOptions(
+	options: unknown,
+): PublicKeyCredentialRequestOptions {
 	if (!options || typeof options !== "object") {
 		throw new Error("无效的通行密钥验证选项");
 	}
+	const source = options as SerializedRequestOptions;
 	return {
-		...options,
-		challenge: toBufferSource(base64UrlToBytes(options.challenge)),
-		allowCredentials: Array.isArray(options.allowCredentials)
-			? options.allowCredentials.map((credential: any) => ({
+		...source,
+		challenge: toBufferSource(base64UrlToBytes(source.challenge)),
+		allowCredentials: Array.isArray(source.allowCredentials)
+			? source.allowCredentials.map((credential) => ({
 					...credential,
 					id: toBufferSource(base64UrlToBytes(credential.id)),
 				}))
-			: options.allowCredentials,
+			: source.allowCredentials,
 	};
 }
 
@@ -96,10 +120,12 @@ function credentialIdToBase64Url(id: BufferSource): string | null {
 	}
 }
 
-type PrfEvalInput = { first: Uint8Array };
-
-function buildLegacyPrfExtension(salt: Uint8Array): Record<string, unknown> {
-	const evalInput: PrfEvalInput = { first: salt };
+function buildLegacyPrfExtension(
+	salt: Uint8Array,
+): AuthenticationExtensionsClientInputs {
+	const evalInput: AuthenticationExtensionsPRFValues = {
+		first: toBufferSource(salt),
+	};
 	return {
 		prf: {
 			eval: evalInput,
@@ -110,11 +136,13 @@ function buildLegacyPrfExtension(salt: Uint8Array): Record<string, unknown> {
 function buildCredentialPrfExtension(
 	salt: Uint8Array,
 	credentialIds: Array<string | null | undefined>,
-): Record<string, unknown> {
-	const evalInput = { first: salt };
+): AuthenticationExtensionsClientInputs {
+	const evalInput: AuthenticationExtensionsPRFValues = {
+		first: toBufferSource(salt),
+	};
 	const evalByCredential = credentialIds
 		.filter((id): id is string => !!id)
-		.reduce<Record<string, PrfEvalInput>>((out, id) => {
+		.reduce<Record<string, AuthenticationExtensionsPRFValues>>((out, id) => {
 			out[id] = evalInput;
 			return out;
 		}, {});
@@ -129,28 +157,33 @@ function buildCredentialPrfExtension(
 
 function withPrfExtension(
 	options: PublicKeyCredentialRequestOptions,
-	extension: Record<string, unknown>,
+	extension: AuthenticationExtensionsClientInputs,
 ): PublicKeyCredentialRequestOptions {
 	return {
 		...options,
 		extensions: {
-			...((options as any).extensions || {}),
+			...(options.extensions ?? {}),
 			...extension,
-		} as any,
+		},
 	};
 }
 
 function readPrfFirstResult(
 	credential: PublicKeyCredential,
 ): ArrayBuffer | undefined {
-	const result = (credential.getClientExtensionResults() as any).prf?.results
-		?.first;
-	return result instanceof ArrayBuffer ? result : undefined;
+	const result = credential.getClientExtensionResults().prf?.results?.first;
+	if (!result) return undefined;
+	if (result instanceof ArrayBuffer) return result;
+	return new Uint8Array(
+		result.buffer,
+		result.byteOffset,
+		result.byteLength,
+	).slice().buffer;
 }
 
 function hasPrfExtensionResult(credential: PublicKeyCredential): boolean {
 	return Object.prototype.hasOwnProperty.call(
-		credential.getClientExtensionResults() as any,
+		credential.getClientExtensionResults(),
 		"prf",
 	);
 }
@@ -300,8 +333,8 @@ export async function createAccountPasskeyCredential(response: {
 		throw new Error("您的浏览器不支持通行密钥 (WebAuthn)");
 	}
 	const nativeOptions = cloneCreationOptions(response.options);
-	(nativeOptions as any).extensions = {
-		...((nativeOptions as any).extensions || {}),
+	nativeOptions.extensions = {
+		...(nativeOptions.extensions ?? {}),
 		prf: {},
 	};
 	const credential = await navigator.credentials.create({
@@ -310,8 +343,7 @@ export async function createAccountPasskeyCredential(response: {
 	if (!(credential instanceof PublicKeyCredential)) {
 		throw new Error("没有创建任何通行密钥");
 	}
-	const supportsPrf = !!(credential.getClientExtensionResults() as any).prf
-		?.enabled;
+	const supportsPrf = !!credential.getClientExtensionResults().prf?.enabled;
 	return {
 		token: response.token,
 		createOptions: nativeOptions,
@@ -451,7 +483,12 @@ export async function buildAccountPasskeyPrfKeySetFromPrfKey(
 
 export async function unlockVaultKeyWithAccountPasskeyPrf(
 	prfKey: Uint8Array,
-	option: any,
+	option: {
+		EncryptedPrivateKey?: string;
+		encryptedPrivateKey?: string;
+		EncryptedUserKey?: string;
+		encryptedUserKey?: string;
+	},
 ): Promise<{ symEncKey: string; symMacKey: string }> {
 	const encryptedPrivateKey =
 		option.EncryptedPrivateKey || option.encryptedPrivateKey || "";

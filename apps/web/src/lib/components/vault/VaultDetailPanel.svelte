@@ -6,6 +6,14 @@ import { Separator } from "$lib/components/ui/separator/index.js";
 import { Skeleton } from "$lib/components/ui/skeleton/index.js";
 import { fade } from "svelte/transition";
 import type { VaultEditorForm as VaultEditorDraft } from "$lib/services/vault-editor";
+import type {
+	VaultAttachment,
+	VaultCipher,
+	VaultCollection,
+	VaultFolder,
+	VaultOrganization,
+	VaultTotp,
+} from "$lib/services/vault-types";
 import VaultEditorForm from "./VaultEditorForm.svelte";
 import VaultItemDetail from "./VaultItemDetail.svelte";
 
@@ -37,11 +45,11 @@ let {
 	isCreating: boolean;
 	isEditing: boolean;
 	editor: VaultEditorDraft;
-	selectedItem: any | null;
-	folders: any[];
-	organizations: any[];
-	collections: any[];
-	totp: { code: string; remain: number } | null;
+	selectedItem: VaultCipher | null;
+	folders: VaultFolder[];
+	organizations: VaultOrganization[];
+	collections: VaultCollection[];
+	totp: VaultTotp | null;
 	attachmentBusy: string | null;
 	isSyncing: boolean;
 	onBack: () => void;
@@ -53,8 +61,8 @@ let {
 	onRestore: () => void;
 	onEdit: () => void;
 	onAttachmentUpload: (event: Event) => void;
-	onAttachmentDownload: (attachment: any) => void;
-	onAttachmentDelete: (attachment: any) => void;
+	onAttachmentDownload: (attachment: VaultAttachment) => void;
+	onAttachmentDelete: (attachment: VaultAttachment) => void;
 } = $props();
 </script>
 

@@ -17,9 +17,31 @@ import { parseBitwardenCsv } from "./vault-transfer-csv";
 
 export { buildBitwardenCsv } from "./vault-transfer-csv";
 
+export interface TransferLogin extends Record<string, unknown> {
+	uri?: string | null;
+	uris?: Array<{ uri?: string | null; match?: number | null }>;
+	username?: string | null;
+	password?: string | null;
+	totp?: string | null;
+	fido2Credentials?: Array<Record<string, unknown>>;
+}
+
+export interface TransferItem extends Record<string, unknown> {
+	id?: string;
+	folderId?: string | null;
+	type?: number;
+	name?: string;
+	notes?: string | null;
+	favorite?: boolean;
+	reprompt?: number;
+	fields?: Array<Record<string, unknown>> | null;
+	login?: TransferLogin | null;
+	sshKey?: Record<string, unknown> | null;
+}
+
 export interface TransferDocument {
 	folders: Array<{ id?: string; name: string; existingId?: string }>;
-	items: Array<Record<string, any>>;
+	items: TransferItem[];
 	warnings: string[];
 }
 
@@ -69,6 +91,10 @@ const VaultImportSourceSchema = v.union([
 	VaultImportObjectSchema,
 ]);
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function parseVaultImportSource(text: string) {
 	return parseJsonWithSchema(text.trim(), VaultImportSourceSchema);
 }
@@ -102,7 +128,7 @@ export function deduplicateTransferDocument(
 			),
 		),
 	);
-	const items: Array<Record<string, any>> = [];
+	const items: TransferItem[] = [];
 	let duplicateItems = 0;
 
 	for (const item of incoming.items) {
@@ -174,8 +200,8 @@ export function buildPlainExportDocument(
 		folders: folders.map((folder) => ({ id: folder.id, name: folder.name })),
 		items: ciphers
 			.filter((cipher) => !cipher.deletedDate)
-			.map((cipher: any) => {
-				const item: Record<string, any> = {
+			.map((cipher) => {
+				const item: TransferItem = {
 					id: cipher.id,
 					folderId: cipher.folderId,
 					type: cipher.type,
@@ -183,11 +209,16 @@ export function buildPlainExportDocument(
 					notes: cipher.notes,
 					favorite: cipher.favorite,
 					reprompt: cipher.reprompt,
-					fields: cipher.fields,
+					fields: Array.isArray(cipher.fields)
+						? cipher.fields.filter(isRecord)
+						: null,
 					passwordHistory: cipher.passwordHistory,
 				};
 				const key = TYPE_KEYS[cipher.type];
-				if (key) item[key] = cipher[key] ?? (key === "secureNote" ? {} : null);
+				if (key) {
+					const source = cipher as unknown as Record<string, unknown>;
+					item[key] = source[key] ?? (key === "secureNote" ? {} : null);
+				}
 				return item;
 			}),
 		warnings: [],
@@ -337,6 +368,9 @@ export async function encryptTransferDocument(
 			favorite: Boolean(payload.favorite),
 			reprompt: Number(payload.reprompt) === 1 ? 1 : 0,
 			folderId: null,
+			fields: Array.isArray(payload.fields)
+				? payload.fields.filter(isRecord)
+				: undefined,
 		};
 		ciphers.push(await encryptCipher(normalized, encKey, macKey));
 		onProgress?.({ processed: ++processed, total, kind: "item" });

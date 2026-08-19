@@ -2,9 +2,9 @@ import {
 	createFolderApi,
 	deleteFolderApi,
 	deleteFoldersApi,
-	moveCiphersApi,
 	updateFolderApi,
-} from "$lib/services/api";
+} from "$lib/services/api-folders";
+import { moveCiphersApi } from "$lib/services/api-vault";
 import { encryptStr } from "$lib/services/crypto";
 
 export type FolderEditorMode = "create" | "rename";

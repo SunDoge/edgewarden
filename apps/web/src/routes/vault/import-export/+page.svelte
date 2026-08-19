@@ -7,7 +7,6 @@ import {
 	ShieldAlert,
 	Upload,
 } from "@lucide/svelte";
-import { onMount } from "svelte";
 import { slide } from "svelte/transition";
 import { goto } from "$app/navigation";
 import { Button } from "$lib/components/ui/button/index.js";
@@ -21,7 +20,8 @@ import * as Select from "$lib/components/ui/select/index.js";
 import { Separator } from "$lib/components/ui/separator/index.js";
 import { Spinner } from "$lib/components/ui/spinner/index.js";
 import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
-import { importCiphersApi } from "$lib/services/api";
+import { importCiphersApi } from "$lib/services/api-folders";
+import { errorDetail } from "$lib/services/error-message";
 import {
 	buildBitwardenCsv,
 	buildBitwardenJson,
@@ -54,12 +54,6 @@ let importPassword = $state("");
 let exportConfirmOpen = $state(false);
 const MAX_IMPORT_BYTES = 32 * 1024 * 1024;
 
-onMount(() => {
-	if (!vault.isUnlocked) {
-		goto("/vault/unlock");
-	}
-});
-
 // Client-side export function
 function handleExport() {
 	errorMsg = "";
@@ -83,8 +77,8 @@ function handleExport() {
 		URL.revokeObjectURL(url);
 
 		successMsg = "导出成功！明文备份文件已下载。请妥善保存该文件。";
-	} catch (e: any) {
-		errorMsg = "导出失败: " + (e.message || e);
+	} catch (caught) {
+		errorMsg = `导出失败: ${errorDetail(caught)}`;
 	}
 }
 
@@ -221,8 +215,8 @@ async function handleImport(strategy?: "skip" | "all") {
 		deduplicationReview = null;
 		encryptedImport = false;
 		importPassword = "";
-	} catch (e: any) {
-		errorMsg = "导入失败: " + (e.message || e);
+	} catch (caught) {
+		errorMsg = `导入失败: ${errorDetail(caught)}`;
 	} finally {
 		importing = false;
 	}

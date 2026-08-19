@@ -11,17 +11,13 @@ import {
 	deleteTwoFactorPasskeyApi,
 	getTwoFactorPasskeyChallengeApi,
 	getTwoFactorPasskeysApi,
-} from "$lib/services/api";
+} from "$lib/services/api-two-factor";
 import {
 	deriveMasterKey,
 	deriveMasterPasswordHash,
 } from "$lib/services/crypto";
 import { createTwoFactorPasskeyCredential } from "$lib/services/passkeys";
-
-interface TwoFactorPasskey {
-	id: string | number;
-	name?: string | null;
-}
+import type { TwoFactorPasskey } from "$lib/services/two-factor-types";
 
 let {
 	email,

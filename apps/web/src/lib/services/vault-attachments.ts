@@ -3,7 +3,7 @@ import {
 	deleteAttachmentApi,
 	downloadAttachmentApi,
 	uploadAttachmentApi,
-} from "./api";
+} from "./api-vault";
 import {
 	type AttachmentKeys,
 	decryptAttachmentFile,

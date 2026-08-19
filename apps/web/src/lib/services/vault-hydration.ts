@@ -11,8 +11,10 @@ import {
 	importAccountPrivateKey,
 	unwrapOrganizationKey,
 } from "./organization-crypto";
-import { decryptOwnedSend } from "./send-crypto";
+import { decryptOwnedSend, type DecryptedSend } from "./send-crypto";
 import type { VaultSnapshot } from "./vault-db";
+import type { VaultCipher } from "./vault-types";
+import type { EncryptedOwnedSend } from "./send-types";
 
 export interface VaultKeyPair {
 	encKey: Uint8Array;
@@ -20,11 +22,11 @@ export interface VaultKeyPair {
 }
 
 export interface HydratedVaultSnapshot {
-	ciphers: CipherResponse[];
+	ciphers: VaultCipher[];
 	folders: FolderResponse[];
 	collections: CollectionResponse[];
 	organizations: ProfileOrganizationResponse[];
-	sends: Record<string, any>[];
+	sends: DecryptedSend[];
 	profile: SyncResponse["profile"];
 	syncedAt: number;
 	organizationKeys: Map<string, VaultKeyPair>;
@@ -39,12 +41,12 @@ export function applyOrganizationAccess(
 		readOnly?: boolean;
 		hidePasswords?: boolean;
 	}>,
-): CipherResponse[] {
+): VaultCipher[] {
 	const visible = new Map(
 		collections.map((collection) => [String(collection.id), collection]),
 	);
 	return ciphers.map((cipher) => {
-		if (!cipher.organizationId) return cipher;
+		if (!cipher.organizationId) return cipher as VaultCipher;
 		const ids = cipher.collectionIds ?? [];
 		const access = ids
 			.map((id) => visible.get(id))
@@ -56,7 +58,7 @@ export function applyOrganizationAccess(
 		const hidePasswords =
 			access.length > 0 &&
 			access.every((collection) => Boolean(collection.hidePasswords));
-		return { ...cipher, readOnly, hidePasswords } as CipherResponse;
+		return { ...cipher, readOnly, hidePasswords } as VaultCipher;
 	});
 }
 
@@ -108,7 +110,7 @@ export async function hydrateEncryptedVaultSnapshot(
 		warnings,
 	);
 
-	const ciphers: CipherResponse[] = [];
+	const ciphers: VaultCipher[] = [];
 	let cipherFailures = 0;
 	for (const cipher of snapshot.ciphers) {
 		try {
@@ -163,12 +165,16 @@ export async function hydrateEncryptedVaultSnapshot(
 	if (collectionFailures)
 		warnings.push(`${collectionFailures} 个集合未通过完整性校验，已隔离。`);
 
-	const sends: Record<string, any>[] = [];
+	const sends: DecryptedSend[] = [];
 	let sendFailures = 0;
 	for (const send of snapshot.sends ?? []) {
 		try {
 			sends.push(
-				await decryptOwnedSend(send, userKeys.encKey, userKeys.macKey),
+				await decryptOwnedSend(
+					send as EncryptedOwnedSend,
+					userKeys.encKey,
+					userKeys.macKey,
+				),
 			);
 		} catch (error) {
 			console.error("Failed to decrypt Send:", error);

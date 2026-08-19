@@ -14,7 +14,7 @@ import {
 	inspectPasswordHealth,
 	type PasswordHealthReport,
 } from "$lib/services/password-health";
-import { syncVaultData, vault } from "$lib/stores/vault.svelte";
+import { vault } from "$lib/stores/vault.svelte";
 import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
 import {
 	AlertTriangle,
@@ -54,7 +54,7 @@ async function scan() {
 			(cipher) =>
 				cipher.type === 1 &&
 				!cipher.deletedDate &&
-				!(cipher as any).hidePasswords &&
+				!cipher.hidePasswords &&
 				cipher.login?.password,
 		).length,
 	};
@@ -75,9 +75,6 @@ async function scan() {
 }
 
 onMount(() => {
-	void (async () => {
-		if (!vault.ciphers.length) await syncVaultData();
-	})();
 	return () => controller?.abort();
 });
 

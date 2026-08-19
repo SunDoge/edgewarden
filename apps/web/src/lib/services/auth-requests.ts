@@ -19,17 +19,29 @@ export interface AuthRequest {
 	fingerprint: string;
 }
 
-function normalize(raw: any): Omit<AuthRequest, "fingerprint"> {
+interface AuthRequestsResponse {
+	data?: unknown[];
+}
+
+function normalize(value: unknown): Omit<AuthRequest, "fingerprint"> {
+	const raw =
+		value && typeof value === "object"
+			? (value as Record<string, unknown>)
+			: {};
 	return {
 		id: String(raw.id ?? ""),
 		requestDeviceIdentifier: String(raw.requestDeviceIdentifier ?? ""),
 		requestDeviceType: Number(raw.requestDeviceType ?? 0),
-		requestIpAddress: raw.requestIpAddress ?? null,
-		requestCountryName: raw.requestCountryName ?? null,
+		requestIpAddress:
+			typeof raw.requestIpAddress === "string" ? raw.requestIpAddress : null,
+		requestCountryName:
+			typeof raw.requestCountryName === "string"
+				? raw.requestCountryName
+				: null,
 		publicKey: String(raw.publicKey ?? ""),
 		creationDate: String(raw.creationDate ?? ""),
 		isExpired: Boolean(raw.isExpired),
-		approved: raw.approved ?? null,
+		approved: typeof raw.approved === "boolean" ? raw.approved : null,
 	};
 }
 
@@ -53,9 +65,11 @@ export async function publicKeyFingerprint(
 export async function listPendingAuthRequestsApi(
 	email: string,
 ): Promise<AuthRequest[]> {
-	const result = await rpcJson<any>(await rpc.api["auth-requests"].$get());
+	const result = await rpcJson<AuthRequestsResponse>(
+		await rpc.api["auth-requests"].$get(),
+	);
 	return Promise.all(
-		(result.data ?? []).map(async (row: any) => {
+		(result.data ?? []).map(async (row) => {
 			const request = normalize(row);
 			let fingerprint = "";
 			try {

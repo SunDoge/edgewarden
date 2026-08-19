@@ -3,6 +3,10 @@ import { Pencil, Trash2 } from "@lucide/svelte";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
+import type {
+	OrganizationCollection,
+	OrganizationSummary,
+} from "$lib/services/organization-types";
 
 let {
 	organization,
@@ -13,13 +17,13 @@ let {
 	onrename,
 	onremove,
 }: {
-	organization: any;
-	collections: any[];
+	organization: Pick<OrganizationSummary, "role">;
+	collections: Array<Pick<OrganizationCollection, "id" | "name">>;
 	name: string;
 	busy: boolean;
 	onadd: () => void;
-	onrename: (collection: any) => void;
-	onremove: (collection: any) => void;
+	onrename: (collection: Pick<OrganizationCollection, "id" | "name">) => void;
+	onremove: (collection: Pick<OrganizationCollection, "id" | "name">) => void;
 } = $props();
 
 const canManage = $derived(

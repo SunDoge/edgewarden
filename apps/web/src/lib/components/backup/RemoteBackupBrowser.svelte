@@ -5,6 +5,7 @@ import * as Empty from "$lib/components/ui/empty/index.js";
 import { Spinner } from "$lib/components/ui/spinner/index.js";
 import * as Table from "$lib/components/ui/table/index.js";
 import { formatFileSize } from "$lib/services/backup-display";
+import type { RemoteBackupItem } from "$lib/services/backup-types";
 import {
 	Download,
 	FileArchive,
@@ -14,14 +15,6 @@ import {
 	ShieldCheck,
 	Trash2,
 } from "@lucide/svelte";
-
-export interface RemoteBackupItem {
-	name: string;
-	path: string;
-	isDirectory: boolean;
-	size: number | null;
-	modifiedAt: string | null;
-}
 
 let {
 	items,

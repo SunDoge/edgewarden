@@ -1,4 +1,12 @@
 import { base64ToBytes, bytesToBase64, decryptBw, encryptBw } from "./crypto";
+import type {
+	EncryptedOwnedSend,
+	EncryptedPublicSend,
+	OwnedSend,
+	PublicSend,
+	SendFileData,
+	SendTextData,
+} from "./send-types";
 
 export interface SendKeys {
 	raw: Uint8Array;
@@ -6,9 +14,15 @@ export interface SendKeys {
 	mac: Uint8Array;
 }
 
-export interface DecryptedSend extends Record<string, any> {
+export interface DecryptedSend extends Omit<OwnedSend, "file" | "text"> {
+	file: SendFileData | null;
+	text: SendTextData | null;
 	_sendKeys: SendKeys;
 	shareKey: string;
+}
+
+export interface DecryptedPublicSend extends Omit<PublicSend, "text"> {
+	text: string | null;
 }
 
 function utf8(value: string): Uint8Array {
@@ -40,23 +54,22 @@ export function createSendKeys(): SendKeys {
 }
 
 export async function decryptOwnedSend(
-	send: Record<string, any>,
+	send: EncryptedOwnedSend,
 	userEncKey: Uint8Array,
 	userMacKey: Uint8Array,
 ): Promise<DecryptedSend> {
 	const raw = await decryptBw(send.key, userEncKey, userMacKey);
 	if (raw.length !== 64) throw new Error("Send 包装密钥长度无效");
 	const keys = { raw, enc: raw.slice(0, 32), mac: raw.slice(32, 64) };
-	const result: DecryptedSend = {
+	const result = {
 		...send,
 		_sendKeys: keys,
 		shareKey: encodeSendShareKey(raw),
-	};
+	} as DecryptedSend;
 	result.name = await decryptText(send.name, keys);
 	result.notes = send.notes ? await decryptText(send.notes, keys) : "";
 	if (send.type === 0 && send.text) {
-		const encryptedText =
-			typeof send.text === "string" ? send.text : send.text.text;
+		const encryptedText = send.text.text;
 		result.text = {
 			...send.text,
 			text: await decryptText(encryptedText, keys),
@@ -106,10 +119,10 @@ export async function wrapSendKey(
 }
 
 export async function decryptPublicSend(
-	send: Record<string, any>,
+	send: EncryptedPublicSend,
 	keys: SendKeys,
-): Promise<Record<string, any>> {
-	const result = { ...send };
+): Promise<DecryptedPublicSend> {
+	const result = { ...send, text: null } as DecryptedPublicSend;
 	result.name = send.name ? await decryptText(send.name, keys) : "";
 	if (send.type === 0 && send.text) {
 		result.text = await decryptText(

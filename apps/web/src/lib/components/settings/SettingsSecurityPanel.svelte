@@ -11,6 +11,7 @@ import YubikeySettings from "./YubikeySettings.svelte";
 
 let {
 	profile,
+	isAdmin,
 	recoveryCode,
 	busy,
 	onCopy,
@@ -24,9 +25,9 @@ let {
 	profile: {
 		email: string;
 		kdfIterations: number;
-		role: string;
 		twoFactorEnabled: boolean;
 	};
+	isAdmin: boolean;
 	recoveryCode: string;
 	busy: string;
 	onCopy: (value: string) => void | Promise<void>;
@@ -57,7 +58,7 @@ let {
 	</Card.Root>
 
 	<TwoFactorPasskeys email={profile.email} kdfIterations={profile.kdfIterations} {onMessage} {onError} />
-	<YubikeySettings email={profile.email} kdfIterations={profile.kdfIterations} isAdmin={profile.role === "admin"} {onMessage} {onError} />
+	<YubikeySettings email={profile.email} kdfIterations={profile.kdfIterations} {isAdmin} {onMessage} {onError} />
 	<AccountPasskeys email={profile.email} kdfIterations={profile.kdfIterations} {onMessage} {onError} />
 	<AuthRequestSettings email={profile.email} {onMessage} {onError} />
 </div>

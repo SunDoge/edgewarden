@@ -5,9 +5,13 @@ import { page } from "$app/state";
 import {
 	createRealtimeTicketApi,
 	fetchRevisionDateApi,
-	isLoggedIn,
-} from "$lib/services/api";
-import { syncVaultData, vault } from "$lib/stores/vault.svelte";
+} from "$lib/services/api-vault";
+import { isLoggedIn } from "$lib/services/api-auth";
+import {
+	ensureVaultData,
+	syncVaultData,
+	vault,
+} from "$lib/stores/vault.svelte";
 import { lock, logout } from "$lib/stores/vault.svelte";
 import { VaultRevisionWatcher } from "$lib/services/vault-revision-watcher";
 import { VaultRealtimeClient } from "$lib/services/vault-realtime";
@@ -51,6 +55,14 @@ onMount(() => {
 			await goto("/vault/unlock");
 			if (!disposed) ready = true;
 			return;
+		}
+		if (disposed) return;
+		if (page.url.pathname !== "/vault/unlock") {
+			try {
+				await ensureVaultData();
+			} catch {
+				// The store exposes its online/offline error state to route content.
+			}
 		}
 		if (disposed) return;
 		ready = true;

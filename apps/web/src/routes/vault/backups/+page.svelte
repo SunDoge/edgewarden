@@ -36,7 +36,7 @@ import {
 	importBackupLocalApi,
 	runBackupApi,
 	updateBackupSettingsApi,
-} from "$lib/services/api";
+} from "$lib/services/api-backup";
 import { vault } from "$lib/stores/vault.svelte";
 
 // UI State
@@ -61,11 +61,11 @@ let deleteConfirmOpen = $state(false);
 let restoreConfirmOpen = $state(false);
 let restoreConfirmation = $state("");
 
+function errorMessage(value: unknown, fallback: string) {
+	return value instanceof Error && value.message ? value.message : fallback;
+}
+
 onMount(async () => {
-	if (!vault.isUnlocked) {
-		goto("/vault/unlock");
-		return;
-	}
 	if (vault.profile?.role === "admin") {
 		await loadBackupSettings();
 	} else {
@@ -84,8 +84,8 @@ async function loadBackupSettings() {
 		} else {
 			selectedDestId = null;
 		}
-	} catch (e: any) {
-		error = e.message || "无法加载备份配置，请刷新页面重试。";
+	} catch (caught) {
+		error = errorMessage(caught, "无法加载备份配置，请刷新页面重试。");
 	} finally {
 		loading = false;
 	}
@@ -151,8 +151,8 @@ async function saveSettings() {
 		settings = res;
 		showSuccess("备份设置保存成功！");
 		selectDestination(selectedDestId);
-	} catch (e: any) {
-		error = e.message || "保存备份配置失败，请检查参数。";
+	} catch (caught) {
+		error = errorMessage(caught, "保存备份配置失败，请检查参数。");
 	} finally {
 		saving = false;
 	}
@@ -168,8 +168,11 @@ async function triggerBackup() {
 		settings = res.settings;
 		showSuccess(`备份执行成功！已上传文件: ${res.result.fileName}`);
 		selectDestination(selectedDestId);
-	} catch (e: any) {
-		error = e.message || "立即执行备份失败，请检查您的存储配置和连通性。";
+	} catch (caught) {
+		error = errorMessage(
+			caught,
+			"立即执行备份失败，请检查您的存储配置和连通性。",
+		);
 	} finally {
 		running = false;
 	}
@@ -192,8 +195,8 @@ async function deleteDestination() {
 		} else {
 			selectedDestId = null;
 		}
-	} catch (e: any) {
-		error = e.message || "删除备份目的地失败。";
+	} catch (caught) {
+		error = errorMessage(caught, "删除备份目的地失败。");
 	} finally {
 		saving = false;
 	}
@@ -212,8 +215,8 @@ async function handleLocalExport() {
 		window.URL.revokeObjectURL(url);
 		document.body.removeChild(a);
 		showSuccess("本地备份已成功生成并下载。");
-	} catch (e: any) {
-		error = e.message || "生成本地备份失败。";
+	} catch (caught) {
+		error = errorMessage(caught, "生成本地备份失败。");
 	}
 }
 
@@ -244,8 +247,8 @@ async function handleLocalImport() {
 			showSuccess("备份导入成功，已导入所有非冲突数据。");
 			localFile = undefined;
 		}
-	} catch (e: any) {
-		error = e.message || "本地备份导入失败。";
+	} catch (caught) {
+		error = errorMessage(caught, "本地备份导入失败。");
 	} finally {
 		restoring = false;
 	}

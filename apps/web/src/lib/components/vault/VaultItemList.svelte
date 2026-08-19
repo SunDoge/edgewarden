@@ -27,6 +27,7 @@ import type {
 	VaultCategory,
 	VaultSort,
 } from "$lib/services/vault-filter";
+import type { VaultCipher } from "$lib/services/vault-types";
 import {
 	cipherDomain,
 	cipherTypeIcon,
@@ -53,7 +54,7 @@ let {
 	onSelectItem,
 	onOpenFilters,
 }: {
-	items: any[];
+	items: VaultCipher[];
 	isSyncing: boolean;
 	error: string | null;
 	activeCategory: VaultCategory;
@@ -61,7 +62,7 @@ let {
 	searchQuery: string;
 	duplicateMode: DuplicateMode;
 	sortMode: VaultSort;
-	selectedItem: any | null;
+	selectedItem: VaultCipher | null;
 	selectedIds: Record<string, boolean>;
 	selectedCount: number;
 	onToggleSelection: (id: string) => void;
@@ -71,7 +72,7 @@ let {
 	onClearSelection: () => void;
 	onSelectRedundant: () => void;
 	onMove: () => void;
-	onSelectItem?: (item: any) => void;
+	onSelectItem?: (item: VaultCipher) => void;
 	onOpenFilters?: () => void;
 } = $props();
 

@@ -1,9 +1,7 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
-import { isLoggedIn } from "$lib/services/api";
-import { vault } from "$lib/stores/vault.svelte";
-import { fetchDomainRules, updateDomainRules } from "$lib/services/api";
+import { fetchDomainRules, updateDomainRules } from "$lib/services/api-vault";
 import { Button } from "$lib/components/ui/button/index.js";
 import * as Alert from "$lib/components/ui/alert/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
@@ -13,6 +11,7 @@ import CustomEquivalentDomains from "$lib/components/domains/CustomEquivalentDom
 import { normalizeEquivalentDomainRule } from "$lib/services/equivalent-domains";
 import GlobalEquivalentDomains from "$lib/components/domains/GlobalEquivalentDomains.svelte";
 import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
+import { errorMessage } from "$lib/services/error-message";
 import {
 	ArrowLeft,
 	Save,
@@ -39,14 +38,6 @@ let globalRules = $state<GlobalEquivalentDomain[]>([]);
 let excludedTypes = $state<Set<number>>(new Set());
 
 onMount(async () => {
-	if (!isLoggedIn()) {
-		goto("/login");
-		return;
-	}
-	if (!vault.isUnlocked) {
-		goto("/vault/unlock");
-		return;
-	}
 	await loadRules();
 });
 
@@ -69,8 +60,8 @@ async function loadRules() {
 		excludedTypes = new Set(
 			res.globalEquivalentDomains.filter((g) => g.excluded).map((g) => g.type),
 		);
-	} catch (e: any) {
-		error = e.message || "加载域名规则失败，请稍后重试。";
+	} catch (caught) {
+		error = errorMessage(caught, "加载域名规则失败，请稍后重试。");
 	} finally {
 		loading = false;
 	}
@@ -107,15 +98,15 @@ async function handleSave() {
 		);
 
 		showTimedSuccess("等效域名规则已成功保存并应用！");
-	} catch (e: any) {
-		error = e.message || "保存规则失败，请稍后重试。";
+	} catch (caught) {
+		error = errorMessage(caught, "保存规则失败，请稍后重试。");
 	} finally {
 		saving = false;
 	}
 }
 
 // Helpers for notifications
-let notificationTimeout: any;
+let notificationTimeout: ReturnType<typeof setTimeout> | undefined;
 function showTimedSuccess(msg: string) {
 	successMsg = msg;
 	error = "";

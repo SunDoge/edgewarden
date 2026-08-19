@@ -24,19 +24,20 @@ import {
 	createAdminInviteApi,
 	deleteAdminInviteApi,
 	deleteAdminUserApi,
-	deriveAccountPasswordHash,
 	getAdminPushRelayStatusApi,
 	getAdminRegistrationPolicyApi,
 	listAdminInvitesApi,
 	listAdminUsersApi,
 	setAdminUserStatusApi,
 	updateAdminRegistrationPolicyApi,
-} from "$lib/services/api";
+} from "$lib/services/api-admin";
+import { deriveAccountPasswordHash } from "$lib/services/api-auth";
 import { vault } from "$lib/stores/vault.svelte";
 import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
+import type { AdminInvite, AdminUser } from "$lib/services/admin-types";
 
-let users = $state<any[]>([]);
-let invites = $state<any[]>([]);
+let users = $state<AdminUser[]>([]);
+let invites = $state<AdminInvite[]>([]);
 let masterPassword = $state("");
 let expiresInHours = $state(168);
 let inviteEmail = $state("");
@@ -52,7 +53,7 @@ let pushRelay = $state<{
 	reason: "ready" | "missing_credentials" | "invalid_region";
 } | null>(null);
 let userSearchQuery = $state("");
-let deleteUser = $state<any>(null);
+let deleteUser = $state<AdminUser | null>(null);
 const filteredUsers = $derived(searchAdminUsers(users, userSearchQuery));
 
 async function refresh() {

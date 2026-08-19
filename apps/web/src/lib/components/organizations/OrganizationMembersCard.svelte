@@ -7,6 +7,11 @@ import * as Card from "$lib/components/ui/card/index.js";
 import * as Field from "$lib/components/ui/field/index.js";
 import * as Select from "$lib/components/ui/select/index.js";
 import * as Table from "$lib/components/ui/table/index.js";
+import type {
+	OrganizationCollection,
+	OrganizationMember,
+	OrganizationSummary,
+} from "$lib/services/organization-types";
 
 let {
 	organization,
@@ -21,17 +26,17 @@ let {
 	onedit,
 	onremove,
 }: {
-	organization: any;
-	members: any[];
-	collections: any[];
+	organization: Pick<OrganizationSummary, "role">;
+	members: OrganizationMember[];
+	collections: Array<Pick<OrganizationCollection, "id" | "name">>;
 	email: string;
 	role: "admin" | "manager" | "member";
 	accessAll: boolean;
 	collectionIds: string[];
 	busy: boolean;
 	oninvite: () => void;
-	onedit: (member: any) => void;
-	onremove: (member: any) => void;
+	onedit: (member: OrganizationMember) => void;
+	onremove: (member: OrganizationMember) => void;
 } = $props();
 
 function toggleCollection(id: string, checked: boolean) {

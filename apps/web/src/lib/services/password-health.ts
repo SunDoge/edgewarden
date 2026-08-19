@@ -103,7 +103,7 @@ export async function checkPasswordHash(
 }
 
 export async function inspectPasswordHealth(
-	ciphers: CipherResponse[],
+	ciphers: Array<CipherResponse & { hidePasswords?: boolean }>,
 	fetchImpl: typeof fetch = fetch,
 	signal?: AbortSignal,
 	onProgress?: (checked: number, total: number) => void,
@@ -114,7 +114,7 @@ export async function inspectPasswordHealth(
 				(cipher) =>
 					cipher.type === 1 &&
 					!cipher.deletedDate &&
-					!(cipher as any).hidePasswords &&
+					!cipher.hidePasswords &&
 					cipher.login?.password,
 			)
 			.map(async (cipher) => ({

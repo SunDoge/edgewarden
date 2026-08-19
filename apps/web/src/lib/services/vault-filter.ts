@@ -1,6 +1,7 @@
 import { type CipherResponse, CipherType } from "@edgewarden/shared";
 import { match } from "ts-pattern";
 import { cipherContentFingerprint } from "./vault-deduplication";
+import type { VaultCipher, VaultLoginData } from "./vault-types";
 
 export type VaultCategory =
 	| "all"
@@ -28,9 +29,9 @@ export interface VaultFilterOptions {
 }
 
 function loginHosts(item: CipherResponse): string[] {
-	const login = item.login as any;
+	const login = item.login as VaultLoginData | null;
 	const rawUris = Array.isArray(login?.uris)
-		? login.uris.map((entry: any) => entry?.uri)
+		? login.uris.map((entry) => entry.uri)
 		: [login?.uri];
 	const hosts = new Set<string>();
 	for (const value of rawUris) {
@@ -56,13 +57,15 @@ export function findDuplicateCipherGroups(
 	const groups = new Map<string, string[]>();
 	for (const item of items) {
 		if (isDeletedCipher(item) || item.archivedDate) continue;
-		const login = item.login as any;
+		const login = item.login as VaultLoginData | null;
 		const username = String(login?.username ?? "")
 			.trim()
 			.toLocaleLowerCase();
 		const password = String(login?.password ?? "");
 		const keys = match(mode)
-			.with("exact", () => [cipherContentFingerprint(item as any)])
+			.with("exact", () => [
+				cipherContentFingerprint(item as unknown as Record<string, unknown>),
+			])
 			.with("login-site", () =>
 				item.type === CipherType.Login && username && password
 					? loginHosts(item).map((site) =>
@@ -127,10 +130,7 @@ export function findRedundantDuplicateCipherIds(
 ): Set<string> {
 	const byId = new Map(items.map((item) => [item.id, item]));
 	const isReadOnly = (id: string) =>
-		Boolean(
-			(byId.get(id) as (CipherResponse & { readOnly?: boolean }) | undefined)
-				?.readOnly,
-		);
+		Boolean((byId.get(id) as VaultCipher | undefined)?.readOnly);
 	return new Set(
 		findDuplicateCipherGroups(items, mode).flatMap((ids) =>
 			ids
@@ -157,10 +157,10 @@ export function isDeletedCipher(item: CipherResponse): boolean {
 	return Boolean(item.deletedDate);
 }
 
-export function filterAndSortVaultItems(
-	items: CipherResponse[],
+export function filterAndSortVaultItems<T extends CipherResponse>(
+	items: T[],
 	options: VaultFilterOptions,
-): CipherResponse[] {
+): T[] {
 	const query = options.query.trim().toLocaleLowerCase();
 	const duplicateIds =
 		options.category === "duplicates"

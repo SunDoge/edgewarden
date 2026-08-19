@@ -1,13 +1,14 @@
 <script lang="ts">
 import { Check, Copy } from "@lucide/svelte";
 import { Button } from "$lib/components/ui/button/index.js";
+import type { VaultIdentityData } from "$lib/services/vault-types";
 
 let {
 	identity,
 	copiedField,
 	onCopy,
 }: {
-	identity: Record<string, any>;
+	identity: VaultIdentityData | null;
 	copiedField: string | null;
 	onCopy: (value: string, field: string) => void;
 } = $props();

@@ -1,4 +1,10 @@
 import { rpc, rpcJson, rpcVoid } from "./rpc";
+import type {
+	AdminInvite,
+	AdminUser,
+	ApiList,
+	AuditLogEntry,
+} from "./admin-types";
 
 export interface AdminRegistrationPolicy {
 	signupsAllowed: boolean;
@@ -13,8 +19,10 @@ export interface AdminPushRelayStatus {
 	reason: "ready" | "missing_credentials" | "invalid_region";
 }
 
-export async function listAdminUsersApi(): Promise<{ data: any[] }> {
-	return rpcJson(await rpc.api.admin.users.$get()) as Promise<{ data: any[] }>;
+export async function listAdminUsersApi(): Promise<ApiList<AdminUser>> {
+	return (await rpcJson(
+		await rpc.api.admin.users.$get(),
+	)) as ApiList<AdminUser>;
 }
 
 export async function getAdminRegistrationPolicyApi(): Promise<AdminRegistrationPolicy> {
@@ -39,24 +47,24 @@ export async function updateAdminRegistrationPolicyApi(
 
 export async function listAdminInvitesApi(
 	includeInactive = true,
-): Promise<{ data: any[] }> {
-	return rpcJson(
+): Promise<ApiList<AdminInvite>> {
+	return (await rpcJson(
 		await rpc.api.admin.invites.$get({
 			query: { includeInactive: String(includeInactive) },
 		}),
-	) as Promise<{ data: any[] }>;
+	)) as ApiList<AdminInvite>;
 }
 
 export async function createAdminInviteApi(
 	masterPasswordHash: string,
 	email: string,
 	expiresInHours: number,
-): Promise<any> {
-	return rpcJson(
+): Promise<AdminInvite> {
+	return (await rpcJson(
 		await rpc.api.admin.invites.$post({
 			json: { masterPasswordHash, email, expiresInHours },
 		}),
-	);
+	)) as AdminInvite;
 }
 
 export async function deleteAdminInviteApi(
@@ -116,7 +124,7 @@ export interface AuditLogQuery {
 	q?: string;
 }
 export async function listAuditLogsApi(filters: AuditLogQuery = {}): Promise<{
-	data: any[];
+	data: AuditLogEntry[];
 	total: number;
 	limit: number;
 	offset: number;
@@ -126,7 +134,7 @@ export async function listAuditLogsApi(filters: AuditLogQuery = {}): Promise<{
 	for (const [key, value] of Object.entries(filters))
 		if (value !== undefined && value !== "") query[key] = String(value);
 	return rpcJson(await rpc.api.admin.logs.$get({ query })) as Promise<{
-		data: any[];
+		data: AuditLogEntry[];
 		total: number;
 		limit: number;
 		offset: number;

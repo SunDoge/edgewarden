@@ -2,6 +2,7 @@
 import VaultSidebar from "./VaultSidebar.svelte";
 import * as Sheet from "$lib/components/ui/sheet/index.js";
 import type { VaultCategory } from "$lib/services/vault-filter";
+import type { VaultFolder } from "$lib/services/vault-types";
 
 let {
 	mobileOpen = $bindable(false),
@@ -25,8 +26,8 @@ let {
 	mergingDuplicateFolders: boolean;
 	onCreate: () => void;
 	onCreateFolder: () => void;
-	onRenameFolder: (folder: any) => void;
-	onDeleteFolder: (folder: any) => void;
+	onRenameFolder: (folder: VaultFolder) => void;
+	onDeleteFolder: (folder: VaultFolder) => void;
 	onDeleteAllFolders: () => void;
 	onMergeDuplicateFolders: () => void;
 } = $props();

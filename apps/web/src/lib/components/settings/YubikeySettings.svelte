@@ -14,18 +14,12 @@ import {
 	getYubikeySettingsApi,
 	saveYubicoConfigApi,
 	saveYubikeysApi,
-} from "$lib/services/api";
+} from "$lib/services/api-two-factor";
 import {
 	deriveMasterKey,
 	deriveMasterPasswordHash,
 } from "$lib/services/crypto";
-
-interface YubikeySettingsResult {
-	enabled: boolean;
-	nfc?: boolean;
-	configured?: boolean;
-	keys?: string[];
-}
+import type { YubikeySettingsResult } from "$lib/services/two-factor-types";
 
 let {
 	email,

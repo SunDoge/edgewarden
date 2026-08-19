@@ -12,9 +12,10 @@ import {
 	unarchiveCipherApi,
 	unarchiveCiphersApi,
 	updateCipherApi,
-} from "$lib/services/api";
+} from "$lib/services/api-vault";
 import { encryptCipher } from "$lib/services/cipher-crypto";
 import { buildCipherPayload } from "$lib/services/cipher-draft";
+import type { VaultCipher } from "$lib/services/vault-types";
 
 export type CipherOwnerKey = { encKey: Uint8Array; macKey: Uint8Array };
 export type CipherOwnerKeyResolver = (
@@ -26,6 +27,8 @@ export type VaultBulkAction =
 	| "permanent"
 	| "archive"
 	| "unarchive";
+export type VaultActionItem = Pick<VaultCipher, "id"> &
+	Partial<Pick<VaultCipher, "organizationId" | "readOnly">>;
 
 export async function saveVaultCipher({
 	editor,
@@ -35,7 +38,7 @@ export async function saveVaultCipher({
 	resolveOwnerKey,
 }: {
 	editor: VaultEditorForm;
-	selectedItem: any | null;
+	selectedItem: VaultCipher | null;
 	isCreating: boolean;
 	isEditing: boolean;
 	resolveOwnerKey: CipherOwnerKeyResolver;
@@ -91,7 +94,7 @@ export async function saveVaultCipher({
 }
 
 export async function updateEncryptedVaultCipher(
-	item: any,
+	item: VaultCipher,
 	changes: Record<string, unknown>,
 	resolveOwnerKey: CipherOwnerKeyResolver,
 ) {
@@ -124,7 +127,7 @@ const singleCipherActions = {
 
 export async function applyVaultBulkAction(
 	action: VaultBulkAction,
-	items: any[],
+	items: VaultActionItem[],
 ) {
 	if (items.some((item) => item.readOnly)) {
 		throw new Error("选择中包含只读组织条目");

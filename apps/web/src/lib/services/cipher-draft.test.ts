@@ -42,7 +42,7 @@ describe("cipher draft payload", () => {
 			unknown: "keep",
 			uris: [{ uri: "https://example.com", match: 1 }],
 		});
-		expect(payload.passwordHistory[0]).toEqual({
+		expect(payload.passwordHistory?.[0]).toEqual({
 			password: "old",
 			lastUsedDate: "2026-01-02T00:00:00.000Z",
 		});

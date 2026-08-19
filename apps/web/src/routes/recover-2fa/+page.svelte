@@ -1,6 +1,6 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
-import { recoverTwoFactorApi } from "$lib/services/api";
+import { recoverTwoFactorApi } from "$lib/services/api-auth";
 import { Button } from "$lib/components/ui/button/index.js";
 import * as Alert from "$lib/components/ui/alert/index.js";
 import * as Field from "$lib/components/ui/field/index.js";

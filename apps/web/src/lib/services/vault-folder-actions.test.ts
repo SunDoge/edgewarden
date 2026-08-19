@@ -9,12 +9,15 @@ const mocks = vi.hoisted(() => ({
 	encrypt: vi.fn(),
 }));
 
-vi.mock("./api", () => ({
+vi.mock("./api-folders", () => ({
 	createFolderApi: mocks.create,
 	deleteFolderApi: mocks.remove,
 	deleteFoldersApi: mocks.removeMany,
-	moveCiphersApi: mocks.move,
 	updateFolderApi: mocks.update,
+}));
+
+vi.mock("./api-vault", () => ({
+	moveCiphersApi: mocks.move,
 }));
 vi.mock("./crypto", () => ({ encryptStr: mocks.encrypt }));
 

@@ -254,7 +254,7 @@ describe("vault import and export", () => {
 		] as any;
 		const document = buildPlainExportDocument([], items);
 		expect(document.items).toHaveLength(1);
-		expect(document.items[0].sshKey.privateKey).toBe("plain-private");
+		expect(document.items[0].sshKey?.privateKey).toBe("plain-private");
 		expect(JSON.stringify(document)).not.toContain("sensitive-wrapped-key");
 		expect(document.items[0]).not.toHaveProperty("key");
 	});
@@ -265,7 +265,7 @@ describe("vault import and export", () => {
 			"csv",
 		);
 		expect(parsed.items[0].name).toBe("Example, Inc");
-		expect(parsed.items[0].login.password).toBe('p"ass');
+		expect(parsed.items[0].login?.password).toBe('p"ass');
 		expect(parsed.items[0].notes).toBe("line 1\nline 2");
 		expect(parsed.folders[0].name).toBe("Work");
 	});
@@ -400,7 +400,7 @@ describe("vault import and export", () => {
 
 		const imported = await parseVaultImportFile(document, "json", password);
 		expect(imported.folders).toEqual([{ id: "folder", name: "Passkeys" }]);
-		expect(imported.items[0].login.fido2Credentials[0]).toMatchObject({
+		expect(imported.items[0].login?.fido2Credentials?.[0]).toMatchObject({
 			credentialId: "credential-id",
 			keyValue: "private-key",
 			rpId: "example.com",

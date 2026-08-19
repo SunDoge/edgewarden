@@ -231,10 +231,10 @@ describe("frontend crypto utils", () => {
 			userMac,
 		);
 		expect(decrypted.name).toBe("Example");
-		expect(decrypted.login.password).toBe("secret");
-		expect(decrypted.login.uris[0].uri).toBe("https://example.com");
-		expect(decrypted.fields[0].value).toBe("1234");
-		expect(decrypted.passwordHistory[0].password).toBe("old-secret");
+		expect(decrypted.login?.password).toBe("secret");
+		expect(decrypted.login?.uris?.[0].uri).toBe("https://example.com");
+		expect(decrypted.fields?.[0].value).toBe("1234");
+		expect(decrypted.passwordHistory?.[0].password).toBe("old-secret");
 	});
 
 	it("preserves organization ownership metadata and binds the item key to the organization key", async () => {

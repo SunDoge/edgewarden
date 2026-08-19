@@ -11,10 +11,9 @@ import {
 	fetchProfileApi,
 	fetchRecoveryCodeApi,
 	getAuthenticatorApi,
-	isLoggedIn,
 	rotateApiKeyApi,
 	updateProfileApi,
-} from "$lib/services/api";
+} from "$lib/services/api-account";
 import {
 	deriveMasterKey,
 	deriveMasterPasswordHash,
@@ -38,13 +37,17 @@ import {
 	type ThemePreference,
 } from "$lib/services/client-preferences";
 import { ArrowLeft, LoaderCircle } from "@lucide/svelte";
+import type {
+	AccountDevice,
+	AccountProfile,
+} from "$lib/services/account-types";
 
 let loading = $state(true);
 let busy = $state("");
 let message = $state("");
 let error = $state("");
-let profile = $state<any>(null);
-let devices = $state<any[]>([]);
+let profile = $state<AccountProfile | null>(null);
+let devices = $state<AccountDevice[]>([]);
 let apiKey = $state("");
 let name = $state("");
 let hint = $state("");
@@ -94,8 +97,6 @@ onMount(async () => {
 		preferences.lockTimeoutMinutes,
 	) as typeof lockTimeoutMinutes;
 	sessionTimeoutAction = preferences.sessionTimeoutAction;
-	if (!isLoggedIn()) return goto("/login");
-	if (!vault.isUnlocked) return goto("/vault/unlock");
 	await load();
 });
 
@@ -185,6 +186,7 @@ async function beginTotp() {
 }
 
 async function enableTotp() {
+	if (!profile) return;
 	busy = "totp-enable";
 	try {
 		await enableAuthenticatorApi(totpKey, totpToken.replace(/\s/g, ""));
@@ -235,6 +237,7 @@ async function disableTotp() {
 }
 
 async function passwordHash(password: string): Promise<string> {
+	if (!profile) throw new Error("账户资料尚未载入");
 	const key = await deriveMasterKey(
 		password,
 		profile.email,
@@ -244,6 +247,7 @@ async function passwordHash(password: string): Promise<string> {
 }
 
 async function changeMasterPassword() {
+	if (!profile) return fail(new Error("账户资料尚未载入"));
 	if (newPassword.length < 12)
 		return fail(new Error("新主密码至少需要 12 个字符"));
 	if (newPassword !== confirmPassword)
@@ -281,7 +285,7 @@ async function changeMasterPassword() {
 		<Tabs.Root value="general" class="flex flex-col gap-6">
 			<Tabs.List class="grid h-auto w-full grid-cols-2 sm:grid-cols-4"><Tabs.Trigger value="general">常规</Tabs.Trigger><Tabs.Trigger value="security">安全</Tabs.Trigger><Tabs.Trigger value="devices">设备</Tabs.Trigger><Tabs.Trigger value="danger">危险区域</Tabs.Trigger></Tabs.List>
 			<Tabs.Content value="general"><SettingsGeneralPanel email={profile.email} bind:theme bind:lockTimeoutMinutes bind:sessionTimeoutAction bind:name bind:hint {apiKey} {busy} onSavePreferences={saveLocalPreferences} onSaveProfile={saveProfile} onCopy={copy} onRevealApiKey={revealApiKey} onRotateApiKey={() => rotateApiKeyOpen = true} /></Tabs.Content>
-			<Tabs.Content value="security"><SettingsSecurityPanel {profile} {recoveryCode} {busy} onCopy={copy} onChangePassword={() => passwordOpen = true} onShowRecoveryCode={showRecoveryCode} onDisableTwoFactor={() => disableOpen = true} onBeginTotp={beginTotp} onMessage={(value) => { message = value; error = ""; }} onError={fail} /></Tabs.Content>
+			<Tabs.Content value="security"><SettingsSecurityPanel {profile} isAdmin={vault.profile?.role === "admin"} {recoveryCode} {busy} onCopy={copy} onChangePassword={() => passwordOpen = true} onShowRecoveryCode={showRecoveryCode} onDisableTwoFactor={() => disableOpen = true} onBeginTotp={beginTotp} onMessage={(value) => { message = value; error = ""; }} onError={fail} /></Tabs.Content>
 			<Tabs.Content value="devices"><DeviceManager bind:devices {passwordHash} onMessage={(value) => { message = value; error = ""; }} onError={fail} onSessionRevoked={async (reason) => { await logout(); await goto(`/login?reason=${reason}`); }} /></Tabs.Content>
 			<Tabs.Content value="danger"><Card.Root class="border-destructive/40"><Card.Header><Card.Title>删除账户</Card.Title><Card.Description>永久删除个人保险库、Sends、设备、通行密钥和账户资料。若你仍拥有组织，必须先删除或转移组织。</Card.Description></Card.Header><Card.Content><Button variant="destructive" onclick={() => deleteAccountOpen = true}>永久删除账户</Button></Card.Content></Card.Root></Tabs.Content>
 		</Tabs.Root>

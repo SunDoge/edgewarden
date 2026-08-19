@@ -1,6 +1,13 @@
 import type { InferRequestType } from "hono/client";
 import { rewrapUserKeyForMasterPassword } from "./crypto";
 import { rpc, rpcJson, rpcVoid } from "./rpc";
+import type {
+	AccountDevice,
+	AccountPasskey,
+	AccountProfile,
+	ApiList,
+	TwoFactorProvider,
+} from "./account-types";
 
 type UpdateProfilePayload = InferRequestType<
 	typeof rpc.api.accounts.profile.$put
@@ -11,14 +18,18 @@ type ChangePasswordPayload = InferRequestType<
 
 // ── Account and security APIs ──────────────────────────────────────────────
 
-export async function fetchProfileApi(): Promise<any> {
-	return rpcJson(await rpc.api.accounts.profile.$get());
+export async function fetchProfileApi(): Promise<AccountProfile> {
+	return (await rpcJson(
+		await rpc.api.accounts.profile.$get(),
+	)) as AccountProfile;
 }
 
 export async function updateProfileApi(
 	payload: UpdateProfilePayload,
-): Promise<any> {
-	return rpcJson(await rpc.api.accounts.profile.$put({ json: payload }));
+): Promise<AccountProfile> {
+	return (await rpcJson(
+		await rpc.api.accounts.profile.$put({ json: payload }),
+	)) as AccountProfile;
 }
 
 export async function changePasswordApi(
@@ -57,14 +68,19 @@ export async function rotateApiKeyApi(): Promise<{ apiKey: string }> {
 	}>;
 }
 
-export async function fetchDevicesApi(): Promise<{ data: any[] }> {
-	return rpcJson(await rpc.api.devices.$get());
+export async function fetchDevicesApi(): Promise<ApiList<AccountDevice>> {
+	return (await rpcJson(
+		await rpc.api.devices.$get(),
+	)) as ApiList<AccountDevice>;
 }
 
-export async function renameDeviceApi(id: string, name: string): Promise<any> {
-	return rpcJson(
+export async function renameDeviceApi(
+	id: string,
+	name: string,
+): Promise<AccountDevice> {
+	return (await rpcJson(
 		await rpc.api.devices[":id"].name.$put({ param: { id }, json: { name } }),
-	);
+	)) as AccountDevice;
 }
 
 export async function deleteDeviceApi(id: string): Promise<void> {
@@ -89,8 +105,10 @@ export async function deleteAccountApi(
 	);
 }
 
-export async function fetchTwoFactorApi(): Promise<{ data: any[] }> {
-	return rpcJson(await rpc.api["two-factor"].$get());
+export async function fetchTwoFactorApi(): Promise<ApiList<TwoFactorProvider>> {
+	return (await rpcJson(
+		await rpc.api["two-factor"].$get(),
+	)) as ApiList<TwoFactorProvider>;
 }
 
 export async function getAuthenticatorApi(): Promise<{
@@ -105,10 +123,10 @@ export async function getAuthenticatorApi(): Promise<{
 export async function enableAuthenticatorApi(
 	key: string,
 	token: string,
-): Promise<any> {
-	return rpcJson(
+): Promise<TwoFactorProvider> {
+	return (await rpcJson(
 		await rpc.api["two-factor"].authenticator.$put({ json: { key, token } }),
-	);
+	)) as TwoFactorProvider;
 }
 
 export async function disableTwoFactorApi(
@@ -127,8 +145,12 @@ export async function fetchRecoveryCodeApi(): Promise<{ code: string | null }> {
 	) as Promise<{ code: string | null }>;
 }
 
-export async function listAccountPasskeysApi(): Promise<{ data: any[] }> {
-	return rpcJson(await rpc.api.webauthn.$get()) as Promise<{ data: any[] }>;
+export async function listAccountPasskeysApi(): Promise<
+	ApiList<AccountPasskey>
+> {
+	return (await rpcJson(
+		await rpc.api.webauthn.$get(),
+	)) as ApiList<AccountPasskey>;
 }
 
 export async function getAccountPasskeyAttestationOptionsApi(
@@ -160,8 +182,10 @@ export async function createAccountPasskeyApi(payload: {
 	encryptedUserKey?: string;
 	encryptedPublicKey?: string;
 	encryptedPrivateKey?: string;
-}): Promise<any> {
-	return rpcJson(await rpc.api.webauthn.$post({ json: payload }));
+}): Promise<AccountPasskey> {
+	return (await rpcJson(
+		await rpc.api.webauthn.$post({ json: payload }),
+	)) as AccountPasskey;
 }
 
 export async function updateAccountPasskeyEncryptionApi(payload: {
@@ -170,8 +194,10 @@ export async function updateAccountPasskeyEncryptionApi(payload: {
 	encryptedUserKey: string;
 	encryptedPublicKey: string;
 	encryptedPrivateKey: string;
-}): Promise<any> {
-	return rpcJson(await rpc.api.webauthn.$put({ json: payload }));
+}): Promise<AccountPasskey> {
+	return (await rpcJson(
+		await rpc.api.webauthn.$put({ json: payload }),
+	)) as AccountPasskey;
 }
 
 export async function deleteAccountPasskeyApi(

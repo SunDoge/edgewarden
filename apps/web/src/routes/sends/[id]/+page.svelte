@@ -4,11 +4,12 @@ import { page } from "$app/state";
 import {
 	accessSendPublicApi,
 	requestSendFileDownloadApi,
-} from "$lib/services/api";
+} from "$lib/services/api-sends";
 import { decryptBwFileData } from "$lib/services/crypto";
 import {
 	decodeSendShareKey,
 	decryptPublicSend,
+	type DecryptedPublicSend,
 	type SendKeys,
 } from "$lib/services/send-crypto";
 import { ApiError } from "$lib/services/rpc";
@@ -48,7 +49,7 @@ let passwordRequired = $state(false);
 let accessPassword = $state("");
 let showPassword = $state(false);
 
-let sendData = $state<any | null>(null);
+let sendData = $state<DecryptedPublicSend | null>(null);
 let decryptedText = $state("");
 let decryptedFileName = $state("");
 let decryptedFileSizeName = $state("");
@@ -82,7 +83,7 @@ async function loadPublicSend() {
 	loading = true;
 	error = "";
 	try {
-		const payload: any = {};
+		const payload: { password?: string } = {};
 		if (accessPassword) {
 			payload.password = accessPassword;
 		}
@@ -99,15 +100,16 @@ async function loadPublicSend() {
 			decryptedFileName = decrypted.file?.fileName || decrypted.name;
 			decryptedFileSizeName = decrypted.file?.sizeName || "未知大小";
 		}
-	} catch (e: any) {
-		if (e instanceof ApiError && e.status === 401) {
+	} catch (caught) {
+		if (caught instanceof ApiError && caught.status === 401) {
 			passwordRequired = true;
 			if (accessPassword) {
 				error = "密码错误，请重新输入。";
 			}
 		} else {
 			error =
-				e.message || "获取分享内容失败，此链接可能已失效、被禁用或不存在。";
+				(caught instanceof Error ? caught.message : "") ||
+				"获取分享内容失败，此链接可能已失效、被禁用或不存在。";
 		}
 	} finally {
 		loading = false;
@@ -115,7 +117,15 @@ async function loadPublicSend() {
 }
 
 async function handleDownloadFile() {
-	if (!sendData || sendData.type !== 1 || !sendEncKey || !sendMacKey) return;
+	if (
+		!sendData ||
+		sendData.type !== 1 ||
+		!sendData.file ||
+		!sendEncKey ||
+		!sendMacKey
+	)
+		return;
+	const file = sendData.file;
 	fileDownloading = true;
 	error = "";
 
@@ -123,7 +133,7 @@ async function handleDownloadFile() {
 		// 1. Fetch a typed file access ticket through the Hono RPC client.
 		const ticket = await requestSendFileDownloadApi(
 			sendData.id,
-			sendData.file.id,
+			file.id,
 			accessPassword ? { password: accessPassword } : {},
 		);
 
@@ -142,7 +152,7 @@ async function handleDownloadFile() {
 		);
 
 		// 4. Trigger download in browser
-		const blob = new Blob([decryptedBytes as any], {
+		const blob = new Blob([decryptedBytes as BlobPart], {
 			type: "application/octet-stream",
 		});
 		const dlUrl = URL.createObjectURL(blob);
@@ -153,8 +163,8 @@ async function handleDownloadFile() {
 		a.click();
 		document.body.removeChild(a);
 		URL.revokeObjectURL(dlUrl);
-	} catch (e: any) {
-		error = "下载或解密文件失败：" + (e.message || e);
+	} catch (caught) {
+		error = `下载或解密文件失败：${caught instanceof Error ? caught.message : String(caught)}`;
 	} finally {
 		fileDownloading = false;
 	}

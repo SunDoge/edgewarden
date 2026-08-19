@@ -1,7 +1,8 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import { onMount } from "svelte";
-import { isLoggedIn } from "$lib/services/api";
+import { isLoggedIn } from "$lib/services/api-auth";
+import { errorMessage } from "$lib/services/error-message";
 import { loadVaultSnapshot } from "$lib/services/vault-db";
 import { vault, unlock } from "$lib/stores/vault.svelte";
 import { Button } from "$lib/components/ui/button/index.js";
@@ -48,8 +49,8 @@ async function handleUnlock(e: SubmitEvent) {
 	try {
 		await unlock(password);
 		goto("/vault");
-	} catch (err: any) {
-		error = err.message || "解锁失败，请检查主密码是否正确。";
+	} catch (caught) {
+		error = errorMessage(caught, "解锁失败，请检查主密码是否正确。");
 	} finally {
 		loading = false;
 	}
