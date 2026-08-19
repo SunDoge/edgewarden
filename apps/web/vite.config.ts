@@ -66,6 +66,10 @@ export default defineConfig(({ command }) => ({
 				target: "http://localhost:8787",
 				changeOrigin: true,
 			},
+			"/icons": {
+				target: "http://localhost:8787",
+				changeOrigin: true,
+			},
 		},
 	},
 	test: {
