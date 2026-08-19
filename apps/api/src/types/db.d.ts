@@ -74,6 +74,7 @@ export interface BlobGcQueue {
 export interface CipherCollections {
   cipher_id: string;
   collection_id: string;
+  org_id: string;
 }
 
 export interface Ciphers {
@@ -112,6 +113,7 @@ export interface CollectionMembers {
   collection_id: string;
   hide_passwords: Generated<number>;
   manage: Generated<number>;
+  org_id: string;
   org_member_id: string;
   read_only: Generated<number>;
 }

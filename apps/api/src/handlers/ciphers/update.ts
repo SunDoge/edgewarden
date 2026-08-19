@@ -154,12 +154,13 @@ export const updateCipher = factory.createHandlers(
       ...collectionIds.map((collectionId) =>
         db
           .insertInto("cipher_collections")
-          .columns(["cipher_id", "collection_id"])
+          .columns(["cipher_id", "collection_id", "org_id"])
           .expression(
             db
               .selectNoFrom([
                 sql<string>`${cipher.id}`.as("cipher_id"),
                 sql<string>`${collectionId}`.as("collection_id"),
+                sql<string>`${cipher.org_id}`.as("org_id"),
               ])
               .where(({ exists }) => exists(committedCipher)),
           ),

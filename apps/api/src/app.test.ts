@@ -331,6 +331,18 @@ describe("Edgewarden API", () => {
       .run();
     await testDatabase
       .prepare(
+        "INSERT INTO devices (user_id,device_identifier,name,type,created_at,updated_at) VALUES (?,?,?,0,?,?)",
+      )
+      .bind(
+        owner.id,
+        "backup-test-device",
+        "backup test device",
+        timestamp,
+        timestamp,
+      )
+      .run();
+    await testDatabase
+      .prepare(
         "INSERT INTO device_trust_tokens (token,user_id,device_identifier,expires_at) VALUES (?,?,?,?)",
       )
       .bind(deviceTrustToken, owner.id, "backup-test-device", timestamp + 3600)

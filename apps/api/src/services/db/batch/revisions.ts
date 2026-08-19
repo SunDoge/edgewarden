@@ -199,12 +199,14 @@ export function organizationMemberCollectionAccessQuery(
 		INSERT INTO collection_members (
 			collection_id,
 			org_member_id,
+			org_id,
 			read_only,
 			hide_passwords
 		)
 		SELECT
 			collection.id,
 			member.id,
+			member.org_id,
 			${readOnly ? 1 : 0},
 			${hidePasswords ? 1 : 0}
 		FROM org_members member

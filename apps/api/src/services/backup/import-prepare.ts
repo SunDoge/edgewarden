@@ -171,6 +171,18 @@ export async function importPreparedBackupRows(
     payload.config || [],
     payload.users || [],
   );
+  const memberOrg = new Map(
+    (payload.org_members || []).map((row) => [
+      requiredId(row, "id", "org_members"),
+      requiredId(row, "org_id", "org_members"),
+    ]),
+  );
+  const cipherOrg = new Map(
+    (payload.ciphers || []).map((row) => [
+      requiredId(row, "id", "ciphers"),
+      typeof row.org_id === "string" ? row.org_id.trim() : "",
+    ]),
+  );
   const preparedDb: BackupPayload["db"] = {
     config: activeOperationLeaseValue
       ? upsertConfigRow(
@@ -189,7 +201,14 @@ export async function importPreparedBackupRows(
     organizations: cloneRows(payload.organizations || []),
     org_members: cloneRows(payload.org_members || []),
     collections: cloneRows(payload.collections || []),
-    collection_members: cloneRows(payload.collection_members || []),
+    collection_members: cloneRows(payload.collection_members || []).map(
+      (row) => ({
+        ...row,
+        org_id: memberOrg.get(
+          requiredId(row, "org_member_id", "collection_members"),
+        )!,
+      }),
+    ),
     // Device trust tokens are bearer credentials, not portable instance data.
     device_trust_tokens: [],
     audit_logs: cloneRows(payload.audit_logs || []),
@@ -200,7 +219,14 @@ export async function importPreparedBackupRows(
       archived_at: row.archived_at ?? null,
     })),
     cipher_user_settings: cloneRows(payload.cipher_user_settings || []),
-    cipher_collections: cloneRows(payload.cipher_collections || []),
+    cipher_collections: cloneRows(payload.cipher_collections || []).map(
+      (row) => ({
+        ...row,
+        org_id: cipherOrg.get(
+          requiredId(row, "cipher_id", "cipher_collections"),
+        )!,
+      }),
+    ),
     attachments: cloneRows(payload.attachments || []).map((row) => {
       const cipherId = String(row.cipher_id || "").trim();
       const attachmentId = String(row.id || "").trim();

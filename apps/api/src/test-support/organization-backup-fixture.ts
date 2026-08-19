@@ -81,9 +81,9 @@ export async function createOrganizationBackupFixture(options: {
     .run();
   await options.database
     .prepare(
-      "INSERT INTO cipher_collections (cipher_id,collection_id) VALUES (?,?)",
+      "INSERT INTO cipher_collections (cipher_id,collection_id,org_id) VALUES (?,?,?)",
     )
-    .bind(cipherId, collectionId)
+    .bind(cipherId, collectionId, organizationId)
     .run();
   await options.database
     .prepare(

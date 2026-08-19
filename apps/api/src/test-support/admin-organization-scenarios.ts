@@ -909,9 +909,9 @@ export function registerAdminOrganizationScenarios(
         ),
       context.database
         .prepare(
-          "INSERT INTO collection_members (collection_id,org_member_id,read_only,hide_passwords) VALUES (?,?,1,0)",
+          "INSERT INTO collection_members (collection_id,org_member_id,org_id,read_only,hide_passwords) VALUES (?,?,?,1,0)",
         )
-        .bind(collectionId, restrictedMemberId),
+        .bind(collectionId, restrictedMemberId, orgId),
       context.database
         .prepare(
           "INSERT INTO organizations (id,name,created_at,updated_at) VALUES (?,?,?,?)",
@@ -1120,9 +1120,9 @@ export function registerAdminOrganizationScenarios(
         ),
       context.database
         .prepare(
-          "INSERT INTO collection_members (collection_id,org_member_id,read_only,hide_passwords) VALUES (?,?,0,1)",
+          "INSERT INTO collection_members (collection_id,org_member_id,org_id,read_only,hide_passwords) VALUES (?,?,?,0,1)",
         )
-        .bind(secondCollectionId, restrictedMemberId),
+        .bind(secondCollectionId, restrictedMemberId, orgId),
       context.database
         .prepare(
           "INSERT INTO collections (id,org_id,name,created_at,updated_at) VALUES (?,?,?,?,?)",
@@ -1136,14 +1136,14 @@ export function registerAdminOrganizationScenarios(
         ),
       context.database
         .prepare(
-          "INSERT INTO cipher_collections (cipher_id,collection_id) VALUES (?,?)",
+          "INSERT INTO cipher_collections (cipher_id,collection_id,org_id) VALUES (?,?,?)",
         )
-        .bind(cipher.id, secondCollectionId),
+        .bind(cipher.id, secondCollectionId, orgId),
       context.database
         .prepare(
-          "INSERT INTO cipher_collections (cipher_id,collection_id) VALUES (?,?)",
+          "INSERT INTO cipher_collections (cipher_id,collection_id,org_id) VALUES (?,?,?)",
         )
-        .bind(cipher.id, inaccessibleCollectionId),
+        .bind(cipher.id, inaccessibleCollectionId, orgId),
     ]);
     const restrictedSync = await request("/api/sync", {
       headers: { authorization: `Bearer ${context.memberAccessToken}` },

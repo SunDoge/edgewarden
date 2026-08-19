@@ -99,9 +99,11 @@ export const createCipher = factory.createHandlers(
           ]
         : []),
       ...collectionIds.map((collectionId) =>
-        db
-          .insertInto("cipher_collections")
-          .values({ cipher_id: id, collection_id: collectionId }),
+        db.insertInto("cipher_collections").values({
+          cipher_id: id,
+          collection_id: collectionId,
+          org_id: organizationId!,
+        }),
       ),
       ...(await revisionQueriesForCipher(db, owner, ts)),
     ]);

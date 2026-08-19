@@ -195,6 +195,8 @@ CREATE INDEX IF NOT EXISTS idx_org_members_user ON org_members(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_org_members_org_email ON org_members(org_id, email);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_org_members_org_user
   ON org_members(org_id, user_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_org_members_id_org
+  ON org_members(id, org_id);
 CREATE INDEX IF NOT EXISTS idx_org_members_mutation_token
   ON org_members(mutation_token) WHERE mutation_token IS NOT NULL;
 -- ---------------------------------------------------------------------------
@@ -211,6 +213,8 @@ CREATE TABLE IF NOT EXISTS collections (
   FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_collections_org ON collections(org_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_collections_id_org
+  ON collections(id, org_id);
 CREATE INDEX IF NOT EXISTS idx_collections_mutation_token
   ON collections(mutation_token) WHERE mutation_token IS NOT NULL;
 -- ---------------------------------------------------------------------------
@@ -219,12 +223,13 @@ CREATE INDEX IF NOT EXISTS idx_collections_mutation_token
 CREATE TABLE IF NOT EXISTS collection_members (
   collection_id TEXT NOT NULL,
   org_member_id TEXT NOT NULL,
+  org_id TEXT NOT NULL,
   read_only INTEGER NOT NULL DEFAULT 0 CHECK (read_only IN (0, 1)),
   hide_passwords INTEGER NOT NULL DEFAULT 0 CHECK (hide_passwords IN (0, 1)),
   manage INTEGER NOT NULL DEFAULT 0 CHECK (manage IN (0, 1)),
   PRIMARY KEY (collection_id, org_member_id),
-  FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
-  FOREIGN KEY (org_member_id) REFERENCES org_members(id) ON DELETE CASCADE
+  FOREIGN KEY (collection_id, org_id) REFERENCES collections(id, org_id) ON DELETE CASCADE,
+  FOREIGN KEY (org_member_id, org_id) REFERENCES org_members(id, org_id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_collection_members_member ON collection_members(org_member_id);
 -- ---------------------------------------------------------------------------
@@ -300,10 +305,11 @@ CREATE TABLE IF NOT EXISTS ciphers (
 );
 CREATE INDEX IF NOT EXISTS idx_ciphers_user_updated ON ciphers(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_ciphers_user_archived ON ciphers(user_id, archived_at);
-CREATE INDEX IF NOT EXISTS idx_ciphers_user_deleted ON ciphers(user_id, deleted_at);
 CREATE INDEX IF NOT EXISTS idx_ciphers_user_deleted_updated ON ciphers(user_id, deleted_at, updated_at);
 CREATE INDEX IF NOT EXISTS idx_ciphers_user_folder ON ciphers(user_id, folder_id);
 CREATE INDEX IF NOT EXISTS idx_ciphers_org_updated ON ciphers(org_id, updated_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ciphers_id_org
+  ON ciphers(id, org_id);
 -- Cleanup job: find all rows due for permanent purge
 CREATE INDEX IF NOT EXISTS idx_ciphers_purge_after ON ciphers(purge_after)
 WHERE purge_after IS NOT NULL;
@@ -334,9 +340,10 @@ CREATE INDEX IF NOT EXISTS idx_cipher_user_settings_user_archived
 CREATE TABLE IF NOT EXISTS cipher_collections (
   cipher_id TEXT NOT NULL,
   collection_id TEXT NOT NULL,
+  org_id TEXT NOT NULL,
   PRIMARY KEY (cipher_id, collection_id),
-  FOREIGN KEY (cipher_id) REFERENCES ciphers(id) ON DELETE CASCADE,
-  FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
+  FOREIGN KEY (cipher_id, org_id) REFERENCES ciphers(id, org_id) ON DELETE CASCADE,
+  FOREIGN KEY (collection_id, org_id) REFERENCES collections(id, org_id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_cipher_collections_collection ON cipher_collections(collection_id);
 -- ---------------------------------------------------------------------------
@@ -347,7 +354,7 @@ CREATE TABLE IF NOT EXISTS attachments (
   cipher_id TEXT NOT NULL,
   file_name TEXT NOT NULL,
   -- client-encrypted
-  size INTEGER NOT NULL,
+  size INTEGER NOT NULL CHECK (size >= 0),
   size_name TEXT NOT NULL,
   key TEXT,
   -- client-encrypted attachment key
@@ -452,7 +459,8 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   -- Unix seconds
   device_identifier TEXT,
   device_session_stamp TEXT,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id, device_identifier) REFERENCES devices(user_id, device_identifier) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
@@ -473,6 +481,9 @@ CREATE TABLE IF NOT EXISTS devices (
   banned INTEGER NOT NULL DEFAULT 0 CHECK (banned IN (0, 1)),
   banned_at INTEGER,
   device_note TEXT,
+  -- Bitwarden mobile push relay registration.
+  push_token TEXT,
+  push_uuid TEXT,
   last_seen_at INTEGER,
   -- Unix seconds
   created_at INTEGER NOT NULL,
@@ -485,6 +496,10 @@ CREATE INDEX IF NOT EXISTS idx_devices_user_updated ON devices(user_id, updated_
 CREATE INDEX IF NOT EXISTS idx_devices_user_last_seen ON devices(user_id, last_seen_at);
 CREATE INDEX IF NOT EXISTS idx_devices_mutation_token
   ON devices(mutation_token) WHERE mutation_token IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_push_uuid
+  ON devices(push_uuid) WHERE push_uuid IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_devices_user_push
+  ON devices(user_id) WHERE push_token IS NOT NULL;
 -- ---------------------------------------------------------------------------
 -- 16. AUTH REQUESTS  (passwordless / device approval flow)
 -- ---------------------------------------------------------------------------
@@ -550,7 +565,8 @@ CREATE TABLE IF NOT EXISTS device_trust_tokens (
   device_identifier TEXT NOT NULL,
   expires_at INTEGER NOT NULL,
   -- Unix seconds
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id, device_identifier) REFERENCES devices(user_id, device_identifier) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_t2f_tokens_user_device ON device_trust_tokens(user_id, device_identifier);
 CREATE INDEX IF NOT EXISTS idx_t2f_tokens_expires_at ON device_trust_tokens(expires_at);
@@ -628,7 +644,7 @@ CREATE TABLE IF NOT EXISTS invites (
     AND COALESCE(json_type(code_encrypted, '$.data') = 'text', 0)
   ),
   -- Lowercase normalized registration address bound to this one-time code.
-  email TEXT NOT NULL,
+  email TEXT NOT NULL CHECK (email = lower(trim(email))),
   created_by TEXT NOT NULL,
   used_by TEXT,
   expires_at INTEGER NOT NULL,

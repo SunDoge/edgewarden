@@ -177,6 +177,7 @@ export async function importBackupRows(
       [
         "collection_id",
         "org_member_id",
+        "org_id",
         "read_only",
         "hide_passwords",
         "manage",
@@ -272,7 +273,7 @@ export async function importBackupRows(
     buildInsertStatements(
       db,
       tableName("cipher_collections"),
-      ["cipher_id", "collection_id"],
+      ["cipher_id", "collection_id", "org_id"],
       payload.cipher_collections || [],
     ),
   );

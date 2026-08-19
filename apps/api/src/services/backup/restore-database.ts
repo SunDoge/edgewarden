@@ -128,13 +128,20 @@ export async function createShadowTables(db: D1Database): Promise<void> {
       ),
     );
   }
-  // The cipher table references folders(id, user_id); CREATE TABLE cloning does
-  // not copy the UNIQUE index required by that composite foreign key.
-  statements.push(
-    db.prepare(
-      `CREATE UNIQUE INDEX folders__restore_id_user ON ${shadowTableName("folders")}(id, user_id)`,
-    ),
-  );
+  // CREATE TABLE cloning does not copy the UNIQUE indexes required by
+  // composite foreign keys in the authorization graph.
+  for (const [table, columns] of [
+    ["folders", "id, user_id"],
+    ["org_members", "id, org_id"],
+    ["collections", "id, org_id"],
+    ["ciphers", "id, org_id"],
+  ] as const) {
+    statements.push(
+      db.prepare(
+        `CREATE UNIQUE INDEX ${table}__restore_composite_key ON ${shadowTableName(table)}(${columns})`,
+      ),
+    );
+  }
   await db.batch(statements);
 }
 
