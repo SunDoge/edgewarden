@@ -7,50 +7,50 @@ import * as Field from "$lib/components/ui/field/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import * as Select from "$lib/components/ui/select/index.js";
 import type {
-	MemberCollectionAccessEditor,
-	OrganizationCollection,
-	OrganizationMember,
-	OrganizationRemoveTarget,
-	OrganizationRenameTarget,
-	OrganizationRole,
+  MemberCollectionAccessEditor,
+  OrganizationCollection,
+  OrganizationMember,
+  OrganizationRemoveTarget,
+  OrganizationRenameTarget,
+  OrganizationRole,
 } from "$lib/services/organization-types";
 
 let {
-	createOpen = $bindable(),
-	organizationName = $bindable(),
-	initialCollectionName = $bindable(),
-	busy,
-	editingMember = $bindable(),
-	actorRole,
-	memberRole = $bindable(),
-	memberAccessAll = $bindable(),
-	memberCollectionAccess = $bindable(),
-	collections,
-	renameTarget = $bindable(),
-	renameName = $bindable(),
-	removeTarget = $bindable(),
-	oncreate,
-	onSaveMember,
-	onSaveRename,
-	onConfirmRemove,
+  createOpen = $bindable(),
+  organizationName = $bindable(),
+  initialCollectionName = $bindable(),
+  busy,
+  editingMember = $bindable(),
+  actorRole,
+  memberRole = $bindable(),
+  memberAccessAll = $bindable(),
+  memberCollectionAccess = $bindable(),
+  collections,
+  renameTarget = $bindable(),
+  renameName = $bindable(),
+  removeTarget = $bindable(),
+  oncreate,
+  onSaveMember,
+  onSaveRename,
+  onConfirmRemove,
 }: {
-	createOpen: boolean;
-	organizationName: string;
-	initialCollectionName: string;
-	busy: string;
-	editingMember: OrganizationMember | null;
-	actorRole: OrganizationRole | null;
-	memberRole: Exclude<OrganizationRole, "owner">;
-	memberAccessAll: boolean;
-	memberCollectionAccess: Record<string, MemberCollectionAccessEditor>;
-	collections: OrganizationCollection[];
-	renameTarget: OrganizationRenameTarget | null;
-	renameName: string;
-	removeTarget: OrganizationRemoveTarget | null;
-	oncreate: () => void;
-	onSaveMember: () => void;
-	onSaveRename: () => void;
-	onConfirmRemove: () => void;
+  createOpen: boolean;
+  organizationName: string;
+  initialCollectionName: string;
+  busy: string;
+  editingMember: OrganizationMember | null;
+  actorRole: OrganizationRole | null;
+  memberRole: Exclude<OrganizationRole, "owner">;
+  memberAccessAll: boolean;
+  memberCollectionAccess: Record<string, MemberCollectionAccessEditor>;
+  collections: OrganizationCollection[];
+  renameTarget: OrganizationRenameTarget | null;
+  renameName: string;
+  removeTarget: OrganizationRemoveTarget | null;
+  oncreate: () => void;
+  onSaveMember: () => void;
+  onSaveRename: () => void;
+  onConfirmRemove: () => void;
 } = $props();
 </script>
 

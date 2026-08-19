@@ -6,16 +6,16 @@ import type { VariantProps } from "tailwind-variants";
 type ToggleVariants = VariantProps<typeof toggleVariants>;
 
 interface ToggleGroupContext extends ToggleVariants {
-	spacing?: number;
-	orientation?: "horizontal" | "vertical";
+  spacing?: number;
+  orientation?: "horizontal" | "vertical";
 }
 
 export function setToggleGroupCtx(props: ToggleGroupContext) {
-	setContext("toggleGroup", props);
+  setContext("toggleGroup", props);
 }
 
 export function getToggleGroupCtx() {
-	return getContext<Required<ToggleGroupContext>>("toggleGroup");
+  return getContext<Required<ToggleGroupContext>>("toggleGroup");
 }
 </script>
 

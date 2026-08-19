@@ -1,14 +1,14 @@
 import {
-	type CipherImportInput,
-	type CipherResponse,
-	CipherType,
-	type FolderResponse,
-	parseJsonWithSchema,
+  type CipherImportInput,
+  type CipherResponse,
+  CipherType,
+  type FolderResponse,
+  parseJsonWithSchema,
 } from "@edgewarden/shared";
 import * as v from "valibot";
 import {
-	decryptPasswordProtectedExport,
-	isPasswordProtectedExport,
+  decryptPasswordProtectedExport,
+  isPasswordProtectedExport,
 } from "./bitwarden-encrypted-export";
 import { encryptCipher } from "./cipher-crypto";
 import { encryptStr } from "./crypto";
@@ -18,85 +18,85 @@ import { parseBitwardenCsv } from "./vault-transfer-csv";
 export { buildBitwardenCsv } from "./vault-transfer-csv";
 
 export interface TransferLogin extends Record<string, unknown> {
-	uri?: string | null;
-	uris?: Array<{ uri?: string | null; match?: number | null }>;
-	username?: string | null;
-	password?: string | null;
-	totp?: string | null;
-	fido2Credentials?: Array<Record<string, unknown>>;
+  uri?: string | null;
+  uris?: Array<{ uri?: string | null; match?: number | null }>;
+  username?: string | null;
+  password?: string | null;
+  totp?: string | null;
+  fido2Credentials?: Array<Record<string, unknown>>;
 }
 
 export interface TransferItem extends Record<string, unknown> {
-	id?: string;
-	folderId?: string | null;
-	type?: number;
-	name?: string;
-	notes?: string | null;
-	favorite?: boolean;
-	reprompt?: number;
-	fields?: Array<Record<string, unknown>> | null;
-	login?: TransferLogin | null;
-	sshKey?: Record<string, unknown> | null;
+  id?: string;
+  folderId?: string | null;
+  type?: number;
+  name?: string;
+  notes?: string | null;
+  favorite?: boolean;
+  reprompt?: number;
+  fields?: Array<Record<string, unknown>> | null;
+  login?: TransferLogin | null;
+  sshKey?: Record<string, unknown> | null;
 }
 
 export interface TransferDocument {
-	folders: Array<{ id?: string; name: string; existingId?: string }>;
-	items: TransferItem[];
-	warnings: string[];
+  folders: Array<{ id?: string; name: string; existingId?: string }>;
+  items: TransferItem[];
+  warnings: string[];
 }
 
 export interface EncryptedImportPayload {
-	folders: Array<{ id?: string; name: string }>;
-	ciphers: NonNullable<CipherImportInput["ciphers"]>;
-	folderRelationships: Array<{ key: number; value: number }>;
+  folders: Array<{ id?: string; name: string }>;
+  ciphers: NonNullable<CipherImportInput["ciphers"]>;
+  folderRelationships: Array<{ key: number; value: number }>;
 }
 
 export interface TransferEncryptionProgress {
-	processed: number;
-	total: number;
-	kind: "folder" | "item";
+  processed: number;
+  total: number;
+  kind: "folder" | "item";
 }
 
 export interface ImportDeduplicationResult {
-	document: TransferDocument;
-	completeDocument: TransferDocument;
-	duplicateItems: number;
-	duplicateFolders: number;
+  document: TransferDocument;
+  completeDocument: TransferDocument;
+  duplicateItems: number;
+  duplicateFolders: number;
 }
 
 const TYPE_KEYS: Record<number, string> = {
-	[CipherType.Login]: "login",
-	[CipherType.SecureNote]: "secureNote",
-	[CipherType.Card]: "card",
-	[CipherType.Identity]: "identity",
-	[CipherType.SshKey]: "sshKey",
-	[CipherType.BankAccount]: "bankAccount",
-	[CipherType.DriversLicense]: "driversLicense",
-	[CipherType.Passport]: "passport",
+  [CipherType.Login]: "login",
+  [CipherType.SecureNote]: "secureNote",
+  [CipherType.Card]: "card",
+  [CipherType.Identity]: "identity",
+  [CipherType.SshKey]: "sshKey",
+  [CipherType.BankAccount]: "bankAccount",
+  [CipherType.DriversLicense]: "driversLicense",
+  [CipherType.Passport]: "passport",
 };
 
 const ImportItemSchema = v.record(v.string(), v.unknown());
 const ImportFolderSchema = v.looseObject({
-	id: v.optional(v.union([v.string(), v.number()])),
-	name: v.optional(v.unknown()),
+  id: v.optional(v.union([v.string(), v.number()])),
+  name: v.optional(v.unknown()),
 });
 const VaultImportObjectSchema = v.looseObject({
-	encrypted: v.optional(v.boolean()),
-	folders: v.optional(v.array(ImportFolderSchema)),
-	items: v.optional(v.array(ImportItemSchema)),
-	ciphers: v.optional(v.array(ImportItemSchema)),
+  encrypted: v.optional(v.boolean()),
+  folders: v.optional(v.array(ImportFolderSchema)),
+  items: v.optional(v.array(ImportItemSchema)),
+  ciphers: v.optional(v.array(ImportItemSchema)),
 });
 const VaultImportSourceSchema = v.union([
-	v.array(ImportItemSchema),
-	VaultImportObjectSchema,
+  v.array(ImportItemSchema),
+  VaultImportObjectSchema,
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-	return value !== null && typeof value === "object" && !Array.isArray(value);
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function parseVaultImportSource(text: string) {
-	return parseJsonWithSchema(text.trim(), VaultImportSourceSchema);
+  return parseJsonWithSchema(text.trim(), VaultImportSourceSchema);
 }
 
 /**
@@ -105,280 +105,280 @@ function parseVaultImportSource(text: string) {
  * and all user-visible secret data remain part of the comparison.
  */
 export function deduplicateTransferDocument(
-	incoming: TransferDocument,
-	existing: TransferDocument,
+  incoming: TransferDocument,
+  existing: TransferDocument,
 ): ImportDeduplicationResult {
-	const incomingFolderNames = new Map(
-		incoming.folders
-			.filter((folder) => folder.id != null)
-			.map((folder) => [String(folder.id), folder.name]),
-	);
-	const existingFolderNames = new Map(
-		existing.folders
-			.filter((folder) => folder.id != null)
-			.map((folder) => [String(folder.id), folder.name]),
-	);
-	const fingerprints = new Set(
-		existing.items.map((item) =>
-			cipherContentFingerprint(
-				item,
-				item.folderId == null
-					? null
-					: existingFolderNames.get(String(item.folderId)),
-			),
-		),
-	);
-	const items: TransferItem[] = [];
-	let duplicateItems = 0;
+  const incomingFolderNames = new Map(
+    incoming.folders
+      .filter((folder) => folder.id != null)
+      .map((folder) => [String(folder.id), folder.name]),
+  );
+  const existingFolderNames = new Map(
+    existing.folders
+      .filter((folder) => folder.id != null)
+      .map((folder) => [String(folder.id), folder.name]),
+  );
+  const fingerprints = new Set(
+    existing.items.map((item) =>
+      cipherContentFingerprint(
+        item,
+        item.folderId == null
+          ? null
+          : existingFolderNames.get(String(item.folderId)),
+      ),
+    ),
+  );
+  const items: TransferItem[] = [];
+  let duplicateItems = 0;
 
-	for (const item of incoming.items) {
-		const fingerprint = cipherContentFingerprint(
-			item,
-			item.folderId == null
-				? null
-				: incomingFolderNames.get(String(item.folderId)),
-		);
-		if (fingerprints.has(fingerprint)) {
-			duplicateItems++;
-			continue;
-		}
-		fingerprints.add(fingerprint);
-		items.push(item);
-	}
+  for (const item of incoming.items) {
+    const fingerprint = cipherContentFingerprint(
+      item,
+      item.folderId == null
+        ? null
+        : incomingFolderNames.get(String(item.folderId)),
+    );
+    if (fingerprints.has(fingerprint)) {
+      duplicateItems++;
+      continue;
+    }
+    fingerprints.add(fingerprint);
+    items.push(item);
+  }
 
-	const referencedFolderIds = new Set(
-		items
-			.map((item) => item.folderId)
-			.filter((folderId) => folderId != null)
-			.map(String),
-	);
-	const knownFolderNames = new Set(
-		existing.folders.map((folder) => folder.name),
-	);
-	const existingFolderIdByName = new Map(
-		existing.folders
-			.filter((folder) => folder.id != null)
-			.map((folder) => [folder.name, String(folder.id)]),
-	);
-	const folders = incoming.folders.flatMap((folder) => {
-		const existingId = existingFolderIdByName.get(folder.name);
-		if (folder.id != null && referencedFolderIds.has(String(folder.id))) {
-			return [{ ...folder, existingId }];
-		}
-		if (knownFolderNames.has(folder.name)) return [];
-		knownFolderNames.add(folder.name);
-		return [folder];
-	});
-	const seenFolderNames = new Set(existingFolderIdByName.keys());
-	let duplicateFolders = 0;
-	for (const folder of incoming.folders) {
-		if (seenFolderNames.has(folder.name)) duplicateFolders++;
-		else seenFolderNames.add(folder.name);
-	}
-	const completeFolders = incoming.folders.map((folder) => ({
-		...folder,
-		existingId: existingFolderIdByName.get(folder.name),
-	}));
+  const referencedFolderIds = new Set(
+    items
+      .map((item) => item.folderId)
+      .filter((folderId) => folderId != null)
+      .map(String),
+  );
+  const knownFolderNames = new Set(
+    existing.folders.map((folder) => folder.name),
+  );
+  const existingFolderIdByName = new Map(
+    existing.folders
+      .filter((folder) => folder.id != null)
+      .map((folder) => [folder.name, String(folder.id)]),
+  );
+  const folders = incoming.folders.flatMap((folder) => {
+    const existingId = existingFolderIdByName.get(folder.name);
+    if (folder.id != null && referencedFolderIds.has(String(folder.id))) {
+      return [{ ...folder, existingId }];
+    }
+    if (knownFolderNames.has(folder.name)) return [];
+    knownFolderNames.add(folder.name);
+    return [folder];
+  });
+  const seenFolderNames = new Set(existingFolderIdByName.keys());
+  let duplicateFolders = 0;
+  for (const folder of incoming.folders) {
+    if (seenFolderNames.has(folder.name)) duplicateFolders++;
+    else seenFolderNames.add(folder.name);
+  }
+  const completeFolders = incoming.folders.map((folder) => ({
+    ...folder,
+    existingId: existingFolderIdByName.get(folder.name),
+  }));
 
-	return {
-		document: { folders, items, warnings: incoming.warnings },
-		completeDocument: {
-			folders: completeFolders,
-			items: incoming.items,
-			warnings: incoming.warnings,
-		},
-		duplicateItems,
-		duplicateFolders,
-	};
+  return {
+    document: { folders, items, warnings: incoming.warnings },
+    completeDocument: {
+      folders: completeFolders,
+      items: incoming.items,
+      warnings: incoming.warnings,
+    },
+    duplicateItems,
+    duplicateFolders,
+  };
 }
 
 export function buildPlainExportDocument(
-	folders: FolderResponse[],
-	ciphers: CipherResponse[],
+  folders: FolderResponse[],
+  ciphers: CipherResponse[],
 ): TransferDocument {
-	return {
-		folders: folders.map((folder) => ({ id: folder.id, name: folder.name })),
-		items: ciphers
-			.filter((cipher) => !cipher.deletedDate)
-			.map((cipher) => {
-				const item: TransferItem = {
-					id: cipher.id,
-					folderId: cipher.folderId,
-					type: cipher.type,
-					name: cipher.name,
-					notes: cipher.notes,
-					favorite: cipher.favorite,
-					reprompt: cipher.reprompt,
-					fields: Array.isArray(cipher.fields)
-						? cipher.fields.filter(isRecord)
-						: null,
-					passwordHistory: cipher.passwordHistory,
-				};
-				const key = TYPE_KEYS[cipher.type];
-				if (key) {
-					const source = cipher as unknown as Record<string, unknown>;
-					item[key] = source[key] ?? (key === "secureNote" ? {} : null);
-				}
-				return item;
-			}),
-		warnings: [],
-	};
+  return {
+    folders: folders.map((folder) => ({ id: folder.id, name: folder.name })),
+    items: ciphers
+      .filter((cipher) => !cipher.deletedDate)
+      .map((cipher) => {
+        const item: TransferItem = {
+          id: cipher.id,
+          folderId: cipher.folderId,
+          type: cipher.type,
+          name: cipher.name,
+          notes: cipher.notes,
+          favorite: cipher.favorite,
+          reprompt: cipher.reprompt,
+          fields: Array.isArray(cipher.fields)
+            ? cipher.fields.filter(isRecord)
+            : null,
+          passwordHistory: cipher.passwordHistory,
+        };
+        const key = TYPE_KEYS[cipher.type];
+        if (key) {
+          const source = cipher as unknown as Record<string, unknown>;
+          item[key] = source[key] ?? (key === "secureNote" ? {} : null);
+        }
+        return item;
+      }),
+    warnings: [],
+  };
 }
 
 export function parseVaultImport(
-	text: string,
-	format: "json" | "csv" | "auto" = "auto",
+  text: string,
+  format: "json" | "csv" | "auto" = "auto",
 ): TransferDocument {
-	const trimmed = text.trim();
-	const selected =
-		format === "auto"
-			? trimmed.startsWith("{") || trimmed.startsWith("[")
-				? "json"
-				: "csv"
-			: format;
-	if (selected === "csv") return parseBitwardenCsv(text);
-	const raw = parseVaultImportSource(trimmed);
-	const source = Array.isArray(raw) ? { items: raw } : raw;
-	if (source.encrypted === true) {
-		if (isPasswordProtectedExport(source))
-			throw new Error("请输入加密导出密码后再导入");
-		throw new Error(
-			"账户限制型加密 JSON 只能导回原 Bitwarden 账户；请使用密码保护型加密导出",
-		);
-	}
-	const folders = Array.isArray(source.folders)
-		? source.folders.map((folder) => ({
-				id: folder.id != null ? String(folder.id) : undefined,
-				name: String(folder.name ?? "Folder"),
-			}))
-		: [];
-	const items = Array.isArray(source.items)
-		? source.items
-		: Array.isArray(source.ciphers)
-			? source.ciphers
-			: [];
-	if (!folders.length && !items.length)
-		throw new Error("导入文件中没有保险库数据");
-	return {
-		folders,
-		items: items.map((item, index: number) => ({
-			...item,
-			type: Number(item.type || CipherType.Login),
-			name: String(item.name ?? `Imported item ${index + 1}`),
-			key: undefined,
-		})),
-		warnings: [],
-	};
+  const trimmed = text.trim();
+  const selected =
+    format === "auto"
+      ? trimmed.startsWith("{") || trimmed.startsWith("[")
+        ? "json"
+        : "csv"
+      : format;
+  if (selected === "csv") return parseBitwardenCsv(text);
+  const raw = parseVaultImportSource(trimmed);
+  const source = Array.isArray(raw) ? { items: raw } : raw;
+  if (source.encrypted === true) {
+    if (isPasswordProtectedExport(source))
+      throw new Error("请输入加密导出密码后再导入");
+    throw new Error(
+      "账户限制型加密 JSON 只能导回原 Bitwarden 账户；请使用密码保护型加密导出",
+    );
+  }
+  const folders = Array.isArray(source.folders)
+    ? source.folders.map((folder) => ({
+        id: folder.id != null ? String(folder.id) : undefined,
+        name: String(folder.name ?? "Folder"),
+      }))
+    : [];
+  const items = Array.isArray(source.items)
+    ? source.items
+    : Array.isArray(source.ciphers)
+      ? source.ciphers
+      : [];
+  if (!folders.length && !items.length)
+    throw new Error("导入文件中没有保险库数据");
+  return {
+    folders,
+    items: items.map((item, index: number) => ({
+      ...item,
+      type: Number(item.type || CipherType.Login),
+      name: String(item.name ?? `Imported item ${index + 1}`),
+      key: undefined,
+    })),
+    warnings: [],
+  };
 }
 
 export function inspectEncryptedVaultImport(
-	text: string,
+  text: string,
 ): "password-protected" | "account-restricted" | null {
-	const source = parseVaultImportSource(text);
-	if (
-		!source ||
-		typeof source !== "object" ||
-		!("encrypted" in source) ||
-		source.encrypted !== true
-	)
-		return null;
-	return isPasswordProtectedExport(source)
-		? "password-protected"
-		: "account-restricted";
+  const source = parseVaultImportSource(text);
+  if (
+    !source ||
+    typeof source !== "object" ||
+    !("encrypted" in source) ||
+    source.encrypted !== true
+  )
+    return null;
+  return isPasswordProtectedExport(source)
+    ? "password-protected"
+    : "account-restricted";
 }
 
 export async function parseVaultImportFile(
-	text: string,
-	format: "json" | "csv",
-	password?: string,
+  text: string,
+  format: "json" | "csv",
+  password?: string,
 ): Promise<TransferDocument> {
-	if (format === "csv") return parseVaultImport(text, format);
-	const source = parseVaultImportSource(text);
-	if (
-		!source ||
-		typeof source !== "object" ||
-		!("encrypted" in source) ||
-		source.encrypted !== true
-	) {
-		return parseVaultImport(text, format);
-	}
-	if (!isPasswordProtectedExport(source)) {
-		throw new Error(
-			"账户限制型加密 JSON 不能跨服务器导入；请从 Bitwarden 导出密码保护型加密 JSON",
-		);
-	}
-	return parseVaultImport(
-		await decryptPasswordProtectedExport(source, password ?? ""),
-		"json",
-	);
+  if (format === "csv") return parseVaultImport(text, format);
+  const source = parseVaultImportSource(text);
+  if (
+    !source ||
+    typeof source !== "object" ||
+    !("encrypted" in source) ||
+    source.encrypted !== true
+  ) {
+    return parseVaultImport(text, format);
+  }
+  if (!isPasswordProtectedExport(source)) {
+    throw new Error(
+      "账户限制型加密 JSON 不能跨服务器导入；请从 Bitwarden 导出密码保护型加密 JSON",
+    );
+  }
+  return parseVaultImport(
+    await decryptPasswordProtectedExport(source, password ?? ""),
+    "json",
+  );
 }
 
 export function buildBitwardenJson(document: TransferDocument): string {
-	return JSON.stringify(
-		{ encrypted: false, folders: document.folders, items: document.items },
-		null,
-		2,
-	);
+  return JSON.stringify(
+    { encrypted: false, folders: document.folders, items: document.items },
+    null,
+    2,
+  );
 }
 
 export async function encryptTransferDocument(
-	document: TransferDocument,
-	encKey: Uint8Array,
-	macKey: Uint8Array,
-	onProgress?: (progress: TransferEncryptionProgress) => void,
+  document: TransferDocument,
+  encKey: Uint8Array,
+  macKey: Uint8Array,
+  onProgress?: (progress: TransferEncryptionProgress) => void,
 ): Promise<EncryptedImportPayload> {
-	const total = document.folders.length + document.items.length;
-	let processed = 0;
-	const folderIndexMap = new Map<string, number>();
-	const folderIndexByName = new Map<string, number>();
-	const folders: Array<{ id?: string; name: string }> = [];
-	for (const folder of document.folders) {
-		const existingIndex = folderIndexByName.get(folder.name);
-		if (existingIndex !== undefined) {
-			if (folder.id != null)
-				folderIndexMap.set(String(folder.id), existingIndex);
-			onProgress?.({ processed: ++processed, total, kind: "folder" });
-			continue;
-		}
-		const outputIndex = folders.length;
-		folderIndexByName.set(folder.name, outputIndex);
-		if (folder.id != null) folderIndexMap.set(String(folder.id), outputIndex);
-		folders.push({
-			...(folder.existingId ? { id: folder.existingId } : {}),
-			name: await encryptStr(folder.name || "Folder", encKey, macKey),
-		});
-		onProgress?.({ processed: ++processed, total, kind: "folder" });
-	}
+  const total = document.folders.length + document.items.length;
+  let processed = 0;
+  const folderIndexMap = new Map<string, number>();
+  const folderIndexByName = new Map<string, number>();
+  const folders: Array<{ id?: string; name: string }> = [];
+  for (const folder of document.folders) {
+    const existingIndex = folderIndexByName.get(folder.name);
+    if (existingIndex !== undefined) {
+      if (folder.id != null)
+        folderIndexMap.set(String(folder.id), existingIndex);
+      onProgress?.({ processed: ++processed, total, kind: "folder" });
+      continue;
+    }
+    const outputIndex = folders.length;
+    folderIndexByName.set(folder.name, outputIndex);
+    if (folder.id != null) folderIndexMap.set(String(folder.id), outputIndex);
+    folders.push({
+      ...(folder.existingId ? { id: folder.existingId } : {}),
+      name: await encryptStr(folder.name || "Folder", encKey, macKey),
+    });
+    onProgress?.({ processed: ++processed, total, kind: "folder" });
+  }
 
-	const ciphers: NonNullable<CipherImportInput["ciphers"]> = [];
-	const folderRelationships: Array<{ key: number; value: number }> = [];
-	for (const [index, item] of document.items.entries()) {
-		const {
-			id: _id,
-			folderId,
-			key: _key,
-			deletedDate: _deletedDate,
-			...payload
-		} = item;
-		const normalized = {
-			...payload,
-			type: Number(payload.type) || CipherType.Login,
-			name: String(payload.name || "Imported item"),
-			notes: payload.notes == null ? null : String(payload.notes),
-			favorite: Boolean(payload.favorite),
-			reprompt: Number(payload.reprompt) === 1 ? 1 : 0,
-			folderId: null,
-			fields: Array.isArray(payload.fields)
-				? payload.fields.filter(isRecord)
-				: undefined,
-		};
-		ciphers.push(await encryptCipher(normalized, encKey, macKey));
-		onProgress?.({ processed: ++processed, total, kind: "item" });
-		if (folderId != null) {
-			const folderIndex = folderIndexMap.get(String(folderId));
-			if (folderIndex !== undefined)
-				folderRelationships.push({ key: index, value: folderIndex });
-		}
-	}
-	return { folders, ciphers, folderRelationships };
+  const ciphers: NonNullable<CipherImportInput["ciphers"]> = [];
+  const folderRelationships: Array<{ key: number; value: number }> = [];
+  for (const [index, item] of document.items.entries()) {
+    const {
+      id: _id,
+      folderId,
+      key: _key,
+      deletedDate: _deletedDate,
+      ...payload
+    } = item;
+    const normalized = {
+      ...payload,
+      type: Number(payload.type) || CipherType.Login,
+      name: String(payload.name || "Imported item"),
+      notes: payload.notes == null ? null : String(payload.notes),
+      favorite: Boolean(payload.favorite),
+      reprompt: Number(payload.reprompt) === 1 ? 1 : 0,
+      folderId: null,
+      fields: Array.isArray(payload.fields)
+        ? payload.fields.filter(isRecord)
+        : undefined,
+    };
+    ciphers.push(await encryptCipher(normalized, encKey, macKey));
+    onProgress?.({ processed: ++processed, total, kind: "item" });
+    if (folderId != null) {
+      const folderIndex = folderIndexMap.get(String(folderId));
+      if (folderIndex !== undefined)
+        folderRelationships.push({ key: index, value: folderIndex });
+    }
+  }
+  return { folders, ciphers, folderRelationships };
 }

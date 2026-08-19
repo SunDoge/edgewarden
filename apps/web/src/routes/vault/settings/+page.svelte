@@ -2,21 +2,21 @@
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
 import {
-	deleteAccountApi,
-	disableTwoFactorApi,
-	enableAuthenticatorApi,
-	changeMasterPasswordApi,
-	fetchApiKeyApi,
-	fetchDevicesApi,
-	fetchProfileApi,
-	fetchRecoveryCodeApi,
-	getAuthenticatorApi,
-	rotateApiKeyApi,
-	updateProfileApi,
+  deleteAccountApi,
+  disableTwoFactorApi,
+  enableAuthenticatorApi,
+  changeMasterPasswordApi,
+  fetchApiKeyApi,
+  fetchDevicesApi,
+  fetchProfileApi,
+  fetchRecoveryCodeApi,
+  getAuthenticatorApi,
+  rotateApiKeyApi,
+  updateProfileApi,
 } from "$lib/services/api-account";
 import {
-	deriveMasterKey,
-	deriveMasterPasswordHash,
+  deriveMasterKey,
+  deriveMasterPasswordHash,
 } from "$lib/services/crypto";
 import { vault, syncVaultData, logout } from "$lib/stores/vault.svelte";
 import { Button } from "$lib/components/ui/button/index.js";
@@ -30,16 +30,16 @@ import * as Alert from "$lib/components/ui/alert/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
 import * as Tabs from "$lib/components/ui/tabs/index.js";
 import {
-	applyThemePreference,
-	loadClientPreferences,
-	saveClientPreferences,
-	type SessionTimeoutAction,
-	type ThemePreference,
+  applyThemePreference,
+  loadClientPreferences,
+  saveClientPreferences,
+  type SessionTimeoutAction,
+  type ThemePreference,
 } from "$lib/services/client-preferences";
 import { ArrowLeft, LoaderCircle } from "@lucide/svelte";
 import type {
-	AccountDevice,
-	AccountProfile,
+  AccountDevice,
+  AccountProfile,
 } from "$lib/services/account-types";
 
 let loading = $state(true);
@@ -69,207 +69,207 @@ let sessionTimeoutAction = $state<SessionTimeoutAction>("lock");
 let rotateApiKeyOpen = $state(false);
 
 function fail(value: unknown) {
-	error = value instanceof Error ? value.message : "操作失败";
-	message = "";
+  error = value instanceof Error ? value.message : "操作失败";
+  message = "";
 }
 
 async function load() {
-	loading = true;
-	error = "";
-	try {
-		[profile, { data: devices }] = await Promise.all([
-			fetchProfileApi(),
-			fetchDevicesApi(),
-		]);
-		name = profile.name ?? "";
-		hint = profile.masterPasswordHint ?? "";
-	} catch (e) {
-		fail(e);
-	} finally {
-		loading = false;
-	}
+  loading = true;
+  error = "";
+  try {
+    [profile, { data: devices }] = await Promise.all([
+      fetchProfileApi(),
+      fetchDevicesApi(),
+    ]);
+    name = profile.name ?? "";
+    hint = profile.masterPasswordHint ?? "";
+  } catch (e) {
+    fail(e);
+  } finally {
+    loading = false;
+  }
 }
 
 onMount(async () => {
-	const preferences = loadClientPreferences();
-	theme = preferences.theme;
-	lockTimeoutMinutes = String(
-		preferences.lockTimeoutMinutes,
-	) as typeof lockTimeoutMinutes;
-	sessionTimeoutAction = preferences.sessionTimeoutAction;
-	await load();
+  const preferences = loadClientPreferences();
+  theme = preferences.theme;
+  lockTimeoutMinutes = String(
+    preferences.lockTimeoutMinutes,
+  ) as typeof lockTimeoutMinutes;
+  sessionTimeoutAction = preferences.sessionTimeoutAction;
+  await load();
 });
 
 function saveLocalPreferences() {
-	saveClientPreferences({
-		theme,
-		lockTimeoutMinutes: Number(lockTimeoutMinutes) as 0 | 1 | 5 | 15 | 30,
-		sessionTimeoutAction,
-	});
-	applyThemePreference(theme);
-	message = "外观和会话策略已保存";
+  saveClientPreferences({
+    theme,
+    lockTimeoutMinutes: Number(lockTimeoutMinutes) as 0 | 1 | 5 | 15 | 30,
+    sessionTimeoutAction,
+  });
+  applyThemePreference(theme);
+  message = "外观和会话策略已保存";
 }
 
 async function saveProfile() {
-	busy = "profile";
-	error = "";
-	try {
-		profile = await updateProfileApi({
-			name: name.trim() || null,
-			masterPasswordHint: hint.trim() || null,
-		});
-		await syncVaultData();
-		message = "个人资料已保存";
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
+  busy = "profile";
+  error = "";
+  try {
+    profile = await updateProfileApi({
+      name: name.trim() || null,
+      masterPasswordHint: hint.trim() || null,
+    });
+    await syncVaultData();
+    message = "个人资料已保存";
+  } catch (e) {
+    fail(e);
+  } finally {
+    busy = "";
+  }
 }
 
 async function revealApiKey() {
-	busy = "api-key";
-	try {
-		apiKey = (await fetchApiKeyApi()).apiKey;
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
+  busy = "api-key";
+  try {
+    apiKey = (await fetchApiKeyApi()).apiKey;
+  } catch (e) {
+    fail(e);
+  } finally {
+    busy = "";
+  }
 }
 
 async function rotateApiKey() {
-	rotateApiKeyOpen = false;
-	busy = "api-key";
-	try {
-		apiKey = (await rotateApiKeyApi()).apiKey;
-		message = "API Key 已轮换";
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
+  rotateApiKeyOpen = false;
+  busy = "api-key";
+  try {
+    apiKey = (await rotateApiKeyApi()).apiKey;
+    message = "API Key 已轮换";
+  } catch (e) {
+    fail(e);
+  } finally {
+    busy = "";
+  }
 }
 
 async function copy(value: string) {
-	await navigator.clipboard.writeText(value);
-	message = "已复制到剪贴板";
+  await navigator.clipboard.writeText(value);
+  message = "已复制到剪贴板";
 }
 
 async function removeAccount() {
-	if (!deleteAccountPassword) return;
-	busy = "delete-account";
-	try {
-		await deleteAccountApi(await passwordHash(deleteAccountPassword));
-		deleteAccountPassword = "";
-		await logout();
-		await goto("/login?reason=account-deleted");
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
+  if (!deleteAccountPassword) return;
+  busy = "delete-account";
+  try {
+    await deleteAccountApi(await passwordHash(deleteAccountPassword));
+    deleteAccountPassword = "";
+    await logout();
+    await goto("/login?reason=account-deleted");
+  } catch (e) {
+    fail(e);
+  } finally {
+    busy = "";
+  }
 }
 
 async function beginTotp() {
-	busy = "totp";
-	try {
-		const result = await getAuthenticatorApi();
-		totpKey = result.key;
-		totpToken = "";
-		totpOpen = true;
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
+  busy = "totp";
+  try {
+    const result = await getAuthenticatorApi();
+    totpKey = result.key;
+    totpToken = "";
+    totpOpen = true;
+  } catch (e) {
+    fail(e);
+  } finally {
+    busy = "";
+  }
 }
 
 async function enableTotp() {
-	if (!profile) return;
-	busy = "totp-enable";
-	try {
-		await enableAuthenticatorApi(totpKey, totpToken.replace(/\s/g, ""));
-		profile.twoFactorEnabled = true;
-		totpOpen = false;
-		message = "身份验证器已启用，请保存恢复代码";
-		const result = await fetchRecoveryCodeApi();
-		recoveryCode = result.code ?? "";
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
+  if (!profile) return;
+  busy = "totp-enable";
+  try {
+    await enableAuthenticatorApi(totpKey, totpToken.replace(/\s/g, ""));
+    profile.twoFactorEnabled = true;
+    totpOpen = false;
+    message = "身份验证器已启用，请保存恢复代码";
+    const result = await fetchRecoveryCodeApi();
+    recoveryCode = result.code ?? "";
+  } catch (e) {
+    fail(e);
+  } finally {
+    busy = "";
+  }
 }
 
 async function showRecoveryCode() {
-	busy = "recovery";
-	try {
-		recoveryCode = (await fetchRecoveryCodeApi()).code ?? "";
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
+  busy = "recovery";
+  try {
+    recoveryCode = (await fetchRecoveryCodeApi()).code ?? "";
+  } catch (e) {
+    fail(e);
+  } finally {
+    busy = "";
+  }
 }
 
 async function disableTotp() {
-	if (!profile || !masterPassword) return;
-	busy = "totp-disable";
-	try {
-		const key = await deriveMasterKey(
-			masterPassword,
-			profile.email,
-			profile.kdfIterations,
-		);
-		const hash = await deriveMasterPasswordHash(key, masterPassword);
-		await disableTwoFactorApi(hash);
-		profile.twoFactorEnabled = false;
-		disableOpen = false;
-		masterPassword = "";
-		recoveryCode = "";
-		message = "两步验证已关闭";
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
+  if (!profile || !masterPassword) return;
+  busy = "totp-disable";
+  try {
+    const key = await deriveMasterKey(
+      masterPassword,
+      profile.email,
+      profile.kdfIterations,
+    );
+    const hash = await deriveMasterPasswordHash(key, masterPassword);
+    await disableTwoFactorApi(hash);
+    profile.twoFactorEnabled = false;
+    disableOpen = false;
+    masterPassword = "";
+    recoveryCode = "";
+    message = "两步验证已关闭";
+  } catch (e) {
+    fail(e);
+  } finally {
+    busy = "";
+  }
 }
 
 async function passwordHash(password: string): Promise<string> {
-	if (!profile) throw new Error("账户资料尚未载入");
-	const key = await deriveMasterKey(
-		password,
-		profile.email,
-		profile.kdfIterations,
-	);
-	return deriveMasterPasswordHash(key, password);
+  if (!profile) throw new Error("账户资料尚未载入");
+  const key = await deriveMasterKey(
+    password,
+    profile.email,
+    profile.kdfIterations,
+  );
+  return deriveMasterPasswordHash(key, password);
 }
 
 async function changeMasterPassword() {
-	if (!profile) return fail(new Error("账户资料尚未载入"));
-	if (newPassword.length < 12)
-		return fail(new Error("新主密码至少需要 12 个字符"));
-	if (newPassword !== confirmPassword)
-		return fail(new Error("两次输入的新主密码不一致"));
-	busy = "password";
-	try {
-		await changeMasterPasswordApi({
-			email: profile.email,
-			currentPassword,
-			newPassword,
-			iterations: profile.kdfIterations,
-			profileKey: profile.key,
-			masterPasswordHint: hint.trim() || null,
-		});
-		passwordOpen = false;
-		await logout();
-		await goto("/login?passwordChanged=1");
-	} catch (e) {
-		fail(e);
-	} finally {
-		busy = "";
-	}
+  if (!profile) return fail(new Error("账户资料尚未载入"));
+  if (newPassword.length < 12)
+    return fail(new Error("新主密码至少需要 12 个字符"));
+  if (newPassword !== confirmPassword)
+    return fail(new Error("两次输入的新主密码不一致"));
+  busy = "password";
+  try {
+    await changeMasterPasswordApi({
+      email: profile.email,
+      currentPassword,
+      newPassword,
+      iterations: profile.kdfIterations,
+      profileKey: profile.key,
+      masterPasswordHint: hint.trim() || null,
+    });
+    passwordOpen = false;
+    await logout();
+    await goto("/login?passwordChanged=1");
+  } catch (e) {
+    fail(e);
+  } finally {
+    busy = "";
+  }
 }
 </script>
 

@@ -5,35 +5,35 @@ import type { VaultCategory } from "$lib/services/vault-filter";
 import type { VaultFolder } from "$lib/services/vault-types";
 
 let {
-	mobileOpen = $bindable(false),
-	activeCategory = $bindable<VaultCategory>("all"),
-	activeFolder = $bindable<string | null>(null),
-	duplicateCount,
-	duplicateFolderCount,
-	mergingDuplicateFolders,
-	onCreate,
-	onCreateFolder,
-	onRenameFolder,
-	onDeleteFolder,
-	onDeleteAllFolders,
-	onMergeDuplicateFolders,
+  mobileOpen = $bindable(false),
+  activeCategory = $bindable<VaultCategory>("all"),
+  activeFolder = $bindable<string | null>(null),
+  duplicateCount,
+  duplicateFolderCount,
+  mergingDuplicateFolders,
+  onCreate,
+  onCreateFolder,
+  onRenameFolder,
+  onDeleteFolder,
+  onDeleteAllFolders,
+  onMergeDuplicateFolders,
 }: {
-	mobileOpen: boolean;
-	activeCategory: VaultCategory;
-	activeFolder: string | null;
-	duplicateCount: number;
-	duplicateFolderCount: number;
-	mergingDuplicateFolders: boolean;
-	onCreate: () => void;
-	onCreateFolder: () => void;
-	onRenameFolder: (folder: VaultFolder) => void;
-	onDeleteFolder: (folder: VaultFolder) => void;
-	onDeleteAllFolders: () => void;
-	onMergeDuplicateFolders: () => void;
+  mobileOpen: boolean;
+  activeCategory: VaultCategory;
+  activeFolder: string | null;
+  duplicateCount: number;
+  duplicateFolderCount: number;
+  mergingDuplicateFolders: boolean;
+  onCreate: () => void;
+  onCreateFolder: () => void;
+  onRenameFolder: (folder: VaultFolder) => void;
+  onDeleteFolder: (folder: VaultFolder) => void;
+  onDeleteAllFolders: () => void;
+  onMergeDuplicateFolders: () => void;
 } = $props();
 
 function closeMobile() {
-	mobileOpen = false;
+  mobileOpen = false;
 }
 </script>
 

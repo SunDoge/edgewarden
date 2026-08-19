@@ -2,13 +2,13 @@
 import "./layout.css";
 import { onMount } from "svelte";
 import {
-	applyThemePreference,
-	clientPreferencesStorageKey,
-	loadClientPreferences,
+  applyThemePreference,
+  clientPreferencesStorageKey,
+  loadClientPreferences,
 } from "$lib/services/client-preferences";
 import {
-	NetworkStatusMonitor,
-	type NetworkStatus,
+  NetworkStatusMonitor,
+  type NetworkStatus,
 } from "$lib/services/network-status";
 import { Badge } from "$lib/components/ui/badge/index.js";
 import { Wifi, WifiOff } from "@lucide/svelte";
@@ -21,71 +21,71 @@ let { children } = $props();
 let networkStatus = $state<NetworkStatus>("checking");
 
 onMount(() => {
-	if (import.meta.env.DEV) {
-		void navigator.serviceWorker
-			?.getRegistrations()
-			.then((registrations) =>
-				Promise.all(
-					registrations.map((registration) => registration.unregister()),
-				),
-			);
-		void caches
-			?.keys()
-			.then((keys) =>
-				Promise.all(
-					keys
-						.filter((key) => key.startsWith("edgewarden-shell-"))
-						.map((key) => caches.delete(key)),
-				),
-			);
-	}
+  if (import.meta.env.DEV) {
+    void navigator.serviceWorker
+      ?.getRegistrations()
+      .then((registrations) =>
+        Promise.all(
+          registrations.map((registration) => registration.unregister()),
+        ),
+      );
+    void caches
+      ?.keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith("edgewarden-shell-"))
+            .map((key) => caches.delete(key)),
+        ),
+      );
+  }
 
-	syncDocumentLocale();
+  syncDocumentLocale();
 
-	const media = matchMedia("(prefers-color-scheme: dark)");
-	const apply = () => applyThemePreference(loadClientPreferences().theme);
-	const onStorage = (event: StorageEvent) => {
-		if (event.key === clientPreferencesStorageKey()) apply();
-	};
-	apply();
-	media.addEventListener("change", apply);
-	window.addEventListener("storage", onStorage);
-	return () => {
-		media.removeEventListener("change", apply);
-		window.removeEventListener("storage", onStorage);
-	};
+  const media = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => applyThemePreference(loadClientPreferences().theme);
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === clientPreferencesStorageKey()) apply();
+  };
+  apply();
+  media.addEventListener("change", apply);
+  window.addEventListener("storage", onStorage);
+  return () => {
+    media.removeEventListener("change", apply);
+    window.removeEventListener("storage", onStorage);
+  };
 });
 
 onMount(() => {
-	const monitor = new NetworkStatusMonitor({
-		probe: async () => {
-			const response = await fetch("/api/health", {
-				cache: "no-store",
-				signal: AbortSignal.timeout(5_000),
-			});
-			if (!response.ok) throw new Error("Service unavailable");
-		},
-		onStatus: (status) => {
-			networkStatus = status;
-		},
-	});
-	const check = () => void monitor.check();
-	const offline = () => void monitor.check(false);
-	const visible = () => {
-		if (document.visibilityState === "visible") check();
-	};
-	monitor.start();
-	window.addEventListener("online", check);
-	window.addEventListener("offline", offline);
-	window.addEventListener("focus", check);
-	document.addEventListener("visibilitychange", visible);
-	return () => {
-		monitor.stop();
-		window.removeEventListener("online", check);
-		window.removeEventListener("offline", offline);
-		window.removeEventListener("focus", check);
-		document.removeEventListener("visibilitychange", visible);
-	};
+  const monitor = new NetworkStatusMonitor({
+    probe: async () => {
+      const response = await fetch("/api/health", {
+        cache: "no-store",
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!response.ok) throw new Error("Service unavailable");
+    },
+    onStatus: (status) => {
+      networkStatus = status;
+    },
+  });
+  const check = () => void monitor.check();
+  const offline = () => void monitor.check(false);
+  const visible = () => {
+    if (document.visibilityState === "visible") check();
+  };
+  monitor.start();
+  window.addEventListener("online", check);
+  window.addEventListener("offline", offline);
+  window.addEventListener("focus", check);
+  document.addEventListener("visibilitychange", visible);
+  return () => {
+    monitor.stop();
+    window.removeEventListener("online", check);
+    window.removeEventListener("offline", offline);
+    window.removeEventListener("focus", check);
+    document.removeEventListener("visibilitychange", visible);
+  };
 });
 </script>
 

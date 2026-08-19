@@ -2,9 +2,9 @@
 import { Select as SelectPrimitive } from "bits-ui";
 
 let {
-	open = $bindable(false),
-	value = $bindable(),
-	...restProps
+  open = $bindable(false),
+  value = $bindable(),
+  ...restProps
 }: SelectPrimitive.RootProps = $props();
 </script>
 

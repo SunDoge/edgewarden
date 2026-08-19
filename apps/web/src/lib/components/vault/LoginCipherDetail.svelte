@@ -5,31 +5,31 @@ import { Check, Copy, ExternalLink, Eye, EyeOff } from "@lucide/svelte";
 import type { VaultLoginData, VaultTotp } from "$lib/services/vault-types";
 
 let {
-	login,
-	hidePasswords = false,
-	totp,
+  login,
+  hidePasswords = false,
+  totp,
 }: {
-	login: VaultLoginData | null;
-	hidePasswords?: boolean;
-	totp: VaultTotp | null;
+  login: VaultLoginData | null;
+  hidePasswords?: boolean;
+  totp: VaultTotp | null;
 } = $props();
 
 let copiedField = $state<string | null>(null);
 let showPassword = $state(false);
 let uris = $derived(
-	Array.isArray(login?.uris)
-		? login.uris
-		: login?.uri
-			? [{ uri: login.uri }]
-			: [],
+  Array.isArray(login?.uris)
+    ? login.uris
+    : login?.uri
+      ? [{ uri: login.uri }]
+      : [],
 );
 
 function copy(text: string, field: string) {
-	void navigator.clipboard.writeText(text);
-	copiedField = field;
-	setTimeout(() => {
-		if (copiedField === field) copiedField = null;
-	}, 2000);
+  void navigator.clipboard.writeText(text);
+  copiedField = field;
+  setTimeout(() => {
+    if (copiedField === field) copiedField = null;
+  }, 2000);
 }
 </script>
 

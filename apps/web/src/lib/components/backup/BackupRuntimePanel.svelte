@@ -8,19 +8,19 @@ import { formatFileSize } from "$lib/services/backup-display";
 import type { BackupDestinationRecord } from "./types";
 
 let {
-	destination,
-	currentPath,
-	running,
-	browsing,
-	onRun,
-	onOpenParent,
+  destination,
+  currentPath,
+  running,
+  browsing,
+  onRun,
+  onOpenParent,
 }: {
-	destination: BackupDestinationRecord | undefined;
-	currentPath: string;
-	running: boolean;
-	browsing: boolean;
-	onRun: () => void;
-	onOpenParent: () => void;
+  destination: BackupDestinationRecord | undefined;
+  currentPath: string;
+  running: boolean;
+  browsing: boolean;
+  onRun: () => void;
+  onOpenParent: () => void;
 } = $props();
 </script>
 

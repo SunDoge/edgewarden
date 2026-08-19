@@ -7,15 +7,15 @@ import * as Empty from "$lib/components/ui/empty/index.js";
 import type { BackupDestinationRecord } from "./types";
 
 let {
-	destinations,
-	selectedId,
-	onAdd,
-	onSelect,
+  destinations,
+  selectedId,
+  onAdd,
+  onSelect,
 }: {
-	destinations: BackupDestinationRecord[];
-	selectedId: string | null;
-	onAdd: () => void;
-	onSelect: (id: string) => void;
+  destinations: BackupDestinationRecord[];
+  selectedId: string | null;
+  onAdd: () => void;
+  onSelect: (id: string) => void;
 } = $props();
 </script>
 

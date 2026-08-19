@@ -5,13 +5,13 @@ import { cn, type WithElementRef } from "$lib/utils.js";
 import type { HTMLAttributes } from "svelte/elements";
 
 let {
-	ref = $bindable(null),
-	class: className,
-	children,
-	showCloseButton = false,
-	...restProps
+  ref = $bindable(null),
+  class: className,
+  children,
+  showCloseButton = false,
+  ...restProps
 }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
-	showCloseButton?: boolean;
+  showCloseButton?: boolean;
 } = $props();
 </script>
 

@@ -8,19 +8,19 @@ import * as Empty from "$lib/components/ui/empty/index.js";
 import * as Field from "$lib/components/ui/field/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import {
-	createEquivalentDomainRuleId,
-	normalizeEquivalentDomainRule,
+  createEquivalentDomainRuleId,
+  normalizeEquivalentDomainRule,
 } from "$lib/services/equivalent-domains";
 import { cn } from "$lib/utils";
 
 let {
-	rules = $bindable(),
-	onSuccess,
-	onError,
+  rules = $bindable(),
+  onSuccess,
+  onError,
 }: {
-	rules: CustomEquivalentDomain[];
-	onSuccess: (message: string) => void;
-	onError: (message: string) => void;
+  rules: CustomEquivalentDomain[];
+  onSuccess: (message: string) => void;
+  onError: (message: string) => void;
 } = $props();
 
 let editingRuleId = $state<string | null>(null);
@@ -30,91 +30,91 @@ let newRuleDomains = $state<string[] | null>(null);
 let newRuleInvalidIndexes = $state<Set<number>>(new Set());
 
 function startAdd() {
-	newRuleDomains = ["", ""];
-	newRuleInvalidIndexes = new Set();
-	editingRuleId = null;
+  newRuleDomains = ["", ""];
+  newRuleInvalidIndexes = new Set();
+  editingRuleId = null;
 }
 
 function startEdit(rule: CustomEquivalentDomain) {
-	editingRuleId = rule.id;
-	editingDomains = [...rule.domains];
-	editingInvalidIndexes = new Set();
-	newRuleDomains = null;
+  editingRuleId = rule.id;
+  editingDomains = [...rule.domains];
+  editingInvalidIndexes = new Set();
+  newRuleDomains = null;
 }
 
 function cancelEditor(isNew: boolean) {
-	if (isNew) newRuleDomains = null;
-	else editingRuleId = null;
+  if (isNew) newRuleDomains = null;
+  else editingRuleId = null;
 }
 
 function addDomain(isNew: boolean) {
-	if (isNew && newRuleDomains) newRuleDomains = [...newRuleDomains, ""];
-	else editingDomains = [...editingDomains, ""];
+  if (isNew && newRuleDomains) newRuleDomains = [...newRuleDomains, ""];
+  else editingDomains = [...editingDomains, ""];
 }
 
 function removeDomain(isNew: boolean, index: number) {
-	if (isNew && newRuleDomains?.length && newRuleDomains.length > 2) {
-		newRuleDomains = newRuleDomains.filter(
-			(_, itemIndex) => itemIndex !== index,
-		);
-		newRuleInvalidIndexes = new Set();
-	} else if (!isNew && editingDomains.length > 2) {
-		editingDomains = editingDomains.filter(
-			(_, itemIndex) => itemIndex !== index,
-		);
-		editingInvalidIndexes = new Set();
-	}
+  if (isNew && newRuleDomains?.length && newRuleDomains.length > 2) {
+    newRuleDomains = newRuleDomains.filter(
+      (_, itemIndex) => itemIndex !== index,
+    );
+    newRuleInvalidIndexes = new Set();
+  } else if (!isNew && editingDomains.length > 2) {
+    editingDomains = editingDomains.filter(
+      (_, itemIndex) => itemIndex !== index,
+    );
+    editingInvalidIndexes = new Set();
+  }
 }
 
 function validate(domains: string[], isNew: boolean) {
-	const normalized = normalizeEquivalentDomainRule(domains);
-	if (isNew) newRuleInvalidIndexes = normalized.invalidIndexes;
-	else editingInvalidIndexes = normalized.invalidIndexes;
-	if (normalized.invalidIndexes.size) {
-		onError("部分域名格式不正确，请修改标记的内容。");
-		return null;
-	}
-	if (!normalized.valid) {
-		onError("每条规则必须包含至少 2 个有效的等效域名。");
-		return null;
-	}
-	return normalized.domains;
+  const normalized = normalizeEquivalentDomainRule(domains);
+  if (isNew) newRuleInvalidIndexes = normalized.invalidIndexes;
+  else editingInvalidIndexes = normalized.invalidIndexes;
+  if (normalized.invalidIndexes.size) {
+    onError("部分域名格式不正确，请修改标记的内容。");
+    return null;
+  }
+  if (!normalized.valid) {
+    onError("每条规则必须包含至少 2 个有效的等效域名。");
+    return null;
+  }
+  return normalized.domains;
 }
 
 function confirmNew() {
-	if (!newRuleDomains) return;
-	const domains = validate(newRuleDomains, true);
-	if (!domains) return;
-	rules = [
-		{ id: createEquivalentDomainRuleId(), domains, excluded: false },
-		...rules,
-	];
-	newRuleDomains = null;
-	newRuleInvalidIndexes = new Set();
-	onSuccess("已添加临时规则，请记得点击右上角“保存并应用”。");
+  if (!newRuleDomains) return;
+  const domains = validate(newRuleDomains, true);
+  if (!domains) return;
+  rules = [
+    { id: createEquivalentDomainRuleId(), domains, excluded: false },
+    ...rules,
+  ];
+  newRuleDomains = null;
+  newRuleInvalidIndexes = new Set();
+  onSuccess("已添加临时规则，请记得点击右上角“保存并应用”。");
 }
 
 function confirmEdit() {
-	const domains = validate(editingDomains, false);
-	if (!domains) return;
-	rules = rules.map((rule) =>
-		rule.id === editingRuleId ? { ...rule, domains } : rule,
-	);
-	editingRuleId = null;
-	editingDomains = ["", ""];
-	editingInvalidIndexes = new Set();
-	onSuccess("已更新临时规则，请记得点击右上角“保存并应用”。");
+  const domains = validate(editingDomains, false);
+  if (!domains) return;
+  rules = rules.map((rule) =>
+    rule.id === editingRuleId ? { ...rule, domains } : rule,
+  );
+  editingRuleId = null;
+  editingDomains = ["", ""];
+  editingInvalidIndexes = new Set();
+  onSuccess("已更新临时规则，请记得点击右上角“保存并应用”。");
 }
 
 function toggleRule(index: number) {
-	rules = rules.map((rule, ruleIndex) =>
-		ruleIndex === index ? { ...rule, excluded: !rule.excluded } : rule,
-	);
+  rules = rules.map((rule, ruleIndex) =>
+    ruleIndex === index ? { ...rule, excluded: !rule.excluded } : rule,
+  );
 }
 
 function deleteRule(index: number) {
-	rules = rules.filter((_, ruleIndex) => ruleIndex !== index);
-	onSuccess("已删除规则，请记得点击右上角“保存并应用”。");
+  rules = rules.filter((_, ruleIndex) => ruleIndex !== index);
+  onSuccess("已删除规则，请记得点击右上角“保存并应用”。");
 }
 </script>
 

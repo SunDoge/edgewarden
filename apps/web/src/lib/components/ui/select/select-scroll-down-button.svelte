@@ -4,9 +4,9 @@ import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
 import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
 
 let {
-	ref = $bindable(null),
-	class: className,
-	...restProps
+  ref = $bindable(null),
+  class: className,
+  ...restProps
 }: WithoutChildrenOrChild<SelectPrimitive.ScrollDownButtonProps> = $props();
 </script>
 

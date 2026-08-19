@@ -9,19 +9,19 @@ import { Separator } from "$lib/components/ui/separator/index.js";
 import { Spinner } from "$lib/components/ui/spinner/index.js";
 
 let {
-	file = $bindable(),
-	replaceExisting = $bindable(),
-	allowChecksumMismatch = $bindable(),
-	restoring,
-	onExport,
-	onImport,
+  file = $bindable(),
+  replaceExisting = $bindable(),
+  allowChecksumMismatch = $bindable(),
+  restoring,
+  onExport,
+  onImport,
 }: {
-	file: File | undefined;
-	replaceExisting: boolean;
-	allowChecksumMismatch: boolean;
-	restoring: boolean;
-	onExport: () => void;
-	onImport: () => void;
+  file: File | undefined;
+  replaceExisting: boolean;
+  allowChecksumMismatch: boolean;
+  restoring: boolean;
+  onExport: () => void;
+  onImport: () => void;
 } = $props();
 </script>
 

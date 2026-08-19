@@ -5,12 +5,12 @@ import type { Snippet } from "svelte";
 import type { HTMLAttributes } from "svelte/elements";
 
 let {
-	ref = $bindable(null),
-	class: className,
-	children,
-	...restProps
+  ref = $bindable(null),
+  class: className,
+  children,
+  ...restProps
 }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
-	children?: Snippet;
+  children?: Snippet;
 } = $props();
 
 const hasContent = $derived(!!children);

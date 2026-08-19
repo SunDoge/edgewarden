@@ -1,19 +1,19 @@
 <script lang="ts">
 import type { FolderResponse } from "@edgewarden/shared";
 import {
-	Archive,
-	Combine,
-	Copy,
-	CreditCard,
-	Edit,
-	FileText,
-	Folder,
-	KeyRound,
-	Lock,
-	Plus,
-	Star,
-	Trash2,
-	User,
+  Archive,
+  Combine,
+  Copy,
+  CreditCard,
+  Edit,
+  FileText,
+  Folder,
+  KeyRound,
+  Lock,
+  Plus,
+  Star,
+  Trash2,
+  User,
 } from "@lucide/svelte";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Badge } from "$lib/components/ui/badge/index.js";
@@ -22,83 +22,83 @@ import type { VaultCategory } from "$lib/services/vault-filter";
 import { vault } from "$lib/stores/vault.svelte";
 
 let {
-	activeCategory = $bindable(),
-	activeFolder = $bindable(),
-	duplicateCount,
-	onCreate,
-	onCreateFolder,
-	onRenameFolder,
-	onDeleteFolder,
-	onDeleteAllFolders,
-	onMergeDuplicateFolders,
-	duplicateFolderCount,
-	mergingDuplicateFolders,
-	onNavigate,
+  activeCategory = $bindable(),
+  activeFolder = $bindable(),
+  duplicateCount,
+  onCreate,
+  onCreateFolder,
+  onRenameFolder,
+  onDeleteFolder,
+  onDeleteAllFolders,
+  onMergeDuplicateFolders,
+  duplicateFolderCount,
+  mergingDuplicateFolders,
+  onNavigate,
 }: {
-	activeCategory: VaultCategory;
-	activeFolder: string | null;
-	duplicateCount: number;
-	onCreate: () => void;
-	onCreateFolder: () => void;
-	onRenameFolder: (folder: FolderResponse) => void;
-	onDeleteFolder: (folder: FolderResponse) => void;
-	onDeleteAllFolders: () => void;
-	onMergeDuplicateFolders: () => void;
-	duplicateFolderCount: number;
-	mergingDuplicateFolders: boolean;
-	onNavigate?: () => void;
+  activeCategory: VaultCategory;
+  activeFolder: string | null;
+  duplicateCount: number;
+  onCreate: () => void;
+  onCreateFolder: () => void;
+  onRenameFolder: (folder: FolderResponse) => void;
+  onDeleteFolder: (folder: FolderResponse) => void;
+  onDeleteAllFolders: () => void;
+  onMergeDuplicateFolders: () => void;
+  duplicateFolderCount: number;
+  mergingDuplicateFolders: boolean;
+  onNavigate?: () => void;
 } = $props();
 
 const filters = $derived([
-	{
-		id: "all" as const,
-		label: "全部条目",
-		icon: Lock,
-		count: vault.ciphers.filter(
-			(item) => !item.deletedDate && !item.archivedDate,
-		).length,
-	},
-	{
-		id: "favorites" as const,
-		label: "我的收藏",
-		icon: Star,
-		count: vault.ciphers.filter(
-			(item) => item.favorite && !item.deletedDate && !item.archivedDate,
-		).length,
-	},
-	{
-		id: "archive" as const,
-		label: "归档",
-		icon: Archive,
-		count: vault.ciphers.filter(
-			(item) => item.archivedDate && !item.deletedDate,
-		).length,
-	},
-	{
-		id: "trash" as const,
-		label: "回收站",
-		icon: Trash2,
-		count: vault.ciphers.filter((item) => item.deletedDate).length,
-	},
-	{
-		id: "duplicates" as const,
-		label: "重复项",
-		icon: Copy,
-		count: duplicateCount,
-	},
+  {
+    id: "all" as const,
+    label: "全部条目",
+    icon: Lock,
+    count: vault.ciphers.filter(
+      (item) => !item.deletedDate && !item.archivedDate,
+    ).length,
+  },
+  {
+    id: "favorites" as const,
+    label: "我的收藏",
+    icon: Star,
+    count: vault.ciphers.filter(
+      (item) => item.favorite && !item.deletedDate && !item.archivedDate,
+    ).length,
+  },
+  {
+    id: "archive" as const,
+    label: "归档",
+    icon: Archive,
+    count: vault.ciphers.filter(
+      (item) => item.archivedDate && !item.deletedDate,
+    ).length,
+  },
+  {
+    id: "trash" as const,
+    label: "回收站",
+    icon: Trash2,
+    count: vault.ciphers.filter((item) => item.deletedDate).length,
+  },
+  {
+    id: "duplicates" as const,
+    label: "重复项",
+    icon: Copy,
+    count: duplicateCount,
+  },
 ]);
 
 const cipherTypes = [
-	{ id: "login" as const, label: "登录凭据", icon: KeyRound },
-	{ id: "card" as const, label: "支付卡片", icon: CreditCard },
-	{ id: "identity" as const, label: "个人身份", icon: User },
-	{ id: "securenote" as const, label: "安全便签", icon: FileText },
+  { id: "login" as const, label: "登录凭据", icon: KeyRound },
+  { id: "card" as const, label: "支付卡片", icon: CreditCard },
+  { id: "identity" as const, label: "个人身份", icon: User },
+  { id: "securenote" as const, label: "安全便签", icon: FileText },
 ];
 
 function selectCategory(category: VaultCategory) {
-	activeCategory = category;
-	activeFolder = null;
-	onNavigate?.();
+  activeCategory = category;
+  activeFolder = null;
+  onNavigate?.();
 }
 </script>
 

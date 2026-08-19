@@ -1,8 +1,8 @@
 [
-	{
-		"type": -10001,
-		"domains": ["nodewarden.example", "nw.example"],
-		"excluded": false,
-		"source": "nodewarden"
-	}
+  {
+    "type": -10001,
+    "domains": ["nodewarden.example", "nw.example"],
+    "excluded": false,
+    "source": "nodewarden"
+  }
 ]

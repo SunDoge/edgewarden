@@ -1,4 +1,4 @@
 export type {
-	BackupDestinationRecord,
-	BackupSettings,
+  BackupDestinationRecord,
+  BackupSettings,
 } from "$lib/services/backup-types";

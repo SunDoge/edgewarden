@@ -14,13 +14,13 @@ import { Spinner } from "$lib/components/ui/spinner/index.js";
 import TurnstileWidget from "$lib/components/turnstile-widget.svelte";
 import ThemeToggle from "$lib/components/theme-toggle.svelte";
 import {
-	Eye,
-	EyeOff,
-	ShieldAlert,
-	KeyRound,
-	Mail,
-	User,
-	CheckCircle2,
+  Eye,
+  EyeOff,
+  ShieldAlert,
+  KeyRound,
+  Mail,
+  User,
+  CheckCircle2,
 } from "@lucide/svelte";
 
 let email = $state("");
@@ -42,23 +42,23 @@ let turnstileToken = $state("");
 let turnstileWidget = $state<{ reset(): void } | null>(null);
 
 onMount(async () => {
-	inviteCode = new URLSearchParams(location.search).get("invite")?.trim() ?? "";
-	try {
-		const config = await getRegistrationConfigApi();
-		signupsAllowed = config.signupsAllowed;
-		invitationsAllowed = config.invitationsAllowed;
-		bootstrapRequired = config.bootstrapRequired;
-		adminPasswordConfigured = config.adminPasswordConfigured;
-		turnstileEnabled = config.turnstileEnabled;
-		turnstileSiteKey = config.turnstileSiteKey;
-		if (config.turnstileEnabled && !config.turnstileSiteKey) {
-			error = "Turnstile 已启用，但服务器没有配置站点密钥。";
-		}
-	} catch (caught) {
-		error = errorMessage(caught, "无法加载注册配置。");
-	} finally {
-		configLoading = false;
-	}
+  inviteCode = new URLSearchParams(location.search).get("invite")?.trim() ?? "";
+  try {
+    const config = await getRegistrationConfigApi();
+    signupsAllowed = config.signupsAllowed;
+    invitationsAllowed = config.invitationsAllowed;
+    bootstrapRequired = config.bootstrapRequired;
+    adminPasswordConfigured = config.adminPasswordConfigured;
+    turnstileEnabled = config.turnstileEnabled;
+    turnstileSiteKey = config.turnstileSiteKey;
+    if (config.turnstileEnabled && !config.turnstileSiteKey) {
+      error = "Turnstile 已启用，但服务器没有配置站点密钥。";
+    }
+  } catch (caught) {
+    error = errorMessage(caught, "无法加载注册配置。");
+  } finally {
+    configLoading = false;
+  }
 });
 
 let showPassword = $state(false);
@@ -70,65 +70,65 @@ let success = $state(false);
 let isPasswordMatch = $derived(password === confirmPassword);
 let isPasswordLengthValid = $derived(password.length >= 8);
 let registrationAvailable = $derived(
-	bootstrapRequired ||
-		signupsAllowed ||
-		(invitationsAllowed && Boolean(inviteCode.trim())),
+  bootstrapRequired ||
+    signupsAllowed ||
+    (invitationsAllowed && Boolean(inviteCode.trim())),
 );
 
 async function handleSubmit(e: SubmitEvent) {
-	e.preventDefault();
-	if (!email || !password || !confirmPassword) {
-		error = "请填写所有必填字段。";
-		return;
-	}
-	if (bootstrapRequired && !adminPassword) {
-		error = "首次创建管理员账号需要部署管理员密码。";
-		return;
-	}
-	if (turnstileEnabled && !turnstileToken) {
-		error = "请先完成人机验证。";
-		return;
-	}
+  e.preventDefault();
+  if (!email || !password || !confirmPassword) {
+    error = "请填写所有必填字段。";
+    return;
+  }
+  if (bootstrapRequired && !adminPassword) {
+    error = "首次创建管理员账号需要部署管理员密码。";
+    return;
+  }
+  if (turnstileEnabled && !turnstileToken) {
+    error = "请先完成人机验证。";
+    return;
+  }
 
-	if (!isPasswordMatch) {
-		error = "两次输入的密码不一致。";
-		return;
-	}
+  if (!isPasswordMatch) {
+    error = "两次输入的密码不一致。";
+    return;
+  }
 
-	if (!isPasswordLengthValid) {
-		error = "主密码长度必须至少为 8 位。";
-		return;
-	}
+  if (!isPasswordLengthValid) {
+    error = "主密码长度必须至少为 8 位。";
+    return;
+  }
 
-	if (iterations < 100000) {
-		error = "为了您的安全，KDF 迭代次数不能低于 100,000 次。";
-		return;
-	}
+  if (iterations < 100000) {
+    error = "为了您的安全，KDF 迭代次数不能低于 100,000 次。";
+    return;
+  }
 
-	loading = true;
-	error = "";
+  loading = true;
+  error = "";
 
-	try {
-		await register(
-			email,
-			password,
-			name,
-			hint,
-			iterations,
-			inviteCode,
-			adminPassword,
-			turnstileToken || undefined,
-		);
-		success = true;
-		setTimeout(() => {
-			goto("/login");
-		}, 2000);
-	} catch (caught) {
-		error = errorMessage(caught, "注册失败，请稍后重试。");
-		if (turnstileEnabled) turnstileWidget?.reset();
-	} finally {
-		loading = false;
-	}
+  try {
+    await register(
+      email,
+      password,
+      name,
+      hint,
+      iterations,
+      inviteCode,
+      adminPassword,
+      turnstileToken || undefined,
+    );
+    success = true;
+    setTimeout(() => {
+      goto("/login");
+    }, 2000);
+  } catch (caught) {
+    error = errorMessage(caught, "注册失败，请稍后重试。");
+    if (turnstileEnabled) turnstileWidget?.reset();
+  } finally {
+    loading = false;
+  }
 }
 </script>
 

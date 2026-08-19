@@ -7,28 +7,28 @@ import * as Dialog from "$lib/components/ui/dialog/index.js";
 import * as Field from "$lib/components/ui/field/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import {
-	createTwoFactorPasskeyApi,
-	deleteTwoFactorPasskeyApi,
-	getTwoFactorPasskeyChallengeApi,
-	getTwoFactorPasskeysApi,
+  createTwoFactorPasskeyApi,
+  deleteTwoFactorPasskeyApi,
+  getTwoFactorPasskeyChallengeApi,
+  getTwoFactorPasskeysApi,
 } from "$lib/services/api-two-factor";
 import {
-	deriveMasterKey,
-	deriveMasterPasswordHash,
+  deriveMasterKey,
+  deriveMasterPasswordHash,
 } from "$lib/services/crypto";
 import { createTwoFactorPasskeyCredential } from "$lib/services/passkeys";
 import type { TwoFactorPasskey } from "$lib/services/two-factor-types";
 
 let {
-	email,
-	kdfIterations,
-	onMessage,
-	onError,
+  email,
+  kdfIterations,
+  onMessage,
+  onError,
 }: {
-	email: string;
-	kdfIterations: number;
-	onMessage: (message: string) => void;
-	onError: (error: unknown) => void;
+  email: string;
+  kdfIterations: number;
+  onMessage: (message: string) => void;
+  onError: (error: unknown) => void;
 } = $props();
 
 let open = $state(false);
@@ -39,62 +39,62 @@ let credentials = $state<TwoFactorPasskey[]>([]);
 let deleteId = $state<string | null>(null);
 
 async function passwordHash(): Promise<string> {
-	const key = await deriveMasterKey(password, email, kdfIterations);
-	return deriveMasterPasswordHash(key, password);
+  const key = await deriveMasterKey(password, email, kdfIterations);
+  return deriveMasterPasswordHash(key, password);
 }
 
 async function load() {
-	if (!password) return;
-	busy = "load";
-	try {
-		const result = await getTwoFactorPasskeysApi(await passwordHash());
-		credentials = result.keys ?? result.Keys ?? [];
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  if (!password) return;
+  busy = "load";
+  try {
+    const result = await getTwoFactorPasskeysApi(await passwordHash());
+    credentials = result.keys ?? result.Keys ?? [];
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 
 async function add() {
-	if (!password) return;
-	busy = "create";
-	try {
-		const masterPasswordHash = await passwordHash();
-		const credential = await createTwoFactorPasskeyCredential(
-			await getTwoFactorPasskeyChallengeApi(masterPasswordHash),
-		);
-		const result = await createTwoFactorPasskeyApi({
-			masterPasswordHash,
-			name: name.trim() || "安全密钥",
-			...credential,
-		});
-		credentials = result.keys ?? result.Keys ?? [];
-		name = "";
-		onMessage("两步验证安全密钥已添加");
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  if (!password) return;
+  busy = "create";
+  try {
+    const masterPasswordHash = await passwordHash();
+    const credential = await createTwoFactorPasskeyCredential(
+      await getTwoFactorPasskeyChallengeApi(masterPasswordHash),
+    );
+    const result = await createTwoFactorPasskeyApi({
+      masterPasswordHash,
+      name: name.trim() || "安全密钥",
+      ...credential,
+    });
+    credentials = result.keys ?? result.Keys ?? [];
+    name = "";
+    onMessage("两步验证安全密钥已添加");
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 
 async function remove(id: string) {
-	if (!password) return;
-	deleteId = null;
-	busy = `delete-${id}`;
-	try {
-		const result = await deleteTwoFactorPasskeyApi({
-			id,
-			masterPasswordHash: await passwordHash(),
-		});
-		credentials = result.keys ?? result.Keys ?? [];
-		onMessage("两步验证安全密钥已删除");
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  if (!password) return;
+  deleteId = null;
+  busy = `delete-${id}`;
+  try {
+    const result = await deleteTwoFactorPasskeyApi({
+      id,
+      masterPasswordHash: await passwordHash(),
+    });
+    credentials = result.keys ?? result.Keys ?? [];
+    onMessage("两步验证安全密钥已删除");
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 </script>
 

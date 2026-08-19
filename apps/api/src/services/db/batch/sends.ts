@@ -4,16 +4,16 @@ import { now } from "../../../utils/time";
 
 // Send revision queries cover both claimed and anonymous Sends without exposing ownership checks to handlers.
 function sendRevisionSelect(
-	db: Kysely<DB>,
-	userId: string,
-	sendIds: readonly string[],
-	timestamp: number,
-	activeOnly: boolean,
+  db: Kysely<DB>,
+  userId: string,
+  sendIds: readonly string[],
+  timestamp: number,
+  activeOnly: boolean,
 ) {
-	const activePredicate = activeOnly
-		? sql`AND deletion_date > ${timestamp}`
-		: sql``;
-	return sql`
+  const activePredicate = activeOnly
+    ? sql`AND deletion_date > ${timestamp}`
+    : sql``;
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT user_id, ${timestamp}
 		FROM sends
@@ -29,21 +29,21 @@ function sendRevisionSelect(
 }
 
 export function sendRevisionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	sendIds: readonly string[],
-	timestamp = now(),
+  db: Kysely<DB>,
+  userId: string,
+  sendIds: readonly string[],
+  timestamp = now(),
 ) {
-	return sendRevisionSelect(db, userId, sendIds, timestamp, false);
+  return sendRevisionSelect(db, userId, sendIds, timestamp, false);
 }
 
 export function unclaimedSendRevisionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	sendIds: readonly string[],
-	timestamp = now(),
+  db: Kysely<DB>,
+  userId: string,
+  sendIds: readonly string[],
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT user_id, ${timestamp}
 		FROM sends
@@ -59,10 +59,10 @@ export function unclaimedSendRevisionQuery(
 }
 
 export function activeSendRevisionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	sendIds: readonly string[],
-	timestamp = now(),
+  db: Kysely<DB>,
+  userId: string,
+  sendIds: readonly string[],
+  timestamp = now(),
 ) {
-	return sendRevisionSelect(db, userId, sendIds, timestamp, true);
+  return sendRevisionSelect(db, userId, sendIds, timestamp, true);
 }

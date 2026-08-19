@@ -1,322 +1,322 @@
 import {
-	createRestoredAttachmentObjectKey,
-	createRestoredSendFileObjectKey,
-	type BlobStore,
+  createRestoredAttachmentObjectKey,
+  createRestoredSendFileObjectKey,
+  type BlobStore,
 } from "../blob-store";
 import { parseStoredSendFileMetadata } from "../sends/file-metadata";
 import type { BackupPayload } from "./archive";
 import {
-	BACKUP_SETTINGS_CONFIG_KEY,
-	normalizeImportedBackupSettingsValue,
+  BACKUP_SETTINGS_CONFIG_KEY,
+  normalizeImportedBackupSettingsValue,
 } from "./config";
 import { DATA_OPERATION_LEASE_CONFIG_KEY } from "./operation-lease";
 import {
-	type BackupImportSkipSummary,
-	BLOB_STORAGE_UNAVAILABLE_SKIP_REASON,
-	KV_BLOB_SKIP_REASON,
-	type PreparedBackupImportPayload,
+  type BackupImportSkipSummary,
+  BLOB_STORAGE_UNAVAILABLE_SKIP_REASON,
+  KV_BLOB_SKIP_REASON,
+  type PreparedBackupImportPayload,
 } from "./import-types";
 import type { SqlRow } from "./restore-database";
 import { importBackupRows } from "./restore-rows";
 
 function cloneRows(rows: SqlRow[]): SqlRow[] {
-	return rows.map((row) => ({ ...row }));
+  return rows.map((row) => ({ ...row }));
 }
 
 function requiredId(row: SqlRow, field: string, table: string): string {
-	const value = String(row[field] ?? "").trim();
-	if (!value) throw new Error(`Invalid backup: ${table}.${field} is required`);
-	return value;
+  const value = String(row[field] ?? "").trim();
+  if (!value) throw new Error(`Invalid backup: ${table}.${field} is required`);
+  return value;
 }
 
 /** Reject authorization graphs that satisfy simple FKs but cross org bounds. */
 export function validateBackupOrganizationGraph(
-	payload: BackupPayload["db"],
+  payload: BackupPayload["db"],
 ): void {
-	const organizations = new Set(
-		(payload.organizations || []).map((row) =>
-			requiredId(row, "id", "organizations"),
-		),
-	);
-	const memberOrg = new Map(
-		(payload.org_members || []).map((row) => [
-			requiredId(row, "id", "org_members"),
-			requiredId(row, "org_id", "org_members"),
-		]),
-	);
-	const collectionOrg = new Map(
-		(payload.collections || []).map((row) => [
-			requiredId(row, "id", "collections"),
-			requiredId(row, "org_id", "collections"),
-		]),
-	);
-	const cipherOrg = new Map(
-		(payload.ciphers || []).map((row) => [
-			requiredId(row, "id", "ciphers"),
-			typeof row.org_id === "string" && row.org_id.trim()
-				? row.org_id.trim()
-				: null,
-		]),
-	);
-	for (const orgId of memberOrg.values()) {
-		if (!organizations.has(orgId))
-			throw new Error(
-				"Invalid backup: organization member references unknown org",
-			);
-	}
-	for (const orgId of collectionOrg.values()) {
-		if (!organizations.has(orgId))
-			throw new Error("Invalid backup: collection references unknown org");
-	}
-	for (const row of payload.collection_members || []) {
-		const collectionId = requiredId(row, "collection_id", "collection_members");
-		const memberId = requiredId(row, "org_member_id", "collection_members");
-		if (
-			!collectionOrg.has(collectionId) ||
-			collectionOrg.get(collectionId) !== memberOrg.get(memberId)
-		)
-			throw new Error(
-				"Invalid backup: collection access crosses organization boundary",
-			);
-	}
-	for (const row of payload.cipher_collections || []) {
-		const cipherId = requiredId(row, "cipher_id", "cipher_collections");
-		const collectionId = requiredId(row, "collection_id", "cipher_collections");
-		if (
-			!cipherOrg.has(cipherId) ||
-			cipherOrg.get(cipherId) === null ||
-			cipherOrg.get(cipherId) !== collectionOrg.get(collectionId)
-		)
-			throw new Error(
-				"Invalid backup: cipher collection crosses organization boundary",
-			);
-	}
-	for (const row of payload.cipher_user_settings || []) {
-		const cipherId = requiredId(row, "cipher_id", "cipher_user_settings");
-		requiredId(row, "user_id", "cipher_user_settings");
-		const orgId = cipherOrg.get(cipherId);
-		if (!orgId)
-			throw new Error(
-				"Invalid backup: personal cipher cannot have organization user settings",
-			);
-	}
+  const organizations = new Set(
+    (payload.organizations || []).map((row) =>
+      requiredId(row, "id", "organizations"),
+    ),
+  );
+  const memberOrg = new Map(
+    (payload.org_members || []).map((row) => [
+      requiredId(row, "id", "org_members"),
+      requiredId(row, "org_id", "org_members"),
+    ]),
+  );
+  const collectionOrg = new Map(
+    (payload.collections || []).map((row) => [
+      requiredId(row, "id", "collections"),
+      requiredId(row, "org_id", "collections"),
+    ]),
+  );
+  const cipherOrg = new Map(
+    (payload.ciphers || []).map((row) => [
+      requiredId(row, "id", "ciphers"),
+      typeof row.org_id === "string" && row.org_id.trim()
+        ? row.org_id.trim()
+        : null,
+    ]),
+  );
+  for (const orgId of memberOrg.values()) {
+    if (!organizations.has(orgId))
+      throw new Error(
+        "Invalid backup: organization member references unknown org",
+      );
+  }
+  for (const orgId of collectionOrg.values()) {
+    if (!organizations.has(orgId))
+      throw new Error("Invalid backup: collection references unknown org");
+  }
+  for (const row of payload.collection_members || []) {
+    const collectionId = requiredId(row, "collection_id", "collection_members");
+    const memberId = requiredId(row, "org_member_id", "collection_members");
+    if (
+      !collectionOrg.has(collectionId) ||
+      collectionOrg.get(collectionId) !== memberOrg.get(memberId)
+    )
+      throw new Error(
+        "Invalid backup: collection access crosses organization boundary",
+      );
+  }
+  for (const row of payload.cipher_collections || []) {
+    const cipherId = requiredId(row, "cipher_id", "cipher_collections");
+    const collectionId = requiredId(row, "collection_id", "cipher_collections");
+    if (
+      !cipherOrg.has(cipherId) ||
+      cipherOrg.get(cipherId) === null ||
+      cipherOrg.get(cipherId) !== collectionOrg.get(collectionId)
+    )
+      throw new Error(
+        "Invalid backup: cipher collection crosses organization boundary",
+      );
+  }
+  for (const row of payload.cipher_user_settings || []) {
+    const cipherId = requiredId(row, "cipher_id", "cipher_user_settings");
+    requiredId(row, "user_id", "cipher_user_settings");
+    const orgId = cipherOrg.get(cipherId);
+    if (!orgId)
+      throw new Error(
+        "Invalid backup: personal cipher cannot have organization user settings",
+      );
+  }
 }
 
 function getFileSendPath(
-	row: SqlRow,
+  row: SqlRow,
 ): { path: string; sizeBytes: number } | null {
-	if (Number(row.type) !== 1) return null;
-	const sendId = String(row.id || "").trim();
-	const metadata = parseStoredSendFileMetadata(row.data);
-	return sendId && metadata
-		? {
-				path: `sends/${sendId}/${metadata.fileId}`,
-				sizeBytes: metadata.sizeBytes,
-			}
-		: null;
+  if (Number(row.type) !== 1) return null;
+  const sendId = String(row.id || "").trim();
+  const metadata = parseStoredSendFileMetadata(row.data);
+  return sendId && metadata
+    ? {
+        path: `sends/${sendId}/${metadata.fileId}`,
+        sizeBytes: metadata.sizeBytes,
+      }
+    : null;
 }
 
 function upsertConfigRow(rows: SqlRow[], key: string, value: string): SqlRow[] {
-	let replaced = false;
-	const nextRows = rows.map((row) => {
-		if (String(row.key || "").trim() !== key) return { ...row };
-		replaced = true;
-		return { ...row, key, value };
-	});
-	if (!replaced) nextRows.push({ key, value });
-	return nextRows;
+  let replaced = false;
+  const nextRows = rows.map((row) => {
+    if (String(row.key || "").trim() !== key) return { ...row };
+    replaced = true;
+    return { ...row, key, value };
+  });
+  if (!replaced) nextRows.push({ key, value });
+  return nextRows;
 }
 
 async function prepareImportedConfigRows(
-	dataEncryptionSecret: string,
-	configRows: SqlRow[],
-	userRows: SqlRow[],
+  dataEncryptionSecret: string,
+  configRows: SqlRow[],
+  userRows: SqlRow[],
 ): Promise<SqlRow[]> {
-	let nextConfigRows = cloneRows(configRows || []);
-	const rawBackupSettings = nextConfigRows.find(
-		(row) => String(row.key || "").trim() === BACKUP_SETTINGS_CONFIG_KEY,
-	);
-	const normalizedBackupSettings = await normalizeImportedBackupSettingsValue(
-		typeof rawBackupSettings?.value === "string"
-			? rawBackupSettings.value
-			: null,
-		dataEncryptionSecret,
-		userRows.map((row) => ({
-			id: String(row.id || "").trim(),
-			public_key: typeof row.public_key === "string" ? row.public_key : null,
-			role: String(row.role || "").trim(),
-			status: String(row.status || "").trim(),
-		})),
-		"UTC",
-	);
-	if (normalizedBackupSettings !== null) {
-		nextConfigRows = upsertConfigRow(
-			nextConfigRows,
-			BACKUP_SETTINGS_CONFIG_KEY,
-			normalizedBackupSettings,
-		);
-	}
-	return upsertConfigRow(nextConfigRows, "registered", "true");
+  let nextConfigRows = cloneRows(configRows || []);
+  const rawBackupSettings = nextConfigRows.find(
+    (row) => String(row.key || "").trim() === BACKUP_SETTINGS_CONFIG_KEY,
+  );
+  const normalizedBackupSettings = await normalizeImportedBackupSettingsValue(
+    typeof rawBackupSettings?.value === "string"
+      ? rawBackupSettings.value
+      : null,
+    dataEncryptionSecret,
+    userRows.map((row) => ({
+      id: String(row.id || "").trim(),
+      public_key: typeof row.public_key === "string" ? row.public_key : null,
+      role: String(row.role || "").trim(),
+      status: String(row.status || "").trim(),
+    })),
+    "UTC",
+  );
+  if (normalizedBackupSettings !== null) {
+    nextConfigRows = upsertConfigRow(
+      nextConfigRows,
+      BACKUP_SETTINGS_CONFIG_KEY,
+      normalizedBackupSettings,
+    );
+  }
+  return upsertConfigRow(nextConfigRows, "registered", "true");
 }
 
 export async function importPreparedBackupRows(
-	db: D1Database,
-	payload: BackupPayload["db"],
-	dataEncryptionSecret: string,
-	activeOperationLeaseValue: string | null = null,
+  db: D1Database,
+  payload: BackupPayload["db"],
+  dataEncryptionSecret: string,
+  activeOperationLeaseValue: string | null = null,
 ): Promise<BackupPayload["db"]> {
-	validateBackupOrganizationGraph(payload);
-	const importedConfigRows = await prepareImportedConfigRows(
-		dataEncryptionSecret,
-		payload.config || [],
-		payload.users || [],
-	);
-	const preparedDb: BackupPayload["db"] = {
-		config: activeOperationLeaseValue
-			? upsertConfigRow(
-					importedConfigRows,
-					DATA_OPERATION_LEASE_CONFIG_KEY,
-					activeOperationLeaseValue,
-				)
-			: importedConfigRows,
-		users: cloneRows(payload.users || []).map((row) => ({
-			...row,
-			verify_devices: row.verify_devices ?? 1,
-			security_stamp: crypto.randomUUID(),
-		})),
-		domain_settings: cloneRows(payload.domain_settings || []),
-		user_revisions: cloneRows(payload.user_revisions || []),
-		organizations: cloneRows(payload.organizations || []),
-		org_members: cloneRows(payload.org_members || []),
-		collections: cloneRows(payload.collections || []),
-		collection_members: cloneRows(payload.collection_members || []),
-		// Device trust tokens are bearer credentials, not portable instance data.
-		device_trust_tokens: [],
-		audit_logs: cloneRows(payload.audit_logs || []),
-		webauthn_credentials: cloneRows(payload.webauthn_credentials || []),
-		folders: cloneRows(payload.folders || []),
-		ciphers: cloneRows(payload.ciphers || []).map((row) => ({
-			...row,
-			archived_at: row.archived_at ?? null,
-		})),
-		cipher_user_settings: cloneRows(payload.cipher_user_settings || []),
-		cipher_collections: cloneRows(payload.cipher_collections || []),
-		attachments: cloneRows(payload.attachments || []).map((row) => {
-			const cipherId = String(row.cipher_id || "").trim();
-			const attachmentId = String(row.id || "").trim();
-			return {
-				...row,
-				storage_key:
-					cipherId && attachmentId
-						? createRestoredAttachmentObjectKey(cipherId, attachmentId)
-						: null,
-			};
-		}),
-		sends: cloneRows(payload.sends || []).map((row) => {
-			if (Number(row.type) !== 1) return { ...row, storage_key: null };
-			const metadata = parseStoredSendFileMetadata(row.data);
-			return {
-				...row,
-				storage_key:
-					metadata?.fileId && row.id
-						? createRestoredSendFileObjectKey(String(row.id), metadata.fileId)
-						: null,
-			};
-		}),
-	};
-	await importBackupRows(db, preparedDb, true);
-	return preparedDb;
+  validateBackupOrganizationGraph(payload);
+  const importedConfigRows = await prepareImportedConfigRows(
+    dataEncryptionSecret,
+    payload.config || [],
+    payload.users || [],
+  );
+  const preparedDb: BackupPayload["db"] = {
+    config: activeOperationLeaseValue
+      ? upsertConfigRow(
+          importedConfigRows,
+          DATA_OPERATION_LEASE_CONFIG_KEY,
+          activeOperationLeaseValue,
+        )
+      : importedConfigRows,
+    users: cloneRows(payload.users || []).map((row) => ({
+      ...row,
+      verify_devices: row.verify_devices ?? 1,
+      security_stamp: crypto.randomUUID(),
+    })),
+    domain_settings: cloneRows(payload.domain_settings || []),
+    user_revisions: cloneRows(payload.user_revisions || []),
+    organizations: cloneRows(payload.organizations || []),
+    org_members: cloneRows(payload.org_members || []),
+    collections: cloneRows(payload.collections || []),
+    collection_members: cloneRows(payload.collection_members || []),
+    // Device trust tokens are bearer credentials, not portable instance data.
+    device_trust_tokens: [],
+    audit_logs: cloneRows(payload.audit_logs || []),
+    webauthn_credentials: cloneRows(payload.webauthn_credentials || []),
+    folders: cloneRows(payload.folders || []),
+    ciphers: cloneRows(payload.ciphers || []).map((row) => ({
+      ...row,
+      archived_at: row.archived_at ?? null,
+    })),
+    cipher_user_settings: cloneRows(payload.cipher_user_settings || []),
+    cipher_collections: cloneRows(payload.cipher_collections || []),
+    attachments: cloneRows(payload.attachments || []).map((row) => {
+      const cipherId = String(row.cipher_id || "").trim();
+      const attachmentId = String(row.id || "").trim();
+      return {
+        ...row,
+        storage_key:
+          cipherId && attachmentId
+            ? createRestoredAttachmentObjectKey(cipherId, attachmentId)
+            : null,
+      };
+    }),
+    sends: cloneRows(payload.sends || []).map((row) => {
+      if (Number(row.type) !== 1) return { ...row, storage_key: null };
+      const metadata = parseStoredSendFileMetadata(row.data);
+      return {
+        ...row,
+        storage_key:
+          metadata?.fileId && row.id
+            ? createRestoredSendFileObjectKey(String(row.id), metadata.fileId)
+            : null,
+      };
+    }),
+  };
+  await importBackupRows(db, preparedDb, true);
+  return preparedDb;
 }
 
 export function prepareImportPayloadForTarget(
-	blobStore: BlobStore | null,
-	payload: BackupPayload,
-	files: Record<string, Uint8Array>,
+  blobStore: BlobStore | null,
+  payload: BackupPayload,
+  files: Record<string, Uint8Array>,
 ): PreparedBackupImportPayload {
-	if (!blobStore) {
-		const skippedAttachments = (payload.db.attachments || []).map((row) => {
-			const cipherId = String(row.cipher_id || "").trim();
-			const attachmentId = String(row.id || "").trim();
-			return {
-				kind: "attachment" as const,
-				path: `attachments/${cipherId}/${attachmentId}.bin`,
-				sizeBytes: Number(row.size || 0) || 0,
-			};
-		});
-		const skippedSendFiles = (payload.db.sends || [])
-			.filter((row) => Number(row.type) === 1)
-			.map((row) => {
-				const file = getFileSendPath(row);
-				return {
-					kind: "sendFile" as const,
-					path: file?.path || `sends/${String(row.id || "invalid")}/invalid`,
-					sizeBytes: file?.sizeBytes || 0,
-				};
-			});
-		const skippedItems = [...skippedAttachments, ...skippedSendFiles];
-		return {
-			payload: {
-				...payload,
-				db: {
-					...payload.db,
-					attachments: [],
-					sends: (payload.db.sends || []).filter(
-						(row) => Number(row.type) !== 1,
-					),
-				},
-			},
-			skipped: {
-				reason: skippedItems.length
-					? BLOB_STORAGE_UNAVAILABLE_SKIP_REASON
-					: null,
-				attachments: skippedAttachments.length,
-				sendFiles: skippedSendFiles.length,
-				items: skippedItems,
-			},
-		};
-	}
+  if (!blobStore) {
+    const skippedAttachments = (payload.db.attachments || []).map((row) => {
+      const cipherId = String(row.cipher_id || "").trim();
+      const attachmentId = String(row.id || "").trim();
+      return {
+        kind: "attachment" as const,
+        path: `attachments/${cipherId}/${attachmentId}.bin`,
+        sizeBytes: Number(row.size || 0) || 0,
+      };
+    });
+    const skippedSendFiles = (payload.db.sends || [])
+      .filter((row) => Number(row.type) === 1)
+      .map((row) => {
+        const file = getFileSendPath(row);
+        return {
+          kind: "sendFile" as const,
+          path: file?.path || `sends/${String(row.id || "invalid")}/invalid`,
+          sizeBytes: file?.sizeBytes || 0,
+        };
+      });
+    const skippedItems = [...skippedAttachments, ...skippedSendFiles];
+    return {
+      payload: {
+        ...payload,
+        db: {
+          ...payload.db,
+          attachments: [],
+          sends: (payload.db.sends || []).filter(
+            (row) => Number(row.type) !== 1,
+          ),
+        },
+      },
+      skipped: {
+        reason: skippedItems.length
+          ? BLOB_STORAGE_UNAVAILABLE_SKIP_REASON
+          : null,
+        attachments: skippedAttachments.length,
+        sendFiles: skippedSendFiles.length,
+        items: skippedItems,
+      },
+    };
+  }
 
-	const oversizedAttachmentPaths = new Set<string>();
-	const oversizedSendPaths = new Set<string>();
-	const skippedItems: BackupImportSkipSummary["items"] = [];
-	for (const entry of Object.keys(files)) {
-		if (!entry.startsWith("attachments/") && !entry.startsWith("sends/"))
-			continue;
-		const sizeBytes = files[entry].byteLength;
-		if (
-			blobStore.maxObjectBytes === null ||
-			sizeBytes <= blobStore.maxObjectBytes
-		)
-			continue;
-		if (entry.startsWith("attachments/")) {
-			oversizedAttachmentPaths.add(entry);
-			skippedItems.push({ kind: "attachment", path: entry, sizeBytes });
-		}
-		if (entry.startsWith("sends/")) {
-			oversizedSendPaths.add(entry);
-			skippedItems.push({ kind: "sendFile", path: entry, sizeBytes });
-		}
-	}
-	const attachments = (payload.db.attachments || []).filter((row) => {
-		const cipherId = String(row.cipher_id || "").trim();
-		const attachmentId = String(row.id || "").trim();
-		if (!cipherId || !attachmentId) return false;
-		return !oversizedAttachmentPaths.has(
-			`attachments/${cipherId}/${attachmentId}.bin`,
-		);
-	});
-	const sends = (payload.db.sends || []).filter((row) => {
-		const file = getFileSendPath(row);
-		return !file || !oversizedSendPaths.has(file.path);
-	});
-	return {
-		payload: { ...payload, db: { ...payload.db, attachments, sends } },
-		skipped: {
-			reason: skippedItems.length ? KV_BLOB_SKIP_REASON : null,
-			sendFiles: skippedItems.filter((item) => item.kind === "sendFile").length,
-			attachments: skippedItems.filter((item) => item.kind === "attachment")
-				.length,
-			items: skippedItems,
-		},
-	};
+  const oversizedAttachmentPaths = new Set<string>();
+  const oversizedSendPaths = new Set<string>();
+  const skippedItems: BackupImportSkipSummary["items"] = [];
+  for (const entry of Object.keys(files)) {
+    if (!entry.startsWith("attachments/") && !entry.startsWith("sends/"))
+      continue;
+    const sizeBytes = files[entry].byteLength;
+    if (
+      blobStore.maxObjectBytes === null ||
+      sizeBytes <= blobStore.maxObjectBytes
+    )
+      continue;
+    if (entry.startsWith("attachments/")) {
+      oversizedAttachmentPaths.add(entry);
+      skippedItems.push({ kind: "attachment", path: entry, sizeBytes });
+    }
+    if (entry.startsWith("sends/")) {
+      oversizedSendPaths.add(entry);
+      skippedItems.push({ kind: "sendFile", path: entry, sizeBytes });
+    }
+  }
+  const attachments = (payload.db.attachments || []).filter((row) => {
+    const cipherId = String(row.cipher_id || "").trim();
+    const attachmentId = String(row.id || "").trim();
+    if (!cipherId || !attachmentId) return false;
+    return !oversizedAttachmentPaths.has(
+      `attachments/${cipherId}/${attachmentId}.bin`,
+    );
+  });
+  const sends = (payload.db.sends || []).filter((row) => {
+    const file = getFileSendPath(row);
+    return !file || !oversizedSendPaths.has(file.path);
+  });
+  return {
+    payload: { ...payload, db: { ...payload.db, attachments, sends } },
+    skipped: {
+      reason: skippedItems.length ? KV_BLOB_SKIP_REASON : null,
+      sendFiles: skippedItems.filter((item) => item.kind === "sendFile").length,
+      attachments: skippedItems.filter((item) => item.kind === "attachment")
+        .length,
+      items: skippedItems,
+    },
+  };
 }

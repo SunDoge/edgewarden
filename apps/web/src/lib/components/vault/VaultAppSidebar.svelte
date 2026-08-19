@@ -1,17 +1,17 @@
 <script lang="ts">
 import {
-	Building2,
-	Database,
-	Globe,
-	KeyRound,
-	Lock,
-	ScrollText,
-	Settings,
-	Share2,
-	ShieldAlert,
-	Upload,
-	UserRoundCog,
-	WandSparkles,
+  Building2,
+  Database,
+  Globe,
+  KeyRound,
+  Lock,
+  ScrollText,
+  Settings,
+  Share2,
+  ShieldAlert,
+  Upload,
+  UserRoundCog,
+  WandSparkles,
 } from "@lucide/svelte";
 import { page } from "$app/state";
 import { Button } from "$lib/components/ui/button/index.js";
@@ -21,27 +21,27 @@ import { vault } from "$lib/stores/vault.svelte";
 let { onNavigate }: { onNavigate?: () => void } = $props();
 
 const tools = [
-	{ href: "/vault", label: "我的保险库", icon: Lock },
-	{ href: "/vault/totp", label: "验证码", icon: KeyRound },
-	{ href: "/vault/password-health", label: "密码健康", icon: ShieldAlert },
-	{ href: "/vault/domains", label: "域名等效规则", icon: Globe },
-	{ href: "/vault/sends", label: "Send 传输中心", icon: Share2 },
-	{ href: "/vault/import-export", label: "导入与导出", icon: Upload },
-	{ href: "/vault/organizations", label: "组织共享", icon: Building2 },
-	{ href: "/vault/settings", label: "账户与安全", icon: Settings },
-	{ href: "/vault/generator", label: "密码生成器", icon: WandSparkles },
+  { href: "/vault", label: "我的保险库", icon: Lock },
+  { href: "/vault/totp", label: "验证码", icon: KeyRound },
+  { href: "/vault/password-health", label: "密码健康", icon: ShieldAlert },
+  { href: "/vault/domains", label: "域名等效规则", icon: Globe },
+  { href: "/vault/sends", label: "Send 传输中心", icon: Share2 },
+  { href: "/vault/import-export", label: "导入与导出", icon: Upload },
+  { href: "/vault/organizations", label: "组织共享", icon: Building2 },
+  { href: "/vault/settings", label: "账户与安全", icon: Settings },
+  { href: "/vault/generator", label: "密码生成器", icon: WandSparkles },
 ];
 
 const adminTools = [
-	{ href: "/vault/admin", label: "用户与邀请", icon: UserRoundCog },
-	{ href: "/vault/logs", label: "审计日志", icon: ScrollText },
-	{ href: "/vault/backups", label: "云备份中心", icon: Database },
+  { href: "/vault/admin", label: "用户与邀请", icon: UserRoundCog },
+  { href: "/vault/logs", label: "审计日志", icon: ScrollText },
+  { href: "/vault/backups", label: "云备份中心", icon: Database },
 ];
 
 function isActive(href: string) {
-	return href === "/vault"
-		? page.url.pathname === href
-		: page.url.pathname.startsWith(href);
+  return href === "/vault"
+    ? page.url.pathname === href
+    : page.url.pathname.startsWith(href);
 }
 </script>
 

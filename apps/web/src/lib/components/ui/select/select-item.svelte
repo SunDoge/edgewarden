@@ -4,12 +4,12 @@ import CheckIcon from "@lucide/svelte/icons/check";
 import { cn, type WithoutChild } from "$lib/utils.js";
 
 let {
-	ref = $bindable(null),
-	class: className,
-	value,
-	label,
-	children: childrenProp,
-	...restProps
+  ref = $bindable(null),
+  class: className,
+  value,
+  label,
+  children: childrenProp,
+  ...restProps
 }: WithoutChild<SelectPrimitive.ItemProps> = $props();
 </script>
 

@@ -1,14 +1,14 @@
 {
-	"extends": "./tsconfig.json",
-	"compilerOptions": {
-		"composite": true,
-		"incremental": true,
-		"noEmit": false,
-		"declaration": true,
-		"emitDeclarationOnly": true,
-		"outDir": "./dist",
-		"rootDir": "./src"
-	},
-	"include": ["src/**/*.ts", "src/**/*.json", "worker-configuration.d.ts"],
-	"exclude": ["src/**/*.test.ts"]
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "incremental": true,
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*.ts", "src/**/*.json", "worker-configuration.d.ts"],
+  "exclude": ["src/**/*.test.ts"]
 }

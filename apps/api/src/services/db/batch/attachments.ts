@@ -4,13 +4,13 @@ import { now } from "../../../utils/time";
 
 // Attachment metadata and cipher revisions must be committed together so clients never observe a stale attachment list.
 export function attachmentCipherUpdateQuery(
-	db: Kysely<DB>,
-	cipherId: string,
-	attachmentId: string,
-	storageKey: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  cipherId: string,
+  attachmentId: string,
+  storageKey: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		UPDATE ciphers
 		SET updated_at = ${timestamp}
 		WHERE id = ${cipherId}
@@ -25,12 +25,12 @@ export function attachmentCipherUpdateQuery(
 }
 
 export function attachmentRevisionQuery(
-	db: Kysely<DB>,
-	attachmentId: string,
-	storageKey: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  attachmentId: string,
+  storageKey: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT DISTINCT recipients.user_id, ${timestamp}
 		FROM (
@@ -61,13 +61,13 @@ export function attachmentRevisionQuery(
 }
 
 export function deletedAttachmentCipherUpdateQuery(
-	db: Kysely<DB>,
-	cipherId: string,
-	attachmentId: string,
-	deletionToken: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  cipherId: string,
+  attachmentId: string,
+  deletionToken: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		UPDATE ciphers
 		SET updated_at = ${timestamp}
 		WHERE id = ${cipherId}
@@ -82,12 +82,12 @@ export function deletedAttachmentCipherUpdateQuery(
 }
 
 export function deletedAttachmentRevisionQuery(
-	db: Kysely<DB>,
-	attachmentId: string,
-	deletionToken: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  attachmentId: string,
+  deletionToken: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT DISTINCT recipients.user_id, ${timestamp}
 		FROM (

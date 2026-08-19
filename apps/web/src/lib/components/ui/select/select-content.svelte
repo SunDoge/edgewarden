@@ -8,15 +8,15 @@ import SelectScrollUpButton from "./select-scroll-up-button.svelte";
 import type { ComponentProps } from "svelte";
 
 let {
-	ref = $bindable(null),
-	class: className,
-	sideOffset = 4,
-	portalProps,
-	children,
-	preventScroll = true,
-	...restProps
+  ref = $bindable(null),
+  class: className,
+  sideOffset = 4,
+  portalProps,
+  children,
+  preventScroll = true,
+  ...restProps
 }: WithoutChild<SelectPrimitive.ContentProps> & {
-	portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SelectPortal>>;
+  portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SelectPortal>>;
 } = $props();
 </script>
 

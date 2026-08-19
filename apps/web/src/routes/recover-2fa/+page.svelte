@@ -16,19 +16,19 @@ let loading = $state(false);
 let error = $state("");
 
 async function submit(event: SubmitEvent) {
-	event.preventDefault();
-	loading = true;
-	error = "";
-	try {
-		await recoverTwoFactorApi(email, password, recoveryCode);
-		await goto("/login?recovered=1");
-	} catch (value) {
-		error =
-			value instanceof Error ? value.message : "恢复失败，请检查凭据和恢复代码";
-	} finally {
-		password = "";
-		loading = false;
-	}
+  event.preventDefault();
+  loading = true;
+  error = "";
+  try {
+    await recoverTwoFactorApi(email, password, recoveryCode);
+    await goto("/login?recovered=1");
+  } catch (value) {
+    error =
+      value instanceof Error ? value.message : "恢复失败，请检查凭据和恢复代码";
+  } finally {
+    password = "";
+    loading = false;
+  }
 }
 </script>
 

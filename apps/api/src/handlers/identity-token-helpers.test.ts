@@ -1,38 +1,38 @@
 import { describe, expect, it } from "vitest";
 import {
-	isWebClient,
-	readDeviceInfo,
-	webRefreshCookieName,
+  isWebClient,
+  readDeviceInfo,
+  webRefreshCookieName,
 } from "./identity-token-helpers";
 
 describe("identity token helpers", () => {
-	it("normalizes device information from compatible field names", () => {
-		expect(
-			readDeviceInfo({
-				DeviceIdentifier: " device-id ",
-				DeviceName: "Browser",
-				DeviceType: "3",
-				DevicePushToken: " mobile-push-token ",
-			}),
-		).toEqual({
-			identifier: "device-id",
-			name: "Browser",
-			type: 3,
-			pushToken: "mobile-push-token",
-		});
-	});
+  it("normalizes device information from compatible field names", () => {
+    expect(
+      readDeviceInfo({
+        DeviceIdentifier: " device-id ",
+        DeviceName: "Browser",
+        DeviceType: "3",
+        DevicePushToken: " mobile-push-token ",
+      }),
+    ).toEqual({
+      identifier: "device-id",
+      name: "Browser",
+      type: 3,
+      pushToken: "mobile-push-token",
+    });
+  });
 
-	it("uses host-only refresh cookies for HTTPS", () => {
-		expect(
-			webRefreshCookieName("https://vault.example.test/connect/token"),
-		).toBe("__Host-edgewarden_refresh");
-		expect(webRefreshCookieName("http://localhost/connect/token")).toBe(
-			"edgewarden_refresh",
-		);
-	});
+  it("uses host-only refresh cookies for HTTPS", () => {
+    expect(
+      webRefreshCookieName("https://vault.example.test/connect/token"),
+    ).toBe("__Host-edgewarden_refresh");
+    expect(webRefreshCookieName("http://localhost/connect/token")).toBe(
+      "edgewarden_refresh",
+    );
+  });
 
-	it("recognizes only the web OAuth client", () => {
-		expect(isWebClient({ client_id: " web " })).toBe(true);
-		expect(isWebClient({ client_id: "cli" })).toBe(false);
-	});
+  it("recognizes only the web OAuth client", () => {
+    expect(isWebClient({ client_id: " web " })).toBe(true);
+    expect(isWebClient({ client_id: "cli" })).toBe(false);
+  });
 });

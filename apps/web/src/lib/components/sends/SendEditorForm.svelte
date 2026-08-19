@@ -10,26 +10,26 @@ import { Textarea } from "$lib/components/ui/textarea/index.js";
 import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
 
 let {
-	isCreating,
-	isEditing,
-	form = $bindable(),
-	hasExistingPassword,
-	onSave,
-	onCancel,
+  isCreating,
+  isEditing,
+  form = $bindable(),
+  hasExistingPassword,
+  onSave,
+  onCancel,
 }: {
-	isCreating: boolean;
-	isEditing: boolean;
-	form: import("$lib/services/send-editor").SendEditorDraft;
-	hasExistingPassword: boolean;
-	onSave: () => void;
-	onCancel: () => void;
+  isCreating: boolean;
+  isEditing: boolean;
+  form: import("$lib/services/send-editor").SendEditorDraft;
+  hasExistingPassword: boolean;
+  onSave: () => void;
+  onCancel: () => void;
 } = $props();
 
 let showPassword = $state(false);
 
 function handleFileChange(event: Event) {
-	form.file = (event.currentTarget as HTMLInputElement).files?.[0] ?? null;
-	if (form.file && !form.name) form.name = form.file.name;
+  form.file = (event.currentTarget as HTMLInputElement).files?.[0] ?? null;
+  if (form.file && !form.name) form.name = form.file.name;
 }
 </script>
 

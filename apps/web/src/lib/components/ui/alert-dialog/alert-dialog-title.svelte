@@ -3,9 +3,9 @@ import { AlertDialog as AlertDialogPrimitive } from "bits-ui";
 import { cn } from "$lib/utils.js";
 
 let {
-	ref = $bindable(null),
-	class: className,
-	...restProps
+  ref = $bindable(null),
+  class: className,
+  ...restProps
 }: AlertDialogPrimitive.TitleProps = $props();
 </script>
 

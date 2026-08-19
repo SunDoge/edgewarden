@@ -4,28 +4,28 @@ import { now } from "../../../utils/time";
 
 // Revision writes deliberately use monotonic MAX updates so concurrent mutations cannot move a user's sync cursor backwards.
 export function revisionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  userId: string,
+  timestamp = now(),
 ) {
-	return db
-		.insertInto("user_revisions")
-		.values({ user_id: userId, revision_date: timestamp })
-		.onConflict((oc) =>
-			oc.column("user_id").doUpdateSet({
-				revision_date: sql<number>`MAX(user_revisions.revision_date + 1, excluded.revision_date)`,
-			}),
-		)
-		.compile();
+  return db
+    .insertInto("user_revisions")
+    .values({ user_id: userId, revision_date: timestamp })
+    .onConflict((oc) =>
+      oc.column("user_id").doUpdateSet({
+        revision_date: sql<number>`MAX(user_revisions.revision_date + 1, excluded.revision_date)`,
+      }),
+    )
+    .compile();
 }
 
 export function conditionalUserUpdatedAtRevisionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	updatedAt: number,
-	timestamp = now(),
+  db: Kysely<DB>,
+  userId: string,
+  updatedAt: number,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT id, ${timestamp}
 		FROM users
@@ -39,11 +39,11 @@ export function conditionalUserUpdatedAtRevisionQuery(
 }
 
 export function organizationRevisionQuery(
-	db: Kysely<DB>,
-	organizationId: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  organizationId: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT DISTINCT user_id, ${timestamp}
 		FROM org_members
@@ -58,12 +58,12 @@ export function organizationRevisionQuery(
 }
 
 export function conditionalOrganizationRevisionQuery(
-	db: Kysely<DB>,
-	organizationId: string,
-	deletionToken: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  organizationId: string,
+  deletionToken: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT DISTINCT member.user_id, ${timestamp}
 		FROM org_members member
@@ -80,11 +80,11 @@ export function conditionalOrganizationRevisionQuery(
 }
 
 export function collectionRevisionQuery(
-	db: Kysely<DB>,
-	collectionId: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  collectionId: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT DISTINCT member.user_id, ${timestamp}
 		FROM collections collection
@@ -100,12 +100,12 @@ export function collectionRevisionQuery(
 }
 
 export function conditionalCollectionRevisionQuery(
-	db: Kysely<DB>,
-	collectionId: string,
-	mutationToken: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  collectionId: string,
+  mutationToken: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT DISTINCT member.user_id, ${timestamp}
 		FROM collections collection
@@ -122,11 +122,11 @@ export function conditionalCollectionRevisionQuery(
 }
 
 export function organizationMemberRevisionQuery(
-	db: Kysely<DB>,
-	memberId: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  memberId: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT user_id, ${timestamp}
 		FROM org_members
@@ -140,12 +140,12 @@ export function organizationMemberRevisionQuery(
 }
 
 export function conditionalOrganizationMemberRevisionQuery(
-	db: Kysely<DB>,
-	memberId: string,
-	mutationToken: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  memberId: string,
+  mutationToken: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT user_id, ${timestamp}
 		FROM org_members
@@ -160,13 +160,13 @@ export function conditionalOrganizationMemberRevisionQuery(
 }
 
 export function organizationMemberInvitationRevisionQuery(
-	db: Kysely<DB>,
-	memberId: string,
-	actorUserId: string,
-	mutationToken: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  memberId: string,
+  actorUserId: string,
+  mutationToken: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT user_id, ${timestamp}
 		FROM org_members
@@ -188,14 +188,14 @@ export function organizationMemberInvitationRevisionQuery(
 }
 
 export function organizationMemberCollectionAccessQuery(
-	db: Kysely<DB>,
-	memberId: string,
-	collectionId: string,
-	readOnly: boolean,
-	hidePasswords: boolean,
-	mutationToken?: string,
+  db: Kysely<DB>,
+  memberId: string,
+  collectionId: string,
+  readOnly: boolean,
+  hidePasswords: boolean,
+  mutationToken?: string,
 ) {
-	return sql`
+  return sql`
 		INSERT INTO collection_members (
 			collection_id,
 			org_member_id,
@@ -211,10 +211,10 @@ export function organizationMemberCollectionAccessQuery(
 		INNER JOIN collections collection ON collection.org_id = member.org_id
 		WHERE member.id = ${memberId}
 		  AND ${
-				mutationToken === undefined
-					? sql<boolean>`true`
-					: sql<boolean>`member.mutation_token = ${mutationToken}`
-			}
+        mutationToken === undefined
+          ? sql<boolean>`true`
+          : sql<boolean>`member.mutation_token = ${mutationToken}`
+      }
 		  AND collection.id = ${collectionId}
 	`.compile(db);
 }

@@ -5,46 +5,46 @@ import { createDatabase } from "../middleware/db";
 import { rotateUserApiKey } from "../services/account-api-key";
 import { deleteAccountData } from "../services/account-deletion";
 import {
-	getDefaultBackupSettings,
-	saveBackupSettings,
+  getDefaultBackupSettings,
+  saveBackupSettings,
 } from "../services/backup/config";
 import {
-	acquireDataOperationLease,
-	DataOperationLeaseLostError,
-	releaseDataOperationLease,
-	renewDataOperationLease,
-	requireDataOperationLeaseRenewal,
-	requireFreshDataOperationLease,
+  acquireDataOperationLease,
+  DataOperationLeaseLostError,
+  releaseDataOperationLease,
+  renewDataOperationLease,
+  requireDataOperationLeaseRenewal,
+  requireFreshDataOperationLease,
 } from "../services/backup/operation-lease";
 import { drainBlobGcQueue } from "../services/blob-gc";
 import type { BlobStore } from "../services/blob-store";
 import {
-	decryptCredential,
-	hashCredential,
+  decryptCredential,
+  hashCredential,
 } from "../services/credential-protection";
 import * as authRequestsDb from "../services/db/auth-requests";
 import {
-	attachmentCipherUpdateQuery,
-	attachmentRevisionQuery,
-	collectionRevisionQuery,
-	conditionalAuthenticatorUpdateQuery,
-	conditionalRefreshTokenDeletionQuery,
-	conditionalTwoFactorPasskeyClaimQuery,
-	conditionalUserRevisionQuery,
-	conditionalWebauthnCredentialInsertQuery,
-	conditionalYubikeyUpdateQuery,
-	deletedAttachmentCipherUpdateQuery,
-	deletedAttachmentRevisionQuery,
-	executeBatch,
-	organizationMemberRevisionQuery,
-	organizationRevisionQuery,
-	revisionQuery,
-	webauthnCredentialRevisionQuery,
+  attachmentCipherUpdateQuery,
+  attachmentRevisionQuery,
+  collectionRevisionQuery,
+  conditionalAuthenticatorUpdateQuery,
+  conditionalRefreshTokenDeletionQuery,
+  conditionalTwoFactorPasskeyClaimQuery,
+  conditionalUserRevisionQuery,
+  conditionalWebauthnCredentialInsertQuery,
+  conditionalYubikeyUpdateQuery,
+  deletedAttachmentCipherUpdateQuery,
+  deletedAttachmentRevisionQuery,
+  executeBatch,
+  organizationMemberRevisionQuery,
+  organizationRevisionQuery,
+  revisionQuery,
+  webauthnCredentialRevisionQuery,
 } from "../services/db/batch";
 import {
-	deleteConfigValue,
-	getConfigValue,
-	setConfigValue,
+  deleteConfigValue,
+  getConfigValue,
+  setConfigValue,
 } from "../services/db/config";
 import * as devicesDb from "../services/db/devices";
 import * as sendsDb from "../services/db/sends";
@@ -54,2134 +54,2134 @@ import { publishSendFileObject } from "../services/sends/file-storage";
 import { hashRefreshToken } from "../utils/jwt";
 
 export interface DatabaseMaintenanceScenarioContext {
-	readonly database: D1Database;
-	readonly bindings: CloudflareBindings;
-	readonly r2Values: Map<string, Uint8Array>;
-	email: string;
+  readonly database: D1Database;
+  readonly bindings: CloudflareBindings;
+  readonly r2Values: Map<string, Uint8Array>;
+  email: string;
 }
 
 export function registerDatabaseMaintenanceScenarios(
-	context: DatabaseMaintenanceScenarioContext,
+  context: DatabaseMaintenanceScenarioContext,
 ): void {
-	const EMAIL = context.email;
-	test("does not partially delete an account that owns an organization", async () => {
-		const { db, dialect } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.select(["id", "status", "deletion_requested_at"])
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const cipher = await db
-			.selectFrom("ciphers")
-			.select(["id", "deleted_at", "purge_after"])
-			.where("user_id", "=", user.id)
-			.executeTakeFirstOrThrow();
-		try {
-			assert.equal(await deleteAccountData(db, dialect, user.id), null);
-			assert.deepEqual(
-				await db
-					.selectFrom("users")
-					.select(["status", "deletion_requested_at"])
-					.where("id", "=", user.id)
-					.executeTakeFirstOrThrow(),
-				{
-					status: user.status,
-					deletion_requested_at: user.deletion_requested_at,
-				},
-			);
-			assert.deepEqual(
-				await db
-					.selectFrom("ciphers")
-					.select(["deleted_at", "purge_after"])
-					.where("id", "=", cipher.id)
-					.executeTakeFirstOrThrow(),
-				{ deleted_at: cipher.deleted_at, purge_after: cipher.purge_after },
-			);
-		} finally {
-			await db.destroy();
-		}
-	});
+  const EMAIL = context.email;
+  test("does not partially delete an account that owns an organization", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select(["id", "status", "deletion_requested_at"])
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const cipher = await db
+      .selectFrom("ciphers")
+      .select(["id", "deleted_at", "purge_after"])
+      .where("user_id", "=", user.id)
+      .executeTakeFirstOrThrow();
+    try {
+      assert.equal(await deleteAccountData(db, dialect, user.id), null);
+      assert.deepEqual(
+        await db
+          .selectFrom("users")
+          .select(["status", "deletion_requested_at"])
+          .where("id", "=", user.id)
+          .executeTakeFirstOrThrow(),
+        {
+          status: user.status,
+          deletion_requested_at: user.deletion_requested_at,
+        },
+      );
+      assert.deepEqual(
+        await db
+          .selectFrom("ciphers")
+          .select(["deleted_at", "purge_after"])
+          .where("id", "=", cipher.id)
+          .executeTakeFirstOrThrow(),
+        { deleted_at: cipher.deleted_at, purge_after: cipher.purge_after },
+      );
+    } finally {
+      await db.destroy();
+    }
+  });
 
-	test("advances user revisions for multiple writes in the same second", async () => {
-		const { db, dialect } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.select("id")
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const timestamp = Math.floor(Date.now() / 1000);
-		try {
-			await executeBatch(dialect, [revisionQuery(db, user.id, timestamp)]);
-			const first = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", user.id)
-				.executeTakeFirstOrThrow();
-			await executeBatch(dialect, [revisionQuery(db, user.id, timestamp)]);
-			const second = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", user.id)
-				.executeTakeFirstOrThrow();
-			assert.equal(second.revision_date, first.revision_date + 1);
-		} finally {
-			await db.destroy();
-		}
-	});
+  test("advances user revisions for multiple writes in the same second", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const timestamp = Math.floor(Date.now() / 1000);
+    try {
+      await executeBatch(dialect, [revisionQuery(db, user.id, timestamp)]);
+      const first = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      await executeBatch(dialect, [revisionQuery(db, user.id, timestamp)]);
+      const second = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      assert.equal(second.revision_date, first.revision_date + 1);
+    } finally {
+      await db.destroy();
+    }
+  });
 
-	test("selects organization revision recipients inside the atomic batch", async () => {
-		const { db, dialect } = await createDatabase(context.database);
-		const member = await db
-			.selectFrom("org_members as member")
-			.innerJoin("users as user", "user.id", "member.user_id")
-			.select(["member.id", "member.org_id", "member.user_id"])
-			.where("user.email", "=", EMAIL)
-			.where("member.status", "=", "confirmed")
-			.executeTakeFirstOrThrow();
-		assert.ok(member.user_id);
-		const timestamp = Math.floor(Date.now() / 1000);
-		try {
-			await db
-				.updateTable("org_members")
-				.set({ status: "invited" })
-				.where("id", "=", member.id)
-				.execute();
-			const before = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", member.user_id)
-				.executeTakeFirstOrThrow();
-			await executeBatch(dialect, [
-				db
-					.updateTable("org_members")
-					.set({ status: "confirmed", updated_at: timestamp })
-					.where("id", "=", member.id),
-				organizationRevisionQuery(db, member.org_id, timestamp),
-			]);
-			const after = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", member.user_id)
-				.executeTakeFirstOrThrow();
-			assert.equal(after.revision_date, before.revision_date + 1);
-		} finally {
-			await db
-				.updateTable("org_members")
-				.set({ status: "confirmed" })
-				.where("id", "=", member.id)
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("selects organization revision recipients inside the atomic batch", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const member = await db
+      .selectFrom("org_members as member")
+      .innerJoin("users as user", "user.id", "member.user_id")
+      .select(["member.id", "member.org_id", "member.user_id"])
+      .where("user.email", "=", EMAIL)
+      .where("member.status", "=", "confirmed")
+      .executeTakeFirstOrThrow();
+    assert.ok(member.user_id);
+    const timestamp = Math.floor(Date.now() / 1000);
+    try {
+      await db
+        .updateTable("org_members")
+        .set({ status: "invited" })
+        .where("id", "=", member.id)
+        .execute();
+      const before = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", member.user_id)
+        .executeTakeFirstOrThrow();
+      await executeBatch(dialect, [
+        db
+          .updateTable("org_members")
+          .set({ status: "confirmed", updated_at: timestamp })
+          .where("id", "=", member.id),
+        organizationRevisionQuery(db, member.org_id, timestamp),
+      ]);
+      const after = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", member.user_id)
+        .executeTakeFirstOrThrow();
+      assert.equal(after.revision_date, before.revision_date + 1);
+    } finally {
+      await db
+        .updateTable("org_members")
+        .set({ status: "confirmed" })
+        .where("id", "=", member.id)
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("advances revisions once when a collection is deleted twice", async () => {
-		const { db, dialect } = await createDatabase(context.database);
-		const member = await db
-			.selectFrom("org_members as member")
-			.innerJoin("users as user", "user.id", "member.user_id")
-			.select(["member.org_id", "member.user_id"])
-			.where("user.email", "=", EMAIL)
-			.where("member.status", "=", "confirmed")
-			.executeTakeFirstOrThrow();
-		assert.ok(member.user_id);
-		const collectionId = crypto.randomUUID();
-		const timestamp = Math.floor(Date.now() / 1000);
-		try {
-			await db
-				.insertInto("collections")
-				.values({
-					id: collectionId,
-					org_id: member.org_id,
-					name: "concurrent-delete-collection",
-					created_at: timestamp,
-					updated_at: timestamp,
-				})
-				.execute();
-			const before = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", member.user_id)
-				.executeTakeFirstOrThrow();
-			for (let attempt = 0; attempt < 2; attempt += 1) {
-				await executeBatch(dialect, [
-					collectionRevisionQuery(db, collectionId, timestamp),
-					db.deleteFrom("collections").where("id", "=", collectionId),
-				]);
-			}
-			const after = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", member.user_id)
-				.executeTakeFirstOrThrow();
-			assert.equal(after.revision_date, before.revision_date + 1);
-		} finally {
-			await db
-				.deleteFrom("collections")
-				.where("id", "=", collectionId)
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("advances revisions once when a collection is deleted twice", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const member = await db
+      .selectFrom("org_members as member")
+      .innerJoin("users as user", "user.id", "member.user_id")
+      .select(["member.org_id", "member.user_id"])
+      .where("user.email", "=", EMAIL)
+      .where("member.status", "=", "confirmed")
+      .executeTakeFirstOrThrow();
+    assert.ok(member.user_id);
+    const collectionId = crypto.randomUUID();
+    const timestamp = Math.floor(Date.now() / 1000);
+    try {
+      await db
+        .insertInto("collections")
+        .values({
+          id: collectionId,
+          org_id: member.org_id,
+          name: "concurrent-delete-collection",
+          created_at: timestamp,
+          updated_at: timestamp,
+        })
+        .execute();
+      const before = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", member.user_id)
+        .executeTakeFirstOrThrow();
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await executeBatch(dialect, [
+          collectionRevisionQuery(db, collectionId, timestamp),
+          db.deleteFrom("collections").where("id", "=", collectionId),
+        ]);
+      }
+      const after = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", member.user_id)
+        .executeTakeFirstOrThrow();
+      assert.equal(after.revision_date, before.revision_date + 1);
+    } finally {
+      await db
+        .deleteFrom("collections")
+        .where("id", "=", collectionId)
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("publishes attachment metadata side effects only once", async () => {
-		const { db, dialect } = await createDatabase(context.database);
-		const cipher = await db
-			.selectFrom("ciphers as cipher")
-			.innerJoin("users as user", "user.id", "cipher.user_id")
-			.select(["cipher.id", "cipher.updated_at", "user.id as user_id"])
-			.where("user.email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const revision = await db
-			.selectFrom("user_revisions")
-			.select("revision_date")
-			.where("user_id", "=", cipher.user_id)
-			.executeTakeFirstOrThrow();
-		const attachmentId = crypto.randomUUID();
-		const timestamp = Math.max(
-			Math.floor(Date.now() / 1000),
-			cipher.updated_at + 1,
-		);
-		const keys = [
-			`attachments/${cipher.id}/${attachmentId}.first.bin`,
-			`attachments/${cipher.id}/${attachmentId}.second.bin`,
-		];
-		let revisionAfterFirst = revision.revision_date;
-		try {
-			for (const [index, storageKey] of keys.entries()) {
-				await executeBatch(dialect, [
-					db
-						.insertInto("attachments")
-						.values({
-							id: attachmentId,
-							cipher_id: cipher.id,
-							file_name: "encrypted-name",
-							size: 4,
-							size_name: "4 Bytes",
-							key: "encrypted-key",
-							storage_key: storageKey,
-							created_at: timestamp,
-						})
-						.onConflict((conflict) => conflict.column("id").doNothing()),
-					attachmentCipherUpdateQuery(
-						db,
-						cipher.id,
-						attachmentId,
-						storageKey,
-						timestamp,
-					),
-					attachmentRevisionQuery(db, attachmentId, storageKey, timestamp),
-				]);
-				if (index === 0)
-					revisionAfterFirst = await db
-						.selectFrom("user_revisions")
-						.select("revision_date")
-						.where("user_id", "=", cipher.user_id)
-						.executeTakeFirstOrThrow()
-						.then((row) => row.revision_date);
-			}
-			assert.ok(revisionAfterFirst > revision.revision_date);
-			assert.equal(
-				await db
-					.selectFrom("attachments")
-					.select("storage_key")
-					.where("id", "=", attachmentId)
-					.executeTakeFirstOrThrow()
-					.then((row) => row.storage_key),
-				keys[0],
-			);
-			assert.equal(
-				await db
-					.selectFrom("user_revisions")
-					.select("revision_date")
-					.where("user_id", "=", cipher.user_id)
-					.executeTakeFirstOrThrow()
-					.then((row) => row.revision_date),
-				revisionAfterFirst,
-			);
-		} finally {
-			await db
-				.deleteFrom("attachments")
-				.where("id", "=", attachmentId)
-				.execute();
-			await db
-				.updateTable("ciphers")
-				.set({ updated_at: cipher.updated_at })
-				.where("id", "=", cipher.id)
-				.execute();
-			await db
-				.updateTable("user_revisions")
-				.set({ revision_date: revision.revision_date })
-				.where("user_id", "=", cipher.user_id)
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("publishes attachment metadata side effects only once", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const cipher = await db
+      .selectFrom("ciphers as cipher")
+      .innerJoin("users as user", "user.id", "cipher.user_id")
+      .select(["cipher.id", "cipher.updated_at", "user.id as user_id"])
+      .where("user.email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const revision = await db
+      .selectFrom("user_revisions")
+      .select("revision_date")
+      .where("user_id", "=", cipher.user_id)
+      .executeTakeFirstOrThrow();
+    const attachmentId = crypto.randomUUID();
+    const timestamp = Math.max(
+      Math.floor(Date.now() / 1000),
+      cipher.updated_at + 1,
+    );
+    const keys = [
+      `attachments/${cipher.id}/${attachmentId}.first.bin`,
+      `attachments/${cipher.id}/${attachmentId}.second.bin`,
+    ];
+    let revisionAfterFirst = revision.revision_date;
+    try {
+      for (const [index, storageKey] of keys.entries()) {
+        await executeBatch(dialect, [
+          db
+            .insertInto("attachments")
+            .values({
+              id: attachmentId,
+              cipher_id: cipher.id,
+              file_name: "encrypted-name",
+              size: 4,
+              size_name: "4 Bytes",
+              key: "encrypted-key",
+              storage_key: storageKey,
+              created_at: timestamp,
+            })
+            .onConflict((conflict) => conflict.column("id").doNothing()),
+          attachmentCipherUpdateQuery(
+            db,
+            cipher.id,
+            attachmentId,
+            storageKey,
+            timestamp,
+          ),
+          attachmentRevisionQuery(db, attachmentId, storageKey, timestamp),
+        ]);
+        if (index === 0)
+          revisionAfterFirst = await db
+            .selectFrom("user_revisions")
+            .select("revision_date")
+            .where("user_id", "=", cipher.user_id)
+            .executeTakeFirstOrThrow()
+            .then((row) => row.revision_date);
+      }
+      assert.ok(revisionAfterFirst > revision.revision_date);
+      assert.equal(
+        await db
+          .selectFrom("attachments")
+          .select("storage_key")
+          .where("id", "=", attachmentId)
+          .executeTakeFirstOrThrow()
+          .then((row) => row.storage_key),
+        keys[0],
+      );
+      assert.equal(
+        await db
+          .selectFrom("user_revisions")
+          .select("revision_date")
+          .where("user_id", "=", cipher.user_id)
+          .executeTakeFirstOrThrow()
+          .then((row) => row.revision_date),
+        revisionAfterFirst,
+      );
+    } finally {
+      await db
+        .deleteFrom("attachments")
+        .where("id", "=", attachmentId)
+        .execute();
+      await db
+        .updateTable("ciphers")
+        .set({ updated_at: cipher.updated_at })
+        .where("id", "=", cipher.id)
+        .execute();
+      await db
+        .updateTable("user_revisions")
+        .set({ revision_date: revision.revision_date })
+        .where("user_id", "=", cipher.user_id)
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("tombstones an attachment only once", async () => {
-		const { db, dialect } = await createDatabase(context.database);
-		const cipher = await db
-			.selectFrom("ciphers as cipher")
-			.innerJoin("users as user", "user.id", "cipher.user_id")
-			.select(["cipher.id", "cipher.updated_at", "user.id as user_id"])
-			.where("user.email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const revision = await db
-			.selectFrom("user_revisions")
-			.select("revision_date")
-			.where("user_id", "=", cipher.user_id)
-			.executeTakeFirstOrThrow();
-		const attachmentId = crypto.randomUUID();
-		const timestamp = Math.max(
-			Math.floor(Date.now() / 1000),
-			cipher.updated_at + 1,
-		);
-		let revisionAfterFirst = revision.revision_date;
-		try {
-			await db
-				.insertInto("attachments")
-				.values({
-					id: attachmentId,
-					cipher_id: cipher.id,
-					file_name: "encrypted-name",
-					size: 4,
-					size_name: "4 Bytes",
-					key: "encrypted-key",
-					storage_key: `attachments/${cipher.id}/${attachmentId}.bin`,
-					created_at: timestamp,
-				})
-				.execute();
-			const affected: bigint[] = [];
-			for (let attempt = 0; attempt < 2; attempt += 1) {
-				const deletionToken = crypto.randomUUID();
-				const [deleted] = await dialect.batch([
-					db
-						.updateTable("attachments")
-						.set({ deleted_at: timestamp, deletion_token: deletionToken })
-						.where("id", "=", attachmentId)
-						.where("cipher_id", "=", cipher.id)
-						.where("deleted_at", "is", null),
-					deletedAttachmentCipherUpdateQuery(
-						db,
-						cipher.id,
-						attachmentId,
-						deletionToken,
-						timestamp,
-					),
-					deletedAttachmentRevisionQuery(
-						db,
-						attachmentId,
-						deletionToken,
-						timestamp,
-					),
-				]);
-				affected.push(deleted.numAffectedRows ?? 0n);
-				if (attempt === 0)
-					revisionAfterFirst = await db
-						.selectFrom("user_revisions")
-						.select("revision_date")
-						.where("user_id", "=", cipher.user_id)
-						.executeTakeFirstOrThrow()
-						.then((row) => row.revision_date);
-			}
-			assert.deepEqual(affected, [1n, 0n]);
-			assert.ok(revisionAfterFirst > revision.revision_date);
-			assert.equal(
-				await db
-					.selectFrom("user_revisions")
-					.select("revision_date")
-					.where("user_id", "=", cipher.user_id)
-					.executeTakeFirstOrThrow()
-					.then((row) => row.revision_date),
-				revisionAfterFirst,
-			);
-		} finally {
-			await db
-				.deleteFrom("attachments")
-				.where("id", "=", attachmentId)
-				.execute();
-			await db
-				.updateTable("ciphers")
-				.set({ updated_at: cipher.updated_at })
-				.where("id", "=", cipher.id)
-				.execute();
-			await db
-				.updateTable("user_revisions")
-				.set({ revision_date: revision.revision_date })
-				.where("user_id", "=", cipher.user_id)
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("tombstones an attachment only once", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const cipher = await db
+      .selectFrom("ciphers as cipher")
+      .innerJoin("users as user", "user.id", "cipher.user_id")
+      .select(["cipher.id", "cipher.updated_at", "user.id as user_id"])
+      .where("user.email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const revision = await db
+      .selectFrom("user_revisions")
+      .select("revision_date")
+      .where("user_id", "=", cipher.user_id)
+      .executeTakeFirstOrThrow();
+    const attachmentId = crypto.randomUUID();
+    const timestamp = Math.max(
+      Math.floor(Date.now() / 1000),
+      cipher.updated_at + 1,
+    );
+    let revisionAfterFirst = revision.revision_date;
+    try {
+      await db
+        .insertInto("attachments")
+        .values({
+          id: attachmentId,
+          cipher_id: cipher.id,
+          file_name: "encrypted-name",
+          size: 4,
+          size_name: "4 Bytes",
+          key: "encrypted-key",
+          storage_key: `attachments/${cipher.id}/${attachmentId}.bin`,
+          created_at: timestamp,
+        })
+        .execute();
+      const affected: bigint[] = [];
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const deletionToken = crypto.randomUUID();
+        const [deleted] = await dialect.batch([
+          db
+            .updateTable("attachments")
+            .set({ deleted_at: timestamp, deletion_token: deletionToken })
+            .where("id", "=", attachmentId)
+            .where("cipher_id", "=", cipher.id)
+            .where("deleted_at", "is", null),
+          deletedAttachmentCipherUpdateQuery(
+            db,
+            cipher.id,
+            attachmentId,
+            deletionToken,
+            timestamp,
+          ),
+          deletedAttachmentRevisionQuery(
+            db,
+            attachmentId,
+            deletionToken,
+            timestamp,
+          ),
+        ]);
+        affected.push(deleted.numAffectedRows ?? 0n);
+        if (attempt === 0)
+          revisionAfterFirst = await db
+            .selectFrom("user_revisions")
+            .select("revision_date")
+            .where("user_id", "=", cipher.user_id)
+            .executeTakeFirstOrThrow()
+            .then((row) => row.revision_date);
+      }
+      assert.deepEqual(affected, [1n, 0n]);
+      assert.ok(revisionAfterFirst > revision.revision_date);
+      assert.equal(
+        await db
+          .selectFrom("user_revisions")
+          .select("revision_date")
+          .where("user_id", "=", cipher.user_id)
+          .executeTakeFirstOrThrow()
+          .then((row) => row.revision_date),
+        revisionAfterFirst,
+      );
+    } finally {
+      await db
+        .deleteFrom("attachments")
+        .where("id", "=", attachmentId)
+        .execute();
+      await db
+        .updateTable("ciphers")
+        .set({ updated_at: cipher.updated_at })
+        .where("id", "=", cipher.id)
+        .execute();
+      await db
+        .updateTable("user_revisions")
+        .set({ revision_date: revision.revision_date })
+        .where("user_id", "=", cipher.user_id)
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("advances a member revision once when removal is attempted twice", async () => {
-		const { db, dialect } = await createDatabase(context.database);
-		const owner = await db
-			.selectFrom("org_members as member")
-			.innerJoin("users as user", "user.id", "member.user_id")
-			.select("member.org_id")
-			.where("user.email", "=", EMAIL)
-			.where("member.status", "=", "confirmed")
-			.executeTakeFirstOrThrow();
-		const user = await db
-			.selectFrom("users as candidate")
-			.select(["candidate.id", "candidate.email"])
-			.where(({ not, exists, selectFrom }) =>
-				not(
-					exists(
-						selectFrom("org_members")
-							.select("id")
-							.where("org_id", "=", owner.org_id)
-							.whereRef("user_id", "=", "candidate.id"),
-					),
-				),
-			)
-			.executeTakeFirstOrThrow();
-		const memberId = crypto.randomUUID();
-		const timestamp = Math.floor(Date.now() / 1000);
-		try {
-			await db
-				.insertInto("org_members")
-				.values({
-					id: memberId,
-					org_id: owner.org_id,
-					user_id: user.id,
-					email: user.email,
-					role: "member",
-					status: "confirmed",
-					access_all: 1,
-					key: "encrypted-key",
-					created_at: timestamp,
-					updated_at: timestamp,
-				})
-				.execute();
-			const before = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", user.id)
-				.executeTakeFirstOrThrow();
-			for (let attempt = 0; attempt < 2; attempt += 1) {
-				await executeBatch(dialect, [
-					organizationMemberRevisionQuery(db, memberId, timestamp),
-					db.deleteFrom("org_members").where("id", "=", memberId),
-				]);
-			}
-			const after = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", user.id)
-				.executeTakeFirstOrThrow();
-			assert.equal(
-				after.revision_date,
-				Math.max(before.revision_date + 1, timestamp),
-			);
-		} finally {
-			await db.deleteFrom("org_members").where("id", "=", memberId).execute();
-			await db.destroy();
-		}
-	});
+  test("advances a member revision once when removal is attempted twice", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const owner = await db
+      .selectFrom("org_members as member")
+      .innerJoin("users as user", "user.id", "member.user_id")
+      .select("member.org_id")
+      .where("user.email", "=", EMAIL)
+      .where("member.status", "=", "confirmed")
+      .executeTakeFirstOrThrow();
+    const user = await db
+      .selectFrom("users as candidate")
+      .select(["candidate.id", "candidate.email"])
+      .where(({ not, exists, selectFrom }) =>
+        not(
+          exists(
+            selectFrom("org_members")
+              .select("id")
+              .where("org_id", "=", owner.org_id)
+              .whereRef("user_id", "=", "candidate.id"),
+          ),
+        ),
+      )
+      .executeTakeFirstOrThrow();
+    const memberId = crypto.randomUUID();
+    const timestamp = Math.floor(Date.now() / 1000);
+    try {
+      await db
+        .insertInto("org_members")
+        .values({
+          id: memberId,
+          org_id: owner.org_id,
+          user_id: user.id,
+          email: user.email,
+          role: "member",
+          status: "confirmed",
+          access_all: 1,
+          key: "encrypted-key",
+          created_at: timestamp,
+          updated_at: timestamp,
+        })
+        .execute();
+      const before = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await executeBatch(dialect, [
+          organizationMemberRevisionQuery(db, memberId, timestamp),
+          db.deleteFrom("org_members").where("id", "=", memberId),
+        ]);
+      }
+      const after = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      assert.equal(
+        after.revision_date,
+        Math.max(before.revision_date + 1, timestamp),
+      );
+    } finally {
+      await db.deleteFrom("org_members").where("id", "=", memberId).execute();
+      await db.destroy();
+    }
+  });
 
-	test("advances a revision once when a passkey is deleted twice", async () => {
-		const { db, dialect } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.select("id")
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const credentialId = crypto.randomUUID();
-		const timestamp = Math.floor(Date.now() / 1000);
-		try {
-			await db
-				.insertInto("webauthn_credentials")
-				.values({
-					id: credentialId,
-					user_id: user.id,
-					purpose: "login",
-					name: "concurrent-delete-passkey",
-					public_key: "public-key",
-					credential_id: `credential-${credentialId}`,
-					counter: 0,
-					type: "public-key",
-					aa_guid: null,
-					transports: null,
-					encrypted_user_key: null,
-					encrypted_public_key: null,
-					encrypted_private_key: null,
-					supports_prf: 0,
-					mutation_token: crypto.randomUUID(),
-					created_at: timestamp,
-					updated_at: timestamp,
-				})
-				.execute();
-			const before = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", user.id)
-				.executeTakeFirstOrThrow();
-			for (let attempt = 0; attempt < 2; attempt += 1) {
-				await executeBatch(dialect, [
-					webauthnCredentialRevisionQuery(db, user.id, credentialId, timestamp),
-					db.deleteFrom("webauthn_credentials").where("id", "=", credentialId),
-				]);
-			}
-			const after = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", user.id)
-				.executeTakeFirstOrThrow();
-			assert.equal(after.revision_date, before.revision_date + 1);
-		} finally {
-			await db
-				.deleteFrom("webauthn_credentials")
-				.where("id", "=", credentialId)
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("advances a revision once when a passkey is deleted twice", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const credentialId = crypto.randomUUID();
+    const timestamp = Math.floor(Date.now() / 1000);
+    try {
+      await db
+        .insertInto("webauthn_credentials")
+        .values({
+          id: credentialId,
+          user_id: user.id,
+          purpose: "login",
+          name: "concurrent-delete-passkey",
+          public_key: "public-key",
+          credential_id: `credential-${credentialId}`,
+          counter: 0,
+          type: "public-key",
+          aa_guid: null,
+          transports: null,
+          encrypted_user_key: null,
+          encrypted_public_key: null,
+          encrypted_private_key: null,
+          supports_prf: 0,
+          mutation_token: crypto.randomUUID(),
+          created_at: timestamp,
+          updated_at: timestamp,
+        })
+        .execute();
+      const before = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await executeBatch(dialect, [
+          webauthnCredentialRevisionQuery(db, user.id, credentialId, timestamp),
+          db.deleteFrom("webauthn_credentials").where("id", "=", credentialId),
+        ]);
+      }
+      const after = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      assert.equal(after.revision_date, before.revision_date + 1);
+    } finally {
+      await db
+        .deleteFrom("webauthn_credentials")
+        .where("id", "=", credentialId)
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("consumes a two-factor recovery code only once", async () => {
-		const { db, dialect } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.select(["id", "totp_recovery_code", "security_stamp"])
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const revision = await db
-			.selectFrom("user_revisions")
-			.select("revision_date")
-			.where("user_id", "=", user.id)
-			.executeTakeFirstOrThrow();
-		const recoveryCode = JSON.stringify({ v: 1, iv: "test", data: "test" });
-		const timestamp = Math.floor(Date.now() / 1000);
-		try {
-			await db
-				.updateTable("users")
-				.set({ totp_recovery_code: recoveryCode })
-				.where("id", "=", user.id)
-				.executeTakeFirstOrThrow();
-			const affected: bigint[] = [];
-			for (let attempt = 0; attempt < 2; attempt += 1) {
-				const securityStamp = crypto.randomUUID();
-				const [updated] = await dialect.batch([
-					db
-						.updateTable("users")
-						.set({
-							totp_recovery_code: null,
-							security_stamp: securityStamp,
-							updated_at: timestamp,
-						})
-						.where("id", "=", user.id)
-						.where("totp_recovery_code", "=", recoveryCode),
-					conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
-				]);
-				affected.push(updated.numAffectedRows ?? 0n);
-			}
-			assert.deepEqual(affected, [1n, 0n]);
-			const after = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", user.id)
-				.executeTakeFirstOrThrow();
-			assert.equal(after.revision_date, revision.revision_date + 1);
-		} finally {
-			await db
-				.updateTable("users")
-				.set({
-					totp_recovery_code: user.totp_recovery_code,
-					security_stamp: user.security_stamp,
-				})
-				.where("id", "=", user.id)
-				.execute();
-			await db
-				.updateTable("user_revisions")
-				.set({ revision_date: revision.revision_date })
-				.where("user_id", "=", user.id)
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("consumes a two-factor recovery code only once", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select(["id", "totp_recovery_code", "security_stamp"])
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const revision = await db
+      .selectFrom("user_revisions")
+      .select("revision_date")
+      .where("user_id", "=", user.id)
+      .executeTakeFirstOrThrow();
+    const recoveryCode = JSON.stringify({ v: 1, iv: "test", data: "test" });
+    const timestamp = Math.floor(Date.now() / 1000);
+    try {
+      await db
+        .updateTable("users")
+        .set({ totp_recovery_code: recoveryCode })
+        .where("id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      const affected: bigint[] = [];
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const securityStamp = crypto.randomUUID();
+        const [updated] = await dialect.batch([
+          db
+            .updateTable("users")
+            .set({
+              totp_recovery_code: null,
+              security_stamp: securityStamp,
+              updated_at: timestamp,
+            })
+            .where("id", "=", user.id)
+            .where("totp_recovery_code", "=", recoveryCode),
+          conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
+        ]);
+        affected.push(updated.numAffectedRows ?? 0n);
+      }
+      assert.deepEqual(affected, [1n, 0n]);
+      const after = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      assert.equal(after.revision_date, revision.revision_date + 1);
+    } finally {
+      await db
+        .updateTable("users")
+        .set({
+          totp_recovery_code: user.totp_recovery_code,
+          security_stamp: user.security_stamp,
+        })
+        .where("id", "=", user.id)
+        .execute();
+      await db
+        .updateTable("user_revisions")
+        .set({ revision_date: revision.revision_date })
+        .where("user_id", "=", user.id)
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("enables an authenticator once from a shared security snapshot", async () => {
-		const { db, dialect } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.select(["id", "totp_secret", "totp_recovery_code", "security_stamp"])
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const revision = await db
-			.selectFrom("user_revisions")
-			.select("revision_date")
-			.where("user_id", "=", user.id)
-			.executeTakeFirstOrThrow();
-		const timestamp = Math.floor(Date.now() / 1000);
-		try {
-			const affected: bigint[] = [];
-			for (let attempt = 0; attempt < 2; attempt += 1) {
-				const securityStamp = crypto.randomUUID();
-				const envelope = JSON.stringify({
-					v: 1,
-					iv: `iv-${attempt}`,
-					data: `data-${attempt}`,
-				});
-				const [changed] = await dialect.batch([
-					conditionalAuthenticatorUpdateQuery(
-						db,
-						user.id,
-						user.security_stamp,
-						user.totp_secret,
-						envelope,
-						envelope,
-						securityStamp,
-						timestamp,
-					),
-					conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
-					conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
-				]);
-				affected.push(changed.numAffectedRows ?? 0n);
-			}
-			assert.deepEqual(affected, [1n, 0n]);
-			const after = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", user.id)
-				.executeTakeFirstOrThrow();
-			assert.equal(after.revision_date, revision.revision_date + 1);
-		} finally {
-			await db
-				.updateTable("users")
-				.set({
-					totp_secret: user.totp_secret,
-					totp_recovery_code: user.totp_recovery_code,
-					security_stamp: user.security_stamp,
-				})
-				.where("id", "=", user.id)
-				.execute();
-			await db
-				.updateTable("user_revisions")
-				.set({ revision_date: revision.revision_date })
-				.where("user_id", "=", user.id)
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("enables an authenticator once from a shared security snapshot", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select(["id", "totp_secret", "totp_recovery_code", "security_stamp"])
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const revision = await db
+      .selectFrom("user_revisions")
+      .select("revision_date")
+      .where("user_id", "=", user.id)
+      .executeTakeFirstOrThrow();
+    const timestamp = Math.floor(Date.now() / 1000);
+    try {
+      const affected: bigint[] = [];
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const securityStamp = crypto.randomUUID();
+        const envelope = JSON.stringify({
+          v: 1,
+          iv: `iv-${attempt}`,
+          data: `data-${attempt}`,
+        });
+        const [changed] = await dialect.batch([
+          conditionalAuthenticatorUpdateQuery(
+            db,
+            user.id,
+            user.security_stamp,
+            user.totp_secret,
+            envelope,
+            envelope,
+            securityStamp,
+            timestamp,
+          ),
+          conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+          conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
+        ]);
+        affected.push(changed.numAffectedRows ?? 0n);
+      }
+      assert.deepEqual(affected, [1n, 0n]);
+      const after = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      assert.equal(after.revision_date, revision.revision_date + 1);
+    } finally {
+      await db
+        .updateTable("users")
+        .set({
+          totp_secret: user.totp_secret,
+          totp_recovery_code: user.totp_recovery_code,
+          security_stamp: user.security_stamp,
+        })
+        .where("id", "=", user.id)
+        .execute();
+      await db
+        .updateTable("user_revisions")
+        .set({ revision_date: revision.revision_date })
+        .where("user_id", "=", user.id)
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("enables YubiKeys once from a shared security snapshot", async () => {
-		const { db, dialect } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.select(["id", "yubikey_config", "totp_recovery_code", "security_stamp"])
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const revision = await db
-			.selectFrom("user_revisions")
-			.select("revision_date")
-			.where("user_id", "=", user.id)
-			.executeTakeFirstOrThrow();
-		const timestamp = Math.floor(Date.now() / 1000);
-		try {
-			const affected: bigint[] = [];
-			for (let attempt = 0; attempt < 2; attempt += 1) {
-				const securityStamp = crypto.randomUUID();
-				const envelope = JSON.stringify({
-					v: 1,
-					iv: `yubikey-iv-${attempt}`,
-					data: `yubikey-data-${attempt}`,
-				});
-				const [changed] = await dialect.batch([
-					conditionalYubikeyUpdateQuery(
-						db,
-						user.id,
-						user.security_stamp,
-						user.yubikey_config,
-						JSON.stringify({
-							keys: [`ccccccbbbb0${attempt}`],
-							nfc: false,
-						}),
-						envelope,
-						securityStamp,
-						timestamp,
-					),
-					conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
-					conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
-				]);
-				affected.push(changed.numAffectedRows ?? 0n);
-			}
-			assert.deepEqual(affected, [1n, 0n]);
-			const after = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", user.id)
-				.executeTakeFirstOrThrow();
-			assert.equal(after.revision_date, revision.revision_date + 1);
-		} finally {
-			await db
-				.updateTable("users")
-				.set({
-					yubikey_config: user.yubikey_config,
-					totp_recovery_code: user.totp_recovery_code,
-					security_stamp: user.security_stamp,
-				})
-				.where("id", "=", user.id)
-				.execute();
-			await db
-				.updateTable("user_revisions")
-				.set({ revision_date: revision.revision_date })
-				.where("user_id", "=", user.id)
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("enables YubiKeys once from a shared security snapshot", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select(["id", "yubikey_config", "totp_recovery_code", "security_stamp"])
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const revision = await db
+      .selectFrom("user_revisions")
+      .select("revision_date")
+      .where("user_id", "=", user.id)
+      .executeTakeFirstOrThrow();
+    const timestamp = Math.floor(Date.now() / 1000);
+    try {
+      const affected: bigint[] = [];
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const securityStamp = crypto.randomUUID();
+        const envelope = JSON.stringify({
+          v: 1,
+          iv: `yubikey-iv-${attempt}`,
+          data: `yubikey-data-${attempt}`,
+        });
+        const [changed] = await dialect.batch([
+          conditionalYubikeyUpdateQuery(
+            db,
+            user.id,
+            user.security_stamp,
+            user.yubikey_config,
+            JSON.stringify({
+              keys: [`ccccccbbbb0${attempt}`],
+              nfc: false,
+            }),
+            envelope,
+            securityStamp,
+            timestamp,
+          ),
+          conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+          conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
+        ]);
+        affected.push(changed.numAffectedRows ?? 0n);
+      }
+      assert.deepEqual(affected, [1n, 0n]);
+      const after = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      assert.equal(after.revision_date, revision.revision_date + 1);
+    } finally {
+      await db
+        .updateTable("users")
+        .set({
+          yubikey_config: user.yubikey_config,
+          totp_recovery_code: user.totp_recovery_code,
+          security_stamp: user.security_stamp,
+        })
+        .where("id", "=", user.id)
+        .execute();
+      await db
+        .updateTable("user_revisions")
+        .set({ revision_date: revision.revision_date })
+        .where("user_id", "=", user.id)
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("adds one two-factor passkey from a shared security snapshot", async () => {
-		const { db, dialect } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.select(["id", "totp_recovery_code", "security_stamp"])
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const revision = await db
-			.selectFrom("user_revisions")
-			.select("revision_date")
-			.where("user_id", "=", user.id)
-			.executeTakeFirstOrThrow();
-		const timestamp = Math.floor(Date.now() / 1000);
-		const credentialIds = [crypto.randomUUID(), crypto.randomUUID()];
-		try {
-			const affected: Array<[bigint, bigint]> = [];
-			for (const [attempt, id] of credentialIds.entries()) {
-				const securityStamp = crypto.randomUUID();
-				const envelope = JSON.stringify({
-					v: 1,
-					iv: `passkey-iv-${attempt}`,
-					data: `passkey-data-${attempt}`,
-				});
-				const credential = {
-					id,
-					user_id: user.id,
-					purpose: "twoFactor",
-					name: `Concurrent passkey ${attempt}`,
-					public_key: "AQID",
-					credential_id: `credential-${id}`,
-					counter: 0,
-					type: "public-key",
-					aa_guid: null,
-					transports: "[]",
-					encrypted_user_key: null,
-					encrypted_public_key: null,
-					encrypted_private_key: null,
-					supports_prf: 0,
-					mutation_token: crypto.randomUUID(),
-					created_at: timestamp,
-					updated_at: timestamp,
-				};
-				const [claimed, inserted] = await dialect.batch([
-					conditionalTwoFactorPasskeyClaimQuery(
-						db,
-						user.id,
-						user.security_stamp,
-						credential.credential_id,
-						envelope,
-						securityStamp,
-						5,
-						timestamp,
-					),
-					conditionalWebauthnCredentialInsertQuery(
-						db,
-						credential,
-						securityStamp,
-					),
-					conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
-					conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
-				]);
-				affected.push([
-					claimed.numAffectedRows ?? 0n,
-					inserted.numAffectedRows ?? 0n,
-				]);
-			}
-			assert.deepEqual(affected, [
-				[1n, 1n],
-				[0n, 0n],
-			]);
-			const after = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", user.id)
-				.executeTakeFirstOrThrow();
-			assert.equal(after.revision_date, revision.revision_date + 1);
-		} finally {
-			await db
-				.deleteFrom("webauthn_credentials")
-				.where("id", "in", credentialIds)
-				.execute();
-			await db
-				.updateTable("users")
-				.set({
-					totp_recovery_code: user.totp_recovery_code,
-					security_stamp: user.security_stamp,
-				})
-				.where("id", "=", user.id)
-				.execute();
-			await db
-				.updateTable("user_revisions")
-				.set({ revision_date: revision.revision_date })
-				.where("user_id", "=", user.id)
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("adds one two-factor passkey from a shared security snapshot", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select(["id", "totp_recovery_code", "security_stamp"])
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const revision = await db
+      .selectFrom("user_revisions")
+      .select("revision_date")
+      .where("user_id", "=", user.id)
+      .executeTakeFirstOrThrow();
+    const timestamp = Math.floor(Date.now() / 1000);
+    const credentialIds = [crypto.randomUUID(), crypto.randomUUID()];
+    try {
+      const affected: Array<[bigint, bigint]> = [];
+      for (const [attempt, id] of credentialIds.entries()) {
+        const securityStamp = crypto.randomUUID();
+        const envelope = JSON.stringify({
+          v: 1,
+          iv: `passkey-iv-${attempt}`,
+          data: `passkey-data-${attempt}`,
+        });
+        const credential = {
+          id,
+          user_id: user.id,
+          purpose: "twoFactor",
+          name: `Concurrent passkey ${attempt}`,
+          public_key: "AQID",
+          credential_id: `credential-${id}`,
+          counter: 0,
+          type: "public-key",
+          aa_guid: null,
+          transports: "[]",
+          encrypted_user_key: null,
+          encrypted_public_key: null,
+          encrypted_private_key: null,
+          supports_prf: 0,
+          mutation_token: crypto.randomUUID(),
+          created_at: timestamp,
+          updated_at: timestamp,
+        };
+        const [claimed, inserted] = await dialect.batch([
+          conditionalTwoFactorPasskeyClaimQuery(
+            db,
+            user.id,
+            user.security_stamp,
+            credential.credential_id,
+            envelope,
+            securityStamp,
+            5,
+            timestamp,
+          ),
+          conditionalWebauthnCredentialInsertQuery(
+            db,
+            credential,
+            securityStamp,
+          ),
+          conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+          conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
+        ]);
+        affected.push([
+          claimed.numAffectedRows ?? 0n,
+          inserted.numAffectedRows ?? 0n,
+        ]);
+      }
+      assert.deepEqual(affected, [
+        [1n, 1n],
+        [0n, 0n],
+      ]);
+      const after = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      assert.equal(after.revision_date, revision.revision_date + 1);
+    } finally {
+      await db
+        .deleteFrom("webauthn_credentials")
+        .where("id", "in", credentialIds)
+        .execute();
+      await db
+        .updateTable("users")
+        .set({
+          totp_recovery_code: user.totp_recovery_code,
+          security_stamp: user.security_stamp,
+        })
+        .where("id", "=", user.id)
+        .execute();
+      await db
+        .updateTable("user_revisions")
+        .set({ revision_date: revision.revision_date })
+        .where("user_id", "=", user.id)
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("changes a password once for a verified old hash", async () => {
-		const { db, dialect } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.select(["id", "master_password_hash", "security_stamp"])
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const revision = await db
-			.selectFrom("user_revisions")
-			.select("revision_date")
-			.where("user_id", "=", user.id)
-			.executeTakeFirstOrThrow();
-		const timestamp = Math.floor(Date.now() / 1000);
-		try {
-			const affected: bigint[] = [];
-			for (let attempt = 0; attempt < 2; attempt += 1) {
-				const securityStamp = crypto.randomUUID();
-				const [updated] = await dialect.batch([
-					db
-						.updateTable("users")
-						.set({
-							master_password_hash: `replacement-hash-${attempt}`,
-							security_stamp: securityStamp,
-							updated_at: timestamp,
-						})
-						.where("id", "=", user.id)
-						.where("master_password_hash", "=", user.master_password_hash),
-					conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
-				]);
-				affected.push(updated.numAffectedRows ?? 0n);
-			}
-			assert.deepEqual(affected, [1n, 0n]);
-			const after = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", user.id)
-				.executeTakeFirstOrThrow();
-			assert.equal(after.revision_date, revision.revision_date + 1);
-		} finally {
-			await db
-				.updateTable("users")
-				.set({
-					master_password_hash: user.master_password_hash,
-					security_stamp: user.security_stamp,
-				})
-				.where("id", "=", user.id)
-				.execute();
-			await db
-				.updateTable("user_revisions")
-				.set({ revision_date: revision.revision_date })
-				.where("user_id", "=", user.id)
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("changes a password once for a verified old hash", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select(["id", "master_password_hash", "security_stamp"])
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const revision = await db
+      .selectFrom("user_revisions")
+      .select("revision_date")
+      .where("user_id", "=", user.id)
+      .executeTakeFirstOrThrow();
+    const timestamp = Math.floor(Date.now() / 1000);
+    try {
+      const affected: bigint[] = [];
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const securityStamp = crypto.randomUUID();
+        const [updated] = await dialect.batch([
+          db
+            .updateTable("users")
+            .set({
+              master_password_hash: `replacement-hash-${attempt}`,
+              security_stamp: securityStamp,
+              updated_at: timestamp,
+            })
+            .where("id", "=", user.id)
+            .where("master_password_hash", "=", user.master_password_hash),
+          conditionalUserRevisionQuery(db, user.id, securityStamp, timestamp),
+        ]);
+        affected.push(updated.numAffectedRows ?? 0n);
+      }
+      assert.deepEqual(affected, [1n, 0n]);
+      const after = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      assert.equal(after.revision_date, revision.revision_date + 1);
+    } finally {
+      await db
+        .updateTable("users")
+        .set({
+          master_password_hash: user.master_password_hash,
+          security_stamp: user.security_stamp,
+        })
+        .where("id", "=", user.id)
+        .execute();
+      await db
+        .updateTable("user_revisions")
+        .set({ revision_date: revision.revision_date })
+        .where("user_id", "=", user.id)
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("creates only one initial API key", async () => {
-		const { db } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.select(["id", "api_key_hash", "api_key_encrypted"])
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const firstEnvelope = JSON.stringify({ v: 1, iv: "first", data: "first" });
-		const secondEnvelope = JSON.stringify({
-			v: 1,
-			iv: "second",
-			data: "second",
-		});
-		try {
-			await db
-				.updateTable("users")
-				.set({ api_key_hash: null, api_key_encrypted: null })
-				.where("id", "=", user.id)
-				.execute();
-			const affected: bigint[] = [];
-			for (const [hash, encrypted] of [
-				["first-hash", firstEnvelope],
-				["second-hash", secondEnvelope],
-			] as const) {
-				const result = await db
-					.updateTable("users")
-					.set({ api_key_hash: hash, api_key_encrypted: encrypted })
-					.where("id", "=", user.id)
-					.where("api_key_encrypted", "is", null)
-					.executeTakeFirst();
-				affected.push(result.numUpdatedRows);
-			}
-			assert.deepEqual(affected, [1n, 0n]);
-			assert.deepEqual(
-				await db
-					.selectFrom("users")
-					.select(["api_key_hash", "api_key_encrypted"])
-					.where("id", "=", user.id)
-					.executeTakeFirstOrThrow(),
-				{ api_key_hash: "first-hash", api_key_encrypted: firstEnvelope },
-			);
-		} finally {
-			await db
-				.updateTable("users")
-				.set({
-					api_key_hash: user.api_key_hash,
-					api_key_encrypted: user.api_key_encrypted,
-				})
-				.where("id", "=", user.id)
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("creates only one initial API key", async () => {
+    const { db } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select(["id", "api_key_hash", "api_key_encrypted"])
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const firstEnvelope = JSON.stringify({ v: 1, iv: "first", data: "first" });
+    const secondEnvelope = JSON.stringify({
+      v: 1,
+      iv: "second",
+      data: "second",
+    });
+    try {
+      await db
+        .updateTable("users")
+        .set({ api_key_hash: null, api_key_encrypted: null })
+        .where("id", "=", user.id)
+        .execute();
+      const affected: bigint[] = [];
+      for (const [hash, encrypted] of [
+        ["first-hash", firstEnvelope],
+        ["second-hash", secondEnvelope],
+      ] as const) {
+        const result = await db
+          .updateTable("users")
+          .set({ api_key_hash: hash, api_key_encrypted: encrypted })
+          .where("id", "=", user.id)
+          .where("api_key_encrypted", "is", null)
+          .executeTakeFirst();
+        affected.push(result.numUpdatedRows);
+      }
+      assert.deepEqual(affected, [1n, 0n]);
+      assert.deepEqual(
+        await db
+          .selectFrom("users")
+          .select(["api_key_hash", "api_key_encrypted"])
+          .where("id", "=", user.id)
+          .executeTakeFirstOrThrow(),
+        { api_key_hash: "first-hash", api_key_encrypted: firstEnvelope },
+      );
+    } finally {
+      await db
+        .updateTable("users")
+        .set({
+          api_key_hash: user.api_key_hash,
+          api_key_encrypted: user.api_key_encrypted,
+        })
+        .where("id", "=", user.id)
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("persists exactly one API key from a shared rotation snapshot", async () => {
-		const { db } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.select(["id", "api_key_hash", "api_key_encrypted"])
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		try {
-			const keys = await Promise.all(
-				Array.from({ length: 8 }, () =>
-					rotateUserApiKey(
-						db,
-						user.id,
-						user.api_key_encrypted,
-						context.bindings.DATA_ENCRYPTION_SECRET,
-					),
-				),
-			);
-			const winners = keys.filter((key): key is string => key !== null);
-			assert.equal(winners.length, 1);
-			const persisted = await db
-				.selectFrom("users")
-				.select(["api_key_hash", "api_key_encrypted"])
-				.where("id", "=", user.id)
-				.executeTakeFirstOrThrow();
-			assert.equal(persisted.api_key_hash, await hashCredential(winners[0]));
-			assert.equal(
-				await decryptCredential(
-					persisted.api_key_encrypted ?? "",
-					context.bindings.DATA_ENCRYPTION_SECRET,
-					"api-key",
-				),
-				winners[0],
-			);
-		} finally {
-			await db
-				.updateTable("users")
-				.set({
-					api_key_hash: user.api_key_hash,
-					api_key_encrypted: user.api_key_encrypted,
-				})
-				.where("id", "=", user.id)
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("persists exactly one API key from a shared rotation snapshot", async () => {
+    const { db } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select(["id", "api_key_hash", "api_key_encrypted"])
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    try {
+      const keys = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          rotateUserApiKey(
+            db,
+            user.id,
+            user.api_key_encrypted,
+            context.bindings.DATA_ENCRYPTION_SECRET,
+          ),
+        ),
+      );
+      const winners = keys.filter((key): key is string => key !== null);
+      assert.equal(winners.length, 1);
+      const persisted = await db
+        .selectFrom("users")
+        .select(["api_key_hash", "api_key_encrypted"])
+        .where("id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      assert.equal(persisted.api_key_hash, await hashCredential(winners[0]));
+      assert.equal(
+        await decryptCredential(
+          persisted.api_key_encrypted ?? "",
+          context.bindings.DATA_ENCRYPTION_SECRET,
+          "api-key",
+        ),
+        winners[0],
+      );
+    } finally {
+      await db
+        .updateTable("users")
+        .set({
+          api_key_hash: user.api_key_hash,
+          api_key_encrypted: user.api_key_encrypted,
+        })
+        .where("id", "=", user.id)
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("does not resurrect a deleted device during updates", async () => {
-		const { db } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.select("id")
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const deviceId = crypto.randomUUID();
-		const sessionStamp = crypto.randomUUID();
-		try {
-			await devicesDb.upsertDevice(
-				db,
-				user.id,
-				deviceId,
-				"temporary-device",
-				0,
-				sessionStamp,
-			);
-			await devicesDb.deleteDevice(db, user.id, deviceId);
-			assert.equal(
-				await devicesDb.updateDeviceName(
-					db,
-					user.id,
-					deviceId,
-					"resurrected-device",
-					sessionStamp,
-					null,
-				),
-				false,
-			);
-			assert.equal(
-				await devicesDb.updateDeviceKeys(
-					db,
-					user.id,
-					deviceId,
-					"user-key",
-					"public-key",
-					"private-key",
-					sessionStamp,
-					null,
-				),
-				false,
-			);
-			assert.equal(await devicesDb.getDevice(db, user.id, deviceId), null);
-			const recreatedSessionStamp = crypto.randomUUID();
-			await devicesDb.upsertDevice(
-				db,
-				user.id,
-				deviceId,
-				"recreated-device",
-				0,
-				recreatedSessionStamp,
-			);
-			assert.equal(
-				await devicesDb.updateDeviceName(
-					db,
-					user.id,
-					deviceId,
-					"stale-name-on-recreated-device",
-					sessionStamp,
-					null,
-				),
-				false,
-			);
-			assert.equal(
-				(await devicesDb.getDevice(db, user.id, deviceId))?.name,
-				"recreated-device",
-			);
-		} finally {
-			await devicesDb.deleteDevice(db, user.id, deviceId);
-			await db.destroy();
-		}
-	});
+  test("does not resurrect a deleted device during updates", async () => {
+    const { db } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const deviceId = crypto.randomUUID();
+    const sessionStamp = crypto.randomUUID();
+    try {
+      await devicesDb.upsertDevice(
+        db,
+        user.id,
+        deviceId,
+        "temporary-device",
+        0,
+        sessionStamp,
+      );
+      await devicesDb.deleteDevice(db, user.id, deviceId);
+      assert.equal(
+        await devicesDb.updateDeviceName(
+          db,
+          user.id,
+          deviceId,
+          "resurrected-device",
+          sessionStamp,
+          null,
+        ),
+        false,
+      );
+      assert.equal(
+        await devicesDb.updateDeviceKeys(
+          db,
+          user.id,
+          deviceId,
+          "user-key",
+          "public-key",
+          "private-key",
+          sessionStamp,
+          null,
+        ),
+        false,
+      );
+      assert.equal(await devicesDb.getDevice(db, user.id, deviceId), null);
+      const recreatedSessionStamp = crypto.randomUUID();
+      await devicesDb.upsertDevice(
+        db,
+        user.id,
+        deviceId,
+        "recreated-device",
+        0,
+        recreatedSessionStamp,
+      );
+      assert.equal(
+        await devicesDb.updateDeviceName(
+          db,
+          user.id,
+          deviceId,
+          "stale-name-on-recreated-device",
+          sessionStamp,
+          null,
+        ),
+        false,
+      );
+      assert.equal(
+        (await devicesDb.getDevice(db, user.id, deviceId))?.name,
+        "recreated-device",
+      );
+    } finally {
+      await devicesDb.deleteDevice(db, user.id, deviceId);
+      await db.destroy();
+    }
+  });
 
-	test("allows only one device mutation from the same snapshot", async () => {
-		const { db } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.select("id")
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const deviceId = crypto.randomUUID();
-		const sessionStamp = crypto.randomUUID();
-		try {
-			await devicesDb.upsertDevice(
-				db,
-				user.id,
-				deviceId,
-				"snapshot-device",
-				0,
-				sessionStamp,
-			);
-			const snapshot = await devicesDb.getDevice(db, user.id, deviceId);
-			assert.ok(snapshot);
-			const results = await Promise.all(
-				Array.from({ length: 8 }, (_, index) =>
-					devicesDb.updateDeviceName(
-						db,
-						user.id,
-						deviceId,
-						`snapshot-name-${index}`,
-						snapshot.session_stamp,
-						snapshot.mutation_token,
-					),
-				),
-			);
-			assert.equal(results.filter(Boolean).length, 1);
-		} finally {
-			await devicesDb.deleteDevice(db, user.id, deviceId);
-			await db.destroy();
-		}
-	});
+  test("allows only one device mutation from the same snapshot", async () => {
+    const { db } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const deviceId = crypto.randomUUID();
+    const sessionStamp = crypto.randomUUID();
+    try {
+      await devicesDb.upsertDevice(
+        db,
+        user.id,
+        deviceId,
+        "snapshot-device",
+        0,
+        sessionStamp,
+      );
+      const snapshot = await devicesDb.getDevice(db, user.id, deviceId);
+      assert.ok(snapshot);
+      const results = await Promise.all(
+        Array.from({ length: 8 }, (_, index) =>
+          devicesDb.updateDeviceName(
+            db,
+            user.id,
+            deviceId,
+            `snapshot-name-${index}`,
+            snapshot.session_stamp,
+            snapshot.mutation_token,
+          ),
+        ),
+      );
+      assert.equal(results.filter(Boolean).length, 1);
+    } finally {
+      await devicesDb.deleteDevice(db, user.id, deviceId);
+      await db.destroy();
+    }
+  });
 
-	test("preserves a device session stamp across concurrent login upserts", async () => {
-		const { db } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.select("id")
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const deviceId = crypto.randomUUID();
-		const firstStamp = crypto.randomUUID();
-		try {
-			await devicesDb.upsertDevice(
-				db,
-				user.id,
-				deviceId,
-				"first-login",
-				0,
-				firstStamp,
-			);
-			await devicesDb.upsertDevice(
-				db,
-				user.id,
-				deviceId,
-				"second-login",
-				1,
-				crypto.randomUUID(),
-			);
-			const device = await devicesDb.getDevice(db, user.id, deviceId);
-			assert.equal(device?.session_stamp, firstStamp);
-			assert.equal(device?.name, "second-login");
-		} finally {
-			await devicesDb.deleteDevice(db, user.id, deviceId);
-			await db.destroy();
-		}
-	});
+  test("preserves a device session stamp across concurrent login upserts", async () => {
+    const { db } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const deviceId = crypto.randomUUID();
+    const firstStamp = crypto.randomUUID();
+    try {
+      await devicesDb.upsertDevice(
+        db,
+        user.id,
+        deviceId,
+        "first-login",
+        0,
+        firstStamp,
+      );
+      await devicesDb.upsertDevice(
+        db,
+        user.id,
+        deviceId,
+        "second-login",
+        1,
+        crypto.randomUUID(),
+      );
+      const device = await devicesDb.getDevice(db, user.id, deviceId);
+      assert.equal(device?.session_stamp, firstStamp);
+      assert.equal(device?.name, "second-login");
+    } finally {
+      await devicesDb.deleteDevice(db, user.id, deviceId);
+      await db.destroy();
+    }
+  });
 
-	test("issues only one session for an approved auth request", async () => {
-		const { db, dialect } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.selectAll()
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const requestId = crypto.randomUUID();
-		const timestamp = Math.floor(Date.now() / 1000);
-		const tokenPrefix = `auth-request-session-${requestId}`;
-		let results: Awaited<ReturnType<typeof issueIdentitySession>>[] = [];
-		try {
-			await db
-				.insertInto("auth_requests")
-				.values({
-					id: requestId,
-					user_id: user.id,
-					organization_id: null,
-					type: 0,
-					request_device_identifier: "concurrent-auth-request",
-					request_device_type: 0,
-					request_ip_address: null,
-					request_country_name: null,
-					response_device_identifier: "approving-device",
-					access_code_hash: "hash",
-					access_code_encrypted: JSON.stringify({
-						v: 1,
-						iv: "test",
-						data: "test",
-					}),
-					public_key: "public-key",
-					key: "encrypted-key",
-					master_password_hash: null,
-					approved: 1,
-					creation_date: timestamp,
-					response_date: timestamp,
-					authentication_date: null,
-					consumption_token: null,
-				})
-				.execute();
-			results = await Promise.all(
-				[0, 1].map((attempt) =>
-					issueIdentitySession({
-						db,
-						dialect,
-						user,
-						device: { identifier: "", name: "", type: 0 },
-						jwtSecret: context.bindings.JWT_SECRET,
-						authRequest: {
-							id: requestId,
-							token: `${tokenPrefix}-${attempt}`,
-						},
-					}),
-				),
-			);
-			assert.equal(results.filter(Boolean).length, 1);
-			const stored = await db
-				.selectFrom("auth_requests")
-				.select(["authentication_date", "consumption_token"])
-				.where("id", "=", requestId)
-				.executeTakeFirstOrThrow();
-			assert.ok(stored.authentication_date);
-			assert.ok(stored.consumption_token?.startsWith(tokenPrefix));
-		} finally {
-			for (const result of results ?? []) {
-				if (result)
-					await db
-						.deleteFrom("refresh_tokens")
-						.where("token", "=", await hashRefreshToken(result.refreshToken))
-						.execute();
-			}
-			await db
-				.deleteFrom("auth_requests")
-				.where("id", "=", requestId)
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("issues only one session for an approved auth request", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .selectAll()
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const requestId = crypto.randomUUID();
+    const timestamp = Math.floor(Date.now() / 1000);
+    const tokenPrefix = `auth-request-session-${requestId}`;
+    let results: Awaited<ReturnType<typeof issueIdentitySession>>[] = [];
+    try {
+      await db
+        .insertInto("auth_requests")
+        .values({
+          id: requestId,
+          user_id: user.id,
+          organization_id: null,
+          type: 0,
+          request_device_identifier: "concurrent-auth-request",
+          request_device_type: 0,
+          request_ip_address: null,
+          request_country_name: null,
+          response_device_identifier: "approving-device",
+          access_code_hash: "hash",
+          access_code_encrypted: JSON.stringify({
+            v: 1,
+            iv: "test",
+            data: "test",
+          }),
+          public_key: "public-key",
+          key: "encrypted-key",
+          master_password_hash: null,
+          approved: 1,
+          creation_date: timestamp,
+          response_date: timestamp,
+          authentication_date: null,
+          consumption_token: null,
+        })
+        .execute();
+      results = await Promise.all(
+        [0, 1].map((attempt) =>
+          issueIdentitySession({
+            db,
+            dialect,
+            user,
+            device: { identifier: "", name: "", type: 0 },
+            jwtSecret: context.bindings.JWT_SECRET,
+            authRequest: {
+              id: requestId,
+              token: `${tokenPrefix}-${attempt}`,
+            },
+          }),
+        ),
+      );
+      assert.equal(results.filter(Boolean).length, 1);
+      const stored = await db
+        .selectFrom("auth_requests")
+        .select(["authentication_date", "consumption_token"])
+        .where("id", "=", requestId)
+        .executeTakeFirstOrThrow();
+      assert.ok(stored.authentication_date);
+      assert.ok(stored.consumption_token?.startsWith(tokenPrefix));
+    } finally {
+      for (const result of results ?? []) {
+        if (result)
+          await db
+            .deleteFrom("refresh_tokens")
+            .where("token", "=", await hashRefreshToken(result.refreshToken))
+            .execute();
+      }
+      await db
+        .deleteFrom("auth_requests")
+        .where("id", "=", requestId)
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("decides a pending auth request only once", async () => {
-		const { db } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.select("id")
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const requestId = crypto.randomUUID();
-		try {
-			await authRequestsDb.createAuthRequest(db, {
-				id: requestId,
-				userId: user.id,
-				type: 0,
-				requestDeviceIdentifier: "decision-race",
-				requestDeviceType: 0,
-				requestIpAddress: null,
-				accessCodeHash: "hash",
-				accessCodeEncrypted: JSON.stringify({
-					v: 1,
-					iv: "test",
-					data: "test",
-				}),
-				publicKey: "public-key",
-			});
-			const outcomes = await Promise.all([
-				authRequestsDb.approveAuthRequest(
-					db,
-					requestId,
-					true,
-					"approver-a",
-					"encrypted-key",
-					null,
-				),
-				authRequestsDb.approveAuthRequest(
-					db,
-					requestId,
-					false,
-					"approver-b",
-					null,
-					null,
-				),
-			]);
-			assert.deepEqual(outcomes.sort(), [false, true]);
-			const stored = await authRequestsDb.getAuthRequestById(db, requestId);
-			assert.ok(stored);
-			assert.equal(
-				stored.approved,
-				stored.response_device_identifier === "approver-a" ? 1 : 0,
-			);
-			assert.ok(
-				["approver-a", "approver-b"].includes(
-					stored.response_device_identifier ?? "",
-				),
-			);
-		} finally {
-			await db
-				.deleteFrom("auth_requests")
-				.where("id", "=", requestId)
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("decides a pending auth request only once", async () => {
+    const { db } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const requestId = crypto.randomUUID();
+    try {
+      await authRequestsDb.createAuthRequest(db, {
+        id: requestId,
+        userId: user.id,
+        type: 0,
+        requestDeviceIdentifier: "decision-race",
+        requestDeviceType: 0,
+        requestIpAddress: null,
+        accessCodeHash: "hash",
+        accessCodeEncrypted: JSON.stringify({
+          v: 1,
+          iv: "test",
+          data: "test",
+        }),
+        publicKey: "public-key",
+      });
+      const outcomes = await Promise.all([
+        authRequestsDb.approveAuthRequest(
+          db,
+          requestId,
+          true,
+          "approver-a",
+          "encrypted-key",
+          null,
+        ),
+        authRequestsDb.approveAuthRequest(
+          db,
+          requestId,
+          false,
+          "approver-b",
+          null,
+          null,
+        ),
+      ]);
+      assert.deepEqual(outcomes.sort(), [false, true]);
+      const stored = await authRequestsDb.getAuthRequestById(db, requestId);
+      assert.ok(stored);
+      assert.equal(
+        stored.approved,
+        stored.response_device_identifier === "approver-a" ? 1 : 0,
+      );
+      assert.ok(
+        ["approver-a", "approver-b"].includes(
+          stored.response_device_identifier ?? "",
+        ),
+      );
+    } finally {
+      await db
+        .deleteFrom("auth_requests")
+        .where("id", "=", requestId)
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("claims blob GC rows before deleting external objects", async () => {
-		const firstConnection = await createDatabase(context.database);
-		const secondConnection = await createDatabase(context.database);
-		const objectKey = `gc-concurrency-${crypto.randomUUID()}`;
-		const timestamp = Math.floor(Date.now() / 1000);
-		let releaseDelete: (() => void) | undefined;
-		let notifyDeleteStarted: (() => void) | undefined;
-		const deleteStarted = new Promise<void>((resolve) => {
-			notifyDeleteStarted = resolve;
-		});
-		const deleteReleased = new Promise<void>((resolve) => {
-			releaseDelete = resolve;
-		});
-		let deleteCalls = 0;
-		const blobStore: BlobStore = {
-			kind: "r2",
-			maxObjectBytes: null,
-			get: async () => null,
-			put: async () => undefined,
-			delete: async () => {
-				deleteCalls += 1;
-				notifyDeleteStarted?.();
-				await deleteReleased;
-			},
-		};
+  test("claims blob GC rows before deleting external objects", async () => {
+    const firstConnection = await createDatabase(context.database);
+    const secondConnection = await createDatabase(context.database);
+    const objectKey = `gc-concurrency-${crypto.randomUUID()}`;
+    const timestamp = Math.floor(Date.now() / 1000);
+    let releaseDelete: (() => void) | undefined;
+    let notifyDeleteStarted: (() => void) | undefined;
+    const deleteStarted = new Promise<void>((resolve) => {
+      notifyDeleteStarted = resolve;
+    });
+    const deleteReleased = new Promise<void>((resolve) => {
+      releaseDelete = resolve;
+    });
+    let deleteCalls = 0;
+    const blobStore: BlobStore = {
+      kind: "r2",
+      maxObjectBytes: null,
+      get: async () => null,
+      put: async () => undefined,
+      delete: async () => {
+        deleteCalls += 1;
+        notifyDeleteStarted?.();
+        await deleteReleased;
+      },
+    };
 
-		try {
-			await firstConnection.db
-				.insertInto("blob_gc_queue")
-				.values({
-					object_key: objectKey,
-					attempts: 0,
-					next_attempt_at: timestamp,
-					last_error: null,
-					created_at: timestamp,
-				})
-				.execute();
-			const firstDrain = drainBlobGcQueue(
-				firstConnection.db,
-				blobStore,
-				timestamp,
-			);
-			await deleteStarted;
-			const secondResult = await drainBlobGcQueue(
-				secondConnection.db,
-				blobStore,
-				timestamp,
-			);
-			assert.deepEqual(secondResult, {
-				deleted: 0,
-				referenced: 0,
-				deferred: 0,
-				contended: 0,
-			});
-			releaseDelete?.();
-			assert.equal((await firstDrain).deleted, 1);
-			assert.equal(deleteCalls, 1);
-		} finally {
-			releaseDelete?.();
-			await firstConnection.db
-				.deleteFrom("blob_gc_queue")
-				.where("object_key", "=", objectKey)
-				.execute();
-			await firstConnection.db.destroy();
-			await secondConnection.db.destroy();
-		}
-	});
+    try {
+      await firstConnection.db
+        .insertInto("blob_gc_queue")
+        .values({
+          object_key: objectKey,
+          attempts: 0,
+          next_attempt_at: timestamp,
+          last_error: null,
+          created_at: timestamp,
+        })
+        .execute();
+      const firstDrain = drainBlobGcQueue(
+        firstConnection.db,
+        blobStore,
+        timestamp,
+      );
+      await deleteStarted;
+      const secondResult = await drainBlobGcQueue(
+        secondConnection.db,
+        blobStore,
+        timestamp,
+      );
+      assert.deepEqual(secondResult, {
+        deleted: 0,
+        referenced: 0,
+        deferred: 0,
+        contended: 0,
+      });
+      releaseDelete?.();
+      assert.equal((await firstDrain).deleted, 1);
+      assert.equal(deleteCalls, 1);
+    } finally {
+      releaseDelete?.();
+      await firstConnection.db
+        .deleteFrom("blob_gc_queue")
+        .where("object_key", "=", objectKey)
+        .execute();
+      await firstConnection.db.destroy();
+      await secondConnection.db.destroy();
+    }
+  });
 
-	test("drops queued deletion requests for referenced attachment and Send blobs", async () => {
-		const { db } = await createDatabase(context.database);
-		const timestamp = Math.floor(Date.now() / 1000);
-		const user = await db
-			.selectFrom("users")
-			.select("id")
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const cipherId = crypto.randomUUID();
-		const attachmentId = crypto.randomUUID();
-		const sendId = crypto.randomUUID();
-		const fileId = crypto.randomUUID();
-		const attachmentKey = `attachments/${cipherId}/${attachmentId}.published.bin`;
-		const sendKey = `sends/${sendId}/${fileId}`;
-		let deleteCalls = 0;
-		const blobStore: BlobStore = {
-			kind: "r2",
-			maxObjectBytes: null,
-			get: async () => null,
-			put: async () => undefined,
-			delete: async () => {
-				deleteCalls += 1;
-			},
-		};
-		try {
-			await db
-				.insertInto("ciphers")
-				.values({
-					id: cipherId,
-					user_id: user.id,
-					org_id: null,
-					type: 1,
-					folder_id: null,
-					name: "referenced-blob-cipher",
-					notes: null,
-					fields: null,
-					password_history: null,
-					favorite: 0,
-					data: "{}",
-					reprompt: 0,
-					key: null,
-					created_at: timestamp,
-					updated_at: timestamp,
-					archived_at: null,
-					deleted_at: timestamp,
-					purge_after: timestamp,
-				})
-				.execute();
-			await db
-				.insertInto("attachments")
-				.values({
-					id: attachmentId,
-					cipher_id: cipherId,
-					file_name: "encrypted-name",
-					size: 1,
-					size_name: "1 Byte",
-					key: null,
-					storage_key: attachmentKey,
-					created_at: timestamp,
-					deleted_at: timestamp,
-				})
-				.execute();
-			await db
-				.insertInto("sends")
-				.values({
-					id: sendId,
-					user_id: user.id,
-					org_id: null,
-					type: 1,
-					name: "referenced-blob-send",
-					notes: null,
-					data: JSON.stringify({ Id: fileId, Size: 1 }),
-					key: "encrypted-key",
-					password_hash: null,
-					password_salt: null,
-					password_iterations: null,
-					password_algorithm: null,
-					auth_type: 2,
-					emails: null,
-					max_access_count: null,
-					access_count: 0,
-					disabled: 0,
-					hide_email: null,
-					created_at: timestamp,
-					updated_at: timestamp,
-					expiration_date: null,
-					deletion_date: timestamp,
-					storage_key: null,
-				})
-				.execute();
-			await db
-				.insertInto("blob_gc_queue")
-				.values(
-					[attachmentKey, sendKey].map((objectKey) => ({
-						object_key: objectKey,
-						attempts: 0,
-						next_attempt_at: timestamp,
-						last_error: null,
-						created_at: timestamp,
-					})),
-				)
-				.execute();
+  test("drops queued deletion requests for referenced attachment and Send blobs", async () => {
+    const { db } = await createDatabase(context.database);
+    const timestamp = Math.floor(Date.now() / 1000);
+    const user = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const cipherId = crypto.randomUUID();
+    const attachmentId = crypto.randomUUID();
+    const sendId = crypto.randomUUID();
+    const fileId = crypto.randomUUID();
+    const attachmentKey = `attachments/${cipherId}/${attachmentId}.published.bin`;
+    const sendKey = `sends/${sendId}/${fileId}`;
+    let deleteCalls = 0;
+    const blobStore: BlobStore = {
+      kind: "r2",
+      maxObjectBytes: null,
+      get: async () => null,
+      put: async () => undefined,
+      delete: async () => {
+        deleteCalls += 1;
+      },
+    };
+    try {
+      await db
+        .insertInto("ciphers")
+        .values({
+          id: cipherId,
+          user_id: user.id,
+          org_id: null,
+          type: 1,
+          folder_id: null,
+          name: "referenced-blob-cipher",
+          notes: null,
+          fields: null,
+          password_history: null,
+          favorite: 0,
+          data: "{}",
+          reprompt: 0,
+          key: null,
+          created_at: timestamp,
+          updated_at: timestamp,
+          archived_at: null,
+          deleted_at: timestamp,
+          purge_after: timestamp,
+        })
+        .execute();
+      await db
+        .insertInto("attachments")
+        .values({
+          id: attachmentId,
+          cipher_id: cipherId,
+          file_name: "encrypted-name",
+          size: 1,
+          size_name: "1 Byte",
+          key: null,
+          storage_key: attachmentKey,
+          created_at: timestamp,
+          deleted_at: timestamp,
+        })
+        .execute();
+      await db
+        .insertInto("sends")
+        .values({
+          id: sendId,
+          user_id: user.id,
+          org_id: null,
+          type: 1,
+          name: "referenced-blob-send",
+          notes: null,
+          data: JSON.stringify({ Id: fileId, Size: 1 }),
+          key: "encrypted-key",
+          password_hash: null,
+          password_salt: null,
+          password_iterations: null,
+          password_algorithm: null,
+          auth_type: 2,
+          emails: null,
+          max_access_count: null,
+          access_count: 0,
+          disabled: 0,
+          hide_email: null,
+          created_at: timestamp,
+          updated_at: timestamp,
+          expiration_date: null,
+          deletion_date: timestamp,
+          storage_key: null,
+        })
+        .execute();
+      await db
+        .insertInto("blob_gc_queue")
+        .values(
+          [attachmentKey, sendKey].map((objectKey) => ({
+            object_key: objectKey,
+            attempts: 0,
+            next_attempt_at: timestamp,
+            last_error: null,
+            created_at: timestamp,
+          })),
+        )
+        .execute();
 
-			assert.deepEqual(await drainBlobGcQueue(db, blobStore, timestamp), {
-				deleted: 0,
-				referenced: 2,
-				deferred: 0,
-				contended: 0,
-			});
-			assert.equal(deleteCalls, 0);
-			assert.equal(
-				await db
-					.selectFrom("blob_gc_queue")
-					.select(({ fn }) => fn.countAll<number>().as("count"))
-					.where("object_key", "in", [attachmentKey, sendKey])
-					.executeTakeFirstOrThrow()
-					.then((row) => Number(row.count)),
-				0,
-			);
-		} finally {
-			await db.deleteFrom("sends").where("id", "=", sendId).execute();
-			await db.deleteFrom("ciphers").where("id", "=", cipherId).execute();
-			await db
-				.deleteFrom("blob_gc_queue")
-				.where("object_key", "in", [attachmentKey, sendKey])
-				.execute();
-			await db.destroy();
-		}
-	});
+      assert.deepEqual(await drainBlobGcQueue(db, blobStore, timestamp), {
+        deleted: 0,
+        referenced: 2,
+        deferred: 0,
+        contended: 0,
+      });
+      assert.equal(deleteCalls, 0);
+      assert.equal(
+        await db
+          .selectFrom("blob_gc_queue")
+          .select(({ fn }) => fn.countAll<number>().as("count"))
+          .where("object_key", "in", [attachmentKey, sendKey])
+          .executeTakeFirstOrThrow()
+          .then((row) => Number(row.count)),
+        0,
+      );
+    } finally {
+      await db.deleteFrom("sends").where("id", "=", sendId).execute();
+      await db.deleteFrom("ciphers").where("id", "=", cipherId).execute();
+      await db
+        .deleteFrom("blob_gc_queue")
+        .where("object_key", "in", [attachmentKey, sendKey])
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("serializes data operations with an expiring owned lease", async () => {
-		const timestamp = Math.floor(Date.now() / 1000);
-		const first = await acquireDataOperationLease(
-			context.database,
-			"backup.first",
-			timestamp,
-			60,
-		);
-		assert.ok(first);
-		assert.equal(
-			await acquireDataOperationLease(
-				context.database,
-				"backup.concurrent",
-				timestamp + 1,
-				60,
-			),
-			null,
-		);
-		await releaseDataOperationLease(context.database, {
-			...first,
-			token: crypto.randomUUID(),
-		});
-		assert.equal(
-			await acquireDataOperationLease(
-				context.database,
-				"backup.still_locked",
-				timestamp + 2,
-				60,
-			),
-			null,
-		);
-		const recovered = await acquireDataOperationLease(
-			context.database,
-			"backup.after_expiry",
-			timestamp + 61,
-			60,
-		);
-		assert.ok(recovered);
-		await assert.rejects(
-			requireDataOperationLeaseRenewal(context.database, first),
-			DataOperationLeaseLostError,
-		);
-		assert.equal(
-			await renewDataOperationLease(
-				context.database,
-				recovered,
-				timestamp + 100,
-				60,
-			),
-			true,
-		);
-		assert.equal(
-			await acquireDataOperationLease(
-				context.database,
-				"backup.blocked_by_renewal",
-				timestamp + 121,
-				60,
-			),
-			null,
-		);
-		await releaseDataOperationLease(context.database, recovered);
-		recovered.expiresAt = Math.floor(Date.now() / 1000);
-		await assert.rejects(
-			requireFreshDataOperationLease(context.database, recovered),
-			/Data operation lease was lost/,
-		);
-		assert.equal(
-			await renewDataOperationLease(
-				context.database,
-				recovered,
-				timestamp + 122,
-				60,
-			),
-			false,
-		);
-	});
+  test("serializes data operations with an expiring owned lease", async () => {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const first = await acquireDataOperationLease(
+      context.database,
+      "backup.first",
+      timestamp,
+      60,
+    );
+    assert.ok(first);
+    assert.equal(
+      await acquireDataOperationLease(
+        context.database,
+        "backup.concurrent",
+        timestamp + 1,
+        60,
+      ),
+      null,
+    );
+    await releaseDataOperationLease(context.database, {
+      ...first,
+      token: crypto.randomUUID(),
+    });
+    assert.equal(
+      await acquireDataOperationLease(
+        context.database,
+        "backup.still_locked",
+        timestamp + 2,
+        60,
+      ),
+      null,
+    );
+    const recovered = await acquireDataOperationLease(
+      context.database,
+      "backup.after_expiry",
+      timestamp + 61,
+      60,
+    );
+    assert.ok(recovered);
+    await assert.rejects(
+      requireDataOperationLeaseRenewal(context.database, first),
+      DataOperationLeaseLostError,
+    );
+    assert.equal(
+      await renewDataOperationLease(
+        context.database,
+        recovered,
+        timestamp + 100,
+        60,
+      ),
+      true,
+    );
+    assert.equal(
+      await acquireDataOperationLease(
+        context.database,
+        "backup.blocked_by_renewal",
+        timestamp + 121,
+        60,
+      ),
+      null,
+    );
+    await releaseDataOperationLease(context.database, recovered);
+    recovered.expiresAt = Math.floor(Date.now() / 1000);
+    await assert.rejects(
+      requireFreshDataOperationLease(context.database, recovered),
+      /Data operation lease was lost/,
+    );
+    assert.equal(
+      await renewDataOperationLease(
+        context.database,
+        recovered,
+        timestamp + 122,
+        60,
+      ),
+      false,
+    );
+  });
 
-	test("publishes one Send file version per storage snapshot", async () => {
-		const { db } = await createDatabase(context.database);
-		const timestamp = Math.floor(Date.now() / 1000);
-		const user = await db
-			.selectFrom("users")
-			.select("id")
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const sendId = crypto.randomUUID();
-		const fileId = crypto.randomUUID();
-		const initialKey = `sends/${sendId}/${fileId}`;
-		const firstKey = `${initialKey}.first.bin`;
-		const secondKey = `${initialKey}.second.bin`;
-		const competingKeys = [
-			`${initialKey}.competing-a.bin`,
-			`${initialKey}.competing-b.bin`,
-		];
-		const blockedKey = `${initialKey}.blocked.bin`;
-		try {
-			await db
-				.insertInto("sends")
-				.values({
-					id: sendId,
-					user_id: user.id,
-					org_id: null,
-					type: 1,
-					name: "versioned-send",
-					notes: null,
-					data: JSON.stringify({ id: fileId, size: 1 }),
-					key: "encrypted-key",
-					password_hash: null,
-					password_salt: null,
-					password_iterations: null,
-					password_algorithm: null,
-					auth_type: 2,
-					emails: null,
-					max_access_count: null,
-					access_count: 0,
-					disabled: 0,
-					hide_email: null,
-					created_at: timestamp,
-					updated_at: timestamp,
-					expiration_date: null,
-					deletion_date: timestamp + 3600,
-					storage_key: initialKey,
-				})
-				.execute();
-			assert.equal(
-				await publishSendFileObject(
-					context.database,
-					{
-						sendId,
-						userId: user.id,
-						fileId,
-						storageKey: firstKey,
-						expectedStorageKey: initialKey,
-					},
-					timestamp + 1,
-				),
-				"published",
-			);
-			assert.equal(
-				await publishSendFileObject(
-					context.database,
-					{
-						sendId,
-						userId: user.id,
-						fileId,
-						storageKey: secondKey,
-						expectedStorageKey: firstKey,
-					},
-					timestamp + 2,
-				),
-				"published",
-			);
-			const competingPublications = await Promise.all(
-				competingKeys.map((storageKey, index) =>
-					publishSendFileObject(
-						context.database,
-						{
-							sendId,
-							userId: user.id,
-							fileId,
-							storageKey,
-							expectedStorageKey: secondKey,
-						},
-						timestamp + 3 + index,
-					),
-				),
-			);
-			assert.deepEqual(competingPublications.sort(), ["conflict", "published"]);
-			const publishedCompetingKey = await db
-				.selectFrom("sends")
-				.select("storage_key")
-				.where("id", "=", sendId)
-				.executeTakeFirstOrThrow()
-				.then((row) => row.storage_key);
-			assert.ok(
-				publishedCompetingKey && competingKeys.includes(publishedCompetingKey),
-			);
-			const revisionBeforeClaimedPublish = await db
-				.selectFrom("user_revisions")
-				.select("revision_date")
-				.where("user_id", "=", user.id)
-				.executeTakeFirstOrThrow();
-			const purgeToken = crypto.randomUUID();
-			await db
-				.updateTable("sends")
-				.set({ purge_token: purgeToken })
-				.where("id", "=", sendId)
-				.execute();
-			assert.equal(
-				await publishSendFileObject(
-					context.database,
-					{
-						sendId,
-						userId: user.id,
-						fileId,
-						storageKey: blockedKey,
-						expectedStorageKey: publishedCompetingKey,
-					},
-					timestamp + 5,
-				),
-				"missing",
-			);
-			assert.deepEqual(
-				await db
-					.selectFrom("sends")
-					.select(["storage_key", "purge_token"])
-					.where("id", "=", sendId)
-					.executeTakeFirstOrThrow(),
-				{ storage_key: publishedCompetingKey, purge_token: purgeToken },
-			);
-			assert.equal(
-				await db
-					.selectFrom("user_revisions")
-					.select("revision_date")
-					.where("user_id", "=", user.id)
-					.executeTakeFirstOrThrow()
-					.then((row) => row.revision_date),
-				revisionBeforeClaimedPublish.revision_date,
-			);
-			assert.equal(
-				await db
-					.selectFrom("sends")
-					.select("storage_key")
-					.where("id", "=", sendId)
-					.executeTakeFirstOrThrow()
-					.then((row) => row.storage_key),
-				publishedCompetingKey,
-			);
-			assert.deepEqual(
-				new Set(
-					(
-						await db
-							.selectFrom("blob_gc_queue")
-							.select("object_key")
-							.where("object_key", "in", [initialKey, firstKey, secondKey])
-							.execute()
-					).map((row) => row.object_key),
-				),
-				new Set([initialKey, firstKey, secondKey]),
-			);
-		} finally {
-			await db.deleteFrom("sends").where("id", "=", sendId).execute();
-			await db
-				.deleteFrom("blob_gc_queue")
-				.where("object_key", "in", [
-					initialKey,
-					firstKey,
-					secondKey,
-					...competingKeys,
-					blockedKey,
-				])
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("publishes one Send file version per storage snapshot", async () => {
+    const { db } = await createDatabase(context.database);
+    const timestamp = Math.floor(Date.now() / 1000);
+    const user = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const sendId = crypto.randomUUID();
+    const fileId = crypto.randomUUID();
+    const initialKey = `sends/${sendId}/${fileId}`;
+    const firstKey = `${initialKey}.first.bin`;
+    const secondKey = `${initialKey}.second.bin`;
+    const competingKeys = [
+      `${initialKey}.competing-a.bin`,
+      `${initialKey}.competing-b.bin`,
+    ];
+    const blockedKey = `${initialKey}.blocked.bin`;
+    try {
+      await db
+        .insertInto("sends")
+        .values({
+          id: sendId,
+          user_id: user.id,
+          org_id: null,
+          type: 1,
+          name: "versioned-send",
+          notes: null,
+          data: JSON.stringify({ id: fileId, size: 1 }),
+          key: "encrypted-key",
+          password_hash: null,
+          password_salt: null,
+          password_iterations: null,
+          password_algorithm: null,
+          auth_type: 2,
+          emails: null,
+          max_access_count: null,
+          access_count: 0,
+          disabled: 0,
+          hide_email: null,
+          created_at: timestamp,
+          updated_at: timestamp,
+          expiration_date: null,
+          deletion_date: timestamp + 3600,
+          storage_key: initialKey,
+        })
+        .execute();
+      assert.equal(
+        await publishSendFileObject(
+          context.database,
+          {
+            sendId,
+            userId: user.id,
+            fileId,
+            storageKey: firstKey,
+            expectedStorageKey: initialKey,
+          },
+          timestamp + 1,
+        ),
+        "published",
+      );
+      assert.equal(
+        await publishSendFileObject(
+          context.database,
+          {
+            sendId,
+            userId: user.id,
+            fileId,
+            storageKey: secondKey,
+            expectedStorageKey: firstKey,
+          },
+          timestamp + 2,
+        ),
+        "published",
+      );
+      const competingPublications = await Promise.all(
+        competingKeys.map((storageKey, index) =>
+          publishSendFileObject(
+            context.database,
+            {
+              sendId,
+              userId: user.id,
+              fileId,
+              storageKey,
+              expectedStorageKey: secondKey,
+            },
+            timestamp + 3 + index,
+          ),
+        ),
+      );
+      assert.deepEqual(competingPublications.sort(), ["conflict", "published"]);
+      const publishedCompetingKey = await db
+        .selectFrom("sends")
+        .select("storage_key")
+        .where("id", "=", sendId)
+        .executeTakeFirstOrThrow()
+        .then((row) => row.storage_key);
+      assert.ok(
+        publishedCompetingKey && competingKeys.includes(publishedCompetingKey),
+      );
+      const revisionBeforeClaimedPublish = await db
+        .selectFrom("user_revisions")
+        .select("revision_date")
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      const purgeToken = crypto.randomUUID();
+      await db
+        .updateTable("sends")
+        .set({ purge_token: purgeToken })
+        .where("id", "=", sendId)
+        .execute();
+      assert.equal(
+        await publishSendFileObject(
+          context.database,
+          {
+            sendId,
+            userId: user.id,
+            fileId,
+            storageKey: blockedKey,
+            expectedStorageKey: publishedCompetingKey,
+          },
+          timestamp + 5,
+        ),
+        "missing",
+      );
+      assert.deepEqual(
+        await db
+          .selectFrom("sends")
+          .select(["storage_key", "purge_token"])
+          .where("id", "=", sendId)
+          .executeTakeFirstOrThrow(),
+        { storage_key: publishedCompetingKey, purge_token: purgeToken },
+      );
+      assert.equal(
+        await db
+          .selectFrom("user_revisions")
+          .select("revision_date")
+          .where("user_id", "=", user.id)
+          .executeTakeFirstOrThrow()
+          .then((row) => row.revision_date),
+        revisionBeforeClaimedPublish.revision_date,
+      );
+      assert.equal(
+        await db
+          .selectFrom("sends")
+          .select("storage_key")
+          .where("id", "=", sendId)
+          .executeTakeFirstOrThrow()
+          .then((row) => row.storage_key),
+        publishedCompetingKey,
+      );
+      assert.deepEqual(
+        new Set(
+          (
+            await db
+              .selectFrom("blob_gc_queue")
+              .select("object_key")
+              .where("object_key", "in", [initialKey, firstKey, secondKey])
+              .execute()
+          ).map((row) => row.object_key),
+        ),
+        new Set([initialKey, firstKey, secondKey]),
+      );
+    } finally {
+      await db.deleteFrom("sends").where("id", "=", sendId).execute();
+      await db
+        .deleteFrom("blob_gc_queue")
+        .where("object_key", "in", [
+          initialKey,
+          firstKey,
+          secondKey,
+          ...competingKeys,
+          blockedKey,
+        ])
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("consumes a Send access limit atomically", async () => {
-		const { db } = await createDatabase(context.database);
-		const user = await db
-			.selectFrom("users")
-			.select("id")
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const sendId = crypto.randomUUID();
-		const timestamp = Math.floor(Date.now() / 1000);
-		try {
-			await db
-				.insertInto("sends")
-				.values({
-					id: sendId,
-					user_id: user.id,
-					org_id: null,
-					type: 0,
-					name: "limited-send",
-					notes: null,
-					data: JSON.stringify({ text: "encrypted" }),
-					key: "encrypted-key",
-					password_hash: null,
-					password_salt: null,
-					password_iterations: null,
-					password_algorithm: null,
-					auth_type: 2,
-					emails: null,
-					max_access_count: 1,
-					access_count: 0,
-					disabled: 0,
-					hide_email: null,
-					created_at: timestamp,
-					updated_at: timestamp,
-					expiration_date: null,
-					deletion_date: timestamp + 3600,
-				})
-				.execute();
-			const outcomes = await Promise.all([
-				sendsDb.consumeAccess(db, sendId, timestamp + 1),
-				sendsDb.consumeAccess(db, sendId, timestamp + 1),
-			]);
-			assert.deepEqual(outcomes.sort(), [false, true]);
-			assert.equal(
-				await db
-					.selectFrom("sends")
-					.select("access_count")
-					.where("id", "=", sendId)
-					.executeTakeFirstOrThrow()
-					.then((row) => row.access_count),
-				1,
-			);
-		} finally {
-			await db.deleteFrom("sends").where("id", "=", sendId).execute();
-			await db.destroy();
-		}
-	});
-	test("database enforces cipher ownership and type invariants", async () => {
-		const { db } = await createDatabase(context.database);
-		try {
-			const timestamp = Math.floor(Date.now() / 1000);
-			const baseCipher = {
-				id: crypto.randomUUID(),
-				user_id: null,
-				org_id: null,
-				type: 1,
-				folder_id: null,
-				name: "invalid-owner",
-				notes: null,
-				fields: null,
-				password_history: null,
-				favorite: 0,
-				data: "{}",
-				reprompt: 0,
-				key: null,
-				created_at: timestamp,
-				updated_at: timestamp,
-				archived_at: null,
-				deleted_at: null,
-				purge_after: null,
-			};
+  test("consumes a Send access limit atomically", async () => {
+    const { db } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const sendId = crypto.randomUUID();
+    const timestamp = Math.floor(Date.now() / 1000);
+    try {
+      await db
+        .insertInto("sends")
+        .values({
+          id: sendId,
+          user_id: user.id,
+          org_id: null,
+          type: 0,
+          name: "limited-send",
+          notes: null,
+          data: JSON.stringify({ text: "encrypted" }),
+          key: "encrypted-key",
+          password_hash: null,
+          password_salt: null,
+          password_iterations: null,
+          password_algorithm: null,
+          auth_type: 2,
+          emails: null,
+          max_access_count: 1,
+          access_count: 0,
+          disabled: 0,
+          hide_email: null,
+          created_at: timestamp,
+          updated_at: timestamp,
+          expiration_date: null,
+          deletion_date: timestamp + 3600,
+        })
+        .execute();
+      const outcomes = await Promise.all([
+        sendsDb.consumeAccess(db, sendId, timestamp + 1),
+        sendsDb.consumeAccess(db, sendId, timestamp + 1),
+      ]);
+      assert.deepEqual(outcomes.sort(), [false, true]);
+      assert.equal(
+        await db
+          .selectFrom("sends")
+          .select("access_count")
+          .where("id", "=", sendId)
+          .executeTakeFirstOrThrow()
+          .then((row) => row.access_count),
+        1,
+      );
+    } finally {
+      await db.deleteFrom("sends").where("id", "=", sendId).execute();
+      await db.destroy();
+    }
+  });
+  test("database enforces cipher ownership and type invariants", async () => {
+    const { db } = await createDatabase(context.database);
+    try {
+      const timestamp = Math.floor(Date.now() / 1000);
+      const baseCipher = {
+        id: crypto.randomUUID(),
+        user_id: null,
+        org_id: null,
+        type: 1,
+        folder_id: null,
+        name: "invalid-owner",
+        notes: null,
+        fields: null,
+        password_history: null,
+        favorite: 0,
+        data: "{}",
+        reprompt: 0,
+        key: null,
+        created_at: timestamp,
+        updated_at: timestamp,
+        archived_at: null,
+        deleted_at: null,
+        purge_after: null,
+      };
 
-			await assert.rejects(() =>
-				db.insertInto("ciphers").values(baseCipher).execute(),
-			);
+      await assert.rejects(() =>
+        db.insertInto("ciphers").values(baseCipher).execute(),
+      );
 
-			const user = await db
-				.selectFrom("users")
-				.select("id")
-				.where("email", "=", EMAIL)
-				.executeTakeFirstOrThrow();
-			await assert.rejects(() =>
-				db
-					.insertInto("ciphers")
-					.values({
-						...baseCipher,
-						id: crypto.randomUUID(),
-						user_id: user.id,
-						type: 9,
-					})
-					.execute(),
-			);
-		} finally {
-			await db.destroy();
-		}
-	});
+      const user = await db
+        .selectFrom("users")
+        .select("id")
+        .where("email", "=", EMAIL)
+        .executeTakeFirstOrThrow();
+      await assert.rejects(() =>
+        db
+          .insertInto("ciphers")
+          .values({
+            ...baseCipher,
+            id: crypto.randomUUID(),
+            user_id: user.id,
+            type: 9,
+          })
+          .execute(),
+      );
+    } finally {
+      await db.destroy();
+    }
+  });
 
-	test("scheduled maintenance removes ephemeral state but retains vault data", async () => {
-		const { db } = await createDatabase(context.database);
-		const timestamp = Math.floor(Date.now() / 1000);
-		const user = await db
-			.selectFrom("users")
-			.select("id")
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const cipherId = crypto.randomUUID();
-		const attachmentId = crypto.randomUUID();
-		const sendId = crypto.randomUUID();
-		const fileId = crypto.randomUUID();
-		const refreshToken = `expired-${crypto.randomUUID()}`;
-		const expiredChallenge = `expired-${crypto.randomUUID()}`;
-		const usedChallenge = `used-${crypto.randomUUID()}`;
-		try {
-			await db
-				.insertInto("refresh_tokens")
-				.values({
-					token: refreshToken,
-					user_id: user.id,
-					expires_at: timestamp - 1,
-					device_identifier: null,
-					device_session_stamp: null,
-				})
-				.execute();
-			await db
-				.insertInto("webauthn_challenges")
-				.values([
-					{
-						challenge_hash: expiredChallenge,
-						scope: "login",
-						user_id: user.id,
-						expires_at: timestamp - 1,
-						used_at: null,
-						created_at: timestamp - 2,
-					},
-					{
-						challenge_hash: usedChallenge,
-						scope: "login",
-						user_id: user.id,
-						expires_at: timestamp + 3600,
-						used_at: timestamp - 1,
-						created_at: timestamp - 2,
-					},
-				])
-				.execute();
-			await db
-				.insertInto("ciphers")
-				.values({
-					id: cipherId,
-					user_id: user.id,
-					org_id: null,
-					type: 1,
-					folder_id: null,
-					name: "expired-cipher",
-					notes: null,
-					fields: null,
-					password_history: null,
-					favorite: 0,
-					data: "{}",
-					reprompt: 0,
-					key: null,
-					created_at: timestamp - 2,
-					updated_at: timestamp - 2,
-					archived_at: null,
-					deleted_at: timestamp - 2,
-					purge_after: timestamp - 1,
-				})
-				.execute();
-			await db
-				.insertInto("attachments")
-				.values({
-					id: attachmentId,
-					cipher_id: cipherId,
-					file_name: "encrypted-name",
-					size: 3,
-					size_name: "3 bytes",
-					key: null,
-					created_at: timestamp - 2,
-				})
-				.execute();
-			await db
-				.insertInto("sends")
-				.values({
-					id: sendId,
-					user_id: user.id,
-					org_id: null,
-					type: 1,
-					name: "expired-send",
-					notes: null,
-					data: JSON.stringify({ id: fileId }),
-					key: "encrypted-key",
-					password_hash: null,
-					password_salt: null,
-					password_iterations: null,
-					password_algorithm: null,
-					auth_type: 2,
-					emails: null,
-					max_access_count: null,
-					access_count: 0,
-					disabled: 0,
-					hide_email: null,
-					created_at: timestamp - 2,
-					updated_at: timestamp - 2,
-					expiration_date: null,
-					deletion_date: timestamp - 1,
-				})
-				.execute();
+  test("scheduled maintenance removes ephemeral state but retains vault data", async () => {
+    const { db } = await createDatabase(context.database);
+    const timestamp = Math.floor(Date.now() / 1000);
+    const user = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const cipherId = crypto.randomUUID();
+    const attachmentId = crypto.randomUUID();
+    const sendId = crypto.randomUUID();
+    const fileId = crypto.randomUUID();
+    const refreshToken = `expired-${crypto.randomUUID()}`;
+    const expiredChallenge = `expired-${crypto.randomUUID()}`;
+    const usedChallenge = `used-${crypto.randomUUID()}`;
+    try {
+      await db
+        .insertInto("refresh_tokens")
+        .values({
+          token: refreshToken,
+          user_id: user.id,
+          expires_at: timestamp - 1,
+          device_identifier: null,
+          device_session_stamp: null,
+        })
+        .execute();
+      await db
+        .insertInto("webauthn_challenges")
+        .values([
+          {
+            challenge_hash: expiredChallenge,
+            scope: "login",
+            user_id: user.id,
+            expires_at: timestamp - 1,
+            used_at: null,
+            created_at: timestamp - 2,
+          },
+          {
+            challenge_hash: usedChallenge,
+            scope: "login",
+            user_id: user.id,
+            expires_at: timestamp + 3600,
+            used_at: timestamp - 1,
+            created_at: timestamp - 2,
+          },
+        ])
+        .execute();
+      await db
+        .insertInto("ciphers")
+        .values({
+          id: cipherId,
+          user_id: user.id,
+          org_id: null,
+          type: 1,
+          folder_id: null,
+          name: "expired-cipher",
+          notes: null,
+          fields: null,
+          password_history: null,
+          favorite: 0,
+          data: "{}",
+          reprompt: 0,
+          key: null,
+          created_at: timestamp - 2,
+          updated_at: timestamp - 2,
+          archived_at: null,
+          deleted_at: timestamp - 2,
+          purge_after: timestamp - 1,
+        })
+        .execute();
+      await db
+        .insertInto("attachments")
+        .values({
+          id: attachmentId,
+          cipher_id: cipherId,
+          file_name: "encrypted-name",
+          size: 3,
+          size_name: "3 bytes",
+          key: null,
+          created_at: timestamp - 2,
+        })
+        .execute();
+      await db
+        .insertInto("sends")
+        .values({
+          id: sendId,
+          user_id: user.id,
+          org_id: null,
+          type: 1,
+          name: "expired-send",
+          notes: null,
+          data: JSON.stringify({ id: fileId }),
+          key: "encrypted-key",
+          password_hash: null,
+          password_salt: null,
+          password_iterations: null,
+          password_algorithm: null,
+          auth_type: 2,
+          emails: null,
+          max_access_count: null,
+          access_count: 0,
+          disabled: 0,
+          hide_email: null,
+          created_at: timestamp - 2,
+          updated_at: timestamp - 2,
+          expiration_date: null,
+          deletion_date: timestamp - 1,
+        })
+        .execute();
 
-			context.r2Values.set(
-				`attachments/${cipherId}/${attachmentId}.bin`,
-				new Uint8Array([1]),
-			);
-			context.r2Values.set(`sends/${sendId}/${fileId}`, new Uint8Array([2]));
-			const result = await runMaintenance(db, context.bindings, timestamp);
-			assert.ok(result.refreshTokens >= 1);
-			assert.ok(result.webauthnChallenges >= 2);
-			assert.equal(result.purgedCiphers, 0);
-			assert.equal(result.purgedSends, 0);
-			assert.equal(
-				context.r2Values.has(`attachments/${cipherId}/${attachmentId}.bin`),
-				true,
-			);
-			assert.equal(context.r2Values.has(`sends/${sendId}/${fileId}`), true);
-			assert.deepEqual(
-				await db
-					.selectFrom("webauthn_challenges")
-					.select("challenge_hash")
-					.where("challenge_hash", "in", [expiredChallenge, usedChallenge])
-					.execute(),
-				[],
-			);
-			assert.equal(
-				await db
-					.selectFrom("refresh_tokens")
-					.select("token")
-					.where("token", "=", refreshToken)
-					.executeTakeFirst(),
-				undefined,
-			);
-			assert.ok(
-				await db
-					.selectFrom("ciphers")
-					.select("id")
-					.where("id", "=", cipherId)
-					.executeTakeFirst(),
-			);
-			assert.ok(
-				await db
-					.selectFrom("sends")
-					.select("id")
-					.where("id", "=", sendId)
-					.executeTakeFirst(),
-			);
-			const purgeAuditTargets = await db
-				.selectFrom("audit_logs")
-				.select(["action", "target_id"])
-				.where("target_id", "in", [cipherId, attachmentId, sendId])
-				.execute();
-			assert.equal(purgeAuditTargets.length, 0);
-		} finally {
-			await db.deleteFrom("sends").where("id", "=", sendId).execute();
-			await db.deleteFrom("ciphers").where("id", "=", cipherId).execute();
-			context.r2Values.delete(`attachments/${cipherId}/${attachmentId}.bin`);
-			context.r2Values.delete(`sends/${sendId}/${fileId}`);
-			await db.destroy();
-		}
-	});
+      context.r2Values.set(
+        `attachments/${cipherId}/${attachmentId}.bin`,
+        new Uint8Array([1]),
+      );
+      context.r2Values.set(`sends/${sendId}/${fileId}`, new Uint8Array([2]));
+      const result = await runMaintenance(db, context.bindings, timestamp);
+      assert.ok(result.refreshTokens >= 1);
+      assert.ok(result.webauthnChallenges >= 2);
+      assert.equal(result.purgedCiphers, 0);
+      assert.equal(result.purgedSends, 0);
+      assert.equal(
+        context.r2Values.has(`attachments/${cipherId}/${attachmentId}.bin`),
+        true,
+      );
+      assert.equal(context.r2Values.has(`sends/${sendId}/${fileId}`), true);
+      assert.deepEqual(
+        await db
+          .selectFrom("webauthn_challenges")
+          .select("challenge_hash")
+          .where("challenge_hash", "in", [expiredChallenge, usedChallenge])
+          .execute(),
+        [],
+      );
+      assert.equal(
+        await db
+          .selectFrom("refresh_tokens")
+          .select("token")
+          .where("token", "=", refreshToken)
+          .executeTakeFirst(),
+        undefined,
+      );
+      assert.ok(
+        await db
+          .selectFrom("ciphers")
+          .select("id")
+          .where("id", "=", cipherId)
+          .executeTakeFirst(),
+      );
+      assert.ok(
+        await db
+          .selectFrom("sends")
+          .select("id")
+          .where("id", "=", sendId)
+          .executeTakeFirst(),
+      );
+      const purgeAuditTargets = await db
+        .selectFrom("audit_logs")
+        .select(["action", "target_id"])
+        .where("target_id", "in", [cipherId, attachmentId, sendId])
+        .execute();
+      assert.equal(purgeAuditTargets.length, 0);
+    } finally {
+      await db.deleteFrom("sends").where("id", "=", sendId).execute();
+      await db.deleteFrom("ciphers").where("id", "=", cipherId).execute();
+      context.r2Values.delete(`attachments/${cipherId}/${attachmentId}.bin`);
+      context.r2Values.delete(`sends/${sendId}/${fileId}`);
+      await db.destroy();
+    }
+  });
 
-	test("scheduled maintenance never submits retained vault blobs for deletion", async () => {
-		const { db } = await createDatabase(context.database);
-		const timestamp = Math.floor(Date.now() / 1000);
-		const user = await db
-			.selectFrom("users")
-			.select("id")
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const cipherId = crypto.randomUUID();
-		const attachmentId = crypto.randomUUID();
-		const activeCipherId = crypto.randomUUID();
-		const deletedAttachmentId = crypto.randomUUID();
-		const sendId = crypto.randomUUID();
-		const fileId = crypto.randomUUID();
-		const attachmentKey = `attachments/${cipherId}/${attachmentId}.bin`;
-		const deletedAttachmentKey = `attachments/${activeCipherId}/${deletedAttachmentId}.bin`;
-		const sendKey = `sends/${sendId}/${fileId}`;
-		const r2 = context.bindings.ATTACHMENTS_R2 as R2Bucket;
-		const originalDelete = r2.delete.bind(r2);
-		let deleteCalls = 0;
-		try {
-			await db
-				.insertInto("ciphers")
-				.values([
-					{
-						id: cipherId,
-						user_id: user.id,
-						org_id: null,
-						type: 1,
-						folder_id: null,
-						name: "deferred-purge-cipher",
-						notes: null,
-						fields: null,
-						password_history: null,
-						favorite: 0,
-						data: "{}",
-						reprompt: 0,
-						key: null,
-						created_at: timestamp - 2,
-						updated_at: timestamp - 2,
-						archived_at: null,
-						deleted_at: timestamp - 2,
-						purge_after: timestamp - 1,
-					},
-					{
-						id: activeCipherId,
-						user_id: user.id,
-						org_id: null,
-						type: 1,
-						folder_id: null,
-						name: "active-cipher-with-deleted-attachment",
-						notes: null,
-						fields: null,
-						password_history: null,
-						favorite: 0,
-						data: "{}",
-						reprompt: 0,
-						key: null,
-						created_at: timestamp - 2,
-						updated_at: timestamp - 2,
-						archived_at: null,
-						deleted_at: null,
-						purge_after: null,
-					},
-				])
-				.execute();
-			await db
-				.insertInto("attachments")
-				.values([
-					{
-						id: attachmentId,
-						cipher_id: cipherId,
-						file_name: "encrypted-name",
-						size: 1,
-						size_name: "1 Byte",
-						key: null,
-						storage_key: attachmentKey,
-						created_at: timestamp - 2,
-						deleted_at: null,
-					},
-					{
-						id: deletedAttachmentId,
-						cipher_id: activeCipherId,
-						file_name: "deleted-encrypted-name",
-						size: 1,
-						size_name: "1 Byte",
-						key: null,
-						storage_key: deletedAttachmentKey,
-						created_at: timestamp - 2,
-						deleted_at: timestamp - 1,
-					},
-				])
-				.execute();
-			await db
-				.insertInto("sends")
-				.values({
-					id: sendId,
-					user_id: user.id,
-					org_id: null,
-					type: 1,
-					name: "deferred-purge-send",
-					notes: null,
-					data: JSON.stringify({ id: fileId }),
-					key: "encrypted-key",
-					password_hash: null,
-					password_salt: null,
-					password_iterations: null,
-					password_algorithm: null,
-					auth_type: 2,
-					emails: null,
-					max_access_count: null,
-					access_count: 0,
-					disabled: 0,
-					hide_email: null,
-					created_at: timestamp - 2,
-					updated_at: timestamp - 2,
-					expiration_date: null,
-					deletion_date: timestamp - 1,
-				})
-				.execute();
-			context.r2Values.set(attachmentKey, new Uint8Array([1]));
-			context.r2Values.set(deletedAttachmentKey, new Uint8Array([3]));
-			context.r2Values.set(sendKey, new Uint8Array([2]));
+  test("scheduled maintenance never submits retained vault blobs for deletion", async () => {
+    const { db } = await createDatabase(context.database);
+    const timestamp = Math.floor(Date.now() / 1000);
+    const user = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const cipherId = crypto.randomUUID();
+    const attachmentId = crypto.randomUUID();
+    const activeCipherId = crypto.randomUUID();
+    const deletedAttachmentId = crypto.randomUUID();
+    const sendId = crypto.randomUUID();
+    const fileId = crypto.randomUUID();
+    const attachmentKey = `attachments/${cipherId}/${attachmentId}.bin`;
+    const deletedAttachmentKey = `attachments/${activeCipherId}/${deletedAttachmentId}.bin`;
+    const sendKey = `sends/${sendId}/${fileId}`;
+    const r2 = context.bindings.ATTACHMENTS_R2 as R2Bucket;
+    const originalDelete = r2.delete.bind(r2);
+    let deleteCalls = 0;
+    try {
+      await db
+        .insertInto("ciphers")
+        .values([
+          {
+            id: cipherId,
+            user_id: user.id,
+            org_id: null,
+            type: 1,
+            folder_id: null,
+            name: "deferred-purge-cipher",
+            notes: null,
+            fields: null,
+            password_history: null,
+            favorite: 0,
+            data: "{}",
+            reprompt: 0,
+            key: null,
+            created_at: timestamp - 2,
+            updated_at: timestamp - 2,
+            archived_at: null,
+            deleted_at: timestamp - 2,
+            purge_after: timestamp - 1,
+          },
+          {
+            id: activeCipherId,
+            user_id: user.id,
+            org_id: null,
+            type: 1,
+            folder_id: null,
+            name: "active-cipher-with-deleted-attachment",
+            notes: null,
+            fields: null,
+            password_history: null,
+            favorite: 0,
+            data: "{}",
+            reprompt: 0,
+            key: null,
+            created_at: timestamp - 2,
+            updated_at: timestamp - 2,
+            archived_at: null,
+            deleted_at: null,
+            purge_after: null,
+          },
+        ])
+        .execute();
+      await db
+        .insertInto("attachments")
+        .values([
+          {
+            id: attachmentId,
+            cipher_id: cipherId,
+            file_name: "encrypted-name",
+            size: 1,
+            size_name: "1 Byte",
+            key: null,
+            storage_key: attachmentKey,
+            created_at: timestamp - 2,
+            deleted_at: null,
+          },
+          {
+            id: deletedAttachmentId,
+            cipher_id: activeCipherId,
+            file_name: "deleted-encrypted-name",
+            size: 1,
+            size_name: "1 Byte",
+            key: null,
+            storage_key: deletedAttachmentKey,
+            created_at: timestamp - 2,
+            deleted_at: timestamp - 1,
+          },
+        ])
+        .execute();
+      await db
+        .insertInto("sends")
+        .values({
+          id: sendId,
+          user_id: user.id,
+          org_id: null,
+          type: 1,
+          name: "deferred-purge-send",
+          notes: null,
+          data: JSON.stringify({ id: fileId }),
+          key: "encrypted-key",
+          password_hash: null,
+          password_salt: null,
+          password_iterations: null,
+          password_algorithm: null,
+          auth_type: 2,
+          emails: null,
+          max_access_count: null,
+          access_count: 0,
+          disabled: 0,
+          hide_email: null,
+          created_at: timestamp - 2,
+          updated_at: timestamp - 2,
+          expiration_date: null,
+          deletion_date: timestamp - 1,
+        })
+        .execute();
+      context.r2Values.set(attachmentKey, new Uint8Array([1]));
+      context.r2Values.set(deletedAttachmentKey, new Uint8Array([3]));
+      context.r2Values.set(sendKey, new Uint8Array([2]));
 
-			const failingKeys = new Set([
-				attachmentKey,
-				deletedAttachmentKey,
-				sendKey,
-			]);
-			r2.delete = async (key: string | string[]) => {
-				deleteCalls += 1;
-				const keys = Array.isArray(key) ? key : [key];
-				if (keys.some((candidate) => failingKeys.has(candidate))) {
-					throw new Error("simulated R2 outage");
-				}
-				await originalDelete(key);
-			};
-			await runMaintenance(db, context.bindings, timestamp);
-			assert.equal(deleteCalls, 0);
-			assert.equal(context.r2Values.has(attachmentKey), true);
-			assert.equal(context.r2Values.has(deletedAttachmentKey), true);
-			assert.equal(context.r2Values.has(sendKey), true);
-			assert.ok(
-				await db
-					.selectFrom("ciphers")
-					.select("id")
-					.where("id", "=", cipherId)
-					.executeTakeFirst(),
-			);
-			assert.ok(
-				await db
-					.selectFrom("attachments")
-					.select("id")
-					.where("id", "=", deletedAttachmentId)
-					.executeTakeFirst(),
-			);
-			assert.ok(
-				await db
-					.selectFrom("sends")
-					.select(["id", "purge_token"])
-					.where("id", "=", sendId)
-					.executeTakeFirst(),
-			);
-			assert.equal(
-				await db
-					.selectFrom("sends")
-					.select("purge_token")
-					.where("id", "=", sendId)
-					.executeTakeFirstOrThrow()
-					.then((row) => row.purge_token),
-				null,
-			);
+      const failingKeys = new Set([
+        attachmentKey,
+        deletedAttachmentKey,
+        sendKey,
+      ]);
+      r2.delete = async (key: string | string[]) => {
+        deleteCalls += 1;
+        const keys = Array.isArray(key) ? key : [key];
+        if (keys.some((candidate) => failingKeys.has(candidate))) {
+          throw new Error("simulated R2 outage");
+        }
+        await originalDelete(key);
+      };
+      await runMaintenance(db, context.bindings, timestamp);
+      assert.equal(deleteCalls, 0);
+      assert.equal(context.r2Values.has(attachmentKey), true);
+      assert.equal(context.r2Values.has(deletedAttachmentKey), true);
+      assert.equal(context.r2Values.has(sendKey), true);
+      assert.ok(
+        await db
+          .selectFrom("ciphers")
+          .select("id")
+          .where("id", "=", cipherId)
+          .executeTakeFirst(),
+      );
+      assert.ok(
+        await db
+          .selectFrom("attachments")
+          .select("id")
+          .where("id", "=", deletedAttachmentId)
+          .executeTakeFirst(),
+      );
+      assert.ok(
+        await db
+          .selectFrom("sends")
+          .select(["id", "purge_token"])
+          .where("id", "=", sendId)
+          .executeTakeFirst(),
+      );
+      assert.equal(
+        await db
+          .selectFrom("sends")
+          .select("purge_token")
+          .where("id", "=", sendId)
+          .executeTakeFirstOrThrow()
+          .then((row) => row.purge_token),
+        null,
+      );
 
-			r2.delete = originalDelete;
-			await context.database
-				.prepare(`
+      r2.delete = originalDelete;
+      await context.database
+        .prepare(`
 					CREATE TRIGGER test_fail_purge_audit
 					BEFORE INSERT ON audit_logs
 					WHEN NEW.action LIKE '%.purged'
@@ -2189,179 +2189,179 @@ export function registerDatabaseMaintenanceScenarios(
 						SELECT RAISE(ABORT, 'simulated audit outage');
 					END
 				`)
-				.run();
-			await runMaintenance(db, context.bindings, timestamp + 1);
-			assert.equal(deleteCalls, 0);
-			assert.equal(context.r2Values.has(attachmentKey), true);
-			assert.equal(context.r2Values.has(deletedAttachmentKey), true);
-			assert.equal(context.r2Values.has(sendKey), true);
-			assert.ok(
-				await db
-					.selectFrom("ciphers")
-					.select("id")
-					.where("id", "=", cipherId)
-					.executeTakeFirst(),
-			);
-			assert.ok(
-				await db
-					.selectFrom("attachments")
-					.select("id")
-					.where("id", "=", deletedAttachmentId)
-					.executeTakeFirst(),
-			);
-			assert.ok(
-				await db
-					.selectFrom("sends")
-					.select("id")
-					.where("id", "=", sendId)
-					.executeTakeFirst(),
-			);
-			assert.equal(
-				await db
-					.selectFrom("sends")
-					.select("purge_token")
-					.where("id", "=", sendId)
-					.executeTakeFirstOrThrow()
-					.then((row) => row.purge_token),
-				null,
-			);
-			await context.database
-				.prepare("DROP TRIGGER test_fail_purge_audit")
-				.run();
-			const retained = await runMaintenance(
-				db,
-				context.bindings,
-				timestamp + 2,
-			);
-			assert.equal(retained.purgedCiphers, 0);
-			assert.equal(retained.purgedAttachments, 0);
-			assert.equal(retained.purgedSends, 0);
-			assert.equal(context.r2Values.has(attachmentKey), true);
-			assert.equal(context.r2Values.has(deletedAttachmentKey), true);
-			assert.equal(context.r2Values.has(sendKey), true);
-			assert.ok(
-				await db
-					.selectFrom("attachments")
-					.select("id")
-					.where("id", "=", deletedAttachmentId)
-					.executeTakeFirst(),
-			);
-			assert.ok(
-				await db
-					.selectFrom("ciphers")
-					.select("id")
-					.where("id", "=", activeCipherId)
-					.executeTakeFirst(),
-			);
-			assert.ok(
-				await db
-					.selectFrom("ciphers")
-					.select("id")
-					.where("id", "=", cipherId)
-					.executeTakeFirst(),
-			);
-			assert.ok(
-				await db
-					.selectFrom("sends")
-					.select("id")
-					.where("id", "=", sendId)
-					.executeTakeFirst(),
-			);
-		} finally {
-			r2.delete = originalDelete;
-			await context.database
-				.prepare("DROP TRIGGER IF EXISTS test_fail_purge_audit")
-				.run();
-			await db.deleteFrom("ciphers").where("id", "=", cipherId).execute();
-			await db.deleteFrom("ciphers").where("id", "=", activeCipherId).execute();
-			await db.deleteFrom("sends").where("id", "=", sendId).execute();
-			context.r2Values.delete(attachmentKey);
-			context.r2Values.delete(deletedAttachmentKey);
-			context.r2Values.delete(sendKey);
-			await db.destroy();
-		}
-	});
+        .run();
+      await runMaintenance(db, context.bindings, timestamp + 1);
+      assert.equal(deleteCalls, 0);
+      assert.equal(context.r2Values.has(attachmentKey), true);
+      assert.equal(context.r2Values.has(deletedAttachmentKey), true);
+      assert.equal(context.r2Values.has(sendKey), true);
+      assert.ok(
+        await db
+          .selectFrom("ciphers")
+          .select("id")
+          .where("id", "=", cipherId)
+          .executeTakeFirst(),
+      );
+      assert.ok(
+        await db
+          .selectFrom("attachments")
+          .select("id")
+          .where("id", "=", deletedAttachmentId)
+          .executeTakeFirst(),
+      );
+      assert.ok(
+        await db
+          .selectFrom("sends")
+          .select("id")
+          .where("id", "=", sendId)
+          .executeTakeFirst(),
+      );
+      assert.equal(
+        await db
+          .selectFrom("sends")
+          .select("purge_token")
+          .where("id", "=", sendId)
+          .executeTakeFirstOrThrow()
+          .then((row) => row.purge_token),
+        null,
+      );
+      await context.database
+        .prepare("DROP TRIGGER test_fail_purge_audit")
+        .run();
+      const retained = await runMaintenance(
+        db,
+        context.bindings,
+        timestamp + 2,
+      );
+      assert.equal(retained.purgedCiphers, 0);
+      assert.equal(retained.purgedAttachments, 0);
+      assert.equal(retained.purgedSends, 0);
+      assert.equal(context.r2Values.has(attachmentKey), true);
+      assert.equal(context.r2Values.has(deletedAttachmentKey), true);
+      assert.equal(context.r2Values.has(sendKey), true);
+      assert.ok(
+        await db
+          .selectFrom("attachments")
+          .select("id")
+          .where("id", "=", deletedAttachmentId)
+          .executeTakeFirst(),
+      );
+      assert.ok(
+        await db
+          .selectFrom("ciphers")
+          .select("id")
+          .where("id", "=", activeCipherId)
+          .executeTakeFirst(),
+      );
+      assert.ok(
+        await db
+          .selectFrom("ciphers")
+          .select("id")
+          .where("id", "=", cipherId)
+          .executeTakeFirst(),
+      );
+      assert.ok(
+        await db
+          .selectFrom("sends")
+          .select("id")
+          .where("id", "=", sendId)
+          .executeTakeFirst(),
+      );
+    } finally {
+      r2.delete = originalDelete;
+      await context.database
+        .prepare("DROP TRIGGER IF EXISTS test_fail_purge_audit")
+        .run();
+      await db.deleteFrom("ciphers").where("id", "=", cipherId).execute();
+      await db.deleteFrom("ciphers").where("id", "=", activeCipherId).execute();
+      await db.deleteFrom("sends").where("id", "=", sendId).execute();
+      context.r2Values.delete(attachmentKey);
+      context.r2Values.delete(deletedAttachmentKey);
+      context.r2Values.delete(sendKey);
+      await db.destroy();
+    }
+  });
 
-	test("scheduled maintenance still runs when backup settings cannot decrypt", async () => {
-		const { db } = await createDatabase(context.database);
-		const configKey = "backup.settings.v1";
-		const original = await getConfigValue(db, configKey);
-		const user = await db
-			.selectFrom("users")
-			.select("id")
-			.where("email", "=", EMAIL)
-			.executeTakeFirstOrThrow();
-		const expiredToken = `scheduled-failure-${crypto.randomUUID()}`;
-		try {
-			await saveBackupSettings(
-				db,
-				context.bindings.DATA_ENCRYPTION_SECRET,
-				getDefaultBackupSettings("UTC"),
-			);
-			await db
-				.insertInto("refresh_tokens")
-				.values({
-					token: expiredToken,
-					user_id: user.id,
-					expires_at: Math.floor(Date.now() / 1000) - 1,
-					device_identifier: null,
-					device_session_stamp: null,
-				})
-				.execute();
-			await assert.rejects(
-				runScheduledTasks({
-					...context.bindings,
-					DATA_ENCRYPTION_SECRET:
-						"wrong-but-long-enough-data-encryption-secret",
-				}),
-				/One or more scheduled tasks failed/,
-			);
-			assert.equal(
-				await db
-					.selectFrom("refresh_tokens")
-					.select("token")
-					.where("token", "=", expiredToken)
-					.executeTakeFirst(),
-				undefined,
-			);
-		} finally {
-			if (original === null) await deleteConfigValue(db, configKey);
-			else await setConfigValue(db, configKey, original);
-			await db
-				.deleteFrom("refresh_tokens")
-				.where("token", "=", expiredToken)
-				.execute();
-			await db.destroy();
-		}
-	});
+  test("scheduled maintenance still runs when backup settings cannot decrypt", async () => {
+    const { db } = await createDatabase(context.database);
+    const configKey = "backup.settings.v1";
+    const original = await getConfigValue(db, configKey);
+    const user = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const expiredToken = `scheduled-failure-${crypto.randomUUID()}`;
+    try {
+      await saveBackupSettings(
+        db,
+        context.bindings.DATA_ENCRYPTION_SECRET,
+        getDefaultBackupSettings("UTC"),
+      );
+      await db
+        .insertInto("refresh_tokens")
+        .values({
+          token: expiredToken,
+          user_id: user.id,
+          expires_at: Math.floor(Date.now() / 1000) - 1,
+          device_identifier: null,
+          device_session_stamp: null,
+        })
+        .execute();
+      await assert.rejects(
+        runScheduledTasks({
+          ...context.bindings,
+          DATA_ENCRYPTION_SECRET:
+            "wrong-but-long-enough-data-encryption-secret",
+        }),
+        /One or more scheduled tasks failed/,
+      );
+      assert.equal(
+        await db
+          .selectFrom("refresh_tokens")
+          .select("token")
+          .where("token", "=", expiredToken)
+          .executeTakeFirst(),
+        undefined,
+      );
+    } finally {
+      if (original === null) await deleteConfigValue(db, configKey);
+      else await setConfigValue(db, configKey, original);
+      await db
+        .deleteFrom("refresh_tokens")
+        .where("token", "=", expiredToken)
+        .execute();
+      await db.destroy();
+    }
+  });
 
-	test("rolls back every statement when a Kysely-D1 batch fails", async () => {
-		const { db, dialect } = await createDatabase(context.database);
-		try {
-			const user = await db
-				.selectFrom("users")
-				.select("id")
-				.where("email", "=", EMAIL)
-				.executeTakeFirstOrThrow();
-			const folderId = crypto.randomUUID();
-			const timestamp = Math.floor(Date.now() / 1000);
-			const insert = db.insertInto("folders").values({
-				id: folderId,
-				user_id: user.id,
-				name: "atomic-folder",
-				created_at: timestamp,
-				updated_at: timestamp,
-			});
+  test("rolls back every statement when a Kysely-D1 batch fails", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    try {
+      const user = await db
+        .selectFrom("users")
+        .select("id")
+        .where("email", "=", EMAIL)
+        .executeTakeFirstOrThrow();
+      const folderId = crypto.randomUUID();
+      const timestamp = Math.floor(Date.now() / 1000);
+      const insert = db.insertInto("folders").values({
+        id: folderId,
+        user_id: user.id,
+        name: "atomic-folder",
+        created_at: timestamp,
+        updated_at: timestamp,
+      });
 
-			await assert.rejects(() => executeBatch(dialect, [insert, insert]));
-			const rolledBack = await db
-				.selectFrom("folders")
-				.select("id")
-				.where("id", "=", folderId)
-				.executeTakeFirst();
-			assert.equal(rolledBack, undefined);
-		} finally {
-			await db.destroy();
-		}
-	});
+      await assert.rejects(() => executeBatch(dialect, [insert, insert]));
+      const rolledBack = await db
+        .selectFrom("folders")
+        .select("id")
+        .where("id", "=", folderId)
+        .executeTakeFirst();
+      assert.equal(rolledBack, undefined);
+    } finally {
+      await db.destroy();
+    }
+  });
 }

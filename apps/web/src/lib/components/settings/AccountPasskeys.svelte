@@ -9,38 +9,38 @@ import * as Dialog from "$lib/components/ui/dialog/index.js";
 import * as Field from "$lib/components/ui/field/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import {
-	createAccountPasskeyApi,
-	deleteAccountPasskeyApi,
-	getAccountPasskeyAssertionOptionsApi,
-	getAccountPasskeyAttestationOptionsApi,
-	listAccountPasskeysApi,
-	updateAccountPasskeyEncryptionApi,
+  createAccountPasskeyApi,
+  deleteAccountPasskeyApi,
+  getAccountPasskeyAssertionOptionsApi,
+  getAccountPasskeyAttestationOptionsApi,
+  listAccountPasskeysApi,
+  updateAccountPasskeyEncryptionApi,
 } from "$lib/services/api-account";
 import {
-	bytesToBase64,
-	deriveMasterKey,
-	deriveMasterPasswordHash,
+  bytesToBase64,
+  deriveMasterKey,
+  deriveMasterPasswordHash,
 } from "$lib/services/crypto";
 import {
-	assertAccountPasskey,
-	buildAccountPasskeyPrfKeySet,
-	buildAccountPasskeyPrfKeySetFromPrfKey,
-	createAccountPasskeyCredential,
+  assertAccountPasskey,
+  buildAccountPasskeyPrfKeySet,
+  buildAccountPasskeyPrfKeySetFromPrfKey,
+  createAccountPasskeyCredential,
 } from "$lib/services/passkeys";
 import { vault } from "$lib/stores/vault.svelte";
 import type { AccountPasskey } from "$lib/services/account-types";
 import type { PendingAccountPasskeyCredential } from "$lib/services/passkeys";
 
 let {
-	email,
-	kdfIterations,
-	onMessage,
-	onError,
+  email,
+  kdfIterations,
+  onMessage,
+  onError,
 }: {
-	email: string;
-	kdfIterations: number;
-	onMessage: (message: string) => void;
-	onError: (error: unknown) => void;
+  email: string;
+  kdfIterations: number;
+  onMessage: (message: string) => void;
+  onError: (error: unknown) => void;
 } = $props();
 
 let passkeys = $state<AccountPasskey[]>([]);
@@ -57,134 +57,134 @@ let pendingLoginOnly = $state<PendingAccountPasskeyCredential | null>(null);
 onMount(load);
 
 async function load() {
-	try {
-		passkeys = (await listAccountPasskeysApi()).data;
-	} catch (error) {
-		onError(error);
-	}
+  try {
+    passkeys = (await listAccountPasskeysApi()).data;
+  } catch (error) {
+    onError(error);
+  }
 }
 
 async function passwordHash(value: string): Promise<string> {
-	const key = await deriveMasterKey(value, email, kdfIterations);
-	return deriveMasterPasswordHash(key, value);
+  const key = await deriveMasterKey(value, email, kdfIterations);
+  return deriveMasterPasswordHash(key, value);
 }
 
 async function createPasskey() {
-	if (!password) return;
-	busy = "create";
-	try {
-		const options = await getAccountPasskeyAttestationOptionsApi(
-			await passwordHash(password),
-		);
-		const pending = await createAccountPasskeyCredential(options);
-		let keySet: {
-			encryptedUserKey?: string;
-			encryptedPublicKey?: string;
-			encryptedPrivateKey?: string;
-		} = {};
-		if (pending.supportsPrf && vault.symEncKey && vault.symMacKey) {
-			try {
-				keySet = await buildAccountPasskeyPrfKeySet(pending, {
-					symEncKey: bytesToBase64(vault.symEncKey),
-					symMacKey: bytesToBase64(vault.symMacKey),
-				});
-			} catch (error) {
-				pendingLoginOnly = pending;
-				return;
-			}
-		}
-		await persistPasskey(pending, keySet);
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  if (!password) return;
+  busy = "create";
+  try {
+    const options = await getAccountPasskeyAttestationOptionsApi(
+      await passwordHash(password),
+    );
+    const pending = await createAccountPasskeyCredential(options);
+    let keySet: {
+      encryptedUserKey?: string;
+      encryptedPublicKey?: string;
+      encryptedPrivateKey?: string;
+    } = {};
+    if (pending.supportsPrf && vault.symEncKey && vault.symMacKey) {
+      try {
+        keySet = await buildAccountPasskeyPrfKeySet(pending, {
+          symEncKey: bytesToBase64(vault.symEncKey),
+          symMacKey: bytesToBase64(vault.symMacKey),
+        });
+      } catch (error) {
+        pendingLoginOnly = pending;
+        return;
+      }
+    }
+    await persistPasskey(pending, keySet);
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 
 async function persistPasskey(
-	pending: PendingAccountPasskeyCredential,
-	keySet: Record<string, string | undefined> = {},
+  pending: PendingAccountPasskeyCredential,
+  keySet: Record<string, string | undefined> = {},
 ) {
-	await createAccountPasskeyApi({
-		token: pending.token,
-		deviceResponse: pending.request,
-		name: name.trim() || undefined,
-		supportsPrf: pending.supportsPrf && !!keySet.encryptedUserKey,
-		...keySet,
-	});
-	await load();
-	createOpen = false;
-	pendingLoginOnly = null;
-	name = "";
-	password = "";
-	onMessage("通行密钥已添加");
+  await createAccountPasskeyApi({
+    token: pending.token,
+    deviceResponse: pending.request,
+    name: name.trim() || undefined,
+    supportsPrf: pending.supportsPrf && !!keySet.encryptedUserKey,
+    ...keySet,
+  });
+  await load();
+  createOpen = false;
+  pendingLoginOnly = null;
+  name = "";
+  password = "";
+  onMessage("通行密钥已添加");
 }
 
 async function confirmLoginOnlyPasskey() {
-	if (!pendingLoginOnly) return;
-	busy = "create";
-	try {
-		await persistPasskey(pendingLoginOnly);
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  if (!pendingLoginOnly) return;
+  busy = "create";
+  try {
+    await persistPasskey(pendingLoginOnly);
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 
 async function removePasskey() {
-	if (!deletePasskey || !deletePassword) return;
-	busy = "delete";
-	try {
-		await deleteAccountPasskeyApi(
-			deletePasskey.id,
-			await passwordHash(deletePassword),
-		);
-		passkeys = passkeys.filter((item) => item.id !== deletePasskey?.id);
-		deletePasskey = null;
-		deletePassword = "";
-		onMessage("通行密钥已删除");
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  if (!deletePasskey || !deletePassword) return;
+  busy = "delete";
+  try {
+    await deleteAccountPasskeyApi(
+      deletePasskey.id,
+      await passwordHash(deletePassword),
+    );
+    passkeys = passkeys.filter((item) => item.id !== deletePasskey?.id);
+    deletePasskey = null;
+    deletePassword = "";
+    onMessage("通行密钥已删除");
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 
 async function enableDirectUnlock() {
-	if (!enablePasskey || !enablePassword || !vault.symEncKey || !vault.symMacKey)
-		return;
-	busy = "enable";
-	try {
-		const assertion = await assertAccountPasskey(
-			await getAccountPasskeyAssertionOptionsApi(
-				await passwordHash(enablePassword),
-				enablePasskey.id,
-			),
-		);
-		if (!assertion.prfKey)
-			throw new Error("这把通行密钥没有返回 PRF 密钥，无法启用直接解锁");
-		const keySet = await buildAccountPasskeyPrfKeySetFromPrfKey(
-			assertion.prfKey,
-			{
-				symEncKey: bytesToBase64(vault.symEncKey),
-				symMacKey: bytesToBase64(vault.symMacKey),
-			},
-		);
-		await updateAccountPasskeyEncryptionApi({
-			token: assertion.token,
-			deviceResponse: assertion.deviceResponse,
-			...keySet,
-		});
-		await load();
-		enablePasskey = null;
-		enablePassword = "";
-		onMessage("已启用通行密钥直接解锁");
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  if (!enablePasskey || !enablePassword || !vault.symEncKey || !vault.symMacKey)
+    return;
+  busy = "enable";
+  try {
+    const assertion = await assertAccountPasskey(
+      await getAccountPasskeyAssertionOptionsApi(
+        await passwordHash(enablePassword),
+        enablePasskey.id,
+      ),
+    );
+    if (!assertion.prfKey)
+      throw new Error("这把通行密钥没有返回 PRF 密钥，无法启用直接解锁");
+    const keySet = await buildAccountPasskeyPrfKeySetFromPrfKey(
+      assertion.prfKey,
+      {
+        symEncKey: bytesToBase64(vault.symEncKey),
+        symMacKey: bytesToBase64(vault.symMacKey),
+      },
+    );
+    await updateAccountPasskeyEncryptionApi({
+      token: assertion.token,
+      deviceResponse: assertion.deviceResponse,
+      ...keySet,
+    });
+    await load();
+    enablePasskey = null;
+    enablePassword = "";
+    onMessage("已启用通行密钥直接解锁");
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 </script>
 

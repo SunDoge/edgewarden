@@ -1,12 +1,12 @@
 <script lang="ts">
 import {
-	ArrowLeft,
-	Copy,
-	RefreshCw,
-	Search,
-	ShieldAlert,
-	Trash2,
-	UserRoundCog,
+  ArrowLeft,
+  Copy,
+  RefreshCw,
+  Search,
+  ShieldAlert,
+  Trash2,
+  UserRoundCog,
 } from "@lucide/svelte";
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
@@ -21,15 +21,15 @@ import * as Table from "$lib/components/ui/table/index.js";
 import * as Tabs from "$lib/components/ui/tabs/index.js";
 import { searchAdminUsers } from "$lib/services/admin-search";
 import {
-	createAdminInviteApi,
-	deleteAdminInviteApi,
-	deleteAdminUserApi,
-	getAdminPushRelayStatusApi,
-	getAdminRegistrationPolicyApi,
-	listAdminInvitesApi,
-	listAdminUsersApi,
-	setAdminUserStatusApi,
-	updateAdminRegistrationPolicyApi,
+  createAdminInviteApi,
+  deleteAdminInviteApi,
+  deleteAdminUserApi,
+  getAdminPushRelayStatusApi,
+  getAdminRegistrationPolicyApi,
+  listAdminInvitesApi,
+  listAdminUsersApi,
+  setAdminUserStatusApi,
+  updateAdminRegistrationPolicyApi,
 } from "$lib/services/api-admin";
 import { deriveAccountPasswordHash } from "$lib/services/api-auth";
 import { vault } from "$lib/stores/vault.svelte";
@@ -46,87 +46,87 @@ let error = $state<string | null>(null);
 let signupsAllowed = $state(false);
 let invitationsAllowed = $state(true);
 let pushRelay = $state<{
-	enabled: boolean;
-	region: "US" | "EU";
-	installationIdConfigured: boolean;
-	installationKeyConfigured: boolean;
-	reason: "ready" | "missing_credentials" | "invalid_region";
+  enabled: boolean;
+  region: "US" | "EU";
+  installationIdConfigured: boolean;
+  installationKeyConfigured: boolean;
+  reason: "ready" | "missing_credentials" | "invalid_region";
 } | null>(null);
 let userSearchQuery = $state("");
 let deleteUser = $state<AdminUser | null>(null);
 const filteredUsers = $derived(searchAdminUsers(users, userSearchQuery));
 
 async function refresh() {
-	busy = "refresh";
-	error = null;
-	try {
-		const [nextUsers, nextInvites, policy, nextPushRelay] = await Promise.all([
-			listAdminUsersApi().then((r) => r.data),
-			listAdminInvitesApi().then((r) => r.data),
-			getAdminRegistrationPolicyApi(),
-			getAdminPushRelayStatusApi(),
-		]);
-		users = nextUsers;
-		invites = nextInvites;
-		signupsAllowed = policy.signupsAllowed;
-		invitationsAllowed = policy.invitationsAllowed;
-		pushRelay = nextPushRelay;
-	} catch (reason) {
-		error = reason instanceof Error ? reason.message : String(reason);
-	} finally {
-		busy = null;
-	}
+  busy = "refresh";
+  error = null;
+  try {
+    const [nextUsers, nextInvites, policy, nextPushRelay] = await Promise.all([
+      listAdminUsersApi().then((r) => r.data),
+      listAdminInvitesApi().then((r) => r.data),
+      getAdminRegistrationPolicyApi(),
+      getAdminPushRelayStatusApi(),
+    ]);
+    users = nextUsers;
+    invites = nextInvites;
+    signupsAllowed = policy.signupsAllowed;
+    invitationsAllowed = policy.invitationsAllowed;
+    pushRelay = nextPushRelay;
+  } catch (reason) {
+    error = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    busy = null;
+  }
 }
 
 async function passwordHash() {
-	if (!masterPassword) throw new Error("请输入当前主密码以确认管理操作");
-	const email = vault.profile?.email;
-	if (!email) throw new Error("账户资料尚未载入");
-	return deriveAccountPasswordHash(email, masterPassword);
+  if (!masterPassword) throw new Error("请输入当前主密码以确认管理操作");
+  const email = vault.profile?.email;
+  if (!email) throw new Error("账户资料尚未载入");
+  return deriveAccountPasswordHash(email, masterPassword);
 }
 
 async function run(key: string, operation: (hash: string) => Promise<unknown>) {
-	busy = key;
-	error = null;
-	try {
-		await operation(await passwordHash());
-		masterPassword = "";
-		await refresh();
-	} catch (reason) {
-		error = reason instanceof Error ? reason.message : String(reason);
-	} finally {
-		busy = null;
-	}
+  busy = key;
+  error = null;
+  try {
+    await operation(await passwordHash());
+    masterPassword = "";
+    await refresh();
+  } catch (reason) {
+    error = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    busy = null;
+  }
 }
 
 async function createInvite() {
-	await run("invite-create", async (hash) => {
-		const invite = await createAdminInviteApi(
-			hash,
-			inviteEmail,
-			expiresInHours,
-		);
-		await navigator.clipboard.writeText(invite.inviteLink);
-		inviteEmail = "";
-	});
+  await run("invite-create", async (hash) => {
+    const invite = await createAdminInviteApi(
+      hash,
+      inviteEmail,
+      expiresInHours,
+    );
+    await navigator.clipboard.writeText(invite.inviteLink);
+    inviteEmail = "";
+  });
 }
 
 async function saveRegistrationPolicy() {
-	await run("registration-policy", (hash) =>
-		updateAdminRegistrationPolicyApi(hash, signupsAllowed, invitationsAllowed),
-	);
+  await run("registration-policy", (hash) =>
+    updateAdminRegistrationPolicyApi(hash, signupsAllowed, invitationsAllowed),
+  );
 }
 
 async function confirmDeleteUser() {
-	if (!deleteUser) return;
-	const user = deleteUser;
-	deleteUser = null;
-	await run(`delete-${user.id}`, (hash) => deleteAdminUserApi(user.id, hash));
+  if (!deleteUser) return;
+  const user = deleteUser;
+  deleteUser = null;
+  await run(`delete-${user.id}`, (hash) => deleteAdminUserApi(user.id, hash));
 }
 
 onMount(() => {
-	if (vault.profile?.role !== "admin") void goto("/vault");
-	else void refresh();
+  if (vault.profile?.role !== "admin") void goto("/vault");
+  else void refresh();
 });
 </script>
 

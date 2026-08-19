@@ -13,17 +13,17 @@ import GlobalEquivalentDomains from "$lib/components/domains/GlobalEquivalentDom
 import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
 import { errorMessage } from "$lib/services/error-message";
 import {
-	ArrowLeft,
-	Save,
-	Globe,
-	ShieldCheck,
-	RefreshCw,
-	AlertCircle,
-	Info,
+  ArrowLeft,
+  Save,
+  Globe,
+  ShieldCheck,
+  RefreshCw,
+  AlertCircle,
+  Info,
 } from "@lucide/svelte";
 import type {
-	CustomEquivalentDomain,
-	GlobalEquivalentDomain,
+  CustomEquivalentDomain,
+  GlobalEquivalentDomain,
 } from "@edgewarden/shared";
 
 // Page state
@@ -38,91 +38,91 @@ let globalRules = $state<GlobalEquivalentDomain[]>([]);
 let excludedTypes = $state<Set<number>>(new Set());
 
 onMount(async () => {
-	await loadRules();
+  await loadRules();
 });
 
 async function loadRules() {
-	loading = true;
-	error = "";
-	try {
-		const res = await fetchDomainRules();
-		// Convert to mutable state arrays
-		customRules = res.customEquivalentDomains.map((r) => ({
-			id: r.id,
-			domains: [...r.domains],
-			excluded: !!r.excluded,
-		}));
-		globalRules = res.globalEquivalentDomains.map((g) => ({
-			type: g.type,
-			domains: [...g.domains],
-			excluded: !!g.excluded,
-		}));
-		excludedTypes = new Set(
-			res.globalEquivalentDomains.filter((g) => g.excluded).map((g) => g.type),
-		);
-	} catch (caught) {
-		error = errorMessage(caught, "加载域名规则失败，请稍后重试。");
-	} finally {
-		loading = false;
-	}
+  loading = true;
+  error = "";
+  try {
+    const res = await fetchDomainRules();
+    // Convert to mutable state arrays
+    customRules = res.customEquivalentDomains.map((r) => ({
+      id: r.id,
+      domains: [...r.domains],
+      excluded: !!r.excluded,
+    }));
+    globalRules = res.globalEquivalentDomains.map((g) => ({
+      type: g.type,
+      domains: [...g.domains],
+      excluded: !!g.excluded,
+    }));
+    excludedTypes = new Set(
+      res.globalEquivalentDomains.filter((g) => g.excluded).map((g) => g.type),
+    );
+  } catch (caught) {
+    error = errorMessage(caught, "加载域名规则失败，请稍后重试。");
+  } finally {
+    loading = false;
+  }
 }
 
 // Save & Sync
 async function handleSave() {
-	saving = true;
-	error = "";
-	successMsg = "";
-	try {
-		// Clean rules first
-		const payloadRules = customRules
-			.map((r) => ({
-				...r,
-				domains: normalizeEquivalentDomainRule(r.domains).domains,
-			}))
-			.filter((r) => r.domains.length >= 2);
+  saving = true;
+  error = "";
+  successMsg = "";
+  try {
+    // Clean rules first
+    const payloadRules = customRules
+      .map((r) => ({
+        ...r,
+        domains: normalizeEquivalentDomainRule(r.domains).domains,
+      }))
+      .filter((r) => r.domains.length >= 2);
 
-		const excludedList = Array.from(excludedTypes);
+    const excludedList = Array.from(excludedTypes);
 
-		const updated = await updateDomainRules(payloadRules, excludedList);
+    const updated = await updateDomainRules(payloadRules, excludedList);
 
-		// Sync local store state too
-		customRules = updated.customEquivalentDomains.map((r) => ({
-			id: r.id,
-			domains: [...r.domains],
-			excluded: !!r.excluded,
-		}));
-		excludedTypes = new Set(
-			updated.globalEquivalentDomains
-				.filter((g) => g.excluded)
-				.map((g) => g.type),
-		);
+    // Sync local store state too
+    customRules = updated.customEquivalentDomains.map((r) => ({
+      id: r.id,
+      domains: [...r.domains],
+      excluded: !!r.excluded,
+    }));
+    excludedTypes = new Set(
+      updated.globalEquivalentDomains
+        .filter((g) => g.excluded)
+        .map((g) => g.type),
+    );
 
-		showTimedSuccess("等效域名规则已成功保存并应用！");
-	} catch (caught) {
-		error = errorMessage(caught, "保存规则失败，请稍后重试。");
-	} finally {
-		saving = false;
-	}
+    showTimedSuccess("等效域名规则已成功保存并应用！");
+  } catch (caught) {
+    error = errorMessage(caught, "保存规则失败，请稍后重试。");
+  } finally {
+    saving = false;
+  }
 }
 
 // Helpers for notifications
 let notificationTimeout: ReturnType<typeof setTimeout> | undefined;
 function showTimedSuccess(msg: string) {
-	successMsg = msg;
-	error = "";
-	if (notificationTimeout) clearTimeout(notificationTimeout);
-	notificationTimeout = setTimeout(() => {
-		successMsg = "";
-	}, 4000);
+  successMsg = msg;
+  error = "";
+  if (notificationTimeout) clearTimeout(notificationTimeout);
+  notificationTimeout = setTimeout(() => {
+    successMsg = "";
+  }, 4000);
 }
 
 function showTimedError(msg: string) {
-	error = msg;
-	successMsg = "";
-	if (notificationTimeout) clearTimeout(notificationTimeout);
-	notificationTimeout = setTimeout(() => {
-		error = "";
-	}, 4000);
+  error = msg;
+  successMsg = "";
+  if (notificationTimeout) clearTimeout(notificationTimeout);
+  notificationTimeout = setTimeout(() => {
+    error = "";
+  }, 4000);
 }
 </script>
 

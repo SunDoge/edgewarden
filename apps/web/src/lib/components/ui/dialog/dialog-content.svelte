@@ -9,16 +9,16 @@ import type { Snippet } from "svelte";
 import type { ComponentProps } from "svelte";
 
 let {
-	ref = $bindable(null),
-	class: className,
-	portalProps,
-	children,
-	showCloseButton = true,
-	...restProps
+  ref = $bindable(null),
+  class: className,
+  portalProps,
+  children,
+  showCloseButton = true,
+  ...restProps
 }: WithoutChildrenOrChild<DialogPrimitive.ContentProps> & {
-	portalProps?: WithoutChildrenOrChild<ComponentProps<typeof DialogPortal>>;
-	children: Snippet;
-	showCloseButton?: boolean;
+  portalProps?: WithoutChildrenOrChild<ComponentProps<typeof DialogPortal>>;
+  children: Snippet;
+  showCloseButton?: boolean;
 } = $props();
 </script>
 

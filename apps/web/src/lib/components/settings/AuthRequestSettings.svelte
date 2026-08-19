@@ -3,70 +3,70 @@ import { onMount } from "svelte";
 import { Button } from "$lib/components/ui/button/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
 import {
-	encryptVaultKeyForAuthRequest,
-	listPendingAuthRequestsApi,
-	respondToAuthRequestApi,
-	type AuthRequest,
+  encryptVaultKeyForAuthRequest,
+  listPendingAuthRequestsApi,
+  respondToAuthRequestApi,
+  type AuthRequest,
 } from "$lib/services/auth-requests";
 import { vault } from "$lib/stores/vault.svelte";
 import { RefreshCw, ShieldCheck } from "@lucide/svelte";
 import { match } from "ts-pattern";
 
 let {
-	email,
-	onMessage,
-	onError,
+  email,
+  onMessage,
+  onError,
 }: {
-	email: string;
-	onMessage: (message: string) => void;
-	onError: (error: unknown) => void;
+  email: string;
+  onMessage: (message: string) => void;
+  onError: (error: unknown) => void;
 } = $props();
 
 let requests = $state<AuthRequest[]>([]);
 let busy = $state("");
 
 function deviceTypeLabel(type: number): string {
-	return match(type)
-		.with(0, () => "浏览器")
-		.with(1, () => "Android")
-		.with(2, () => "iOS")
-		.with(3, () => "桌面客户端")
-		.otherwise(() => `设备类型 ${type}`);
+  return match(type)
+    .with(0, () => "浏览器")
+    .with(1, () => "Android")
+    .with(2, () => "iOS")
+    .with(3, () => "桌面客户端")
+    .otherwise(() => `设备类型 ${type}`);
 }
 
 async function refresh() {
-	busy = "refresh";
-	try {
-		requests = await listPendingAuthRequestsApi(email);
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  busy = "refresh";
+  try {
+    requests = await listPendingAuthRequestsApi(email);
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 
 async function respond(request: AuthRequest, approved: boolean) {
-	busy = request.id;
-	try {
-		let key: string | undefined;
-		if (approved) {
-			if (!vault.symEncKey || !vault.symMacKey) {
-				throw new Error("保险库密钥不可用，请重新解锁");
-			}
-			key = await encryptVaultKeyForAuthRequest(
-				request.publicKey,
-				vault.symEncKey,
-				vault.symMacKey,
-			);
-		}
-		await respondToAuthRequestApi(request.id, approved, key);
-		requests = requests.filter((item) => item.id !== request.id);
-		onMessage(approved ? "已批准设备登录" : "已拒绝设备登录");
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  busy = request.id;
+  try {
+    let key: string | undefined;
+    if (approved) {
+      if (!vault.symEncKey || !vault.symMacKey) {
+        throw new Error("保险库密钥不可用，请重新解锁");
+      }
+      key = await encryptVaultKeyForAuthRequest(
+        request.publicKey,
+        vault.symEncKey,
+        vault.symMacKey,
+      );
+    }
+    await respondToAuthRequestApi(request.id, approved, key);
+    requests = requests.filter((item) => item.id !== request.id);
+    onMessage(approved ? "已批准设备登录" : "已拒绝设备登录");
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 
 onMount(refresh);

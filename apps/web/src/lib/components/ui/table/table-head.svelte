@@ -3,10 +3,10 @@ import { cn, type WithElementRef } from "$lib/utils.js";
 import type { HTMLThAttributes } from "svelte/elements";
 
 let {
-	ref = $bindable(null),
-	class: className,
-	children,
-	...restProps
+  ref = $bindable(null),
+  class: className,
+  children,
+  ...restProps
 }: WithElementRef<HTMLThAttributes> = $props();
 </script>
 

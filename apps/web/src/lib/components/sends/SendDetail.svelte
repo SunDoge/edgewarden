@@ -6,44 +6,44 @@ import * as Field from "$lib/components/ui/field/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import { Separator } from "$lib/components/ui/separator/index.js";
 import {
-	Check,
-	Copy,
-	ExternalLink,
-	File as FileIcon,
-	FileText,
-	Trash2,
+  Check,
+  Copy,
+  ExternalLink,
+  File as FileIcon,
+  FileText,
+  Trash2,
 } from "@lucide/svelte";
 import { match } from "ts-pattern";
 import type { DecryptedSend } from "$lib/services/send-crypto";
 
 let {
-	send,
-	copied = false,
-	onCopy,
-	onEdit,
-	onDelete,
+  send,
+  copied = false,
+  onCopy,
+  onEdit,
+  onDelete,
 }: {
-	send: DecryptedSend;
-	copied?: boolean;
-	onCopy: () => void;
-	onEdit: () => void;
-	onDelete: () => void;
+  send: DecryptedSend;
+  copied?: boolean;
+  onCopy: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 } = $props();
 
 let sendType = $derived(
-	match(send.type)
-		.with(0, () => ({ label: "安全文本", icon: FileText }))
-		.with(1, () => ({ label: "安全文件", icon: FileIcon }))
-		.otherwise(() => ({ label: "安全分享", icon: FileText })),
+  match(send.type)
+    .with(0, () => ({ label: "安全文本", icon: FileText }))
+    .with(1, () => ({ label: "安全文件", icon: FileIcon }))
+    .otherwise(() => ({ label: "安全分享", icon: FileText })),
 );
 let TypeIcon = $derived(sendType.icon);
 
 function openShareLink() {
-	window.open(
-		`${window.location.origin}/sends/${send.accessId}#${send.shareKey}`,
-		"_blank",
-		"noopener,noreferrer",
-	);
+  window.open(
+    `${window.location.origin}/sends/${send.accessId}#${send.shareKey}`,
+    "_blank",
+    "noopener,noreferrer",
+  );
 }
 </script>
 

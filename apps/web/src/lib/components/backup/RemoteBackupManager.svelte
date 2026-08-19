@@ -5,11 +5,11 @@ import { Button } from "$lib/components/ui/button/index.js";
 import * as Field from "$lib/components/ui/field/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import {
-	deleteRemoteBackupApi,
-	downloadRemoteBackupApi,
-	inspectRemoteBackupApi,
-	listRemoteBackupsApi,
-	restoreRemoteBackupApi,
+  deleteRemoteBackupApi,
+  downloadRemoteBackupApi,
+  inspectRemoteBackupApi,
+  listRemoteBackupsApi,
+  restoreRemoteBackupApi,
 } from "$lib/services/api-backup";
 import BackupRuntimePanel from "./BackupRuntimePanel.svelte";
 import RemoteBackupBrowser from "./RemoteBackupBrowser.svelte";
@@ -17,21 +17,21 @@ import type { RemoteBackupItem } from "$lib/services/backup-types";
 import type { BackupDestinationRecord } from "./types";
 
 let {
-	destinationId,
-	destination,
-	running,
-	allowChecksumMismatch,
-	onRun,
-	onSuccess,
-	onError,
+  destinationId,
+  destination,
+  running,
+  allowChecksumMismatch,
+  onRun,
+  onSuccess,
+  onError,
 }: {
-	destinationId: string;
-	destination: BackupDestinationRecord | undefined;
-	running: boolean;
-	allowChecksumMismatch: boolean;
-	onRun: () => void;
-	onSuccess: (message: string) => void;
-	onError: (message: string) => void;
+  destinationId: string;
+  destination: BackupDestinationRecord | undefined;
+  running: boolean;
+  allowChecksumMismatch: boolean;
+  onRun: () => void;
+  onSuccess: (message: string) => void;
+  onError: (message: string) => void;
 } = $props();
 
 let items = $state<RemoteBackupItem[]>([]);
@@ -46,118 +46,118 @@ let restorePath = $state<string | null>(null);
 let restoreConfirmation = $state("");
 
 async function load(id = destinationId, path = currentPath) {
-	browsing = true;
-	try {
-		items = (await listRemoteBackupsApi(id, path)).items || [];
-	} catch (error) {
-		console.warn("Failed to browse remote backups:", error);
-		items = [];
-	} finally {
-		browsing = false;
-	}
+  browsing = true;
+  try {
+    items = (await listRemoteBackupsApi(id, path)).items || [];
+  } catch (error) {
+    console.warn("Failed to browse remote backups:", error);
+    items = [];
+  } finally {
+    browsing = false;
+  }
 }
 
 $effect(() => {
-	const id = destinationId;
-	currentPath = "";
-	void load(id, "");
+  const id = destinationId;
+  currentPath = "";
+  void load(id, "");
 });
 
 function openDirectory(path: string) {
-	currentPath = path;
-	void load(destinationId, path);
+  currentPath = path;
+  void load(destinationId, path);
 }
 
 function openParentDirectory() {
-	const parts = currentPath.replace(/\/+$/, "").split("/").filter(Boolean);
-	parts.pop();
-	openDirectory(parts.join("/"));
+  const parts = currentPath.replace(/\/+$/, "").split("/").filter(Boolean);
+  parts.pop();
+  openDirectory(parts.join("/"));
 }
 
 async function download(path: string, fileName: string) {
-	downloading = path;
-	try {
-		const blob = await downloadRemoteBackupApi(destinationId, path);
-		const url = URL.createObjectURL(blob);
-		const anchor = document.createElement("a");
-		anchor.href = url;
-		anchor.download = fileName;
-		document.body.appendChild(anchor);
-		anchor.click();
-		URL.revokeObjectURL(url);
-		anchor.remove();
-	} catch (error) {
-		onError(
-			`下载备份文件失败：${error instanceof Error ? error.message : String(error)}`,
-		);
-	} finally {
-		downloading = null;
-	}
+  downloading = path;
+  try {
+    const blob = await downloadRemoteBackupApi(destinationId, path);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    URL.revokeObjectURL(url);
+    anchor.remove();
+  } catch (error) {
+    onError(
+      `下载备份文件失败：${error instanceof Error ? error.message : String(error)}`,
+    );
+  } finally {
+    downloading = null;
+  }
 }
 
 async function remove(path: string) {
-	deletePath = path;
+  deletePath = path;
 }
 
 async function confirmRemove() {
-	if (!deletePath) return;
-	const path = deletePath;
-	deletePath = null;
-	deleting = path;
-	try {
-		await deleteRemoteBackupApi(destinationId, path);
-		await load();
-		onSuccess("文件删除成功！");
-	} catch (error) {
-		onError(
-			`删除远程备份文件失败：${error instanceof Error ? error.message : String(error)}`,
-		);
-	} finally {
-		deleting = null;
-	}
+  if (!deletePath) return;
+  const path = deletePath;
+  deletePath = null;
+  deleting = path;
+  try {
+    await deleteRemoteBackupApi(destinationId, path);
+    await load();
+    onSuccess("文件删除成功！");
+  } catch (error) {
+    onError(
+      `删除远程备份文件失败：${error instanceof Error ? error.message : String(error)}`,
+    );
+  } finally {
+    deleting = null;
+  }
 }
 
 async function inspect(path: string) {
-	inspecting = path;
-	try {
-		const integrity =
-			(await inspectRemoteBackupApi(destinationId, path)).integrity ?? {};
-		if (integrity.valid === true) {
-			onSuccess("备份文件校验和与归档结构验证通过。");
-		} else {
-			onError(integrity.reason || "备份文件校验和与文件名不匹配。");
-		}
-	} catch (error) {
-		onError(error instanceof Error ? error.message : "检查备份完整性失败。");
-	} finally {
-		inspecting = null;
-	}
+  inspecting = path;
+  try {
+    const integrity =
+      (await inspectRemoteBackupApi(destinationId, path)).integrity ?? {};
+    if (integrity.valid === true) {
+      onSuccess("备份文件校验和与归档结构验证通过。");
+    } else {
+      onError(integrity.reason || "备份文件校验和与文件名不匹配。");
+    }
+  } catch (error) {
+    onError(error instanceof Error ? error.message : "检查备份完整性失败。");
+  } finally {
+    inspecting = null;
+  }
 }
 
 async function restore(path: string) {
-	restorePath = path;
-	restoreConfirmation = "";
+  restorePath = path;
+  restoreConfirmation = "";
 }
 
 async function confirmRestore() {
-	if (!restorePath || restoreConfirmation !== "REVERT") return;
-	const path = restorePath;
-	restorePath = null;
-	restoring = true;
-	try {
-		await restoreRemoteBackupApi(
-			destinationId,
-			path,
-			true,
-			allowChecksumMismatch,
-		);
-		onSuccess("恢复成功，主数据库已替换，请重新登录账户。");
-		await goto("/login");
-	} catch (error) {
-		onError(error instanceof Error ? error.message : "从远程备份恢复失败。");
-	} finally {
-		restoring = false;
-	}
+  if (!restorePath || restoreConfirmation !== "REVERT") return;
+  const path = restorePath;
+  restorePath = null;
+  restoring = true;
+  try {
+    await restoreRemoteBackupApi(
+      destinationId,
+      path,
+      true,
+      allowChecksumMismatch,
+    );
+    onSuccess("恢复成功，主数据库已替换，请重新登录账户。");
+    await goto("/login");
+  } catch (error) {
+    onError(error instanceof Error ? error.message : "从远程备份恢复失败。");
+  } finally {
+    restoring = false;
+  }
 }
 </script>
 

@@ -12,49 +12,49 @@ import { vault } from "$lib/stores/vault.svelte";
 import { ArrowLeft, Check, Copy, KeyRound } from "@lucide/svelte";
 
 let codes = $state<
-	Record<string, { code: string; remain: number; period: number } | null>
+  Record<string, { code: string; remain: number; period: number } | null>
 >({});
 let copiedId = $state<string | null>(null);
 let timer: ReturnType<typeof setInterval> | null = null;
 let items = $derived(
-	vault.ciphers
-		.filter(
-			(cipher) =>
-				!cipher.deletedDate && cipher.type === 1 && cipher.login?.totp,
-		)
-		.sort((a, b) => a.name.localeCompare(b.name)),
+  vault.ciphers
+    .filter(
+      (cipher) =>
+        !cipher.deletedDate && cipher.type === 1 && cipher.login?.totp,
+    )
+    .sort((a, b) => a.name.localeCompare(b.name)),
 );
 
 async function refreshCodes() {
-	const entries = await Promise.all(
-		items.map(async (cipher) => {
-			try {
-				return [
-					cipher.id,
-					await calcTotpNow(String(cipher.login?.totp ?? "")),
-				] as const;
-			} catch {
-				return [cipher.id, null] as const;
-			}
-		}),
-	);
-	codes = Object.fromEntries(entries);
+  const entries = await Promise.all(
+    items.map(async (cipher) => {
+      try {
+        return [
+          cipher.id,
+          await calcTotpNow(String(cipher.login?.totp ?? "")),
+        ] as const;
+      } catch {
+        return [cipher.id, null] as const;
+      }
+    }),
+  );
+  codes = Object.fromEntries(entries);
 }
 
 async function copyCode(id: string, value: string) {
-	await navigator.clipboard.writeText(value);
-	copiedId = id;
-	setTimeout(() => {
-		if (copiedId === id) copiedId = null;
-	}, 1500);
+  await navigator.clipboard.writeText(value);
+  copiedId = id;
+  setTimeout(() => {
+    if (copiedId === id) copiedId = null;
+  }, 1500);
 }
 
 onMount(() => {
-	void refreshCodes();
-	timer = setInterval(() => void refreshCodes(), 1000);
-	return () => {
-		if (timer) clearInterval(timer);
-	};
+  void refreshCodes();
+  timer = setInterval(() => void refreshCodes(), 1000);
+  return () => {
+    if (timer) clearInterval(timer);
+  };
 });
 </script>
 

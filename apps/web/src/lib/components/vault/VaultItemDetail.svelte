@@ -1,20 +1,20 @@
 <script lang="ts">
 import { CipherType } from "@edgewarden/shared";
 import {
-	Archive,
-	ArchiveRestore,
-	Check,
-	Copy,
-	Download,
-	Edit,
-	Eye,
-	EyeOff,
-	Folder,
-	Paperclip,
-	RotateCcw,
-	Star,
-	Trash2,
-	Upload,
+  Archive,
+  ArchiveRestore,
+  Check,
+  Copy,
+  Download,
+  Edit,
+  Eye,
+  EyeOff,
+  Folder,
+  Paperclip,
+  RotateCcw,
+  Star,
+  Trash2,
+  Upload,
 } from "@lucide/svelte";
 import { Button } from "$lib/components/ui/button/index.js";
 import { Checkbox } from "$lib/components/ui/checkbox/index.js";
@@ -23,44 +23,44 @@ import LoginCipherDetail from "./LoginCipherDetail.svelte";
 import CardCipherDetail from "./CardCipherDetail.svelte";
 import IdentityCipherDetail from "./IdentityCipherDetail.svelte";
 import {
-	cipherDomain as getDomain,
-	cipherExtraData as getExtraData,
-	cipherTypeIcon as getItemIcon,
-	cipherTypeName as getTypeName,
+  cipherDomain as getDomain,
+  cipherExtraData as getExtraData,
+  cipherTypeIcon as getItemIcon,
+  cipherTypeName as getTypeName,
 } from "$lib/services/vault-item-display";
 import type {
-	VaultAttachment,
-	VaultCipher,
-	VaultFolder,
-	VaultTotp,
+  VaultAttachment,
+  VaultCipher,
+  VaultFolder,
+  VaultTotp,
 } from "$lib/services/vault-types";
 
 let {
-	item,
-	folders,
-	totp,
-	attachmentBusy,
-	onFavorite,
-	onArchive,
-	onRestore,
-	onEdit,
-	onDelete,
-	onAttachmentUpload,
-	onAttachmentDownload,
-	onAttachmentDelete,
+  item,
+  folders,
+  totp,
+  attachmentBusy,
+  onFavorite,
+  onArchive,
+  onRestore,
+  onEdit,
+  onDelete,
+  onAttachmentUpload,
+  onAttachmentDownload,
+  onAttachmentDelete,
 }: {
-	item: VaultCipher;
-	folders: VaultFolder[];
-	totp: VaultTotp | null;
-	attachmentBusy: string | null;
-	onFavorite: () => void;
-	onArchive: () => void;
-	onRestore: () => void;
-	onEdit: () => void;
-	onDelete: () => void;
-	onAttachmentUpload: (event: Event) => void;
-	onAttachmentDownload: (attachment: VaultAttachment) => void;
-	onAttachmentDelete: (attachment: VaultAttachment) => void;
+  item: VaultCipher;
+  folders: VaultFolder[];
+  totp: VaultTotp | null;
+  attachmentBusy: string | null;
+  onFavorite: () => void;
+  onArchive: () => void;
+  onRestore: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onAttachmentUpload: (event: Event) => void;
+  onAttachmentDownload: (attachment: VaultAttachment) => void;
+  onAttachmentDelete: (attachment: VaultAttachment) => void;
 } = $props();
 
 let copiedField = $state<string | null>(null);
@@ -69,16 +69,16 @@ let attachmentInput = $state<HTMLInputElement | null>(null);
 let IconComp = $derived(getItemIcon(item.type));
 
 $effect(() => {
-	item.id;
-	hiddenFieldsMap = {};
+  item.id;
+  hiddenFieldsMap = {};
 });
 
 function copyToClipboard(text: string, fieldName: string) {
-	navigator.clipboard.writeText(text);
-	copiedField = fieldName;
-	setTimeout(() => {
-		if (copiedField === fieldName) copiedField = null;
-	}, 2000);
+  navigator.clipboard.writeText(text);
+  copiedField = fieldName;
+  setTimeout(() => {
+    if (copiedField === fieldName) copiedField = null;
+  }, 2000);
 }
 </script>
 

@@ -1,10 +1,10 @@
 <script lang="ts">
 import {
-	ArrowLeft,
-	ChevronLeft,
-	ChevronRight,
-	RefreshCw,
-	ShieldAlert,
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  ShieldAlert,
 } from "@lucide/svelte";
 import { onMount } from "svelte";
 import { goto } from "$app/navigation";
@@ -16,9 +16,9 @@ import { Input } from "$lib/components/ui/input/index.js";
 import * as Select from "$lib/components/ui/select/index.js";
 import * as Table from "$lib/components/ui/table/index.js";
 import {
-	fetchAuditLogSettingsApi,
-	listAuditLogsApi,
-	updateAuditLogSettingsApi,
+  fetchAuditLogSettingsApi,
+  listAuditLogsApi,
+  updateAuditLogSettingsApi,
 } from "$lib/services/api-admin";
 import { vault } from "$lib/stores/vault.svelte";
 import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
@@ -38,56 +38,56 @@ let maxEntries = $state(10000);
 const limit = 50;
 
 async function load(reset = false) {
-	if (reset) offset = 0;
-	busy = true;
-	error = null;
-	try {
-		const result = await listAuditLogsApi({
-			limit,
-			offset,
-			category: category === "all" ? undefined : category,
-			level: level === "all" ? undefined : level,
-			q: query.trim(),
-		});
-		logs = result.data;
-		total = result.total;
-	} catch (reason) {
-		error = reason instanceof Error ? reason.message : String(reason);
-	} finally {
-		busy = false;
-	}
+  if (reset) offset = 0;
+  busy = true;
+  error = null;
+  try {
+    const result = await listAuditLogsApi({
+      limit,
+      offset,
+      category: category === "all" ? undefined : category,
+      level: level === "all" ? undefined : level,
+      q: query.trim(),
+    });
+    logs = result.data;
+    total = result.total;
+  } catch (reason) {
+    error = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    busy = false;
+  }
 }
 
 async function loadSettings() {
-	const settings = await fetchAuditLogSettingsApi();
-	retentionMode = settings.maxEntries ? "entries" : "days";
-	retentionDays = String(settings.retentionDays ?? 0);
-	maxEntries = settings.maxEntries ?? 10000;
+  const settings = await fetchAuditLogSettingsApi();
+  retentionMode = settings.maxEntries ? "entries" : "days";
+  retentionDays = String(settings.retentionDays ?? 0);
+  maxEntries = settings.maxEntries ?? 10000;
 }
 
 async function saveSettings() {
-	busy = true;
-	error = null;
-	try {
-		await updateAuditLogSettingsApi(
-			retentionMode === "days"
-				? {
-						retentionDays:
-							(Number(retentionDays) as 7 | 30 | 90 | 180 | 365) || null,
-						maxEntries: null,
-					}
-				: { retentionDays: null, maxEntries },
-		);
-	} catch (reason) {
-		error = reason instanceof Error ? reason.message : String(reason);
-	} finally {
-		busy = false;
-	}
+  busy = true;
+  error = null;
+  try {
+    await updateAuditLogSettingsApi(
+      retentionMode === "days"
+        ? {
+            retentionDays:
+              (Number(retentionDays) as 7 | 30 | 90 | 180 | 365) || null,
+            maxEntries: null,
+          }
+        : { retentionDays: null, maxEntries },
+    );
+  } catch (reason) {
+    error = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    busy = false;
+  }
 }
 
 onMount(() => {
-	if (vault.profile?.role !== "admin") void goto("/vault");
-	else void Promise.all([load(), loadSettings()]);
+  if (vault.profile?.role !== "admin") void goto("/vault");
+  else void Promise.all([load(), loadSettings()]);
 });
 </script>
 

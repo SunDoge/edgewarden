@@ -4,10 +4,10 @@ import CheckIcon from "@lucide/svelte/icons/check";
 import { cn, type WithoutChild } from "$lib/utils.js";
 
 let {
-	ref = $bindable(null),
-	class: className,
-	children: childrenProp,
-	...restProps
+  ref = $bindable(null),
+  class: className,
+  children: childrenProp,
+  ...restProps
 }: WithoutChild<DropdownMenuPrimitive.RadioItemProps> = $props();
 </script>
 

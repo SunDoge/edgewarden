@@ -4,9 +4,9 @@ import ChevronUpIcon from "@lucide/svelte/icons/chevron-up";
 import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
 
 let {
-	ref = $bindable(null),
-	class: className,
-	...restProps
+  ref = $bindable(null),
+  class: className,
+  ...restProps
 }: WithoutChildrenOrChild<SelectPrimitive.ScrollUpButtonProps> = $props();
 </script>
 

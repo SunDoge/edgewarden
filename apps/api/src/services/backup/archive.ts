@@ -2,16 +2,16 @@ import { EDGEWARDEN_VERSION, parseJsonWithSchema } from "@edgewarden/shared";
 import { unzipSync, Zip, ZipPassThrough } from "fflate";
 import * as v from "valibot";
 import {
-	type BlobStore,
-	getStoredAttachmentObjectKey,
-	getStoredSendFileObjectKey,
+  type BlobStore,
+  getStoredAttachmentObjectKey,
+  getStoredSendFileObjectKey,
 } from "../blob-store";
 import { parseStoredSendFileMetadata } from "../sends/file-metadata";
 import {
-	buildBackupFileNameInTimeZone,
-	getBackupArchiveChecksumPrefix,
-	sha256Hex,
-	verifyBackupArchiveFileNameChecksum,
+  buildBackupFileNameInTimeZone,
+  getBackupArchiveChecksumPrefix,
+  sha256Hex,
+  verifyBackupArchiveFileNameChecksum,
 } from "./archive-integrity";
 import { BACKUP_SETTINGS_CONFIG_KEY } from "./config";
 import { MAX_BACKUP_ARCHIVE_BYTES } from "./limits";
@@ -21,9 +21,9 @@ import { readBackupDatabaseSnapshot } from "./snapshot";
 
 export type { BackupFileIntegrityCheckResult } from "./archive-integrity";
 export {
-	extractBackupFileChecksumPrefix,
-	inspectBackupArchiveFileNameChecksum,
-	verifyBackupArchiveFileNameChecksum,
+  extractBackupFileChecksumPrefix,
+  inspectBackupArchiveFileNameChecksum,
+  verifyBackupArchiveFileNameChecksum,
 } from "./archive-integrity";
 
 type SqlRow = Record<string, string | number | null>;
@@ -35,768 +35,768 @@ const MAX_BACKUP_EXTRACTED_BYTES = 64 * 1024 * 1024;
 const MAX_BACKUP_DB_JSON_BYTES = 32 * 1024 * 1024;
 
 export interface BackupManifest {
-	formatVersion: 1 | 2 | 3 | 4;
-	exportedAt: string;
-	appVersion: string;
-	storageKind: "kv" | "r2" | null;
-	tableCounts: Record<string, number>;
-	includes: {
-		attachments: boolean;
-		fileSends?: boolean;
-	};
-	blobSummary: {
-		attachmentFiles: number;
-		sendFiles?: number;
-		totalBytes: number;
-		largestObjectBytes: number;
-	};
-	attachmentBlobs?: BackupManifestAttachmentBlob[];
-	sendBlobs?: BackupManifestSendBlob[];
-	blobHashes?: Record<string, string>;
+  formatVersion: 1 | 2 | 3 | 4;
+  exportedAt: string;
+  appVersion: string;
+  storageKind: "kv" | "r2" | null;
+  tableCounts: Record<string, number>;
+  includes: {
+    attachments: boolean;
+    fileSends?: boolean;
+  };
+  blobSummary: {
+    attachmentFiles: number;
+    sendFiles?: number;
+    totalBytes: number;
+    largestObjectBytes: number;
+  };
+  attachmentBlobs?: BackupManifestAttachmentBlob[];
+  sendBlobs?: BackupManifestSendBlob[];
+  blobHashes?: Record<string, string>;
 }
 
 export interface BackupManifestAttachmentBlob {
-	cipherId: string;
-	attachmentId: string;
-	blobName: string;
-	sizeBytes: number;
+  cipherId: string;
+  attachmentId: string;
+  blobName: string;
+  sizeBytes: number;
 }
 
 export interface BackupManifestSendBlob {
-	sendId: string;
-	fileId: string;
-	blobName: string;
-	sizeBytes: number;
+  sendId: string;
+  fileId: string;
+  blobName: string;
+  sizeBytes: number;
 }
 
 export interface BackupPayload {
-	manifest: BackupManifest;
-	db: {
-		config: SqlRow[];
-		users: SqlRow[];
-		domain_settings: SqlRow[];
-		user_revisions: SqlRow[];
-		organizations?: SqlRow[];
-		org_members?: SqlRow[];
-		collections?: SqlRow[];
-		collection_members?: SqlRow[];
-		folders: SqlRow[];
-		ciphers: SqlRow[];
-		cipher_user_settings?: SqlRow[];
-		cipher_collections?: SqlRow[];
-		attachments: SqlRow[];
-		webauthn_credentials?: SqlRow[];
-		device_trust_tokens?: SqlRow[];
-		audit_logs?: SqlRow[];
-		sends?: SqlRow[];
-	};
+  manifest: BackupManifest;
+  db: {
+    config: SqlRow[];
+    users: SqlRow[];
+    domain_settings: SqlRow[];
+    user_revisions: SqlRow[];
+    organizations?: SqlRow[];
+    org_members?: SqlRow[];
+    collections?: SqlRow[];
+    collection_members?: SqlRow[];
+    folders: SqlRow[];
+    ciphers: SqlRow[];
+    cipher_user_settings?: SqlRow[];
+    cipher_collections?: SqlRow[];
+    attachments: SqlRow[];
+    webauthn_credentials?: SqlRow[];
+    device_trust_tokens?: SqlRow[];
+    audit_logs?: SqlRow[];
+    sends?: SqlRow[];
+  };
 }
 
 const BackupBlobSchema = v.object({
-	blobName: v.string(),
-	sizeBytes: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  blobName: v.string(),
+  sizeBytes: v.pipe(v.number(), v.integer(), v.minValue(0)),
 });
 const BackupManifestSchema = v.object({
-	formatVersion: v.picklist([1, 2, 3, 4]),
-	exportedAt: v.string(),
-	appVersion: v.string(),
-	storageKind: v.nullable(v.picklist(["kv", "r2"])),
-	tableCounts: v.record(v.string(), v.number()),
-	includes: v.object({
-		attachments: v.boolean(),
-		fileSends: v.optional(v.boolean()),
-	}),
-	blobSummary: v.object({
-		attachmentFiles: v.pipe(v.number(), v.integer(), v.minValue(0)),
-		sendFiles: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
-		totalBytes: v.pipe(v.number(), v.integer(), v.minValue(0)),
-		largestObjectBytes: v.pipe(v.number(), v.integer(), v.minValue(0)),
-	}),
-	attachmentBlobs: v.optional(
-		v.array(
-			v.object({
-				...BackupBlobSchema.entries,
-				cipherId: v.string(),
-				attachmentId: v.string(),
-			}),
-		),
-	),
-	sendBlobs: v.optional(
-		v.array(
-			v.object({
-				...BackupBlobSchema.entries,
-				sendId: v.string(),
-				fileId: v.string(),
-			}),
-		),
-	),
-	blobHashes: v.optional(v.record(v.string(), v.string())),
+  formatVersion: v.picklist([1, 2, 3, 4]),
+  exportedAt: v.string(),
+  appVersion: v.string(),
+  storageKind: v.nullable(v.picklist(["kv", "r2"])),
+  tableCounts: v.record(v.string(), v.number()),
+  includes: v.object({
+    attachments: v.boolean(),
+    fileSends: v.optional(v.boolean()),
+  }),
+  blobSummary: v.object({
+    attachmentFiles: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    sendFiles: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
+    totalBytes: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    largestObjectBytes: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  }),
+  attachmentBlobs: v.optional(
+    v.array(
+      v.object({
+        ...BackupBlobSchema.entries,
+        cipherId: v.string(),
+        attachmentId: v.string(),
+      }),
+    ),
+  ),
+  sendBlobs: v.optional(
+    v.array(
+      v.object({
+        ...BackupBlobSchema.entries,
+        sendId: v.string(),
+        fileId: v.string(),
+      }),
+    ),
+  ),
+  blobHashes: v.optional(v.record(v.string(), v.string())),
 });
 const BackupDatabaseSchema = v.custom<BackupPayload["db"]>((input) => {
-	if (!input || typeof input !== "object" || Array.isArray(input)) return false;
-	return Object.values(input).every(
-		(rows) =>
-			Array.isArray(rows) &&
-			rows.every(
-				(row) => !!row && typeof row === "object" && !Array.isArray(row),
-			),
-	);
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  return Object.values(input).every(
+    (rows) =>
+      Array.isArray(rows) &&
+      rows.every(
+        (row) => !!row && typeof row === "object" && !Array.isArray(row),
+      ),
+  );
 }, "Backup database must contain arrays of SQL rows");
 
 const BACKUP_DB_TABLES = [
-	"config",
-	"users",
-	"domain_settings",
-	"user_revisions",
-	"organizations",
-	"org_members",
-	"collections",
-	"collection_members",
-	"folders",
-	"ciphers",
-	"cipher_user_settings",
-	"cipher_collections",
-	"attachments",
-	"webauthn_credentials",
-	"device_trust_tokens",
-	"audit_logs",
-	"sends",
+  "config",
+  "users",
+  "domain_settings",
+  "user_revisions",
+  "organizations",
+  "org_members",
+  "collections",
+  "collection_members",
+  "folders",
+  "ciphers",
+  "cipher_user_settings",
+  "cipher_collections",
+  "attachments",
+  "webauthn_credentials",
+  "device_trust_tokens",
+  "audit_logs",
+  "sends",
 ] as const satisfies readonly (keyof BackupPayload["db"])[];
 
 function validateBackupDatabasePayload(
-	manifest: BackupManifest,
-	db: BackupPayload["db"],
+  manifest: BackupManifest,
+  db: BackupPayload["db"],
 ): void {
-	if (!db || typeof db !== "object" || Array.isArray(db)) {
-		throw new Error("Backup archive database payload is invalid");
-	}
-	if (
-		!manifest.tableCounts ||
-		typeof manifest.tableCounts !== "object" ||
-		Array.isArray(manifest.tableCounts)
-	) {
-		throw new Error("Backup archive table counts are invalid");
-	}
-	for (const table of BACKUP_DB_TABLES) {
-		const rows = db[table];
-		const declared = manifest.tableCounts[table];
-		if (rows === undefined && declared === undefined) continue;
-		if (!Array.isArray(rows)) {
-			throw new Error(`Backup archive table is not an array: ${table}`);
-		}
-		if (
-			rows.some((row) => !row || typeof row !== "object" || Array.isArray(row))
-		) {
-			throw new Error(`Backup archive contains an invalid row in: ${table}`);
-		}
-		if (!Number.isSafeInteger(declared) || Number(declared) < 0) {
-			throw new Error(`Backup archive table count is invalid: ${table}`);
-		}
-		if (rows.length !== declared) {
-			throw new Error(
-				`Backup archive table count mismatch for ${table}: expected ${declared}, received ${rows.length}`,
-			);
-		}
-	}
+  if (!db || typeof db !== "object" || Array.isArray(db)) {
+    throw new Error("Backup archive database payload is invalid");
+  }
+  if (
+    !manifest.tableCounts ||
+    typeof manifest.tableCounts !== "object" ||
+    Array.isArray(manifest.tableCounts)
+  ) {
+    throw new Error("Backup archive table counts are invalid");
+  }
+  for (const table of BACKUP_DB_TABLES) {
+    const rows = db[table];
+    const declared = manifest.tableCounts[table];
+    if (rows === undefined && declared === undefined) continue;
+    if (!Array.isArray(rows)) {
+      throw new Error(`Backup archive table is not an array: ${table}`);
+    }
+    if (
+      rows.some((row) => !row || typeof row !== "object" || Array.isArray(row))
+    ) {
+      throw new Error(`Backup archive contains an invalid row in: ${table}`);
+    }
+    if (!Number.isSafeInteger(declared) || Number(declared) < 0) {
+      throw new Error(`Backup archive table count is invalid: ${table}`);
+    }
+    if (rows.length !== declared) {
+      throw new Error(
+        `Backup archive table count mismatch for ${table}: expected ${declared}, received ${rows.length}`,
+      );
+    }
+  }
 }
 
 function sanitizeUserRowsForExport(rows: SqlRow[]): SqlRow[] {
-	return rows.map(
-		({
-			api_key_hash: _apiKeyHash,
-			api_key_encrypted: _apiKeyEncrypted,
-			...row
-		}) => row,
-	);
+  return rows.map(
+    ({
+      api_key_hash: _apiKeyHash,
+      api_key_encrypted: _apiKeyEncrypted,
+      ...row
+    }) => row,
+  );
 }
 
 export interface BackupArchiveBundle {
-	bytes: Uint8Array;
-	fileName: string;
-	manifest: BackupManifest;
+  bytes: Uint8Array;
+  fileName: string;
+  manifest: BackupManifest;
 }
 
 export interface BuildBackupArchiveOptions {
-	includeAttachments?: boolean;
-	blobStore?: BlobStore | null;
-	/** Store attachment blobs beside the archive instead of retaining them in memory and ZIP output. */
-	externalizeAttachment?: (
-		blobName: string,
-		bytes: Uint8Array,
-	) => Promise<void>;
-	progress?: BackupArchiveBuildProgressReporter;
-	checkpoint?: () => Promise<void>;
-	timeZone?: string;
+  includeAttachments?: boolean;
+  blobStore?: BlobStore | null;
+  /** Store attachment blobs beside the archive instead of retaining them in memory and ZIP output. */
+  externalizeAttachment?: (
+    blobName: string,
+    bytes: Uint8Array,
+  ) => Promise<void>;
+  progress?: BackupArchiveBuildProgressReporter;
+  checkpoint?: () => Promise<void>;
+  timeZone?: string;
 }
 
 export interface BackupArchiveBuildProgressEvent {
-	step: string;
-	fileName?: string;
-	stageTitle: string;
-	stageDetail: string;
-	includeAttachments: boolean;
+  step: string;
+  fileName?: string;
+  stageTitle: string;
+  stageDetail: string;
+  includeAttachments: boolean;
 }
 
 export type BackupArchiveBuildProgressReporter = (
-	event: BackupArchiveBuildProgressEvent,
+  event: BackupArchiveBuildProgressEvent,
 ) => Promise<void>;
 
 function sanitizeConfigRowsForExport(rows: SqlRow[]): SqlRow[] {
-	const sanitized: SqlRow[] = [];
-	for (const row of rows) {
-		const key = String(row.key || "").trim();
-		if (!key || key === DATA_OPERATION_LEASE_CONFIG_KEY) continue;
+  const sanitized: SqlRow[] = [];
+  for (const row of rows) {
+    const key = String(row.key || "").trim();
+    if (!key || key === DATA_OPERATION_LEASE_CONFIG_KEY) continue;
 
-		if (key === BACKUP_SETTINGS_CONFIG_KEY) {
-			const portableOnly = exportPortableBackupSettingsEnvelope(
-				typeof row.value === "string" ? row.value : null,
-			);
-			if (portableOnly) sanitized.push({ ...row, value: portableOnly });
-			continue;
-		}
+    if (key === BACKUP_SETTINGS_CONFIG_KEY) {
+      const portableOnly = exportPortableBackupSettingsEnvelope(
+        typeof row.value === "string" ? row.value : null,
+      );
+      if (portableOnly) sanitized.push({ ...row, value: portableOnly });
+      continue;
+    }
 
-		sanitized.push({ ...row });
-	}
-	return sanitized;
+    sanitized.push({ ...row });
+  }
+  return sanitized;
 }
 
 function validateArchiveSize(bytes: Uint8Array): void {
-	if (bytes.byteLength > MAX_BACKUP_ARCHIVE_BYTES) {
-		throw new Error(
-			`Backup archive is too large. The current restore limit is ${Math.floor(MAX_BACKUP_ARCHIVE_BYTES / (1024 * 1024))} MiB`,
-		);
-	}
+  if (bytes.byteLength > MAX_BACKUP_ARCHIVE_BYTES) {
+    throw new Error(
+      `Backup archive is too large. The current restore limit is ${Math.floor(MAX_BACKUP_ARCHIVE_BYTES / (1024 * 1024))} MiB`,
+    );
+  }
 }
 
 function getRequiredZipEntries(
-	db: BackupPayload["db"],
-	formatVersion: 1 | 2 | 3 | 4,
+  db: BackupPayload["db"],
+  formatVersion: 1 | 2 | 3 | 4,
 ): string[] {
-	const entries: string[] = [];
-	for (const row of db.attachments) {
-		const cipherId = String(row.cipher_id || "").trim();
-		const attachmentId = String(row.id || "").trim();
-		if (!cipherId || !attachmentId) continue;
-		entries.push(`attachments/${cipherId}/${attachmentId}.bin`);
-	}
-	if (formatVersion >= 2) {
-		for (const row of db.sends || []) {
-			if (Number(row.type) !== 1) continue;
-			const sendId = String(row.id || "").trim();
-			const file = parseStoredSendFileMetadata(row.data);
-			if (!sendId || !file) {
-				throw new Error("Backup archive contains invalid file Send metadata");
-			}
-			entries.push(`sends/${sendId}/${file.fileId}`);
-		}
-	}
-	return entries;
+  const entries: string[] = [];
+  for (const row of db.attachments) {
+    const cipherId = String(row.cipher_id || "").trim();
+    const attachmentId = String(row.id || "").trim();
+    if (!cipherId || !attachmentId) continue;
+    entries.push(`attachments/${cipherId}/${attachmentId}.bin`);
+  }
+  if (formatVersion >= 2) {
+    for (const row of db.sends || []) {
+      if (Number(row.type) !== 1) continue;
+      const sendId = String(row.id || "").trim();
+      const file = parseStoredSendFileMetadata(row.data);
+      if (!sendId || !file) {
+        throw new Error("Backup archive contains invalid file Send metadata");
+      }
+      entries.push(`sends/${sendId}/${file.fileId}`);
+    }
+  }
+  return entries;
 }
 
 function getStrictBlobEntries(db: BackupPayload["db"]): Array<{
-	path: string;
-	sizeBytes: number;
+  path: string;
+  sizeBytes: number;
 }> {
-	const entries: Array<{ path: string; sizeBytes: number }> = [];
-	for (const row of db.attachments) {
-		const cipherId = String(row.cipher_id || "").trim();
-		const attachmentId = String(row.id || "").trim();
-		const sizeBytes = Number(row.size);
-		if (
-			!cipherId ||
-			!attachmentId ||
-			!Number.isSafeInteger(sizeBytes) ||
-			sizeBytes < 0
-		) {
-			throw new Error(
-				"Backup archive contains invalid attachment blob metadata",
-			);
-		}
-		entries.push({
-			path: `attachments/${cipherId}/${attachmentId}.bin`,
-			sizeBytes,
-		});
-	}
-	for (const row of db.sends || []) {
-		if (Number(row.type) !== 1) continue;
-		const sendId = String(row.id || "").trim();
-		const file = parseStoredSendFileMetadata(row.data);
-		if (!sendId || !file) {
-			throw new Error("Backup archive contains invalid file Send metadata");
-		}
-		entries.push({
-			path: `sends/${sendId}/${file.fileId}`,
-			sizeBytes: file.sizeBytes,
-		});
-	}
-	return entries;
+  const entries: Array<{ path: string; sizeBytes: number }> = [];
+  for (const row of db.attachments) {
+    const cipherId = String(row.cipher_id || "").trim();
+    const attachmentId = String(row.id || "").trim();
+    const sizeBytes = Number(row.size);
+    if (
+      !cipherId ||
+      !attachmentId ||
+      !Number.isSafeInteger(sizeBytes) ||
+      sizeBytes < 0
+    ) {
+      throw new Error(
+        "Backup archive contains invalid attachment blob metadata",
+      );
+    }
+    entries.push({
+      path: `attachments/${cipherId}/${attachmentId}.bin`,
+      sizeBytes,
+    });
+  }
+  for (const row of db.sends || []) {
+    if (Number(row.type) !== 1) continue;
+    const sendId = String(row.id || "").trim();
+    const file = parseStoredSendFileMetadata(row.data);
+    if (!sendId || !file) {
+      throw new Error("Backup archive contains invalid file Send metadata");
+    }
+    entries.push({
+      path: `sends/${sendId}/${file.fileId}`,
+      sizeBytes: file.sizeBytes,
+    });
+  }
+  return entries;
 }
 
 class IncrementalZipBuilder {
-	readonly #chunks: Uint8Array[] = [];
-	readonly #zip: Zip;
-	#error: Error | null = null;
+  readonly #chunks: Uint8Array[] = [];
+  readonly #zip: Zip;
+  #error: Error | null = null;
 
-	constructor() {
-		this.#zip = new Zip((error, chunk) => {
-			if (error) {
-				this.#error = error;
-				return;
-			}
-			this.#chunks.push(chunk);
-		});
-	}
+  constructor() {
+    this.#zip = new Zip((error, chunk) => {
+      if (error) {
+        this.#error = error;
+        return;
+      }
+      this.#chunks.push(chunk);
+    });
+  }
 
-	add(path: string, bytes: Uint8Array): void {
-		if (this.#error) throw this.#error;
-		const entry = new ZipPassThrough(path);
-		this.#zip.add(entry);
-		entry.push(bytes, true);
-		if (this.#error) throw this.#error;
-	}
+  add(path: string, bytes: Uint8Array): void {
+    if (this.#error) throw this.#error;
+    const entry = new ZipPassThrough(path);
+    this.#zip.add(entry);
+    entry.push(bytes, true);
+    if (this.#error) throw this.#error;
+  }
 
-	finish(): Uint8Array {
-		this.#zip.end();
-		if (this.#error) throw this.#error;
-		const byteLength = this.#chunks.reduce(
-			(total, chunk) => total + chunk.byteLength,
-			0,
-		);
-		const output = new Uint8Array(byteLength);
-		let offset = 0;
-		for (const chunk of this.#chunks) {
-			output.set(chunk, offset);
-			offset += chunk.byteLength;
-		}
-		return output;
-	}
+  finish(): Uint8Array {
+    this.#zip.end();
+    if (this.#error) throw this.#error;
+    const byteLength = this.#chunks.reduce(
+      (total, chunk) => total + chunk.byteLength,
+      0,
+    );
+    const output = new Uint8Array(byteLength);
+    let offset = 0;
+    for (const chunk of this.#chunks) {
+      output.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return output;
+  }
 }
 
 export interface ParseBackupArchiveOptions {
-	allowExternalAttachmentBlobs?: boolean;
+  allowExternalAttachmentBlobs?: boolean;
 }
 
 export function parseBackupArchive(
-	bytes: Uint8Array,
-	options: ParseBackupArchiveOptions = {},
+  bytes: Uint8Array,
+  options: ParseBackupArchiveOptions = {},
 ): { payload: BackupPayload; files: Record<string, Uint8Array> } {
-	validateArchiveSize(bytes);
-	let zipped: Record<string, Uint8Array>;
-	try {
-		zipped = unzipSync(bytes);
-	} catch {
-		throw new Error("Invalid backup archive");
-	}
+  validateArchiveSize(bytes);
+  let zipped: Record<string, Uint8Array>;
+  try {
+    zipped = unzipSync(bytes);
+  } catch {
+    throw new Error("Invalid backup archive");
+  }
 
-	const entryNames = Object.keys(zipped);
-	if (entryNames.length > MAX_BACKUP_ARCHIVE_ENTRY_COUNT) {
-		throw new Error("Backup archive contains too many files");
-	}
+  const entryNames = Object.keys(zipped);
+  if (entryNames.length > MAX_BACKUP_ARCHIVE_ENTRY_COUNT) {
+    throw new Error("Backup archive contains too many files");
+  }
 
-	let totalExtractedBytes = 0;
-	for (const entry of entryNames) {
-		const entryBytes = zipped[entry];
-		totalExtractedBytes += entryBytes.byteLength;
-		if (
-			entry === "db.json" &&
-			entryBytes.byteLength > MAX_BACKUP_DB_JSON_BYTES
-		) {
-			throw new Error("Backup archive database payload is too large");
-		}
-		if (totalExtractedBytes > MAX_BACKUP_EXTRACTED_BYTES) {
-			throw new Error(
-				"Backup archive expands beyond the current restore limit",
-			);
-		}
-	}
+  let totalExtractedBytes = 0;
+  for (const entry of entryNames) {
+    const entryBytes = zipped[entry];
+    totalExtractedBytes += entryBytes.byteLength;
+    if (
+      entry === "db.json" &&
+      entryBytes.byteLength > MAX_BACKUP_DB_JSON_BYTES
+    ) {
+      throw new Error("Backup archive database payload is too large");
+    }
+    if (totalExtractedBytes > MAX_BACKUP_EXTRACTED_BYTES) {
+      throw new Error(
+        "Backup archive expands beyond the current restore limit",
+      );
+    }
+  }
 
-	const manifestBytes = zipped["manifest.json"];
-	const dbBytes = zipped["db.json"];
-	if (!manifestBytes || !dbBytes) {
-		throw new Error("Backup archive is missing manifest.json or db.json");
-	}
+  const manifestBytes = zipped["manifest.json"];
+  const dbBytes = zipped["db.json"];
+  if (!manifestBytes || !dbBytes) {
+    throw new Error("Backup archive is missing manifest.json or db.json");
+  }
 
-	const decoder = new TextDecoder();
-	let manifest: BackupManifest;
-	let db: BackupPayload["db"];
-	try {
-		manifest = parseJsonWithSchema(
-			decoder.decode(manifestBytes),
-			BackupManifestSchema,
-		);
-		db = parseJsonWithSchema(decoder.decode(dbBytes), BackupDatabaseSchema);
-	} catch {
-		throw new Error("Backup archive contains invalid JSON metadata");
-	}
+  const decoder = new TextDecoder();
+  let manifest: BackupManifest;
+  let db: BackupPayload["db"];
+  try {
+    manifest = parseJsonWithSchema(
+      decoder.decode(manifestBytes),
+      BackupManifestSchema,
+    );
+    db = parseJsonWithSchema(decoder.decode(dbBytes), BackupDatabaseSchema);
+  } catch {
+    throw new Error("Backup archive contains invalid JSON metadata");
+  }
 
-	if (
-		manifest?.formatVersion !== 1 &&
-		manifest?.formatVersion !== 2 &&
-		manifest?.formatVersion !== 3 &&
-		manifest?.formatVersion !== 4
-	) {
-		throw new Error("Unsupported backup format version");
-	}
-	validateBackupDatabasePayload(manifest, db);
-	if (
-		manifest.formatVersion >= 4 &&
-		(!manifest.blobHashes ||
-			typeof manifest.blobHashes !== "object" ||
-			Array.isArray(manifest.blobHashes))
-	) {
-		throw new Error("Backup archive blob hashes are invalid");
-	}
+  if (
+    manifest?.formatVersion !== 1 &&
+    manifest?.formatVersion !== 2 &&
+    manifest?.formatVersion !== 3 &&
+    manifest?.formatVersion !== 4
+  ) {
+    throw new Error("Unsupported backup format version");
+  }
+  validateBackupDatabasePayload(manifest, db);
+  if (
+    manifest.formatVersion >= 4 &&
+    (!manifest.blobHashes ||
+      typeof manifest.blobHashes !== "object" ||
+      Array.isArray(manifest.blobHashes))
+  ) {
+    throw new Error("Backup archive blob hashes are invalid");
+  }
 
-	const externalAttachmentKeys = new Set<string>(
-		options.allowExternalAttachmentBlobs
-			? (manifest.attachmentBlobs || []).map(
-					(item) =>
-						`attachments/${String(item.cipherId || "").trim()}/${String(item.attachmentId || "").trim()}.bin`,
-				)
-			: [],
-	);
-	const requiredEntries = getRequiredZipEntries(
-		db,
-		manifest.formatVersion,
-	).filter((entry) => !externalAttachmentKeys.has(entry));
-	for (const entry of requiredEntries) {
-		if (!zipped[entry]) {
-			throw new Error(`Backup archive is missing required file: ${entry}`);
-		}
-	}
-	if (manifest.formatVersion >= 4) {
-		for (const { path } of getStrictBlobEntries(db)) {
-			if (!/^[0-9a-f]{64}$/i.test(String(manifest.blobHashes?.[path] || ""))) {
-				throw new Error(`Backup archive blob checksum is invalid: ${path}`);
-			}
-		}
-	}
+  const externalAttachmentKeys = new Set<string>(
+    options.allowExternalAttachmentBlobs
+      ? (manifest.attachmentBlobs || []).map(
+          (item) =>
+            `attachments/${String(item.cipherId || "").trim()}/${String(item.attachmentId || "").trim()}.bin`,
+        )
+      : [],
+  );
+  const requiredEntries = getRequiredZipEntries(
+    db,
+    manifest.formatVersion,
+  ).filter((entry) => !externalAttachmentKeys.has(entry));
+  for (const entry of requiredEntries) {
+    if (!zipped[entry]) {
+      throw new Error(`Backup archive is missing required file: ${entry}`);
+    }
+  }
+  if (manifest.formatVersion >= 4) {
+    for (const { path } of getStrictBlobEntries(db)) {
+      if (!/^[0-9a-f]{64}$/i.test(String(manifest.blobHashes?.[path] || ""))) {
+        throw new Error(`Backup archive blob checksum is invalid: ${path}`);
+      }
+    }
+  }
 
-	return {
-		payload: { manifest, db },
-		files: zipped,
-	};
+  return {
+    payload: { manifest, db },
+    files: zipped,
+  };
 }
 
 export async function buildBackupArchive(
-	db: D1Database,
-	date: Date = new Date(),
-	options: BuildBackupArchiveOptions = {},
+  db: D1Database,
+  date: Date = new Date(),
+  options: BuildBackupArchiveOptions = {},
 ): Promise<BackupArchiveBundle> {
-	const includeAttachments = options.includeAttachments !== false;
-	if (includeAttachments && !options.blobStore) {
-		throw new Error("File storage is not configured");
-	}
-	await options.progress?.({
-		step: "collect_data",
-		fileName: "",
-		stageTitle: "txt_backup_archive_progress_collect_title",
-		stageDetail: includeAttachments
-			? "txt_backup_archive_progress_collect_with_attachments_detail"
-			: "txt_backup_archive_progress_collect_detail",
-		includeAttachments,
-	});
-	const encoder = new TextEncoder();
-	const snapshotTimestamp = Math.floor(date.getTime() / 1000);
+  const includeAttachments = options.includeAttachments !== false;
+  if (includeAttachments && !options.blobStore) {
+    throw new Error("File storage is not configured");
+  }
+  await options.progress?.({
+    step: "collect_data",
+    fileName: "",
+    stageTitle: "txt_backup_archive_progress_collect_title",
+    stageDetail: includeAttachments
+      ? "txt_backup_archive_progress_collect_with_attachments_detail"
+      : "txt_backup_archive_progress_collect_detail",
+    includeAttachments,
+  });
+  const encoder = new TextEncoder();
+  const snapshotTimestamp = Math.floor(date.getTime() / 1000);
 
-	const {
-		configRows,
-		userRows,
-		domainSettingsRows,
-		revisionRows,
-		organizationRows,
-		orgMemberRows,
-		collectionRows,
-		collectionMemberRows,
-		folderRows,
-		cipherRows,
-		cipherUserSettingRows,
-		cipherCollectionRows,
-		attachmentRows,
-		webauthnRows,
-		auditRows,
-		sendsRows,
-	} = await readBackupDatabaseSnapshot(db, snapshotTimestamp);
-	await options.checkpoint?.();
+  const {
+    configRows,
+    userRows,
+    domainSettingsRows,
+    revisionRows,
+    organizationRows,
+    orgMemberRows,
+    collectionRows,
+    collectionMemberRows,
+    folderRows,
+    cipherRows,
+    cipherUserSettingRows,
+    cipherCollectionRows,
+    attachmentRows,
+    webauthnRows,
+    auditRows,
+    sendsRows,
+  } = await readBackupDatabaseSnapshot(db, snapshotTimestamp);
+  await options.checkpoint?.();
 
-	const exportedConfigRows = sanitizeConfigRowsForExport(
-		configRows as unknown as SqlRow[],
-	);
-	const exportedUserRows = sanitizeUserRowsForExport(
-		userRows as unknown as SqlRow[],
-	);
-	const exportedUserIds = new Set(
-		exportedUserRows.map((row) => String(row.id || "").trim()),
-	);
-	const exportedAuditRows = auditRows.map((row) => ({
-		...row,
-		actor_user_id:
-			row.actor_user_id && exportedUserIds.has(String(row.actor_user_id))
-				? String(row.actor_user_id)
-				: null,
-	})) as unknown as SqlRow[];
-	const sourceAttachmentRows = includeAttachments ? attachmentRows : [];
-	const sourceSendRows = sendsRows.filter(
-		(row) => Number(row.type) !== 1 || includeAttachments,
-	);
-	const exportedAttachmentRows = sourceAttachmentRows.map(
-		({ storage_key: _storageKey, deletion_token: _deletionToken, ...row }) =>
-			row as SqlRow,
-	);
-	const attachmentBlobs = sourceAttachmentRows.map((row) => {
-		const cipherId = String(row.cipher_id || "").trim();
-		const attachmentId = String(row.id || "").trim();
-		return {
-			cipherId,
-			attachmentId,
-			blobName: `attachments/${cipherId}/${attachmentId}.bin`,
-			storageKey: getStoredAttachmentObjectKey({
-				id: attachmentId,
-				cipher_id: cipherId,
-				storage_key:
-					typeof row.storage_key === "string" ? row.storage_key : null,
-			}),
-			sizeBytes: Number(row.size || 0) || 0,
-		};
-	});
-	const manifestAttachmentBlobs: BackupManifestAttachmentBlob[] =
-		attachmentBlobs.map(({ storageKey: _storageKey, ...blob }) => blob);
-	const sendBlobs = sourceSendRows.flatMap((row) => {
-		if (Number(row.type) !== 1) return [];
-		const sendId = String(row.id || "").trim();
-		const file = parseStoredSendFileMetadata(row.data);
-		if (!sendId || !file) {
-			throw new Error(
-				`Backup file Send metadata is invalid: ${sendId || "unknown"}`,
-			);
-		}
-		return [
-			{
-				sendId,
-				fileId: file.fileId,
-				blobName: `sends/${sendId}/${file.fileId}`,
-				storageKey: getStoredSendFileObjectKey(
-					{
-						id: sendId,
-						storage_key:
-							typeof row.storage_key === "string" ? row.storage_key : null,
-					},
-					file.fileId,
-				),
-				sizeBytes: file.sizeBytes,
-			},
-		];
-	});
-	const exportedSendRows = sourceSendRows.map(
-		({ storage_key: _storageKey, purge_token: _purgeToken, ...row }) =>
-			row as SqlRow,
-	);
-	const exportedCipherRows = cipherRows.map(
-		({ mutation_token: _mutationToken, purge_token: _purgeToken, ...row }) =>
-			row as SqlRow,
-	);
-	const exportedFolderRows = folderRows.map(
-		({ mutation_token: _mutationToken, ...row }) => row as SqlRow,
-	);
-	const exportedCollectionRows = collectionRows.map(
-		({ mutation_token: _mutationToken, ...row }) => row as SqlRow,
-	);
-	const exportedOrgMemberRows = orgMemberRows.map(
-		({ mutation_token: _mutationToken, ...row }) => row as SqlRow,
-	);
-	const exportedWebauthnRows = webauthnRows.map(
-		({ mutation_token: _mutationToken, ...row }) => row as SqlRow,
-	);
-	const exportedOrganizationRows = organizationRows.map(
-		({ deletion_token: _deletionToken, ...row }) => row as SqlRow,
-	);
-	const manifestSendBlobs: BackupManifestSendBlob[] = sendBlobs.map(
-		({ storageKey: _storageKey, ...blob }) => blob,
-	);
-	const allBlobs = [...attachmentBlobs, ...sendBlobs];
-	const attachmentBlobNames = new Set(
-		attachmentBlobs.map((blob) => blob.blobName),
-	);
+  const exportedConfigRows = sanitizeConfigRowsForExport(
+    configRows as unknown as SqlRow[],
+  );
+  const exportedUserRows = sanitizeUserRowsForExport(
+    userRows as unknown as SqlRow[],
+  );
+  const exportedUserIds = new Set(
+    exportedUserRows.map((row) => String(row.id || "").trim()),
+  );
+  const exportedAuditRows = auditRows.map((row) => ({
+    ...row,
+    actor_user_id:
+      row.actor_user_id && exportedUserIds.has(String(row.actor_user_id))
+        ? String(row.actor_user_id)
+        : null,
+  })) as unknown as SqlRow[];
+  const sourceAttachmentRows = includeAttachments ? attachmentRows : [];
+  const sourceSendRows = sendsRows.filter(
+    (row) => Number(row.type) !== 1 || includeAttachments,
+  );
+  const exportedAttachmentRows = sourceAttachmentRows.map(
+    ({ storage_key: _storageKey, deletion_token: _deletionToken, ...row }) =>
+      row as SqlRow,
+  );
+  const attachmentBlobs = sourceAttachmentRows.map((row) => {
+    const cipherId = String(row.cipher_id || "").trim();
+    const attachmentId = String(row.id || "").trim();
+    return {
+      cipherId,
+      attachmentId,
+      blobName: `attachments/${cipherId}/${attachmentId}.bin`,
+      storageKey: getStoredAttachmentObjectKey({
+        id: attachmentId,
+        cipher_id: cipherId,
+        storage_key:
+          typeof row.storage_key === "string" ? row.storage_key : null,
+      }),
+      sizeBytes: Number(row.size || 0) || 0,
+    };
+  });
+  const manifestAttachmentBlobs: BackupManifestAttachmentBlob[] =
+    attachmentBlobs.map(({ storageKey: _storageKey, ...blob }) => blob);
+  const sendBlobs = sourceSendRows.flatMap((row) => {
+    if (Number(row.type) !== 1) return [];
+    const sendId = String(row.id || "").trim();
+    const file = parseStoredSendFileMetadata(row.data);
+    if (!sendId || !file) {
+      throw new Error(
+        `Backup file Send metadata is invalid: ${sendId || "unknown"}`,
+      );
+    }
+    return [
+      {
+        sendId,
+        fileId: file.fileId,
+        blobName: `sends/${sendId}/${file.fileId}`,
+        storageKey: getStoredSendFileObjectKey(
+          {
+            id: sendId,
+            storage_key:
+              typeof row.storage_key === "string" ? row.storage_key : null,
+          },
+          file.fileId,
+        ),
+        sizeBytes: file.sizeBytes,
+      },
+    ];
+  });
+  const exportedSendRows = sourceSendRows.map(
+    ({ storage_key: _storageKey, purge_token: _purgeToken, ...row }) =>
+      row as SqlRow,
+  );
+  const exportedCipherRows = cipherRows.map(
+    ({ mutation_token: _mutationToken, purge_token: _purgeToken, ...row }) =>
+      row as SqlRow,
+  );
+  const exportedFolderRows = folderRows.map(
+    ({ mutation_token: _mutationToken, ...row }) => row as SqlRow,
+  );
+  const exportedCollectionRows = collectionRows.map(
+    ({ mutation_token: _mutationToken, ...row }) => row as SqlRow,
+  );
+  const exportedOrgMemberRows = orgMemberRows.map(
+    ({ mutation_token: _mutationToken, ...row }) => row as SqlRow,
+  );
+  const exportedWebauthnRows = webauthnRows.map(
+    ({ mutation_token: _mutationToken, ...row }) => row as SqlRow,
+  );
+  const exportedOrganizationRows = organizationRows.map(
+    ({ deletion_token: _deletionToken, ...row }) => row as SqlRow,
+  );
+  const manifestSendBlobs: BackupManifestSendBlob[] = sendBlobs.map(
+    ({ storageKey: _storageKey, ...blob }) => blob,
+  );
+  const allBlobs = [...attachmentBlobs, ...sendBlobs];
+  const attachmentBlobNames = new Set(
+    attachmentBlobs.map((blob) => blob.blobName),
+  );
 
-	const manifestBase = {
-		formatVersion: BACKUP_FORMAT_VERSION,
-		exportedAt: date.toISOString(),
-		appVersion: EDGEWARDEN_VERSION,
-		storageKind: includeAttachments ? (options.blobStore?.kind ?? null) : null,
-		tableCounts: {
-			config: exportedConfigRows.length,
-			users: exportedUserRows.length,
-			domain_settings: domainSettingsRows.length,
-			user_revisions: revisionRows.length,
-			organizations: exportedOrganizationRows.length,
-			org_members: exportedOrgMemberRows.length,
-			collections: exportedCollectionRows.length,
-			collection_members: collectionMemberRows.length,
-			folders: exportedFolderRows.length,
-			ciphers: exportedCipherRows.length,
-			cipher_user_settings: cipherUserSettingRows.length,
-			cipher_collections: cipherCollectionRows.length,
-			attachments: exportedAttachmentRows.length,
-			webauthn_credentials: exportedWebauthnRows.length,
-			device_trust_tokens: 0,
-			audit_logs: exportedAuditRows.length,
-			sends: exportedSendRows.length,
-		},
-		includes: {
-			attachments: includeAttachments,
-			fileSends: includeAttachments,
-		},
-		blobSummary: {
-			attachmentFiles: attachmentBlobs.length,
-			sendFiles: sendBlobs.length,
-			totalBytes: allBlobs.reduce((sum, item) => sum + item.sizeBytes, 0),
-			largestObjectBytes: allBlobs.reduce(
-				(max, item) => Math.max(max, item.sizeBytes),
-				0,
-			),
-		},
-		attachmentBlobs: includeAttachments ? manifestAttachmentBlobs : [],
-		sendBlobs: includeAttachments ? manifestSendBlobs : [],
-		blobHashes: {} as Record<string, string>,
-	} satisfies BackupManifest;
+  const manifestBase = {
+    formatVersion: BACKUP_FORMAT_VERSION,
+    exportedAt: date.toISOString(),
+    appVersion: EDGEWARDEN_VERSION,
+    storageKind: includeAttachments ? (options.blobStore?.kind ?? null) : null,
+    tableCounts: {
+      config: exportedConfigRows.length,
+      users: exportedUserRows.length,
+      domain_settings: domainSettingsRows.length,
+      user_revisions: revisionRows.length,
+      organizations: exportedOrganizationRows.length,
+      org_members: exportedOrgMemberRows.length,
+      collections: exportedCollectionRows.length,
+      collection_members: collectionMemberRows.length,
+      folders: exportedFolderRows.length,
+      ciphers: exportedCipherRows.length,
+      cipher_user_settings: cipherUserSettingRows.length,
+      cipher_collections: cipherCollectionRows.length,
+      attachments: exportedAttachmentRows.length,
+      webauthn_credentials: exportedWebauthnRows.length,
+      device_trust_tokens: 0,
+      audit_logs: exportedAuditRows.length,
+      sends: exportedSendRows.length,
+    },
+    includes: {
+      attachments: includeAttachments,
+      fileSends: includeAttachments,
+    },
+    blobSummary: {
+      attachmentFiles: attachmentBlobs.length,
+      sendFiles: sendBlobs.length,
+      totalBytes: allBlobs.reduce((sum, item) => sum + item.sizeBytes, 0),
+      largestObjectBytes: allBlobs.reduce(
+        (max, item) => Math.max(max, item.sizeBytes),
+        0,
+      ),
+    },
+    attachmentBlobs: includeAttachments ? manifestAttachmentBlobs : [],
+    sendBlobs: includeAttachments ? manifestSendBlobs : [],
+    blobHashes: {} as Record<string, string>,
+  } satisfies BackupManifest;
 
-	const archiveBuilder = new IncrementalZipBuilder();
-	archiveBuilder.add(
-		"db.json",
-		encoder.encode(
-			JSON.stringify(
-				{
-					config: exportedConfigRows,
-					users: exportedUserRows,
-					domain_settings: domainSettingsRows,
-					user_revisions: revisionRows,
-					organizations: exportedOrganizationRows,
-					org_members: exportedOrgMemberRows,
-					collections: exportedCollectionRows,
-					collection_members: collectionMemberRows,
-					folders: exportedFolderRows,
-					ciphers: exportedCipherRows,
-					cipher_user_settings: cipherUserSettingRows,
-					cipher_collections: cipherCollectionRows,
-					attachments: exportedAttachmentRows,
-					webauthn_credentials: exportedWebauthnRows,
-					device_trust_tokens: [],
-					audit_logs: exportedAuditRows,
-					sends: exportedSendRows,
-				},
-				null,
-				BACKUP_JSON_INDENT,
-			),
-		),
-	);
+  const archiveBuilder = new IncrementalZipBuilder();
+  archiveBuilder.add(
+    "db.json",
+    encoder.encode(
+      JSON.stringify(
+        {
+          config: exportedConfigRows,
+          users: exportedUserRows,
+          domain_settings: domainSettingsRows,
+          user_revisions: revisionRows,
+          organizations: exportedOrganizationRows,
+          org_members: exportedOrgMemberRows,
+          collections: exportedCollectionRows,
+          collection_members: collectionMemberRows,
+          folders: exportedFolderRows,
+          ciphers: exportedCipherRows,
+          cipher_user_settings: cipherUserSettingRows,
+          cipher_collections: cipherCollectionRows,
+          attachments: exportedAttachmentRows,
+          webauthn_credentials: exportedWebauthnRows,
+          device_trust_tokens: [],
+          audit_logs: exportedAuditRows,
+          sends: exportedSendRows,
+        },
+        null,
+        BACKUP_JSON_INDENT,
+      ),
+    ),
+  );
 
-	if (includeAttachments && options.blobStore) {
-		for (const blob of allBlobs) {
-			await options.checkpoint?.();
-			const object = await options.blobStore.get(blob.storageKey);
-			if (!object?.body) {
-				throw new Error(`Backup blob not found: ${blob.blobName}`);
-			}
-			const bytes = new Uint8Array(
-				await new Response(object.body).arrayBuffer(),
-			);
-			if (bytes.byteLength !== blob.sizeBytes) {
-				throw new Error(`Backup blob size mismatch: ${blob.blobName}`);
-			}
-			manifestBase.blobHashes[blob.blobName] = await sha256Hex(bytes);
-			if (
-				options.externalizeAttachment &&
-				attachmentBlobNames.has(blob.blobName)
-			) {
-				await options.externalizeAttachment(blob.blobName, bytes);
-			} else {
-				archiveBuilder.add(blob.blobName, bytes);
-			}
-		}
-	}
-	archiveBuilder.add(
-		"manifest.json",
-		encoder.encode(JSON.stringify(manifestBase, null, BACKUP_JSON_INDENT)),
-	);
+  if (includeAttachments && options.blobStore) {
+    for (const blob of allBlobs) {
+      await options.checkpoint?.();
+      const object = await options.blobStore.get(blob.storageKey);
+      if (!object?.body) {
+        throw new Error(`Backup blob not found: ${blob.blobName}`);
+      }
+      const bytes = new Uint8Array(
+        await new Response(object.body).arrayBuffer(),
+      );
+      if (bytes.byteLength !== blob.sizeBytes) {
+        throw new Error(`Backup blob size mismatch: ${blob.blobName}`);
+      }
+      manifestBase.blobHashes[blob.blobName] = await sha256Hex(bytes);
+      if (
+        options.externalizeAttachment &&
+        attachmentBlobNames.has(blob.blobName)
+      ) {
+        await options.externalizeAttachment(blob.blobName, bytes);
+      } else {
+        archiveBuilder.add(blob.blobName, bytes);
+      }
+    }
+  }
+  archiveBuilder.add(
+    "manifest.json",
+    encoder.encode(JSON.stringify(manifestBase, null, BACKUP_JSON_INDENT)),
+  );
 
-	await options.checkpoint?.();
-	await options.progress?.({
-		step: "package_archive",
-		fileName: "",
-		stageTitle: "txt_backup_archive_progress_package_title",
-		stageDetail: includeAttachments
-			? "txt_backup_archive_progress_package_with_attachments_detail"
-			: "txt_backup_archive_progress_package_detail",
-		includeAttachments,
-	});
-	const bytes = archiveBuilder.finish();
-	validateArchiveSize(bytes);
-	const fileHashPrefix = await getBackupArchiveChecksumPrefix(bytes);
-	const backupTimeZone = options.timeZone || "UTC";
-	const fileName = buildBackupFileNameInTimeZone(
-		date,
-		fileHashPrefix,
-		backupTimeZone,
-	);
-	await options.progress?.({
-		step: "archive_ready",
-		fileName,
-		stageTitle: "txt_backup_archive_progress_ready_title",
-		stageDetail: "txt_backup_archive_progress_ready_detail",
-		includeAttachments,
-	});
+  await options.checkpoint?.();
+  await options.progress?.({
+    step: "package_archive",
+    fileName: "",
+    stageTitle: "txt_backup_archive_progress_package_title",
+    stageDetail: includeAttachments
+      ? "txt_backup_archive_progress_package_with_attachments_detail"
+      : "txt_backup_archive_progress_package_detail",
+    includeAttachments,
+  });
+  const bytes = archiveBuilder.finish();
+  validateArchiveSize(bytes);
+  const fileHashPrefix = await getBackupArchiveChecksumPrefix(bytes);
+  const backupTimeZone = options.timeZone || "UTC";
+  const fileName = buildBackupFileNameInTimeZone(
+    date,
+    fileHashPrefix,
+    backupTimeZone,
+  );
+  await options.progress?.({
+    step: "archive_ready",
+    fileName,
+    stageTitle: "txt_backup_archive_progress_ready_title",
+    stageDetail: "txt_backup_archive_progress_ready_detail",
+    includeAttachments,
+  });
 
-	return {
-		bytes,
-		fileName,
-		manifest: manifestBase,
-	};
+  return {
+    bytes,
+    fileName,
+    manifest: manifestBase,
+  };
 }
 
 export async function assertBackupArchiveIntegrity(
-	bytes: Uint8Array,
-	fileName: string,
-	expectedByteLength?: number,
-	options: ParseBackupArchiveOptions = {},
+  bytes: Uint8Array,
+  fileName: string,
+  expectedByteLength?: number,
+  options: ParseBackupArchiveOptions = {},
 ): Promise<BackupPayload> {
-	if (
-		expectedByteLength !== undefined &&
-		bytes.byteLength !== expectedByteLength
-	) {
-		throw new Error("Backup archive size changed after upload");
-	}
-	if (!(await verifyBackupArchiveFileNameChecksum(bytes, fileName))) {
-		throw new Error("Backup archive checksum does not match its filename");
-	}
-	const parsed = parseBackupArchive(bytes, options);
-	await assertBackupBlobIntegrity(parsed.payload, parsed.files, options);
-	return parsed.payload;
+  if (
+    expectedByteLength !== undefined &&
+    bytes.byteLength !== expectedByteLength
+  ) {
+    throw new Error("Backup archive size changed after upload");
+  }
+  if (!(await verifyBackupArchiveFileNameChecksum(bytes, fileName))) {
+    throw new Error("Backup archive checksum does not match its filename");
+  }
+  const parsed = parseBackupArchive(bytes, options);
+  await assertBackupBlobIntegrity(parsed.payload, parsed.files, options);
+  return parsed.payload;
 }
 
 export async function assertBackupBlobIntegrity(
-	payload: BackupPayload,
-	files: Record<string, Uint8Array>,
-	options: ParseBackupArchiveOptions = {},
+  payload: BackupPayload,
+  files: Record<string, Uint8Array>,
+  options: ParseBackupArchiveOptions = {},
 ): Promise<void> {
-	if (payload.manifest.formatVersion < 4) return;
-	const externalAttachments = new Set(
-		options.allowExternalAttachmentBlobs
-			? (payload.manifest.attachmentBlobs ?? []).map((blob) => blob.blobName)
-			: [],
-	);
-	for (const { path, sizeBytes } of getStrictBlobEntries(payload.db)) {
-		const bytes = files[path];
-		if (!bytes && externalAttachments.has(path)) continue;
-		if (!bytes)
-			throw new Error(`Backup archive is missing required file: ${path}`);
-		if (bytes.byteLength !== sizeBytes) {
-			throw new Error(`Backup blob size mismatch: ${path}`);
-		}
-		const expected = String(
-			payload.manifest.blobHashes?.[path] || "",
-		).toLowerCase();
-		if ((await sha256Hex(bytes)) !== expected) {
-			throw new Error(`Backup blob checksum mismatch: ${path}`);
-		}
-	}
+  if (payload.manifest.formatVersion < 4) return;
+  const externalAttachments = new Set(
+    options.allowExternalAttachmentBlobs
+      ? (payload.manifest.attachmentBlobs ?? []).map((blob) => blob.blobName)
+      : [],
+  );
+  for (const { path, sizeBytes } of getStrictBlobEntries(payload.db)) {
+    const bytes = files[path];
+    if (!bytes && externalAttachments.has(path)) continue;
+    if (!bytes)
+      throw new Error(`Backup archive is missing required file: ${path}`);
+    if (bytes.byteLength !== sizeBytes) {
+      throw new Error(`Backup blob size mismatch: ${path}`);
+    }
+    const expected = String(
+      payload.manifest.blobHashes?.[path] || "",
+    ).toLowerCase();
+    if ((await sha256Hex(bytes)) !== expected) {
+      throw new Error(`Backup blob checksum mismatch: ${path}`);
+    }
+  }
 }

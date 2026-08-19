@@ -6,52 +6,52 @@ import { Input } from "$lib/components/ui/input/index.js";
 import * as Select from "$lib/components/ui/select/index.js";
 
 interface FolderOption {
-	id: string;
-	name: string;
+  id: string;
+  name: string;
 }
 
 let {
-	deleteOpen = $bindable(),
-	deleteAllFoldersOpen = $bindable(),
-	moveOpen = $bindable(),
-	folderOpen = $bindable(),
-	deleteFolderOpen = $bindable(),
-	moveFolderId = $bindable(),
-	folderName = $bindable(),
-	selectedItemName,
-	selectedItemDeleted,
-	deleteLoading,
-	folders,
-	selectedCount,
-	folderMode,
-	folderLoading,
-	targetFolderName,
-	onDeleteItem,
-	onDeleteAllFolders,
-	onMoveItems,
-	onSaveFolder,
-	onDeleteFolder,
+  deleteOpen = $bindable(),
+  deleteAllFoldersOpen = $bindable(),
+  moveOpen = $bindable(),
+  folderOpen = $bindable(),
+  deleteFolderOpen = $bindable(),
+  moveFolderId = $bindable(),
+  folderName = $bindable(),
+  selectedItemName,
+  selectedItemDeleted,
+  deleteLoading,
+  folders,
+  selectedCount,
+  folderMode,
+  folderLoading,
+  targetFolderName,
+  onDeleteItem,
+  onDeleteAllFolders,
+  onMoveItems,
+  onSaveFolder,
+  onDeleteFolder,
 }: {
-	deleteOpen: boolean;
-	deleteAllFoldersOpen: boolean;
-	moveOpen: boolean;
-	folderOpen: boolean;
-	deleteFolderOpen: boolean;
-	moveFolderId: string | null;
-	folderName: string;
-	selectedItemName?: string;
-	selectedItemDeleted: boolean;
-	deleteLoading: boolean;
-	folders: FolderOption[];
-	selectedCount: number;
-	folderMode: "create" | "rename";
-	folderLoading: boolean;
-	targetFolderName?: string;
-	onDeleteItem: () => void;
-	onDeleteAllFolders: () => void;
-	onMoveItems: () => void;
-	onSaveFolder: () => void;
-	onDeleteFolder: () => void;
+  deleteOpen: boolean;
+  deleteAllFoldersOpen: boolean;
+  moveOpen: boolean;
+  folderOpen: boolean;
+  deleteFolderOpen: boolean;
+  moveFolderId: string | null;
+  folderName: string;
+  selectedItemName?: string;
+  selectedItemDeleted: boolean;
+  deleteLoading: boolean;
+  folders: FolderOption[];
+  selectedCount: number;
+  folderMode: "create" | "rename";
+  folderLoading: boolean;
+  targetFolderName?: string;
+  onDeleteItem: () => void;
+  onDeleteAllFolders: () => void;
+  onMoveItems: () => void;
+  onSaveFolder: () => void;
+  onDeleteFolder: () => void;
 } = $props();
 </script>
 

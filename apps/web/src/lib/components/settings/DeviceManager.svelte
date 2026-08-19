@@ -10,29 +10,29 @@ import * as Field from "$lib/components/ui/field/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import * as Table from "$lib/components/ui/table/index.js";
 import {
-	deleteAllDevicesApi,
-	deleteDeviceApi,
-	deleteDevicesApi,
-	fetchDevicesApi,
-	renameDeviceApi,
+  deleteAllDevicesApi,
+  deleteDeviceApi,
+  deleteDevicesApi,
+  fetchDevicesApi,
+  renameDeviceApi,
 } from "$lib/services/api-account";
 import { getCurrentDeviceIdentifier } from "$lib/services/client-device";
 import type { AccountDevice } from "$lib/services/account-types";
 
 let {
-	devices = $bindable(),
-	passwordHash,
-	onMessage,
-	onError,
-	onSessionRevoked,
+  devices = $bindable(),
+  passwordHash,
+  onMessage,
+  onError,
+  onSessionRevoked,
 }: {
-	devices: AccountDevice[];
-	passwordHash: (password: string) => Promise<string>;
-	onMessage: (message: string) => void;
-	onError: (error: unknown) => void;
-	onSessionRevoked: (
-		reason: "device-removed" | "devices-removed",
-	) => Promise<void>;
+  devices: AccountDevice[];
+  passwordHash: (password: string) => Promise<string>;
+  onMessage: (message: string) => void;
+  onError: (error: unknown) => void;
+  onSessionRevoked: (
+    reason: "device-removed" | "devices-removed",
+  ) => Promise<void>;
 } = $props();
 
 let busy = $state("");
@@ -42,92 +42,92 @@ let removeAllOpen = $state(false);
 let removeAllPassword = $state("");
 let selectedIds = $state<Record<string, boolean>>({});
 let removeTarget = $state<
-	{ kind: "single"; device: AccountDevice } | { kind: "selected" } | null
+  { kind: "single"; device: AccountDevice } | { kind: "selected" } | null
 >(null);
 let selectedIdList = $derived(
-	devices.filter((device) => selectedIds[device.id]).map((device) => device.id),
+  devices.filter((device) => selectedIds[device.id]).map((device) => device.id),
 );
 
 function startRename(device: AccountDevice) {
-	editingDevice = device;
-	deviceName = device.name ?? "";
+  editingDevice = device;
+  deviceName = device.name ?? "";
 }
 
 async function saveDeviceName() {
-	if (!editingDevice || !deviceName.trim()) return;
-	busy = `device-${editingDevice.id}`;
-	try {
-		await renameDeviceApi(editingDevice.id, deviceName.trim());
-		editingDevice = null;
-		devices = (await fetchDevicesApi()).data;
-		onMessage("设备名称已更新");
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  if (!editingDevice || !deviceName.trim()) return;
+  busy = `device-${editingDevice.id}`;
+  try {
+    await renameDeviceApi(editingDevice.id, deviceName.trim());
+    editingDevice = null;
+    devices = (await fetchDevicesApi()).data;
+    onMessage("设备名称已更新");
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 
 async function removeDevice(device: AccountDevice) {
-	busy = `device-${device.id}`;
-	try {
-		await deleteDeviceApi(device.id);
-		devices = devices.filter((item) => item.id !== device.id);
-		if (device.id === getCurrentDeviceIdentifier()) {
-			await onSessionRevoked("device-removed");
-		}
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  busy = `device-${device.id}`;
+  try {
+    await deleteDeviceApi(device.id);
+    devices = devices.filter((item) => item.id !== device.id);
+    if (device.id === getCurrentDeviceIdentifier()) {
+      await onSessionRevoked("device-removed");
+    }
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 
 async function removeSelectedDevices() {
-	if (!selectedIdList.length) return;
-	const removesCurrent = selectedIdList.includes(getCurrentDeviceIdentifier());
-	busy = "selected-devices";
-	try {
-		await deleteDevicesApi(selectedIdList);
-		devices = devices.filter((device) => !selectedIds[device.id]);
-		selectedIds = {};
-		onMessage("已移除选中设备");
-		if (removesCurrent) await onSessionRevoked("device-removed");
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  if (!selectedIdList.length) return;
+  const removesCurrent = selectedIdList.includes(getCurrentDeviceIdentifier());
+  busy = "selected-devices";
+  try {
+    await deleteDevicesApi(selectedIdList);
+    devices = devices.filter((device) => !selectedIds[device.id]);
+    selectedIds = {};
+    onMessage("已移除选中设备");
+    if (removesCurrent) await onSessionRevoked("device-removed");
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 
 async function confirmRemoveDevices() {
-	if (!removeTarget) return;
-	const target = removeTarget;
-	removeTarget = null;
-	if (target.kind === "single") await removeDevice(target.device);
-	else await removeSelectedDevices();
+  if (!removeTarget) return;
+  const target = removeTarget;
+  removeTarget = null;
+  if (target.kind === "single") await removeDevice(target.device);
+  else await removeSelectedDevices();
 }
 
 function toggleAll(checked: boolean) {
-	selectedIds = checked
-		? Object.fromEntries(devices.map((device) => [device.id, true]))
-		: {};
+  selectedIds = checked
+    ? Object.fromEntries(devices.map((device) => [device.id, true]))
+    : {};
 }
 
 async function removeAllDevices() {
-	if (!removeAllPassword) return;
-	busy = "all-devices";
-	try {
-		await deleteAllDevicesApi(await passwordHash(removeAllPassword));
-		devices = [];
-		removeAllOpen = false;
-		removeAllPassword = "";
-		await onSessionRevoked("devices-removed");
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  if (!removeAllPassword) return;
+  busy = "all-devices";
+  try {
+    await deleteAllDevicesApi(await passwordHash(removeAllPassword));
+    devices = [];
+    removeAllOpen = false;
+    removeAllPassword = "";
+    await onSessionRevoked("devices-removed");
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 </script>
 

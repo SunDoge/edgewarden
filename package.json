@@ -1,53 +1,53 @@
 {
-	"name": "edgewarden",
-	"version": "1.0.0",
-	"packageManager": "pnpm@11.21.0",
-	"private": true,
-	"description": "A Bitwarden-compatible password manager for Cloudflare Workers",
-	"scripts": {
-		"rpc:types": "pnpm --filter @edgewarden/api run rpc:types",
-		"dev": "pnpm --parallel --filter './apps/*' run dev",
-		"build": "pnpm --filter @edgewarden/web run build",
-		"db:migrate:local": "pnpm --filter @edgewarden/api run db:apply:local",
-		"db:migrate:remote": "pnpm --filter @edgewarden/api run db:apply:remote",
-		"db:migrate:remote:kv": "pnpm --filter @edgewarden/api run db:apply:remote:kv",
-		"deploy": "node scripts/deploy.ts",
-		"deploy:kv": "node scripts/deploy.ts --kv",
-		"test": "pnpm --filter @edgewarden/api run test && pnpm --filter @edgewarden/web run test",
-		"test:compat:bw": "node scripts/bw-compat-smoke.ts",
-		"test:compat:bw:local": "node scripts/bw-compat-local.ts",
-		"test:integration:cloudflare": "node scripts/cloudflare-integration-smoke.ts",
-		"domains:sync": "node scripts/sync-bitwarden-domains.ts",
-		"check": "pnpm --parallel --filter './apps/*' --if-present run check && node scripts/check-cloudflare-config.ts && node scripts/check-migrations.ts && node scripts/check-web-architecture.ts",
-		"lint": "biome lint .",
-		"lint:ci": "biome lint . --diagnostic-level=error --max-diagnostics=100",
-		"format": "biome format --write ."
-	},
-	"keywords": [],
-	"author": "",
-	"license": "ISC",
-	"engines": {
-		"node": ">=26 <27"
-	},
-	"type": "module",
-	"cloudflare": {
-		"bindings": {
-			"JWT_SECRET": {
-				"description": "用于签名登录和短期令牌。请生成独立的随机值，例如 `openssl rand -hex 32`。"
-			},
-			"DATA_ENCRYPTION_SECRET": {
-				"description": "用于加密持久化配置。必须独立生成并安全备份，例如 `openssl rand -hex 32`。"
-			},
-			"BOOTSTRAP_SECRET": {
-				"description": "首次创建管理员账户时输入的部署密码。请使用高强度随机值。"
-			}
-		}
-	},
-	"devDependencies": {
-		"@biomejs/biome": "2.5.7",
-		"wrangler": "^4.4.0"
-	},
-	"dependencies": {
-		"fflate": "^0.8.3"
-	}
+  "name": "edgewarden",
+  "version": "1.0.0",
+  "packageManager": "pnpm@11.21.0",
+  "private": true,
+  "description": "A Bitwarden-compatible password manager for Cloudflare Workers",
+  "scripts": {
+    "rpc:types": "pnpm --filter @edgewarden/api run rpc:types",
+    "dev": "pnpm --parallel --filter './apps/*' run dev",
+    "build": "pnpm --filter @edgewarden/web run build",
+    "db:migrate:local": "pnpm --filter @edgewarden/api run db:apply:local",
+    "db:migrate:remote": "pnpm --filter @edgewarden/api run db:apply:remote",
+    "db:migrate:remote:kv": "pnpm --filter @edgewarden/api run db:apply:remote:kv",
+    "deploy": "node scripts/deploy.ts",
+    "deploy:kv": "node scripts/deploy.ts --kv",
+    "test": "pnpm --filter @edgewarden/api run test && pnpm --filter @edgewarden/web run test",
+    "test:compat:bw": "node scripts/bw-compat-smoke.ts",
+    "test:compat:bw:local": "node scripts/bw-compat-local.ts",
+    "test:integration:cloudflare": "node scripts/cloudflare-integration-smoke.ts",
+    "domains:sync": "node scripts/sync-bitwarden-domains.ts",
+    "check": "pnpm --parallel --filter './apps/*' --if-present run check && node scripts/check-cloudflare-config.ts && node scripts/check-migrations.ts && node scripts/check-web-architecture.ts",
+    "lint": "biome lint .",
+    "lint:ci": "biome lint . --diagnostic-level=error --max-diagnostics=100",
+    "format": "biome format --write ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=26 <27"
+  },
+  "type": "module",
+  "cloudflare": {
+    "bindings": {
+      "JWT_SECRET": {
+        "description": "用于签名登录和短期令牌。请生成独立的随机值，例如 `openssl rand -hex 32`。"
+      },
+      "DATA_ENCRYPTION_SECRET": {
+        "description": "用于加密持久化配置。必须独立生成并安全备份，例如 `openssl rand -hex 32`。"
+      },
+      "BOOTSTRAP_SECRET": {
+        "description": "首次创建管理员账户时输入的部署密码。请使用高强度随机值。"
+      }
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.7",
+    "wrangler": "^4.4.0"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3"
+  }
 }

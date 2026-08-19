@@ -4,9 +4,9 @@ import { cn } from "$lib/utils.js";
 import type { Separator as SeparatorPrimitive } from "bits-ui";
 
 let {
-	ref = $bindable(null),
-	class: className,
-	...restProps
+  ref = $bindable(null),
+  class: className,
+  ...restProps
 }: SeparatorPrimitive.RootProps = $props();
 </script>
 

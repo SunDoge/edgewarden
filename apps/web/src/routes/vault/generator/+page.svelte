@@ -11,22 +11,22 @@ import * as Select from "$lib/components/ui/select/index.js";
 import { Textarea } from "$lib/components/ui/textarea/index.js";
 import { Switch } from "$lib/components/ui/switch/index.js";
 import {
-	GENERATOR_SETTINGS_KEY,
-	createGeneratorPreferences,
-	parseGeneratorPreferences,
+  GENERATOR_SETTINGS_KEY,
+  createGeneratorPreferences,
+  parseGeneratorPreferences,
 } from "$lib/services/generator-preferences";
 import {
-	estimateBits,
-	generateEmailAlias,
-	generatePassphrase,
-	generatePassword,
-	generatePin,
-	generateUsername,
-	type GeneratorMode,
+  estimateBits,
+  generateEmailAlias,
+  generatePassphrase,
+  generatePassword,
+  generatePin,
+  generateUsername,
+  type GeneratorMode,
 } from "$lib/services/password-generator";
 import {
-	generateSshKey,
-	type GeneratedSshKey,
+  generateSshKey,
+  type GeneratedSshKey,
 } from "$lib/services/ssh-key-generator";
 import { ArrowLeft, Check, Copy, Download, RefreshCw } from "@lucide/svelte";
 import { match } from "ts-pattern";
@@ -40,113 +40,113 @@ let generating = $state(false);
 let bits = $derived(estimateBits(value, preferences.mode));
 
 async function generate() {
-	error = "";
-	copied = false;
-	generating = true;
-	try {
-		if (preferences.mode === "ssh") {
-			sshKey = await generateSshKey({
-				type: preferences.sshType,
-				rsaLength: Number(preferences.rsaLength) as 2048 | 3072 | 4096,
-				comment: preferences.sshComment,
-			});
-			value = sshKey.publicKey;
-			return;
-		}
-		value = match(preferences.mode)
-			.with("password", () =>
-				generatePassword({
-					length: preferences.length,
-					uppercase: preferences.uppercase,
-					lowercase: preferences.lowercase,
-					numbers: preferences.numbers,
-					special: preferences.special,
-					avoidAmbiguous: preferences.avoidAmbiguous,
-					minUppercase: preferences.minUppercase,
-					minLowercase: preferences.minLowercase,
-					minNumbers: preferences.minNumbers,
-					minSpecial: preferences.minSpecial,
-				}),
-			)
-			.with("passphrase", () =>
-				generatePassphrase({
-					words: preferences.words,
-					separator: preferences.separator,
-					capitalize: preferences.capitalize,
-					includeNumber: preferences.includeNumber,
-					customWords: preferences.useCustomWords
-						? preferences.customWords
-						: undefined,
-				}),
-			)
-			.with("pin", () => generatePin(preferences.pinLength))
-			.with("username", () =>
-				generateUsername({
-					words: preferences.words,
-					separator: preferences.separator,
-					capitalize: preferences.capitalize,
-					includeNumber: preferences.includeNumber,
-					customWords: preferences.useCustomWords
-						? preferences.customWords
-						: undefined,
-					customWord: preferences.usernameCustomWord,
-				}),
-			)
-			.with("email", () =>
-				generateEmailAlias({
-					email: preferences.email,
-					mode: preferences.aliasMode,
-					domain: preferences.aliasDomain,
-				}),
-			)
-			.exhaustive();
-	} catch (e) {
-		error = e instanceof Error ? e.message : "生成失败";
-	} finally {
-		generating = false;
-	}
+  error = "";
+  copied = false;
+  generating = true;
+  try {
+    if (preferences.mode === "ssh") {
+      sshKey = await generateSshKey({
+        type: preferences.sshType,
+        rsaLength: Number(preferences.rsaLength) as 2048 | 3072 | 4096,
+        comment: preferences.sshComment,
+      });
+      value = sshKey.publicKey;
+      return;
+    }
+    value = match(preferences.mode)
+      .with("password", () =>
+        generatePassword({
+          length: preferences.length,
+          uppercase: preferences.uppercase,
+          lowercase: preferences.lowercase,
+          numbers: preferences.numbers,
+          special: preferences.special,
+          avoidAmbiguous: preferences.avoidAmbiguous,
+          minUppercase: preferences.minUppercase,
+          minLowercase: preferences.minLowercase,
+          minNumbers: preferences.minNumbers,
+          minSpecial: preferences.minSpecial,
+        }),
+      )
+      .with("passphrase", () =>
+        generatePassphrase({
+          words: preferences.words,
+          separator: preferences.separator,
+          capitalize: preferences.capitalize,
+          includeNumber: preferences.includeNumber,
+          customWords: preferences.useCustomWords
+            ? preferences.customWords
+            : undefined,
+        }),
+      )
+      .with("pin", () => generatePin(preferences.pinLength))
+      .with("username", () =>
+        generateUsername({
+          words: preferences.words,
+          separator: preferences.separator,
+          capitalize: preferences.capitalize,
+          includeNumber: preferences.includeNumber,
+          customWords: preferences.useCustomWords
+            ? preferences.customWords
+            : undefined,
+          customWord: preferences.usernameCustomWord,
+        }),
+      )
+      .with("email", () =>
+        generateEmailAlias({
+          email: preferences.email,
+          mode: preferences.aliasMode,
+          domain: preferences.aliasDomain,
+        }),
+      )
+      .exhaustive();
+  } catch (e) {
+    error = e instanceof Error ? e.message : "生成失败";
+  } finally {
+    generating = false;
+  }
 }
 
 function changeMode(next: string) {
-	preferences.mode = next as GeneratorMode;
-	value = "";
-	sshKey = null;
-	error = "";
+  preferences.mode = next as GeneratorMode;
+  value = "";
+  sshKey = null;
+  error = "";
 }
 
 async function copy(text = value) {
-	if (!text) return;
-	await navigator.clipboard.writeText(text);
-	copied = true;
-	setTimeout(() => (copied = false), 1500);
+  if (!text) return;
+  await navigator.clipboard.writeText(text);
+  copied = true;
+  setTimeout(() => (copied = false), 1500);
 }
 
 function download(filename: string, text: string) {
-	const url = URL.createObjectURL(
-		new Blob([text], { type: "text/plain;charset=utf-8" }),
-	);
-	const anchor = document.createElement("a");
-	anchor.href = url;
-	anchor.download = filename;
-	anchor.click();
-	setTimeout(() => URL.revokeObjectURL(url), 0);
+  const url = URL.createObjectURL(
+    new Blob([text], { type: "text/plain;charset=utf-8" }),
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 onMount(() => {
-	preferences = parseGeneratorPreferences(
-		localStorage.getItem(GENERATOR_SETTINGS_KEY),
-	);
-	value = "";
-	void generate();
+  preferences = parseGeneratorPreferences(
+    localStorage.getItem(GENERATOR_SETTINGS_KEY),
+  );
+  value = "";
+  void generate();
 });
 
 $effect(() => {
-	if (typeof window === "undefined") return;
-	localStorage.setItem(GENERATOR_SETTINGS_KEY, JSON.stringify(preferences));
+  if (typeof window === "undefined") return;
+  localStorage.setItem(GENERATOR_SETTINGS_KEY, JSON.stringify(preferences));
 });
 
 $effect(() => {
-	if (!value && preferences.mode !== "email") void generate();
+  if (!value && preferences.mode !== "email") void generate();
 });
 </script>
 

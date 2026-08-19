@@ -4,34 +4,34 @@ import type { Snippet } from "svelte";
 import type { HTMLAttributes } from "svelte/elements";
 
 let {
-	ref = $bindable(null),
-	class: className,
-	children,
-	errors,
-	...restProps
+  ref = $bindable(null),
+  class: className,
+  children,
+  errors,
+  ...restProps
 }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
-	children?: Snippet;
-	errors?: { message?: string }[];
+  children?: Snippet;
+  errors?: { message?: string }[];
 } = $props();
 
 const hasContent = $derived.by(() => {
-	// has slotted error
-	if (children) return true;
+  // has slotted error
+  if (children) return true;
 
-	// no errors
-	if (!errors || errors.length === 0) return false;
+  // no errors
+  if (!errors || errors.length === 0) return false;
 
-	// has an error but no message
-	if (errors.length === 1 && !errors[0]?.message) {
-		return false;
-	}
+  // has an error but no message
+  if (errors.length === 1 && !errors[0]?.message) {
+    return false;
+  }
 
-	return true;
+  return true;
 });
 
 const isMultipleErrors = $derived(errors && errors.length > 1);
 const singleErrorMessage = $derived(
-	errors && errors.length === 1 && errors[0]?.message,
+  errors && errors.length === 1 && errors[0]?.message,
 );
 </script>
 

@@ -7,62 +7,62 @@ import { Skeleton } from "$lib/components/ui/skeleton/index.js";
 import { fade } from "svelte/transition";
 import type { VaultEditorForm as VaultEditorDraft } from "$lib/services/vault-editor";
 import type {
-	VaultAttachment,
-	VaultCipher,
-	VaultCollection,
-	VaultFolder,
-	VaultOrganization,
-	VaultTotp,
+  VaultAttachment,
+  VaultCipher,
+  VaultCollection,
+  VaultFolder,
+  VaultOrganization,
+  VaultTotp,
 } from "$lib/services/vault-types";
 import VaultEditorForm from "./VaultEditorForm.svelte";
 import VaultItemDetail from "./VaultItemDetail.svelte";
 
 let {
-	visible,
-	isCreating,
-	isEditing,
-	editor = $bindable(),
-	selectedItem,
-	folders,
-	organizations,
-	collections,
-	totp,
-	attachmentBusy,
-	isSyncing,
-	onBack,
-	onSave,
-	onDelete,
-	onCancel,
-	onFavorite,
-	onArchive,
-	onRestore,
-	onEdit,
-	onAttachmentUpload,
-	onAttachmentDownload,
-	onAttachmentDelete,
+  visible,
+  isCreating,
+  isEditing,
+  editor = $bindable(),
+  selectedItem,
+  folders,
+  organizations,
+  collections,
+  totp,
+  attachmentBusy,
+  isSyncing,
+  onBack,
+  onSave,
+  onDelete,
+  onCancel,
+  onFavorite,
+  onArchive,
+  onRestore,
+  onEdit,
+  onAttachmentUpload,
+  onAttachmentDownload,
+  onAttachmentDelete,
 }: {
-	visible: boolean;
-	isCreating: boolean;
-	isEditing: boolean;
-	editor: VaultEditorDraft;
-	selectedItem: VaultCipher | null;
-	folders: VaultFolder[];
-	organizations: VaultOrganization[];
-	collections: VaultCollection[];
-	totp: VaultTotp | null;
-	attachmentBusy: string | null;
-	isSyncing: boolean;
-	onBack: () => void;
-	onSave: () => void;
-	onDelete: () => void;
-	onCancel: () => void;
-	onFavorite: () => void;
-	onArchive: () => void;
-	onRestore: () => void;
-	onEdit: () => void;
-	onAttachmentUpload: (event: Event) => void;
-	onAttachmentDownload: (attachment: VaultAttachment) => void;
-	onAttachmentDelete: (attachment: VaultAttachment) => void;
+  visible: boolean;
+  isCreating: boolean;
+  isEditing: boolean;
+  editor: VaultEditorDraft;
+  selectedItem: VaultCipher | null;
+  folders: VaultFolder[];
+  organizations: VaultOrganization[];
+  collections: VaultCollection[];
+  totp: VaultTotp | null;
+  attachmentBusy: string | null;
+  isSyncing: boolean;
+  onBack: () => void;
+  onSave: () => void;
+  onDelete: () => void;
+  onCancel: () => void;
+  onFavorite: () => void;
+  onArchive: () => void;
+  onRestore: () => void;
+  onEdit: () => void;
+  onAttachmentUpload: (event: Event) => void;
+  onAttachmentDownload: (attachment: VaultAttachment) => void;
+  onAttachmentDelete: (attachment: VaultAttachment) => void;
 } = $props();
 </script>
 

@@ -3,19 +3,19 @@ import { onMount } from "svelte";
 import { match } from "ts-pattern";
 import { goto } from "$app/navigation";
 import {
-	fetchSendsApi,
-	deleteSendApi,
-	deleteSendsApi,
+  fetchSendsApi,
+  deleteSendApi,
+  deleteSendsApi,
 } from "$lib/services/api-sends";
 import { vault } from "$lib/stores/vault.svelte";
 import {
-	decryptOwnedSend,
-	type DecryptedSend,
+  decryptOwnedSend,
+  type DecryptedSend,
 } from "$lib/services/send-crypto";
 import { saveOwnedSend } from "$lib/services/send-actions";
 import {
-	createSendEditorDraft,
-	sendToEditorDraft,
+  createSendEditorDraft,
+  sendToEditorDraft,
 } from "$lib/services/send-editor";
 import { Button } from "$lib/components/ui/button/index.js";
 import * as Alert from "$lib/components/ui/alert/index.js";
@@ -32,19 +32,19 @@ import { Spinner } from "$lib/components/ui/spinner/index.js";
 import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
 import { cn } from "$lib/utils";
 import {
-	Search,
-	Plus,
-	LogOut,
-	Star,
-	ShieldCheck,
-	RefreshCw,
-	Trash2,
-	ArrowLeft,
-	Share2,
-	FileText,
-	File as FileIcon,
-	Copy,
-	Check,
+  Search,
+  Plus,
+  LogOut,
+  Star,
+  ShieldCheck,
+  RefreshCw,
+  Trash2,
+  ArrowLeft,
+  Share2,
+  FileText,
+  File as FileIcon,
+  Copy,
+  Check,
 } from "@lucide/svelte";
 
 // State
@@ -64,172 +64,172 @@ let editor = $state(createSendEditorDraft());
 let copiedId = $state<string | null>(null);
 let errorMsg = $state("");
 let deleteTarget = $state<
-	{ kind: "single"; id: string } | { kind: "bulk" } | null
+  { kind: "single"; id: string } | { kind: "bulk" } | null
 >(null);
 
 onMount(async () => {
-	await loadSends();
+  await loadSends();
 });
 
 async function loadSends() {
-	loading = true;
-	const cached = vault.sends;
-	if (cached.length) sends = [...cached];
-	if (vault.isOffline) {
-		loading = false;
-		return;
-	}
-	try {
-		const res = await fetchSendsApi();
-		const decryptedList = [];
-		for (const send of res.data) {
-			try {
-				decryptedList.push(
-					await decryptOwnedSend(send, vault.symEncKey!, vault.symMacKey!),
-				);
-			} catch (e) {
-				console.error("Failed to decrypt send:", send.id, e);
-			}
-		}
-		sends = decryptedList;
-	} catch (error) {
-		if (!cached.length)
-			errorMsg = `加载 Send 列表失败：${error instanceof Error ? error.message : String(error)}`;
-	} finally {
-		loading = false;
-	}
+  loading = true;
+  const cached = vault.sends;
+  if (cached.length) sends = [...cached];
+  if (vault.isOffline) {
+    loading = false;
+    return;
+  }
+  try {
+    const res = await fetchSendsApi();
+    const decryptedList = [];
+    for (const send of res.data) {
+      try {
+        decryptedList.push(
+          await decryptOwnedSend(send, vault.symEncKey!, vault.symMacKey!),
+        );
+      } catch (e) {
+        console.error("Failed to decrypt send:", send.id, e);
+      }
+    }
+    sends = decryptedList;
+  } catch (error) {
+    if (!cached.length)
+      errorMsg = `加载 Send 列表失败：${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    loading = false;
+  }
 }
 
 // Filtered Sends
 let filteredSends = $derived(
-	sends.filter((item) => {
-		const matchesType = match(typeFilter)
-			.with("text", () => item.type === 0)
-			.with("file", () => item.type === 1)
-			.otherwise(() => true);
-		if (!matchesType) return false;
-		if (searchQuery.trim()) {
-			const q = searchQuery.toLowerCase().trim();
-			return (
-				item.name.toLowerCase().includes(q) ||
-				(item.notes ?? "").toLowerCase().includes(q)
-			);
-		}
-		return true;
-	}),
+  sends.filter((item) => {
+    const matchesType = match(typeFilter)
+      .with("text", () => item.type === 0)
+      .with("file", () => item.type === 1)
+      .otherwise(() => true);
+    if (!matchesType) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      return (
+        item.name.toLowerCase().includes(q) ||
+        (item.notes ?? "").toLowerCase().includes(q)
+      );
+    }
+    return true;
+  }),
 );
 let selectedIdList = $derived(
-	Object.keys(selectedIds).filter((id) => selectedIds[id]),
+  Object.keys(selectedIds).filter((id) => selectedIds[id]),
 );
 
 function startCreate() {
-	isEditing = false;
-	isCreating = true;
-	mobileDetailOpen = true;
-	editor = createSendEditorDraft();
+  isEditing = false;
+  isCreating = true;
+  mobileDetailOpen = true;
+  editor = createSendEditorDraft();
 }
 
 function startEdit(send: DecryptedSend) {
-	selectedSend = send;
-	isEditing = true;
-	isCreating = false;
-	mobileDetailOpen = true;
-	editor = sendToEditorDraft(send);
+  selectedSend = send;
+  isEditing = true;
+  isCreating = false;
+  mobileDetailOpen = true;
+  editor = sendToEditorDraft(send);
 }
 
 function cancelEdit() {
-	isCreating = false;
-	isEditing = false;
-	if (!selectedSend) mobileDetailOpen = false;
+  isCreating = false;
+  isEditing = false;
+  if (!selectedSend) mobileDetailOpen = false;
 }
 
 function selectSend(send: DecryptedSend) {
-	selectedSend = send;
-	isCreating = false;
-	isEditing = false;
-	mobileDetailOpen = true;
+  selectedSend = send;
+  isCreating = false;
+  isEditing = false;
+  mobileDetailOpen = true;
 }
 
 async function handleSaveSend() {
-	loading = true;
-	try {
-		await saveOwnedSend({
-			form: editor,
-			selectedSend,
-			isCreating,
-			isEditing,
-			vaultKeys: { encKey: vault.symEncKey!, macKey: vault.symMacKey! },
-		});
+  loading = true;
+  try {
+    await saveOwnedSend({
+      form: editor,
+      selectedSend,
+      isCreating,
+      isEditing,
+      vaultKeys: { encKey: vault.symEncKey!, macKey: vault.symMacKey! },
+    });
 
-		isCreating = false;
-		isEditing = false;
-		selectedSend = null;
-		await loadSends();
-	} catch (error) {
-		errorMsg = `保存失败：${error instanceof Error ? error.message : String(error)}`;
-	} finally {
-		loading = false;
-	}
+    isCreating = false;
+    isEditing = false;
+    selectedSend = null;
+    await loadSends();
+  } catch (error) {
+    errorMsg = `保存失败：${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    loading = false;
+  }
 }
 
 async function handleDeleteSend(sendId: string) {
-	loading = true;
-	try {
-		await deleteSendApi(sendId);
-		selectedSend = null;
-		await loadSends();
-	} catch (error) {
-		errorMsg = `删除失败：${error instanceof Error ? error.message : String(error)}`;
-	} finally {
-		loading = false;
-	}
+  loading = true;
+  try {
+    await deleteSendApi(sendId);
+    selectedSend = null;
+    await loadSends();
+  } catch (error) {
+    errorMsg = `删除失败：${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    loading = false;
+  }
 }
 
 async function handleBulkDelete() {
-	if (!selectedIdList.length) return;
-	loading = true;
-	try {
-		await deleteSendsApi(selectedIdList);
-		selectedIds = {};
-		selectedSend = null;
-		await loadSends();
-	} catch (error) {
-		errorMsg = `批量删除失败：${error instanceof Error ? error.message : String(error)}`;
-	} finally {
-		loading = false;
-	}
+  if (!selectedIdList.length) return;
+  loading = true;
+  try {
+    await deleteSendsApi(selectedIdList);
+    selectedIds = {};
+    selectedSend = null;
+    await loadSends();
+  } catch (error) {
+    errorMsg = `批量删除失败：${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    loading = false;
+  }
 }
 
 async function confirmDelete() {
-	if (!deleteTarget) return;
-	const target = deleteTarget;
-	deleteTarget = null;
-	await match(target)
-		.with({ kind: "single" }, ({ id }) => handleDeleteSend(id))
-		.with({ kind: "bulk" }, () => handleBulkDelete())
-		.exhaustive();
+  if (!deleteTarget) return;
+  const target = deleteTarget;
+  deleteTarget = null;
+  await match(target)
+    .with({ kind: "single" }, ({ id }) => handleDeleteSend(id))
+    .with({ kind: "bulk" }, () => handleBulkDelete())
+    .exhaustive();
 }
 
 function copyShareLink(send: DecryptedSend) {
-	const origin = window.location.origin;
-	const link = `${origin}/sends/${send.accessId}#${send.shareKey}`;
-	navigator.clipboard.writeText(link);
-	copiedId = send.id;
-	setTimeout(() => {
-		if (copiedId === send.id) copiedId = null;
-	}, 2000);
+  const origin = window.location.origin;
+  const link = `${origin}/sends/${send.accessId}#${send.shareKey}`;
+  navigator.clipboard.writeText(link);
+  copiedId = send.id;
+  setTimeout(() => {
+    if (copiedId === send.id) copiedId = null;
+  }, 2000);
 }
 
 function copySelectedShareLink() {
-	if (selectedSend) copyShareLink(selectedSend);
+  if (selectedSend) copyShareLink(selectedSend);
 }
 
 function editSelectedSend() {
-	if (selectedSend) startEdit(selectedSend);
+  if (selectedSend) startEdit(selectedSend);
 }
 
 function requestSelectedSendDelete() {
-	if (selectedSend) deleteTarget = { kind: "single", id: selectedSend.id };
+  if (selectedSend) deleteTarget = { kind: "single", id: selectedSend.id };
 }
 </script>
 

@@ -22,38 +22,38 @@ let error = $state("");
 let hasCache = $state(false);
 
 onMount(async () => {
-	if (!isLoggedIn()) {
-		goto("/login");
-		return;
-	}
-	if (vault.isUnlocked) {
-		goto("/vault");
-		return;
-	}
+  if (!isLoggedIn()) {
+    goto("/login");
+    return;
+  }
+  if (vault.isUnlocked) {
+    goto("/vault");
+    return;
+  }
 
-	// Pre-fill email from the cached profile so the user knows whose vault this is
-	const cached = await loadVaultSnapshot();
-	if (cached) {
-		email = cached.profile.email;
-		hasCache = true;
-	}
+  // Pre-fill email from the cached profile so the user knows whose vault this is
+  const cached = await loadVaultSnapshot();
+  if (cached) {
+    email = cached.profile.email;
+    hasCache = true;
+  }
 });
 
 async function handleUnlock(e: SubmitEvent) {
-	e.preventDefault();
-	if (!password) return;
+  e.preventDefault();
+  if (!password) return;
 
-	loading = true;
-	error = "";
+  loading = true;
+  error = "";
 
-	try {
-		await unlock(password);
-		goto("/vault");
-	} catch (caught) {
-		error = errorMessage(caught, "解锁失败，请检查主密码是否正确。");
-	} finally {
-		loading = false;
-	}
+  try {
+    await unlock(password);
+    goto("/vault");
+  } catch (caught) {
+    error = errorMessage(caught, "解锁失败，请检查主密码是否正确。");
+  } finally {
+    loading = false;
+  }
 }
 </script>
 

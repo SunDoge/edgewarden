@@ -4,13 +4,13 @@ import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
 import { cn, type WithoutChild } from "$lib/utils.js";
 
 let {
-	ref = $bindable(null),
-	class: className,
-	children,
-	size = "default",
-	...restProps
+  ref = $bindable(null),
+  class: className,
+  children,
+  size = "default",
+  ...restProps
 }: WithoutChild<SelectPrimitive.TriggerProps> & {
-	size?: "sm" | "default";
+  size?: "sm" | "default";
 } = $props();
 </script>
 

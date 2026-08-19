@@ -7,41 +7,41 @@ import * as Table from "$lib/components/ui/table/index.js";
 import { formatFileSize } from "$lib/services/backup-display";
 import type { RemoteBackupItem } from "$lib/services/backup-types";
 import {
-	Download,
-	FileArchive,
-	Folder,
-	Info,
-	RefreshCw,
-	ShieldCheck,
-	Trash2,
+  Download,
+  FileArchive,
+  Folder,
+  Info,
+  RefreshCw,
+  ShieldCheck,
+  Trash2,
 } from "@lucide/svelte";
 
 let {
-	items,
-	browsing,
-	downloading,
-	deleting,
-	inspecting,
-	restoring,
-	onRefresh,
-	onOpenDirectory,
-	onInspect,
-	onDownload,
-	onRestore,
-	onDelete,
+  items,
+  browsing,
+  downloading,
+  deleting,
+  inspecting,
+  restoring,
+  onRefresh,
+  onOpenDirectory,
+  onInspect,
+  onDownload,
+  onRestore,
+  onDelete,
 }: {
-	items: RemoteBackupItem[];
-	browsing: boolean;
-	downloading: string | null;
-	deleting: string | null;
-	inspecting: string | null;
-	restoring: boolean;
-	onRefresh: () => void;
-	onOpenDirectory: (path: string) => void;
-	onInspect: (path: string) => void;
-	onDownload: (path: string, name: string) => void;
-	onRestore: (path: string) => void;
-	onDelete: (path: string) => void;
+  items: RemoteBackupItem[];
+  browsing: boolean;
+  downloading: string | null;
+  deleting: string | null;
+  inspecting: string | null;
+  restoring: boolean;
+  onRefresh: () => void;
+  onOpenDirectory: (path: string) => void;
+  onInspect: (path: string) => void;
+  onDownload: (path: string, name: string) => void;
+  onRestore: (path: string) => void;
+  onDelete: (path: string) => void;
 } = $props();
 </script>
 

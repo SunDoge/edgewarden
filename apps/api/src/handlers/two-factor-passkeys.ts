@@ -1,10 +1,10 @@
 export {
-	assertTwoFactorPasskey,
-	buildTwoFactorPasskeyAssertion,
+  assertTwoFactorPasskey,
+  buildTwoFactorPasskeyAssertion,
 } from "./two-factor-passkeys/assertion";
 export {
-	createTwoFactorPasskey,
-	deleteTwoFactorPasskey,
-	getTwoFactorPasskeyChallenge,
-	getTwoFactorPasskeys,
+  createTwoFactorPasskey,
+  deleteTwoFactorPasskey,
+  getTwoFactorPasskeyChallenge,
+  getTwoFactorPasskeys,
 } from "./two-factor-passkeys/management";

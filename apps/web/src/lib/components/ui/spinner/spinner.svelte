@@ -4,14 +4,14 @@ import { cn } from "$lib/utils.js";
 import type { SVGAttributes } from "svelte/elements";
 
 let {
-	class: className,
-	role = "status",
-	// we add name, color, and stroke for compatibility with different icon libraries props
-	name,
-	color,
-	stroke,
-	"aria-label": ariaLabel = "Loading",
-	...restProps
+  class: className,
+  role = "status",
+  // we add name, color, and stroke for compatibility with different icon libraries props
+  name,
+  color,
+  stroke,
+  "aria-label": ariaLabel = "Loading",
+  ...restProps
 }: SVGAttributes<SVGSVGElement> = $props();
 </script>
 

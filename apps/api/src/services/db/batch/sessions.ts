@@ -4,11 +4,11 @@ import { now } from "../../../utils/time";
 
 // Session cleanup queries are guarded by the newly written security marker to avoid revoking a newer concurrent session state.
 export function conditionalRefreshTokenDeletionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	securityStamp: string,
+  db: Kysely<DB>,
+  userId: string,
+  securityStamp: string,
 ) {
-	return sql`
+  return sql`
 		DELETE FROM refresh_tokens
 		WHERE user_id = ${userId}
 		  AND EXISTS (
@@ -20,13 +20,13 @@ export function conditionalRefreshTokenDeletionQuery(
 }
 
 export function conditionalAllDevicesDeletionClaimQuery(
-	db: Kysely<DB>,
-	userId: string,
-	expectedSecurityStamp: string,
-	securityStamp: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  userId: string,
+  expectedSecurityStamp: string,
+  securityStamp: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		UPDATE users
 		SET security_stamp = ${securityStamp}, updated_at = ${timestamp}
 		WHERE id = ${userId}
@@ -36,11 +36,11 @@ export function conditionalAllDevicesDeletionClaimQuery(
 }
 
 export function conditionalDeviceTrustTokenDeletionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	securityStamp: string,
+  db: Kysely<DB>,
+  userId: string,
+  securityStamp: string,
 ) {
-	return sql`
+  return sql`
 		DELETE FROM device_trust_tokens
 		WHERE user_id = ${userId}
 		  AND EXISTS (
@@ -51,11 +51,11 @@ export function conditionalDeviceTrustTokenDeletionQuery(
 }
 
 export function conditionalAllDevicesDeletionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	securityStamp: string,
+  db: Kysely<DB>,
+  userId: string,
+  securityStamp: string,
 ) {
-	return sql`
+  return sql`
 		DELETE FROM devices
 		WHERE user_id = ${userId}
 		  AND EXISTS (
@@ -66,11 +66,11 @@ export function conditionalAllDevicesDeletionQuery(
 }
 
 export function conditionalTwoFactorCredentialDeletionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	securityStamp: string,
+  db: Kysely<DB>,
+  userId: string,
+  securityStamp: string,
 ) {
-	return sql`
+  return sql`
 		DELETE FROM webauthn_credentials
 		WHERE user_id = ${userId}
 		  AND purpose = 'twoFactor'

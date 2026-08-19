@@ -10,29 +10,29 @@ import { Input } from "$lib/components/ui/input/index.js";
 import { Switch } from "$lib/components/ui/switch/index.js";
 import { Textarea } from "$lib/components/ui/textarea/index.js";
 import {
-	disableYubikeysApi,
-	getYubikeySettingsApi,
-	saveYubicoConfigApi,
-	saveYubikeysApi,
+  disableYubikeysApi,
+  getYubikeySettingsApi,
+  saveYubicoConfigApi,
+  saveYubikeysApi,
 } from "$lib/services/api-two-factor";
 import {
-	deriveMasterKey,
-	deriveMasterPasswordHash,
+  deriveMasterKey,
+  deriveMasterPasswordHash,
 } from "$lib/services/crypto";
 import type { YubikeySettingsResult } from "$lib/services/two-factor-types";
 
 let {
-	email,
-	kdfIterations,
-	isAdmin,
-	onMessage,
-	onError,
+  email,
+  kdfIterations,
+  isAdmin,
+  onMessage,
+  onError,
 }: {
-	email: string;
-	kdfIterations: number;
-	isAdmin: boolean;
-	onMessage: (message: string) => void;
-	onError: (error: unknown) => void;
+  email: string;
+  kdfIterations: number;
+  isAdmin: boolean;
+  onMessage: (message: string) => void;
+  onError: (error: unknown) => void;
 } = $props();
 
 let open = $state(false);
@@ -46,73 +46,73 @@ let secretKey = $state("");
 let disableConfirmOpen = $state(false);
 
 async function passwordHash(): Promise<string> {
-	const key = await deriveMasterKey(password, email, kdfIterations);
-	return deriveMasterPasswordHash(key, password);
+  const key = await deriveMasterKey(password, email, kdfIterations);
+  return deriveMasterPasswordHash(key, password);
 }
 
 async function loadSettings() {
-	if (!password) return;
-	busy = "load";
-	try {
-		const result = await getYubikeySettingsApi(await passwordHash());
-		settings = result;
-		nfc = Boolean(result.nfc);
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  if (!password) return;
+  busy = "load";
+  try {
+    const result = await getYubikeySettingsApi(await passwordHash());
+    settings = result;
+    nfc = Boolean(result.nfc);
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 
 async function save() {
-	if (!password || !otps.trim()) return;
-	busy = "save";
-	try {
-		settings = await saveYubikeysApi({
-			masterPasswordHash: await passwordHash(),
-			otps: otps.split(/\s+/).filter(Boolean),
-			nfc,
-		});
-		otps = "";
-		onMessage("YubiKey 两步验证已启用");
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  if (!password || !otps.trim()) return;
+  busy = "save";
+  try {
+    settings = await saveYubikeysApi({
+      masterPasswordHash: await passwordHash(),
+      otps: otps.split(/\s+/).filter(Boolean),
+      nfc,
+    });
+    otps = "";
+    onMessage("YubiKey 两步验证已启用");
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 
 async function disable() {
-	if (!password) return;
-	disableConfirmOpen = false;
-	busy = "disable";
-	try {
-		settings = await disableYubikeysApi(await passwordHash());
-		onMessage("YubiKey 两步验证已关闭");
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  if (!password) return;
+  disableConfirmOpen = false;
+  busy = "disable";
+  try {
+    settings = await disableYubikeysApi(await passwordHash());
+    onMessage("YubiKey 两步验证已关闭");
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 
 async function saveConfig() {
-	if (!password || !clientId || !secretKey) return;
-	busy = "config";
-	try {
-		await saveYubicoConfigApi({
-			masterPasswordHash: await passwordHash(),
-			clientId: clientId.trim(),
-			secretKey: secretKey.trim(),
-		});
-		secretKey = "";
-		await loadSettings();
-		onMessage("Yubico 验证凭据已加密保存");
-	} catch (error) {
-		onError(error);
-	} finally {
-		busy = "";
-	}
+  if (!password || !clientId || !secretKey) return;
+  busy = "config";
+  try {
+    await saveYubicoConfigApi({
+      masterPasswordHash: await passwordHash(),
+      clientId: clientId.trim(),
+      secretKey: secretKey.trim(),
+    });
+    secretKey = "";
+    await loadSettings();
+    onMessage("Yubico 验证凭据已加密保存");
+  } catch (error) {
+    onError(error);
+  } finally {
+    busy = "";
+  }
 }
 </script>
 

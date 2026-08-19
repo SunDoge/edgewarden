@@ -4,13 +4,13 @@ import { Button } from "$lib/components/ui/button/index.js";
 import type { VaultCardData } from "$lib/services/vault-types";
 
 let {
-	card,
-	copiedField,
-	onCopy,
+  card,
+  copiedField,
+  onCopy,
 }: {
-	card: VaultCardData | null;
-	copiedField: string | null;
-	onCopy: (value: string, field: string) => void;
+  card: VaultCardData | null;
+  copiedField: string | null;
+  onCopy: (value: string, field: string) => void;
 } = $props();
 let showCode = $state(false);
 </script>

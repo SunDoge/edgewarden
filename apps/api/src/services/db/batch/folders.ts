@@ -4,12 +4,12 @@ import { now } from "../../../utils/time";
 
 // Folder changes advance the owning user's revision in the same batch as the mutation.
 export function folderRevisionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	folderIds: readonly string[],
-	timestamp = now(),
+  db: Kysely<DB>,
+  userId: string,
+  folderIds: readonly string[],
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT user_id, ${timestamp}
 		FROM folders
@@ -24,12 +24,12 @@ export function folderRevisionQuery(
 }
 
 export function conditionalFolderRevisionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	mutationToken: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  userId: string,
+  mutationToken: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT ${userId}, ${timestamp}
 		WHERE EXISTS (

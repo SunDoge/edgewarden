@@ -1,15 +1,15 @@
 import {
-	generateAuthenticationOptions,
-	verifyAuthenticationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
 import type { D1Dialect } from "./db/d1-dialect";
 import {
-	createAccountPasskeyToken,
-	getAccountPasskeyRpConfig,
-	normalizeAuthenticationResponse,
-	toSimpleWebAuthnCredential,
-	userHandleToUserId,
-	verifyAccountPasskeyToken,
+  createAccountPasskeyToken,
+  getAccountPasskeyRpConfig,
+  normalizeAuthenticationResponse,
+  toSimpleWebAuthnCredential,
+  userHandleToUserId,
+  verifyAccountPasskeyToken,
 } from "../utils/account-passkeys";
 import { bytesToBase64Url } from "../utils/passkey";
 import { jsonResponse } from "../utils/response";
@@ -19,166 +19,166 @@ import * as usersDb from "./db/users";
 import * as webauthnDb from "./db/webauthn";
 
 export async function verifyUserSecret(
-	user: any,
-	body: Record<string, any>,
+  user: any,
+  body: Record<string, any>,
 ): Promise<boolean> {
-	const secret = String(
-		body.masterPasswordHash ||
-			body.master_password_hash ||
-			body.secret ||
-			body.password ||
-			"",
-	).trim();
-	if (!secret) return false;
-	const storedHash = String(user.master_password_hash || "").trim();
-	if (!storedHash) return false;
-	return verifyPassword(secret, storedHash, user.email);
+  const secret = String(
+    body.masterPasswordHash ||
+      body.master_password_hash ||
+      body.secret ||
+      body.password ||
+      "",
+  ).trim();
+  if (!secret) return false;
+  const storedHash = String(user.master_password_hash || "").trim();
+  if (!storedHash) return false;
+  return verifyPassword(secret, storedHash, user.email);
 }
 
 // Public endpoint handler helper
 export async function handleGetAccountPasskeyAssertionOptions(
-	c: any,
+  c: any,
 ): Promise<Response> {
-	const db = c.get("db");
-	const { rpId } = getAccountPasskeyRpConfig(c.req.raw, c.env);
-	const options = await generateAuthenticationOptions({
-		rpID: rpId,
-		allowCredentials: [],
-		userVerification: "required",
-		timeout: 60000,
-	});
+  const db = c.get("db");
+  const { rpId } = getAccountPasskeyRpConfig(c.req.raw, c.env);
+  const options = await generateAuthenticationOptions({
+    rpID: rpId,
+    allowCredentials: [],
+    userVerification: "required",
+    timeout: 60000,
+  });
 
-	const ts = now();
-	const challengeBytes = new TextEncoder().encode(options.challenge);
-	const challengeHashBuf = await crypto.subtle.digest(
-		"SHA-256",
-		challengeBytes,
-	);
-	const challengeHash = bytesToBase64Url(new Uint8Array(challengeHashBuf));
+  const ts = now();
+  const challengeBytes = new TextEncoder().encode(options.challenge);
+  const challengeHashBuf = await crypto.subtle.digest(
+    "SHA-256",
+    challengeBytes,
+  );
+  const challengeHash = bytesToBase64Url(new Uint8Array(challengeHashBuf));
 
-	await webauthnDb.saveAccountPasskeyChallenge(db, {
-		challenge_hash: challengeHash,
-		scope: "login", // 'login' maps to 'Authentication'
-		user_id: null,
-		expires_at: ts + 17 * 60,
-		used_at: null,
-		created_at: ts,
-	});
+  await webauthnDb.saveAccountPasskeyChallenge(db, {
+    challenge_hash: challengeHash,
+    scope: "login", // 'login' maps to 'Authentication'
+    user_id: null,
+    expires_at: ts + 17 * 60,
+    used_at: null,
+    created_at: ts,
+  });
 
-	const token = await createAccountPasskeyToken(c.env.JWT_SECRET, {
-		scope: "Authentication",
-		challenge: options.challenge,
-		userId: null,
-		rpId,
-		purpose: "login",
-	});
+  const token = await createAccountPasskeyToken(c.env.JWT_SECRET, {
+    scope: "Authentication",
+    challenge: options.challenge,
+    userId: null,
+    rpId,
+    purpose: "login",
+  });
 
-	return jsonResponse({
-		options,
-		token,
-		object: "webAuthnLoginAssertionOptions",
-		Object: "webAuthnLoginAssertionOptions",
-	});
+  return jsonResponse({
+    options,
+    token,
+    object: "webAuthnLoginAssertionOptions",
+    Object: "webAuthnLoginAssertionOptions",
+  });
 }
 
 // Core assertion checker used during login
 export async function assertAccountPasskeyCredential(
-	request: Request,
-	env: CloudflareBindings,
-	db: any,
-	dialect: D1Dialect,
-	input: {
-		token: string;
-		deviceResponse: unknown;
-		scope: "Authentication" | "UpdateKeySet";
-		expectedUserId?: string | null;
-	},
+  request: Request,
+  env: CloudflareBindings,
+  db: any,
+  dialect: D1Dialect,
+  input: {
+    token: string;
+    deviceResponse: unknown;
+    scope: "Authentication" | "UpdateKeySet";
+    expectedUserId?: string | null;
+  },
 ): Promise<{ user: any; credential: any }> {
-	const payload = await verifyAccountPasskeyToken(
-		env.JWT_SECRET,
-		input.token,
-		input.scope,
-		"login",
-	);
-	if (!payload) {
-		throw new Error("Passkey challenge token is invalid or expired");
-	}
-	if (
-		input.expectedUserId !== undefined &&
-		payload.userId !== input.expectedUserId
-	) {
-		throw new Error("Passkey challenge token does not match this user");
-	}
+  const payload = await verifyAccountPasskeyToken(
+    env.JWT_SECRET,
+    input.token,
+    input.scope,
+    "login",
+  );
+  if (!payload) {
+    throw new Error("Passkey challenge token is invalid or expired");
+  }
+  if (
+    input.expectedUserId !== undefined &&
+    payload.userId !== input.expectedUserId
+  ) {
+    throw new Error("Passkey challenge token does not match this user");
+  }
 
-	const response = normalizeAuthenticationResponse(input.deviceResponse);
-	if (!response) {
-		throw new Error("Invalid passkey assertion response");
-	}
+  const response = normalizeAuthenticationResponse(input.deviceResponse);
+  if (!response) {
+    throw new Error("Invalid passkey assertion response");
+  }
 
-	const challengeBytes = new TextEncoder().encode(payload.challenge);
-	const challengeHashBuf = await crypto.subtle.digest(
-		"SHA-256",
-		challengeBytes,
-	);
-	const challengeHash = bytesToBase64Url(new Uint8Array(challengeHashBuf));
+  const challengeBytes = new TextEncoder().encode(payload.challenge);
+  const challengeHashBuf = await crypto.subtle.digest(
+    "SHA-256",
+    challengeBytes,
+  );
+  const challengeHash = bytesToBase64Url(new Uint8Array(challengeHashBuf));
 
-	const scopeDb = input.scope === "Authentication" ? "login" : "action";
-	const credential = await webauthnDb.getAccountPasskeyCredentialByCredentialId(
-		db,
-		response.rawId,
-	);
-	if (!credential) {
-		throw new Error("Passkey is not registered for this server");
-	}
-	if (payload.userId && credential.user_id !== payload.userId) {
-		throw new Error("Passkey does not belong to this user");
-	}
+  const scopeDb = input.scope === "Authentication" ? "login" : "action";
+  const credential = await webauthnDb.getAccountPasskeyCredentialByCredentialId(
+    db,
+    response.rawId,
+  );
+  if (!credential) {
+    throw new Error("Passkey is not registered for this server");
+  }
+  if (payload.userId && credential.user_id !== payload.userId) {
+    throw new Error("Passkey does not belong to this user");
+  }
 
-	const userHandleUserId = userHandleToUserId(response.response.userHandle);
-	const resolvedUserId =
-		payload.userId || userHandleUserId || credential.user_id;
-	if (!resolvedUserId || resolvedUserId !== credential.user_id) {
-		throw new Error("Passkey user handle does not match this credential");
-	}
+  const userHandleUserId = userHandleToUserId(response.response.userHandle);
+  const resolvedUserId =
+    payload.userId || userHandleUserId || credential.user_id;
+  if (!resolvedUserId || resolvedUserId !== credential.user_id) {
+    throw new Error("Passkey user handle does not match this credential");
+  }
 
-	const user = await usersDb.getUserById(db, resolvedUserId);
-	if (!user || user.status !== "active") {
-		throw new Error("Passkey user is not available");
-	}
+  const user = await usersDb.getUserById(db, resolvedUserId);
+  if (!user || user.status !== "active") {
+    throw new Error("Passkey user is not available");
+  }
 
-	const { origins } = getAccountPasskeyRpConfig(request, env);
-	const verification = await verifyAuthenticationResponse({
-		response,
-		expectedChallenge: payload.challenge,
-		expectedOrigin: origins,
-		expectedRPID: payload.rpId,
-		credential: toSimpleWebAuthnCredential(credential),
-		requireUserVerification: true,
-		advancedFIDOConfig: { userVerification: "required" },
-	});
+  const { origins } = getAccountPasskeyRpConfig(request, env);
+  const verification = await verifyAuthenticationResponse({
+    response,
+    expectedChallenge: payload.challenge,
+    expectedOrigin: origins,
+    expectedRPID: payload.rpId,
+    credential: toSimpleWebAuthnCredential(credential),
+    requireUserVerification: true,
+    advancedFIDOConfig: { userVerification: "required" },
+  });
 
-	if (!verification.verified || !verification.authenticationInfo.userVerified) {
-		throw new Error("Passkey assertion could not be verified");
-	}
-	const assertionClaimToken = await webauthnDb.claimVerifiedPasskeyAssertion(
-		db,
-		dialect,
-		{
-			challengeHash,
-			scope: scopeDb,
-			challengeUserId: payload.userId,
-			credentialUserId: credential.user_id,
-			credentialId: credential.credential_id,
-			expectedCounter: credential.counter,
-			newCounter: verification.authenticationInfo.newCounter,
-		},
-	);
-	if (!assertionClaimToken)
-		throw new Error("Passkey assertion was already used");
-	credential.counter = verification.authenticationInfo.newCounter;
-	credential.mutation_token = assertionClaimToken;
+  if (!verification.verified || !verification.authenticationInfo.userVerified) {
+    throw new Error("Passkey assertion could not be verified");
+  }
+  const assertionClaimToken = await webauthnDb.claimVerifiedPasskeyAssertion(
+    db,
+    dialect,
+    {
+      challengeHash,
+      scope: scopeDb,
+      challengeUserId: payload.userId,
+      credentialUserId: credential.user_id,
+      credentialId: credential.credential_id,
+      expectedCounter: credential.counter,
+      newCounter: verification.authenticationInfo.newCounter,
+    },
+  );
+  if (!assertionClaimToken)
+    throw new Error("Passkey assertion was already used");
+  credential.counter = verification.authenticationInfo.newCounter;
+  credential.mutation_token = assertionClaimToken;
 
-	return { user, credential };
+  return { user, credential };
 }
 
 // GET /api/webauthn

@@ -2,15 +2,15 @@
 import { onMount } from "svelte";
 import { page } from "$app/state";
 import {
-	accessSendPublicApi,
-	requestSendFileDownloadApi,
+  accessSendPublicApi,
+  requestSendFileDownloadApi,
 } from "$lib/services/api-sends";
 import { decryptBwFileData } from "$lib/services/crypto";
 import {
-	decodeSendShareKey,
-	decryptPublicSend,
-	type DecryptedPublicSend,
-	type SendKeys,
+  decodeSendShareKey,
+  decryptPublicSend,
+  type DecryptedPublicSend,
+  type SendKeys,
 } from "$lib/services/send-crypto";
 import { ApiError } from "$lib/services/rpc";
 import * as Alert from "$lib/components/ui/alert/index.js";
@@ -22,16 +22,16 @@ import { Input } from "$lib/components/ui/input/index.js";
 import { Separator } from "$lib/components/ui/separator/index.js";
 import { Spinner } from "$lib/components/ui/spinner/index.js";
 import {
-	Share2,
-	File,
-	Lock,
-	Copy,
-	Check,
-	Eye,
-	EyeOff,
-	ShieldAlert,
-	ArrowDownToLine,
-	LockOpen,
+  Share2,
+  File,
+  Lock,
+  Copy,
+  Check,
+  Eye,
+  EyeOff,
+  ShieldAlert,
+  ArrowDownToLine,
+  LockOpen,
 } from "@lucide/svelte";
 
 // Params
@@ -57,123 +57,123 @@ let fileDownloading = $state(false);
 let copied = $state(false);
 
 onMount(async () => {
-	// Parse Send Key from URL hash
-	const hash = window.location.hash.slice(1);
-	if (!hash) {
-		error =
-			"链接无效：缺少解密钥匙。请确保您复制了完整的分享链接（包括 '#' 后面的字符）。";
-		loading = false;
-		return;
-	}
+  // Parse Send Key from URL hash
+  const hash = window.location.hash.slice(1);
+  if (!hash) {
+    error =
+      "链接无效：缺少解密钥匙。请确保您复制了完整的分享链接（包括 '#' 后面的字符）。";
+    loading = false;
+    return;
+  }
 
-	try {
-		sendKeys = decodeSendShareKey(hash);
-		sendEncKey = sendKeys.enc;
-		sendMacKey = sendKeys.mac;
-	} catch (e) {
-		error = "密钥解析失败，请检查分享链接是否完整。";
-		loading = false;
-		return;
-	}
+  try {
+    sendKeys = decodeSendShareKey(hash);
+    sendEncKey = sendKeys.enc;
+    sendMacKey = sendKeys.mac;
+  } catch (e) {
+    error = "密钥解析失败，请检查分享链接是否完整。";
+    loading = false;
+    return;
+  }
 
-	await loadPublicSend();
+  await loadPublicSend();
 });
 
 async function loadPublicSend() {
-	loading = true;
-	error = "";
-	try {
-		const payload: { password?: string } = {};
-		if (accessPassword) {
-			payload.password = accessPassword;
-		}
+  loading = true;
+  error = "";
+  try {
+    const payload: { password?: string } = {};
+    if (accessPassword) {
+      payload.password = accessPassword;
+    }
 
-		const res = await accessSendPublicApi(accessId, payload);
-		if (!sendKeys) throw new Error("Send 解密密钥不可用");
-		const decrypted = await decryptPublicSend(res, sendKeys);
-		sendData = decrypted;
-		passwordRequired = false;
+    const res = await accessSendPublicApi(accessId, payload);
+    if (!sendKeys) throw new Error("Send 解密密钥不可用");
+    const decrypted = await decryptPublicSend(res, sendKeys);
+    sendData = decrypted;
+    passwordRequired = false;
 
-		// Decrypt payload fields
-		if (decrypted.type === 0) decryptedText = decrypted.text ?? "";
-		if (decrypted.type === 1) {
-			decryptedFileName = decrypted.file?.fileName || decrypted.name;
-			decryptedFileSizeName = decrypted.file?.sizeName || "未知大小";
-		}
-	} catch (caught) {
-		if (caught instanceof ApiError && caught.status === 401) {
-			passwordRequired = true;
-			if (accessPassword) {
-				error = "密码错误，请重新输入。";
-			}
-		} else {
-			error =
-				(caught instanceof Error ? caught.message : "") ||
-				"获取分享内容失败，此链接可能已失效、被禁用或不存在。";
-		}
-	} finally {
-		loading = false;
-	}
+    // Decrypt payload fields
+    if (decrypted.type === 0) decryptedText = decrypted.text ?? "";
+    if (decrypted.type === 1) {
+      decryptedFileName = decrypted.file?.fileName || decrypted.name;
+      decryptedFileSizeName = decrypted.file?.sizeName || "未知大小";
+    }
+  } catch (caught) {
+    if (caught instanceof ApiError && caught.status === 401) {
+      passwordRequired = true;
+      if (accessPassword) {
+        error = "密码错误，请重新输入。";
+      }
+    } else {
+      error =
+        (caught instanceof Error ? caught.message : "") ||
+        "获取分享内容失败，此链接可能已失效、被禁用或不存在。";
+    }
+  } finally {
+    loading = false;
+  }
 }
 
 async function handleDownloadFile() {
-	if (
-		!sendData ||
-		sendData.type !== 1 ||
-		!sendData.file ||
-		!sendEncKey ||
-		!sendMacKey
-	)
-		return;
-	const file = sendData.file;
-	fileDownloading = true;
-	error = "";
+  if (
+    !sendData ||
+    sendData.type !== 1 ||
+    !sendData.file ||
+    !sendEncKey ||
+    !sendMacKey
+  )
+    return;
+  const file = sendData.file;
+  fileDownloading = true;
+  error = "";
 
-	try {
-		// 1. Fetch a typed file access ticket through the Hono RPC client.
-		const ticket = await requestSendFileDownloadApi(
-			sendData.id,
-			file.id,
-			accessPassword ? { password: accessPassword } : {},
-		);
+  try {
+    // 1. Fetch a typed file access ticket through the Hono RPC client.
+    const ticket = await requestSendFileDownloadApi(
+      sendData.id,
+      file.id,
+      accessPassword ? { password: accessPassword } : {},
+    );
 
-		// 2. Download encrypted payload bytes
-		const fileResp = await fetch(ticket.url);
-		if (!fileResp.ok) {
-			throw new Error(`下载文件失败: ${fileResp.status}`);
-		}
-		const encryptedBuffer = await fileResp.arrayBuffer();
+    // 2. Download encrypted payload bytes
+    const fileResp = await fetch(ticket.url);
+    if (!fileResp.ok) {
+      throw new Error(`下载文件失败: ${fileResp.status}`);
+    }
+    const encryptedBuffer = await fileResp.arrayBuffer();
 
-		// 3. Decrypt file payload
-		const decryptedBytes = await decryptBwFileData(
-			new Uint8Array(encryptedBuffer),
-			sendEncKey,
-			sendMacKey,
-		);
+    // 3. Decrypt file payload
+    const decryptedBytes = await decryptBwFileData(
+      new Uint8Array(encryptedBuffer),
+      sendEncKey,
+      sendMacKey,
+    );
 
-		// 4. Trigger download in browser
-		const blob = new Blob([decryptedBytes as BlobPart], {
-			type: "application/octet-stream",
-		});
-		const dlUrl = URL.createObjectURL(blob);
-		const a = document.createElement("a");
-		a.href = dlUrl;
-		a.download = decryptedFileName || "downloaded-file";
-		document.body.appendChild(a);
-		a.click();
-		document.body.removeChild(a);
-		URL.revokeObjectURL(dlUrl);
-	} catch (caught) {
-		error = `下载或解密文件失败：${caught instanceof Error ? caught.message : String(caught)}`;
-	} finally {
-		fileDownloading = false;
-	}
+    // 4. Trigger download in browser
+    const blob = new Blob([decryptedBytes as BlobPart], {
+      type: "application/octet-stream",
+    });
+    const dlUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = dlUrl;
+    a.download = decryptedFileName || "downloaded-file";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(dlUrl);
+  } catch (caught) {
+    error = `下载或解密文件失败：${caught instanceof Error ? caught.message : String(caught)}`;
+  } finally {
+    fileDownloading = false;
+  }
 }
 
 function handleCopyText() {
-	navigator.clipboard.writeText(decryptedText);
-	copied = true;
-	setTimeout(() => (copied = false), 2000);
+  navigator.clipboard.writeText(decryptedText);
+  copied = true;
+  setTimeout(() => (copied = false), 2000);
 }
 </script>
 

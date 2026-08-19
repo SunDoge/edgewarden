@@ -2,16 +2,16 @@ import type { Kysely, Selectable } from "kysely";
 import type { InferOutput } from "valibot";
 import type { TokenFormSchema } from "./schemas/identity";
 import type {
-	AuthRequests,
-	Ciphers,
-	Collections,
-	DB,
-	Devices,
-	Folders,
-	OrgMembers,
-	Sends,
-	Users,
-	WebauthnCredentials,
+  AuthRequests,
+  Ciphers,
+  Collections,
+  DB,
+  Devices,
+  Folders,
+  OrgMembers,
+  Sends,
+  Users,
+  WebauthnCredentials,
 } from "./types/db";
 import type { JWTPayload } from "./utils/jwt";
 import type { WorkerBindings } from "./worker-bindings";
@@ -21,24 +21,24 @@ import type { D1Dialect } from "./services/db/d1-dialect";
 // It is a global interface — no import needed.
 
 export type Variables = {
-	db: Kysely<DB>;
-	dbDialect: D1Dialect;
-	user: Selectable<Users>;
-	payload: JWTPayload;
-	folder: Selectable<Folders>;
-	device: Selectable<Devices>;
-	authRequest: Selectable<AuthRequests>;
-	cipher: Selectable<Ciphers>;
-	send: Selectable<Sends>;
-	sendFileId: string;
-	tokenRequest: InferOutput<typeof TokenFormSchema>;
-	revocationToken: string;
-	accountPasskey: Selectable<WebauthnCredentials>;
-	orgMember: Selectable<OrgMembers>;
-	collection: Selectable<Collections>;
+  db: Kysely<DB>;
+  dbDialect: D1Dialect;
+  user: Selectable<Users>;
+  payload: JWTPayload;
+  folder: Selectable<Folders>;
+  device: Selectable<Devices>;
+  authRequest: Selectable<AuthRequests>;
+  cipher: Selectable<Ciphers>;
+  send: Selectable<Sends>;
+  sendFileId: string;
+  tokenRequest: InferOutput<typeof TokenFormSchema>;
+  revocationToken: string;
+  accountPasskey: Selectable<WebauthnCredentials>;
+  orgMember: Selectable<OrgMembers>;
+  collection: Selectable<Collections>;
 };
 
 export type HonoEnv = {
-	Bindings: WorkerBindings;
-	Variables: Variables;
+  Bindings: WorkerBindings;
+  Variables: Variables;
 };

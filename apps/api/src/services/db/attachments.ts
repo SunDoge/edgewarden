@@ -2,44 +2,44 @@ import { sql, type Insertable, type Kysely, type Selectable } from "kysely";
 import type { Attachments, DB } from "../../types/db";
 
 export async function listByCipherIds(
-	db: Kysely<DB>,
-	cipherIds: string[],
+  db: Kysely<DB>,
+  cipherIds: string[],
 ): Promise<Selectable<Attachments>[]> {
-	return listByCipherIdsIncludingDeleted(db, cipherIds, false);
+  return listByCipherIdsIncludingDeleted(db, cipherIds, false);
 }
 
 export async function listByCipherIdsIncludingDeleted(
-	db: Kysely<DB>,
-	cipherIds: string[],
-	includeDeleted = true,
+  db: Kysely<DB>,
+  cipherIds: string[],
+  includeDeleted = true,
 ): Promise<Selectable<Attachments>[]> {
-	if (!cipherIds.length) return [];
-	let query = db
-		.selectFrom("attachments")
-		.selectAll()
-		// Explicit bulk operations may still contain many IDs. Passing the set as
-		// JSON keeps those operations to one bound parameter.
-		.where(
-			sql<boolean>`cipher_id in (select value from json_each(${JSON.stringify(cipherIds)}))`,
-		);
-	if (!includeDeleted) query = query.where("deleted_at", "is", null);
-	return query.orderBy("created_at", "asc").execute();
+  if (!cipherIds.length) return [];
+  let query = db
+    .selectFrom("attachments")
+    .selectAll()
+    // Explicit bulk operations may still contain many IDs. Passing the set as
+    // JSON keeps those operations to one bound parameter.
+    .where(
+      sql<boolean>`cipher_id in (select value from json_each(${JSON.stringify(cipherIds)}))`,
+    );
+  if (!includeDeleted) query = query.where("deleted_at", "is", null);
+  return query.orderBy("created_at", "asc").execute();
 }
 
 /** Load attachments for ciphers visible in a full user sync without binding
  * every cipher ID. The joins mirror the ownership checks used to load ciphers. */
 export async function listVisibleForSync(
-	db: Kysely<DB>,
-	userId: string,
-	allAccessOrgIds: string[],
-	restrictedCollectionIds: string[],
+  db: Kysely<DB>,
+  userId: string,
+  allAccessOrgIds: string[],
+  restrictedCollectionIds: string[],
 ): Promise<Selectable<Attachments>[]> {
-	return db
-		.selectFrom("attachments")
-		.selectAll()
-		.where("deleted_at", "is", null)
-		.where(
-			sql<boolean>`
+  return db
+    .selectFrom("attachments")
+    .selectAll()
+    .where("deleted_at", "is", null)
+    .where(
+      sql<boolean>`
 				cipher_id in (
 					select id from ciphers where user_id = ${userId}
 					union
@@ -52,68 +52,68 @@ export async function listVisibleForSync(
 					)
 				)
 			`,
-		)
-		.orderBy("created_at", "asc")
-		.execute();
+    )
+    .orderBy("created_at", "asc")
+    .execute();
 }
 
 export async function listByUserId(
-	db: Kysely<DB>,
-	userId: string,
+  db: Kysely<DB>,
+  userId: string,
 ): Promise<Selectable<Attachments>[]> {
-	return db
-		.selectFrom("attachments as attachment")
-		.innerJoin("ciphers as cipher", "cipher.id", "attachment.cipher_id")
-		.selectAll("attachment")
-		.where("cipher.user_id", "=", userId)
-		.where("attachment.deleted_at", "is", null)
-		.orderBy("attachment.created_at", "asc")
-		.execute();
+  return db
+    .selectFrom("attachments as attachment")
+    .innerJoin("ciphers as cipher", "cipher.id", "attachment.cipher_id")
+    .selectAll("attachment")
+    .where("cipher.user_id", "=", userId)
+    .where("attachment.deleted_at", "is", null)
+    .orderBy("attachment.created_at", "asc")
+    .execute();
 }
 
 export async function getById(
-	db: Kysely<DB>,
-	id: string,
+  db: Kysely<DB>,
+  id: string,
 ): Promise<Selectable<Attachments> | null> {
-	return (
-		(await db
-			.selectFrom("attachments")
-			.selectAll()
-			.where("id", "=", id)
-			.where("deleted_at", "is", null)
-			.executeTakeFirst()) ?? null
-	);
+  return (
+    (await db
+      .selectFrom("attachments")
+      .selectAll()
+      .where("id", "=", id)
+      .where("deleted_at", "is", null)
+      .executeTakeFirst()) ?? null
+  );
 }
 
 export async function getByIdIncludingDeleted(
-	db: Kysely<DB>,
-	id: string,
+  db: Kysely<DB>,
+  id: string,
 ): Promise<Selectable<Attachments> | null> {
-	return (
-		(await db
-			.selectFrom("attachments")
-			.selectAll()
-			.where("id", "=", id)
-			.executeTakeFirst()) ?? null
-	);
+  return (
+    (await db
+      .selectFrom("attachments")
+      .selectAll()
+      .where("id", "=", id)
+      .executeTakeFirst()) ?? null
+  );
 }
 
 export async function create(
-	db: Kysely<DB>,
-	value: Insertable<Attachments>,
+  db: Kysely<DB>,
+  value: Insertable<Attachments>,
 ): Promise<void> {
-	await db.insertInto("attachments").values(value).execute();
+  await db.insertInto("attachments").values(value).execute();
 }
 
 export async function remove(
-	db: Kysely<DB>,
-	id: string,
-	cipherId: string,
+  db: Kysely<DB>,
+  id: string,
+  cipherId: string,
 ): Promise<boolean> {
-	const result = await db
-		.deleteFrom("attachments")
-		.where("id", "=", id)
-		.where("cipher_id", "=", cipherId)
-		.executeTakeFirst();
-	return Number(result.numDeletedRows) > 0;
+  const result = await db
+    .deleteFrom("attachments")
+    .where("id", "=", id)
+    .where("cipher_id", "=", cipherId)
+    .executeTakeFirst();
+  return Number(result.numDeletedRows) > 0;
 }

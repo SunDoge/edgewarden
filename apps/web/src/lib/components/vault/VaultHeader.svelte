@@ -1,12 +1,12 @@
 <script lang="ts">
 import {
-	LogOut,
-	Menu,
-	MoreVertical,
-	RefreshCw,
-	ShieldCheck,
-	TriangleAlert,
-	WifiOff,
+  LogOut,
+  Menu,
+  MoreVertical,
+  RefreshCw,
+  ShieldCheck,
+  TriangleAlert,
+  WifiOff,
 } from "@lucide/svelte";
 import { Button } from "$lib/components/ui/button/index.js";
 import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
@@ -19,23 +19,23 @@ import { syncVaultData, vault } from "$lib/stores/vault.svelte";
 import ThemeToggle from "$lib/components/theme-toggle.svelte";
 
 let {
-	onOpenNavigation,
-	onLogout,
+  onOpenNavigation,
+  onLogout,
 }: {
-	onOpenNavigation: () => void;
-	onLogout: () => void | Promise<void>;
+  onOpenNavigation: () => void;
+  onLogout: () => void | Promise<void>;
 } = $props();
 
 let syncStatus = $derived.by(() => {
-	if (vault.isSyncing) return "正在同步…";
-	if (vault.status === "error") return "同步失败";
-	if (vault.isOffline)
-		return vault.syncedAt
-			? m.vault_cached_at({ time: formatTime(vault.syncedAt) })
-			: m.vault_offline_cache();
-	return vault.syncedAt
-		? m.vault_synced_at({ time: formatTime(vault.syncedAt) })
-		: "等待首次同步";
+  if (vault.isSyncing) return "正在同步…";
+  if (vault.status === "error") return "同步失败";
+  if (vault.isOffline)
+    return vault.syncedAt
+      ? m.vault_cached_at({ time: formatTime(vault.syncedAt) })
+      : m.vault_offline_cache();
+  return vault.syncedAt
+    ? m.vault_synced_at({ time: formatTime(vault.syncedAt) })
+    : "等待首次同步";
 });
 </script>
 

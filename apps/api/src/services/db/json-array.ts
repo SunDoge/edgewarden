@@ -5,10 +5,10 @@ import { sql, type RawBuilder } from "kysely";
  * Column names must be static server-owned identifiers, never user input.
  */
 export function textColumnInJson(
-	column: string,
-	values: readonly string[],
+  column: string,
+  values: readonly string[],
 ): RawBuilder<boolean> {
-	return sql<boolean>`${sql.ref(column)} in (
+  return sql<boolean>`${sql.ref(column)} in (
 		select value from json_each(${JSON.stringify(values)})
 	)`;
 }

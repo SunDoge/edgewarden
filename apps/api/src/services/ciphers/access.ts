@@ -1,10 +1,10 @@
 import type { D1Dialect, EdgewardenBatchQuery } from "../db/d1-dialect";
 import {
-	type CompiledQuery,
-	type Kysely,
-	type RawBuilder,
-	type Selectable,
-	sql,
+  type CompiledQuery,
+  type Kysely,
+  type RawBuilder,
+  type Selectable,
+  sql,
 } from "kysely";
 import type { Ciphers, DB, OrgMembers } from "../../types/db";
 import { now } from "../../utils/time";
@@ -13,143 +13,143 @@ import { textColumnInJson } from "../db/json-array";
 import type { CipherPermissions } from "./presentation";
 
 export async function getCipherCollectionIds(
-	db: Kysely<DB>,
-	cipherId: string,
+  db: Kysely<DB>,
+  cipherId: string,
 ): Promise<string[]> {
-	return (
-		await db
-			.selectFrom("cipher_collections")
-			.select("collection_id")
-			.where("cipher_id", "=", cipherId)
-			.execute()
-	).map((row) => row.collection_id);
+  return (
+    await db
+      .selectFrom("cipher_collections")
+      .select("collection_id")
+      .where("cipher_id", "=", cipherId)
+      .execute()
+  ).map((row) => row.collection_id);
 }
 
 export async function getVisibleCipherCollectionIds(
-	db: Kysely<DB>,
-	cipherId: string,
-	member: Selectable<OrgMembers> | undefined,
+  db: Kysely<DB>,
+  cipherId: string,
+  member: Selectable<OrgMembers> | undefined,
 ): Promise<string[]> {
-	if (
-		!member ||
-		member.access_all === 1 ||
-		["manager", "admin", "owner"].includes(member.role)
-	) {
-		return getCipherCollectionIds(db, cipherId);
-	}
-	return (
-		await db
-			.selectFrom("cipher_collections as link")
-			.innerJoin("collection_members as access", (join) =>
-				join
-					.onRef("access.collection_id", "=", "link.collection_id")
-					.on("access.org_member_id", "=", member.id),
-			)
-			.select("link.collection_id")
-			.where("link.cipher_id", "=", cipherId)
-			.execute()
-	).map((row) => row.collection_id);
+  if (
+    !member ||
+    member.access_all === 1 ||
+    ["manager", "admin", "owner"].includes(member.role)
+  ) {
+    return getCipherCollectionIds(db, cipherId);
+  }
+  return (
+    await db
+      .selectFrom("cipher_collections as link")
+      .innerJoin("collection_members as access", (join) =>
+        join
+          .onRef("access.collection_id", "=", "link.collection_id")
+          .on("access.org_member_id", "=", member.id),
+      )
+      .select("link.collection_id")
+      .where("link.cipher_id", "=", cipherId)
+      .execute()
+  ).map((row) => row.collection_id);
 }
 
 export async function getCipherPermissions(
-	db: Kysely<DB>,
-	cipher: Selectable<Ciphers>,
-	member: Selectable<OrgMembers> | undefined,
-	collectionIds: string[],
+  db: Kysely<DB>,
+  cipher: Selectable<Ciphers>,
+  member: Selectable<OrgMembers> | undefined,
+  collectionIds: string[],
 ): Promise<CipherPermissions> {
-	if (
-		!cipher.org_id ||
-		!member ||
-		member.access_all === 1 ||
-		["manager", "admin", "owner"].includes(member.role)
-	) {
-		return { edit: true, viewPassword: true };
-	}
-	const access = collectionIds.length
-		? await db
-				.selectFrom("collection_members")
-				.select(["read_only", "hide_passwords"])
-				.where("org_member_id", "=", member.id)
-				.where(textColumnInJson("collection_id", collectionIds))
-				.execute()
-		: [];
-	return {
-		// Bitwarden combines duplicate collection grants using the most permissive
-		// matching grant. A cipher in one writable and one read-only collection is
-		// therefore writable; inaccessible collections do not weaken that grant.
-		edit: access.some((row) => row.read_only !== 1),
-		viewPassword: access.some((row) => row.hide_passwords !== 1),
-	};
+  if (
+    !cipher.org_id ||
+    !member ||
+    member.access_all === 1 ||
+    ["manager", "admin", "owner"].includes(member.role)
+  ) {
+    return { edit: true, viewPassword: true };
+  }
+  const access = collectionIds.length
+    ? await db
+        .selectFrom("collection_members")
+        .select(["read_only", "hide_passwords"])
+        .where("org_member_id", "=", member.id)
+        .where(textColumnInJson("collection_id", collectionIds))
+        .execute()
+    : [];
+  return {
+    // Bitwarden combines duplicate collection grants using the most permissive
+    // matching grant. A cipher in one writable and one read-only collection is
+    // therefore writable; inaccessible collections do not weaken that grant.
+    edit: access.some((row) => row.read_only !== 1),
+    viewPassword: access.some((row) => row.hide_passwords !== 1),
+  };
 }
 
 export async function resolveOrganizationCipherCollectionsForUpdate(
-	db: Kysely<DB>,
-	member: Selectable<OrgMembers>,
-	organizationId: string,
-	currentCollectionIds: string[],
-	requestedCollectionIds: string[],
+  db: Kysely<DB>,
+  member: Selectable<OrgMembers>,
+  organizationId: string,
+  currentCollectionIds: string[],
+  requestedCollectionIds: string[],
 ): Promise<{ collectionIds: string[] } | { error: string }> {
-	const requestedIds = [...new Set(requestedCollectionIds)];
-	if (!requestedIds.length)
-		return { error: "At least one collection is required" };
-	const requestedCollections = await db
-		.selectFrom("collections")
-		.select("id")
-		.where("org_id", "=", organizationId)
-		.where(textColumnInJson("id", requestedIds))
-		.execute();
-	if (requestedCollections.length !== requestedIds.length)
-		return { error: "Collection not found" };
-	if (
-		member.access_all === 1 ||
-		["manager", "admin", "owner"].includes(member.role)
-	) {
-		return { collectionIds: requestedIds };
-	}
+  const requestedIds = [...new Set(requestedCollectionIds)];
+  if (!requestedIds.length)
+    return { error: "At least one collection is required" };
+  const requestedCollections = await db
+    .selectFrom("collections")
+    .select("id")
+    .where("org_id", "=", organizationId)
+    .where(textColumnInJson("id", requestedIds))
+    .execute();
+  if (requestedCollections.length !== requestedIds.length)
+    return { error: "Collection not found" };
+  if (
+    member.access_all === 1 ||
+    ["manager", "admin", "owner"].includes(member.role)
+  ) {
+    return { collectionIds: requestedIds };
+  }
 
-	const candidateIds = [...new Set([...currentCollectionIds, ...requestedIds])];
-	const access = await db
-		.selectFrom("collection_members")
-		.select(["collection_id", "read_only"])
-		.where("org_member_id", "=", member.id)
-		.where(textColumnInJson("collection_id", candidateIds))
-		.execute();
-	const writableIds = new Set(
-		access.filter((row) => row.read_only !== 1).map((row) => row.collection_id),
-	);
-	if (!currentCollectionIds.some((id) => writableIds.has(id)))
-		return { error: "Collection is read-only" };
-	const currentIds = new Set(currentCollectionIds);
-	if (requestedIds.some((id) => !currentIds.has(id) && !writableIds.has(id)))
-		return { error: "Collection is read-only" };
+  const candidateIds = [...new Set([...currentCollectionIds, ...requestedIds])];
+  const access = await db
+    .selectFrom("collection_members")
+    .select(["collection_id", "read_only"])
+    .where("org_member_id", "=", member.id)
+    .where(textColumnInJson("collection_id", candidateIds))
+    .execute();
+  const writableIds = new Set(
+    access.filter((row) => row.read_only !== 1).map((row) => row.collection_id),
+  );
+  if (!currentCollectionIds.some((id) => writableIds.has(id)))
+    return { error: "Collection is read-only" };
+  const currentIds = new Set(currentCollectionIds);
+  if (requestedIds.some((id) => !currentIds.has(id) && !writableIds.has(id)))
+    return { error: "Collection is read-only" };
 
-	// Only writable assignments are replaceable by this member. Preserve every
-	// existing read-only or inaccessible assignment, matching the official
-	// CollectionCipher_UpdateCollections behavior.
-	const retainedIds = currentCollectionIds.filter((id) => !writableIds.has(id));
-	const requestedWritableIds = requestedIds.filter((id) => writableIds.has(id));
-	return {
-		collectionIds: [...new Set([...retainedIds, ...requestedWritableIds])],
-	};
+  // Only writable assignments are replaceable by this member. Preserve every
+  // existing read-only or inaccessible assignment, matching the official
+  // CollectionCipher_UpdateCollections behavior.
+  const retainedIds = currentCollectionIds.filter((id) => !writableIds.has(id));
+  const requestedWritableIds = requestedIds.filter((id) => writableIds.has(id));
+  return {
+    collectionIds: [...new Set([...retainedIds, ...requestedWritableIds])],
+  };
 }
 
 export async function revisionQueriesForCipher(
-	db: Kysely<DB>,
-	cipher: Pick<Selectable<Ciphers>, "user_id" | "org_id">,
-	timestamp = now(),
+  db: Kysely<DB>,
+  cipher: Pick<Selectable<Ciphers>, "user_id" | "org_id">,
+  timestamp = now(),
 ): Promise<CompiledQuery[]> {
-	if (cipher.user_id) return [revisionQuery(db, cipher.user_id, timestamp)];
-	if (!cipher.org_id) return [];
-	return [organizationRevisionQuery(db, cipher.org_id, timestamp)];
+  if (cipher.user_id) return [revisionQuery(db, cipher.user_id, timestamp)];
+  if (!cipher.org_id) return [];
+  return [organizationRevisionQuery(db, cipher.org_id, timestamp)];
 }
 
 export function conditionalCipherRevisionQuery(
-	db: Kysely<DB>,
-	cipherId: string,
-	mutationToken: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  cipherId: string,
+  mutationToken: string,
+  timestamp = now(),
 ): CompiledQuery {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT user_id, ${timestamp} FROM ciphers
 		WHERE id = ${cipherId} AND mutation_token = ${mutationToken}
@@ -170,12 +170,12 @@ export function conditionalCipherRevisionQuery(
 }
 
 export function conditionalPersonalCipherBulkRevisionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	mutationToken: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  userId: string,
+  mutationToken: string,
+  timestamp = now(),
 ): CompiledQuery {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT ${userId}, ${timestamp}
 		WHERE EXISTS (
@@ -191,81 +191,81 @@ export function conditionalPersonalCipherBulkRevisionQuery(
 }
 
 interface CipherMutationFenceCandidate {
-	id: string;
-	mutation_token: string | null;
+  id: string;
+  mutation_token: string | null;
 }
 
 export async function executeFencedPersonalCipherBulkMutation(
-	dialect: D1Dialect,
-	db: Kysely<DB>,
-	userId: string,
-	candidates: readonly CipherMutationFenceCandidate[],
-	timestamp: number,
-	buildUpdate: (
-		mutationToken: string,
-		expectedState: RawBuilder<boolean>,
-	) => EdgewardenBatchQuery,
-	buildFollowups: (mutationToken: string) => EdgewardenBatchQuery[] = () => [],
+  dialect: D1Dialect,
+  db: Kysely<DB>,
+  userId: string,
+  candidates: readonly CipherMutationFenceCandidate[],
+  timestamp: number,
+  buildUpdate: (
+    mutationToken: string,
+    expectedState: RawBuilder<boolean>,
+  ) => EdgewardenBatchQuery,
+  buildFollowups: (mutationToken: string) => EdgewardenBatchQuery[] = () => [],
 ): Promise<number> {
-	if (!candidates.length) return 0;
-	const mutationToken = crypto.randomUUID();
-	const serializedState = JSON.stringify(candidates);
-	const expectedState = sql<boolean>`EXISTS (
+  if (!candidates.length) return 0;
+  const mutationToken = crypto.randomUUID();
+  const serializedState = JSON.stringify(candidates);
+  const expectedState = sql<boolean>`EXISTS (
 		SELECT 1 FROM json_each(${serializedState}) expected
 		WHERE json_extract(expected.value, '$.id') = ciphers.id
 		  AND ciphers.mutation_token IS json_extract(expected.value, '$.mutation_token')
 	)`;
-	const [mutated] = await dialect.batch([
-		buildUpdate(mutationToken, expectedState),
-		conditionalPersonalCipherBulkRevisionQuery(
-			db,
-			userId,
-			mutationToken,
-			timestamp,
-		),
-		...buildFollowups(mutationToken),
-	]);
-	return Number(mutated.numAffectedRows);
+  const [mutated] = await dialect.batch([
+    buildUpdate(mutationToken, expectedState),
+    conditionalPersonalCipherBulkRevisionQuery(
+      db,
+      userId,
+      mutationToken,
+      timestamp,
+    ),
+    ...buildFollowups(mutationToken),
+  ]);
+  return Number(mutated.numAffectedRows);
 }
 
 export async function validateOrganizationCollections(
-	db: Kysely<DB>,
-	userId: string,
-	organizationId: string,
-	collectionIds: string[],
+  db: Kysely<DB>,
+  userId: string,
+  organizationId: string,
+  collectionIds: string[],
 ) {
-	const uniqueIds = [...new Set(collectionIds)];
-	if (!uniqueIds.length)
-		return { error: "At least one collection is required" } as const;
-	const member = await db
-		.selectFrom("org_members")
-		.selectAll()
-		.where("org_id", "=", organizationId)
-		.where("user_id", "=", userId)
-		.where("status", "=", "confirmed")
-		.executeTakeFirst();
-	if (!member) return { error: "Organization not found" } as const;
-	const collections = await db
-		.selectFrom("collections")
-		.select("id")
-		.where("org_id", "=", organizationId)
-		.where(textColumnInJson("id", uniqueIds))
-		.execute();
-	if (collections.length !== uniqueIds.length)
-		return { error: "Collection not found" } as const;
-	const elevated = ["manager", "admin", "owner"].includes(member.role);
-	if (!elevated && !member.access_all) {
-		const writable = await db
-			.selectFrom("collection_members")
-			.select("collection_id")
-			.where("org_member_id", "=", member.id)
-			.where(textColumnInJson("collection_id", uniqueIds))
-			.where("read_only", "=", 0)
-			.execute();
-		if (writable.length !== uniqueIds.length)
-			return { error: "Collection is read-only" } as const;
-	}
-	return { member, collectionIds: uniqueIds } as const;
+  const uniqueIds = [...new Set(collectionIds)];
+  if (!uniqueIds.length)
+    return { error: "At least one collection is required" } as const;
+  const member = await db
+    .selectFrom("org_members")
+    .selectAll()
+    .where("org_id", "=", organizationId)
+    .where("user_id", "=", userId)
+    .where("status", "=", "confirmed")
+    .executeTakeFirst();
+  if (!member) return { error: "Organization not found" } as const;
+  const collections = await db
+    .selectFrom("collections")
+    .select("id")
+    .where("org_id", "=", organizationId)
+    .where(textColumnInJson("id", uniqueIds))
+    .execute();
+  if (collections.length !== uniqueIds.length)
+    return { error: "Collection not found" } as const;
+  const elevated = ["manager", "admin", "owner"].includes(member.role);
+  if (!elevated && !member.access_all) {
+    const writable = await db
+      .selectFrom("collection_members")
+      .select("collection_id")
+      .where("org_member_id", "=", member.id)
+      .where(textColumnInJson("collection_id", uniqueIds))
+      .where("read_only", "=", 0)
+      .execute();
+    if (writable.length !== uniqueIds.length)
+      return { error: "Collection is read-only" } as const;
+  }
+  return { member, collectionIds: uniqueIds } as const;
 }
 
 /**
@@ -274,79 +274,79 @@ export async function validateOrganizationCollections(
  * update in the same D1 batch without opening a cross-request race window.
  */
 export function organizationCipherViewStateQuery(
-	db: Kysely<DB>,
-	args: {
-		cipherId: string;
-		userId: string;
-		folderId: string | null;
-		favorite: number;
-		archivedAt: number | null;
-		updatedAt: number;
-		committedMutationToken: string;
-	},
+  db: Kysely<DB>,
+  args: {
+    cipherId: string;
+    userId: string;
+    folderId: string | null;
+    favorite: number;
+    archivedAt: number | null;
+    updatedAt: number;
+    committedMutationToken: string;
+  },
 ) {
-	return db
-		.insertInto("cipher_user_settings")
-		.columns([
-			"cipher_id",
-			"user_id",
-			"folder_id",
-			"favorite",
-			"archived_at",
-			"updated_at",
-		])
-		.expression(
-			db
-				.selectFrom("ciphers")
-				.select([
-					sql<string>`${args.cipherId}`.as("cipher_id"),
-					sql<string>`${args.userId}`.as("user_id"),
-					sql<string | null>`${args.folderId}`.as("folder_id"),
-					sql<number>`${args.favorite}`.as("favorite"),
-					sql<number | null>`${args.archivedAt}`.as("archived_at"),
-					sql<number>`${args.updatedAt}`.as("updated_at"),
-				])
-				.where("id", "=", args.cipherId)
-				.where("org_id", "is not", null)
-				.where("mutation_token", "=", args.committedMutationToken),
-		)
-		.onConflict((conflict) =>
-			conflict.columns(["cipher_id", "user_id"]).doUpdateSet({
-				folder_id: args.folderId,
-				favorite: args.favorite,
-				archived_at: args.archivedAt,
-				updated_at: args.updatedAt,
-			}),
-		);
+  return db
+    .insertInto("cipher_user_settings")
+    .columns([
+      "cipher_id",
+      "user_id",
+      "folder_id",
+      "favorite",
+      "archived_at",
+      "updated_at",
+    ])
+    .expression(
+      db
+        .selectFrom("ciphers")
+        .select([
+          sql<string>`${args.cipherId}`.as("cipher_id"),
+          sql<string>`${args.userId}`.as("user_id"),
+          sql<string | null>`${args.folderId}`.as("folder_id"),
+          sql<number>`${args.favorite}`.as("favorite"),
+          sql<number | null>`${args.archivedAt}`.as("archived_at"),
+          sql<number>`${args.updatedAt}`.as("updated_at"),
+        ])
+        .where("id", "=", args.cipherId)
+        .where("org_id", "is not", null)
+        .where("mutation_token", "=", args.committedMutationToken),
+    )
+    .onConflict((conflict) =>
+      conflict.columns(["cipher_id", "user_id"]).doUpdateSet({
+        folder_id: args.folderId,
+        favorite: args.favorite,
+        archived_at: args.archivedAt,
+        updated_at: args.updatedAt,
+      }),
+    );
 }
 
 export function visibleOrganizationCipherViewBulkUpsertQuery(
-	db: Kysely<DB>,
-	args: {
-		userId: string;
-		cipherIds: string[];
-		updatedAt: number;
-		folderId?: string | null;
-		archivedAt?: number | null;
-	},
+  db: Kysely<DB>,
+  args: {
+    userId: string;
+    cipherIds: string[];
+    updatedAt: number;
+    folderId?: string | null;
+    archivedAt?: number | null;
+  },
 ): CompiledQuery {
-	const ids = JSON.stringify([...new Set(args.cipherIds)]);
-	const folder =
-		args.folderId === undefined
-			? sql`current_view.folder_id`
-			: sql`${args.folderId}`;
-	const archived =
-		args.archivedAt === undefined
-			? sql`current_view.archived_at`
-			: sql`${args.archivedAt}`;
-	const changed =
-		args.folderId !== undefined && args.archivedAt !== undefined
-			? sql<boolean>`current_view.folder_id IS NOT ${args.folderId}
+  const ids = JSON.stringify([...new Set(args.cipherIds)]);
+  const folder =
+    args.folderId === undefined
+      ? sql`current_view.folder_id`
+      : sql`${args.folderId}`;
+  const archived =
+    args.archivedAt === undefined
+      ? sql`current_view.archived_at`
+      : sql`${args.archivedAt}`;
+  const changed =
+    args.folderId !== undefined && args.archivedAt !== undefined
+      ? sql<boolean>`current_view.folder_id IS NOT ${args.folderId}
 				OR current_view.archived_at IS NOT ${args.archivedAt}`
-			: args.folderId !== undefined
-				? sql<boolean>`current_view.folder_id IS NOT ${args.folderId}`
-				: sql<boolean>`current_view.archived_at IS NOT ${args.archivedAt ?? null}`;
-	return sql`
+      : args.folderId !== undefined
+        ? sql<boolean>`current_view.folder_id IS NOT ${args.folderId}`
+        : sql<boolean>`current_view.archived_at IS NOT ${args.archivedAt ?? null}`;
+  return sql`
 		INSERT INTO cipher_user_settings (
 			cipher_id, user_id, folder_id, favorite, archived_at, updated_at
 		)

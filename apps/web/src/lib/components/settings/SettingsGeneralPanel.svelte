@@ -7,33 +7,33 @@ import { Input } from "$lib/components/ui/input/index.js";
 import * as Select from "$lib/components/ui/select/index.js";
 
 let {
-	email,
-	theme = $bindable(),
-	lockTimeoutMinutes = $bindable(),
-	sessionTimeoutAction = $bindable(),
-	name = $bindable(),
-	hint = $bindable(),
-	apiKey,
-	busy,
-	onSavePreferences,
-	onSaveProfile,
-	onCopy,
-	onRevealApiKey,
-	onRotateApiKey,
+  email,
+  theme = $bindable(),
+  lockTimeoutMinutes = $bindable(),
+  sessionTimeoutAction = $bindable(),
+  name = $bindable(),
+  hint = $bindable(),
+  apiKey,
+  busy,
+  onSavePreferences,
+  onSaveProfile,
+  onCopy,
+  onRevealApiKey,
+  onRotateApiKey,
 }: {
-	email: string;
-	theme: "system" | "light" | "dark";
-	lockTimeoutMinutes: string;
-	sessionTimeoutAction: "lock" | "logout";
-	name: string;
-	hint: string;
-	apiKey: string;
-	busy: string;
-	onSavePreferences: () => void;
-	onSaveProfile: () => void | Promise<void>;
-	onCopy: (value: string) => void | Promise<void>;
-	onRevealApiKey: () => void | Promise<void>;
-	onRotateApiKey: () => void;
+  email: string;
+  theme: "system" | "light" | "dark";
+  lockTimeoutMinutes: string;
+  sessionTimeoutAction: "lock" | "logout";
+  name: string;
+  hint: string;
+  apiKey: string;
+  busy: string;
+  onSavePreferences: () => void;
+  onSaveProfile: () => void | Promise<void>;
+  onCopy: (value: string) => void | Promise<void>;
+  onRevealApiKey: () => void | Promise<void>;
+  onRotateApiKey: () => void;
 } = $props();
 </script>
 

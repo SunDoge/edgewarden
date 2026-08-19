@@ -3,18 +3,18 @@ import { goto } from "$app/navigation";
 import { onMount } from "svelte";
 import { deriveMasterKey } from "$lib/services/crypto";
 import {
-	getTurnstileConfigApi,
-	isTwoFactorRequiredError,
-	login,
-	loginWithPasskeyApi,
-	twoFactorPasskeyChallengeFromError,
-	twoFactorProvidersFromError,
+  getTurnstileConfigApi,
+  isTwoFactorRequiredError,
+  login,
+  loginWithPasskeyApi,
+  twoFactorPasskeyChallengeFromError,
+  twoFactorProvidersFromError,
 } from "$lib/services/api-auth";
 import { errorMessage } from "$lib/services/error-message";
 import {
-	setMasterKey,
-	setSymmetricKeys,
-	syncVaultData,
+  setMasterKey,
+  setSymmetricKeys,
+  syncVaultData,
 } from "$lib/stores/vault.svelte";
 import { Button } from "$lib/components/ui/button/index.js";
 import * as Alert from "$lib/components/ui/alert/index.js";
@@ -26,12 +26,12 @@ import { Spinner } from "$lib/components/ui/spinner/index.js";
 import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
 import { assertTwoFactorPasskeyCredential } from "$lib/services/passkeys";
 import {
-	Eye,
-	EyeOff,
-	ShieldAlert,
-	KeyRound,
-	Mail,
-	Fingerprint,
+  Eye,
+  EyeOff,
+  ShieldAlert,
+  KeyRound,
+  Mail,
+  Fingerprint,
 } from "@lucide/svelte";
 import TurnstileWidget from "$lib/components/turnstile-widget.svelte";
 import { readDevLoginCredentials } from "$lib/services/dev-login";
@@ -48,14 +48,14 @@ let twoFactorToken = $state("");
 let twoFactorProvider = $state<"0" | "3" | "8">("0");
 let availableTwoFactorProviders = $state<string[]>([]);
 let passkeyUnlock = $state<{
-	email: string;
-	iterations: number;
-	profileKey: string;
+  email: string;
+  iterations: number;
+  profileKey: string;
 } | null>(null);
 let passkeyPassword = $state("");
 let twoFactorPasskeyChallenge = $state<{
-	options: unknown;
-	token: string;
+  options: unknown;
+  token: string;
 } | null>(null);
 let turnstileEnabled = $state(false);
 let turnstileSiteKey = $state<string | null>(null);
@@ -64,148 +64,148 @@ let turnstileLoading = $state(true);
 let turnstileWidget = $state<{ reset(): void } | null>(null);
 
 onMount(() => {
-	void initializeLogin();
+  void initializeLogin();
 });
 
 async function initializeLogin() {
-	try {
-		const config = await getTurnstileConfigApi();
-		turnstileEnabled = config.enabled;
-		turnstileSiteKey = config.siteKey;
-		if (config.enabled && !config.siteKey)
-			error = "Turnstile 已启用，但服务器没有配置站点密钥。";
-	} catch {
-		error = "无法加载登录安全配置。";
-		return;
-	} finally {
-		turnstileLoading = false;
-	}
+  try {
+    const config = await getTurnstileConfigApi();
+    turnstileEnabled = config.enabled;
+    turnstileSiteKey = config.siteKey;
+    if (config.enabled && !config.siteKey)
+      error = "Turnstile 已启用，但服务器没有配置站点密钥。";
+  } catch {
+    error = "无法加载登录安全配置。";
+    return;
+  } finally {
+    turnstileLoading = false;
+  }
 
-	const credentials = import.meta.env.DEV
-		? readDevLoginCredentials(true, import.meta.env)
-		: null;
-	if (credentials && !turnstileEnabled) {
-		email = credentials.email;
-		password = credentials.password;
-		await submitPasswordLogin();
-	}
+  const credentials = import.meta.env.DEV
+    ? readDevLoginCredentials(true, import.meta.env)
+    : null;
+  if (credentials && !turnstileEnabled) {
+    email = credentials.email;
+    password = credentials.password;
+    await submitPasswordLogin();
+  }
 }
 
 async function handleSubmit(e: SubmitEvent) {
-	e.preventDefault();
-	await submitPasswordLogin();
+  e.preventDefault();
+  await submitPasswordLogin();
 }
 
 async function submitPasswordLogin() {
-	if (!email || !password) {
-		error = "请输入电子邮件和主密码。";
-		return;
-	}
-	if (turnstileEnabled && !turnstileToken) {
-		error = "请先完成人机验证。";
-		return;
-	}
+  if (!email || !password) {
+    error = "请输入电子邮件和主密码。";
+    return;
+  }
+  if (turnstileEnabled && !turnstileToken) {
+    error = "请先完成人机验证。";
+    return;
+  }
 
-	loading = true;
-	error = "";
+  loading = true;
+  error = "";
 
-	try {
-		const { masterKey } = await login(
-			email,
-			password,
-			twoFactorRequired
-				? { token: twoFactorToken, provider: twoFactorProvider }
-				: undefined,
-			turnstileToken || undefined,
-		);
-		setMasterKey(masterKey);
-		await syncVaultData(); // saves snapshot to IndexedDB for future offline use
-		goto("/vault");
-	} catch (caught) {
-		if (isTwoFactorRequiredError(caught)) {
-			twoFactorRequired = true;
-			twoFactorPasskeyChallenge = twoFactorPasskeyChallengeFromError(caught);
-			availableTwoFactorProviders = twoFactorProvidersFromError(caught);
-			if (
-				!availableTwoFactorProviders.includes("0") &&
-				availableTwoFactorProviders.includes("3")
-			)
-				twoFactorProvider = "3";
-			error = "请输入身份验证器验证码或恢复代码。";
-		} else error = errorMessage(caught, "登录失败，请检查您的凭据。");
-		if (turnstileEnabled) turnstileWidget?.reset();
-	} finally {
-		loading = false;
-	}
+  try {
+    const { masterKey } = await login(
+      email,
+      password,
+      twoFactorRequired
+        ? { token: twoFactorToken, provider: twoFactorProvider }
+        : undefined,
+      turnstileToken || undefined,
+    );
+    setMasterKey(masterKey);
+    await syncVaultData(); // saves snapshot to IndexedDB for future offline use
+    goto("/vault");
+  } catch (caught) {
+    if (isTwoFactorRequiredError(caught)) {
+      twoFactorRequired = true;
+      twoFactorPasskeyChallenge = twoFactorPasskeyChallengeFromError(caught);
+      availableTwoFactorProviders = twoFactorProvidersFromError(caught);
+      if (
+        !availableTwoFactorProviders.includes("0") &&
+        availableTwoFactorProviders.includes("3")
+      )
+        twoFactorProvider = "3";
+      error = "请输入身份验证器验证码或恢复代码。";
+    } else error = errorMessage(caught, "登录失败，请检查您的凭据。");
+    if (turnstileEnabled) turnstileWidget?.reset();
+  } finally {
+    loading = false;
+  }
 }
 
 async function completeTwoFactorPasskey() {
-	if (!twoFactorPasskeyChallenge) return;
-	loading = true;
-	error = "";
-	try {
-		const assertion = await assertTwoFactorPasskeyCredential(
-			twoFactorPasskeyChallenge,
-		);
-		const { masterKey } = await login(
-			email,
-			password,
-			{ provider: "7", token: JSON.stringify(assertion) },
-			turnstileToken || undefined,
-		);
-		setMasterKey(masterKey);
-		await syncVaultData();
-		await goto("/vault");
-	} catch (value) {
-		error = value instanceof Error ? value.message : "安全密钥验证失败";
-		if (turnstileEnabled) turnstileWidget?.reset();
-	} finally {
-		loading = false;
-	}
+  if (!twoFactorPasskeyChallenge) return;
+  loading = true;
+  error = "";
+  try {
+    const assertion = await assertTwoFactorPasskeyCredential(
+      twoFactorPasskeyChallenge,
+    );
+    const { masterKey } = await login(
+      email,
+      password,
+      { provider: "7", token: JSON.stringify(assertion) },
+      turnstileToken || undefined,
+    );
+    setMasterKey(masterKey);
+    await syncVaultData();
+    await goto("/vault");
+  } catch (value) {
+    error = value instanceof Error ? value.message : "安全密钥验证失败";
+    if (turnstileEnabled) turnstileWidget?.reset();
+  } finally {
+    loading = false;
+  }
 }
 
 async function handlePasskeyLogin() {
-	loading = true;
-	error = "";
-	try {
-		const result = await loginWithPasskeyApi();
-		if (result.symEncKey && result.symMacKey) {
-			setSymmetricKeys(result.symEncKey, result.symMacKey);
-			await syncVaultData();
-			await goto("/vault");
-			return;
-		}
-		if (
-			!result.masterPasswordUnlock?.email ||
-			!result.masterPasswordUnlock.profileKey
-		)
-			throw new Error("这把通行密钥无法解锁保险库");
-		passkeyUnlock = result.masterPasswordUnlock;
-	} catch (err) {
-		error = err instanceof Error ? err.message : "通行密钥登录失败";
-	} finally {
-		loading = false;
-	}
+  loading = true;
+  error = "";
+  try {
+    const result = await loginWithPasskeyApi();
+    if (result.symEncKey && result.symMacKey) {
+      setSymmetricKeys(result.symEncKey, result.symMacKey);
+      await syncVaultData();
+      await goto("/vault");
+      return;
+    }
+    if (
+      !result.masterPasswordUnlock?.email ||
+      !result.masterPasswordUnlock.profileKey
+    )
+      throw new Error("这把通行密钥无法解锁保险库");
+    passkeyUnlock = result.masterPasswordUnlock;
+  } catch (err) {
+    error = err instanceof Error ? err.message : "通行密钥登录失败";
+  } finally {
+    loading = false;
+  }
 }
 
 async function completePasskeyUnlock() {
-	if (!passkeyUnlock || !passkeyPassword) return;
-	loading = true;
-	try {
-		setMasterKey(
-			await deriveMasterKey(
-				passkeyPassword,
-				passkeyUnlock.email,
-				passkeyUnlock.iterations,
-			),
-		);
-		await syncVaultData();
-		await goto("/vault");
-	} catch (err) {
-		error = err instanceof Error ? err.message : "主密码不正确";
-	} finally {
-		loading = false;
-	}
+  if (!passkeyUnlock || !passkeyPassword) return;
+  loading = true;
+  try {
+    setMasterKey(
+      await deriveMasterKey(
+        passkeyPassword,
+        passkeyUnlock.email,
+        passkeyUnlock.iterations,
+      ),
+    );
+    await syncVaultData();
+    await goto("/vault");
+  } catch (err) {
+    error = err instanceof Error ? err.message : "主密码不正确";
+  } finally {
+    loading = false;
+  }
 }
 </script>
 

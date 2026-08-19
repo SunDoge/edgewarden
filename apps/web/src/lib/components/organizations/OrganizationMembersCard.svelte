@@ -8,41 +8,41 @@ import * as Field from "$lib/components/ui/field/index.js";
 import * as Select from "$lib/components/ui/select/index.js";
 import * as Table from "$lib/components/ui/table/index.js";
 import type {
-	OrganizationCollection,
-	OrganizationMember,
-	OrganizationSummary,
+  OrganizationCollection,
+  OrganizationMember,
+  OrganizationSummary,
 } from "$lib/services/organization-types";
 
 let {
-	organization,
-	members,
-	collections,
-	email = $bindable(""),
-	role = $bindable<"admin" | "manager" | "member">("member"),
-	accessAll = $bindable(true),
-	collectionIds = $bindable<string[]>([]),
-	busy,
-	oninvite,
-	onedit,
-	onremove,
+  organization,
+  members,
+  collections,
+  email = $bindable(""),
+  role = $bindable<"admin" | "manager" | "member">("member"),
+  accessAll = $bindable(true),
+  collectionIds = $bindable<string[]>([]),
+  busy,
+  oninvite,
+  onedit,
+  onremove,
 }: {
-	organization: Pick<OrganizationSummary, "role">;
-	members: OrganizationMember[];
-	collections: Array<Pick<OrganizationCollection, "id" | "name">>;
-	email: string;
-	role: "admin" | "manager" | "member";
-	accessAll: boolean;
-	collectionIds: string[];
-	busy: boolean;
-	oninvite: () => void;
-	onedit: (member: OrganizationMember) => void;
-	onremove: (member: OrganizationMember) => void;
+  organization: Pick<OrganizationSummary, "role">;
+  members: OrganizationMember[];
+  collections: Array<Pick<OrganizationCollection, "id" | "name">>;
+  email: string;
+  role: "admin" | "manager" | "member";
+  accessAll: boolean;
+  collectionIds: string[];
+  busy: boolean;
+  oninvite: () => void;
+  onedit: (member: OrganizationMember) => void;
+  onremove: (member: OrganizationMember) => void;
 } = $props();
 
 function toggleCollection(id: string, checked: boolean) {
-	collectionIds = checked
-		? [...new Set([...collectionIds, id])]
-		: collectionIds.filter((value) => value !== id);
+  collectionIds = checked
+    ? [...new Set([...collectionIds, id])]
+    : collectionIds.filter((value) => value !== id);
 }
 </script>
 

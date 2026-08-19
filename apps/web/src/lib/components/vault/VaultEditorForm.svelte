@@ -13,100 +13,100 @@ import { scanTotpQrFile } from "$lib/services/totp-qr";
 import type { VaultEditorForm } from "$lib/services/vault-editor";
 
 interface FolderOption {
-	id: string;
-	name: string;
+  id: string;
+  name: string;
 }
 
 interface OrganizationOption {
-	id: string;
-	name: string;
+  id: string;
+  name: string;
 }
 
 interface CollectionOption {
-	id: string;
-	organizationId: string;
-	name: string;
-	readOnly?: boolean;
+  id: string;
+  organizationId: string;
+  name: string;
+  readOnly?: boolean;
 }
 
 let {
-	form = $bindable(),
-	isCreating,
-	isEditing,
-	folders,
-	organizations,
-	collections,
-	onSave,
-	onDelete,
-	onCancel,
+  form = $bindable(),
+  isCreating,
+  isEditing,
+  folders,
+  organizations,
+  collections,
+  onSave,
+  onDelete,
+  onCancel,
 }: {
-	form: VaultEditorForm;
-	isCreating: boolean;
-	isEditing: boolean;
-	folders: FolderOption[];
-	organizations: OrganizationOption[];
-	collections: CollectionOption[];
-	onSave: () => void;
-	onDelete: () => void;
-	onCancel: () => void;
+  form: VaultEditorForm;
+  isCreating: boolean;
+  isEditing: boolean;
+  folders: FolderOption[];
+  organizations: OrganizationOption[];
+  collections: CollectionOption[];
+  onSave: () => void;
+  onDelete: () => void;
+  onCancel: () => void;
 } = $props();
 
 let totpQrError = $state("");
 let totpQrInput = $state<HTMLInputElement | null>(null);
 
 function changeOwner() {
-	form.folderId = null;
-	form.collectionIds = [];
+  form.folderId = null;
+  form.collectionIds = [];
 }
 
 function toggleCollection(collectionId: string, checked: boolean) {
-	form.collectionIds = checked
-		? [...new Set([...form.collectionIds, collectionId])]
-		: form.collectionIds.filter((id) => id !== collectionId);
+  form.collectionIds = checked
+    ? [...new Set([...form.collectionIds, collectionId])]
+    : form.collectionIds.filter((id) => id !== collectionId);
 }
 
 async function importTotpQr(event: Event) {
-	const input = event.currentTarget as HTMLInputElement;
-	const file = input.files?.[0];
-	input.value = "";
-	if (!file) return;
-	totpQrError = "";
-	try {
-		form.loginTotp = await scanTotpQrFile(file);
-	} catch (error) {
-		totpQrError = error instanceof Error ? error.message : "无法识别二维码";
-	}
+  const input = event.currentTarget as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  totpQrError = "";
+  try {
+    form.loginTotp = await scanTotpQrFile(file);
+  } catch (error) {
+    totpQrError = error instanceof Error ? error.message : "无法识别二维码";
+  }
 }
 
 function cipherTypeLabel(type: number): string {
-	return match(type)
-		.with(CipherType.Login, () => "登录凭据")
-		.with(CipherType.SecureNote, () => "安全便签")
-		.with(CipherType.Card, () => "支付卡片")
-		.with(CipherType.Identity, () => "个人身份")
-		.with(CipherType.SshKey, () => "SSH 密钥")
-		.with(CipherType.BankAccount, () => "银行账户")
-		.with(CipherType.DriversLicense, () => "驾驶证")
-		.with(CipherType.Passport, () => "护照")
-		.otherwise(() => "登录凭据");
+  return match(type)
+    .with(CipherType.Login, () => "登录凭据")
+    .with(CipherType.SecureNote, () => "安全便签")
+    .with(CipherType.Card, () => "支付卡片")
+    .with(CipherType.Identity, () => "个人身份")
+    .with(CipherType.SshKey, () => "SSH 密钥")
+    .with(CipherType.BankAccount, () => "银行账户")
+    .with(CipherType.DriversLicense, () => "驾驶证")
+    .with(CipherType.Passport, () => "护照")
+    .otherwise(() => "登录凭据");
 }
 
 function uriMatchLabel(value: number | null): string {
-	return match(value)
-		.with(0, () => "根域")
-		.with(1, () => "主机")
-		.with(2, () => "前缀")
-		.with(3, () => "完全匹配")
-		.with(4, () => "正则")
-		.with(5, () => "从不")
-		.otherwise(() => "默认");
+  return match(value)
+    .with(0, () => "根域")
+    .with(1, () => "主机")
+    .with(2, () => "前缀")
+    .with(3, () => "完全匹配")
+    .with(4, () => "正则")
+    .with(5, () => "从不")
+    .otherwise(() => "默认");
 }
 
 function customFieldTypeLabel(value: number): string {
-	return match(value)
-		.with(1, () => "隐藏")
-		.with(2, () => "布尔")
-		.otherwise(() => "文本");
+  return match(value)
+    .with(1, () => "隐藏")
+    .with(2, () => "布尔")
+    .otherwise(() => "文本");
 }
 </script>
 

@@ -4,30 +4,30 @@ import { Button } from "$lib/components/ui/button/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 import * as Card from "$lib/components/ui/card/index.js";
 import type {
-	OrganizationCollection,
-	OrganizationSummary,
+  OrganizationCollection,
+  OrganizationSummary,
 } from "$lib/services/organization-types";
 
 let {
-	organization,
-	collections,
-	name = $bindable(""),
-	busy,
-	onadd,
-	onrename,
-	onremove,
+  organization,
+  collections,
+  name = $bindable(""),
+  busy,
+  onadd,
+  onrename,
+  onremove,
 }: {
-	organization: Pick<OrganizationSummary, "role">;
-	collections: Array<Pick<OrganizationCollection, "id" | "name">>;
-	name: string;
-	busy: boolean;
-	onadd: () => void;
-	onrename: (collection: Pick<OrganizationCollection, "id" | "name">) => void;
-	onremove: (collection: Pick<OrganizationCollection, "id" | "name">) => void;
+  organization: Pick<OrganizationSummary, "role">;
+  collections: Array<Pick<OrganizationCollection, "id" | "name">>;
+  name: string;
+  busy: boolean;
+  onadd: () => void;
+  onrename: (collection: Pick<OrganizationCollection, "id" | "name">) => void;
+  onremove: (collection: Pick<OrganizationCollection, "id" | "name">) => void;
 } = $props();
 
 const canManage = $derived(
-	["owner", "admin", "manager"].includes(organization.role),
+  ["owner", "admin", "manager"].includes(organization.role),
 );
 </script>
 

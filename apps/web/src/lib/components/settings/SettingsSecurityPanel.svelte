@@ -10,33 +10,33 @@ import TwoFactorPasskeys from "./TwoFactorPasskeys.svelte";
 import YubikeySettings from "./YubikeySettings.svelte";
 
 let {
-	profile,
-	isAdmin,
-	recoveryCode,
-	busy,
-	onCopy,
-	onChangePassword,
-	onShowRecoveryCode,
-	onDisableTwoFactor,
-	onBeginTotp,
-	onMessage,
-	onError,
+  profile,
+  isAdmin,
+  recoveryCode,
+  busy,
+  onCopy,
+  onChangePassword,
+  onShowRecoveryCode,
+  onDisableTwoFactor,
+  onBeginTotp,
+  onMessage,
+  onError,
 }: {
-	profile: {
-		email: string;
-		kdfIterations: number;
-		twoFactorEnabled: boolean;
-	};
-	isAdmin: boolean;
-	recoveryCode: string;
-	busy: string;
-	onCopy: (value: string) => void | Promise<void>;
-	onChangePassword: () => void;
-	onShowRecoveryCode: () => void | Promise<void>;
-	onDisableTwoFactor: () => void;
-	onBeginTotp: () => void | Promise<void>;
-	onMessage: (value: string) => void;
-	onError: (value: unknown) => void;
+  profile: {
+    email: string;
+    kdfIterations: number;
+    twoFactorEnabled: boolean;
+  };
+  isAdmin: boolean;
+  recoveryCode: string;
+  busy: string;
+  onCopy: (value: string) => void | Promise<void>;
+  onChangePassword: () => void;
+  onShowRecoveryCode: () => void | Promise<void>;
+  onDisableTwoFactor: () => void;
+  onBeginTotp: () => void | Promise<void>;
+  onMessage: (value: string) => void;
+  onError: (value: unknown) => void;
 } = $props();
 </script>
 

@@ -12,15 +12,15 @@ import { Spinner } from "$lib/components/ui/spinner/index.js";
 import type { BackupDestinationForm } from "./destination-form";
 
 let {
-	form = $bindable(),
-	saving,
-	onSave,
-	onDelete,
+  form = $bindable(),
+  saving,
+  onSave,
+  onDelete,
 }: {
-	form: BackupDestinationForm;
-	saving: boolean;
-	onSave: () => void;
-	onDelete: () => void;
+  form: BackupDestinationForm;
+  saving: boolean;
+  onSave: () => void;
+  onDelete: () => void;
 } = $props();
 </script>
 

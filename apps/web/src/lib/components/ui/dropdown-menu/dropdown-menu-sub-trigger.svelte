@@ -4,13 +4,13 @@ import ChevronRightIcon from "@lucide/svelte/icons/chevron-right";
 import { cn } from "$lib/utils.js";
 
 let {
-	ref = $bindable(null),
-	class: className,
-	inset,
-	children,
-	...restProps
+  ref = $bindable(null),
+  class: className,
+  inset,
+  children,
+  ...restProps
 }: DropdownMenuPrimitive.SubTriggerProps & {
-	inset?: boolean;
+  inset?: boolean;
 } = $props();
 </script>
 

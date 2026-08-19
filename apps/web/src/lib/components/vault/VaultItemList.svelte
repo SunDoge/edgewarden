@@ -1,15 +1,15 @@
 <script lang="ts">
 import {
-	Archive,
-	ArchiveRestore,
-	ListFilter,
-	Folder,
-	Lock,
-	RotateCcw,
-	Search,
-	Star,
-	Trash2,
-	TriangleAlert,
+  Archive,
+  ArchiveRestore,
+  ListFilter,
+  Folder,
+  Lock,
+  RotateCcw,
+  Search,
+  Star,
+  Trash2,
+  TriangleAlert,
 } from "@lucide/svelte";
 import * as Alert from "$lib/components/ui/alert/index.js";
 import { Button } from "$lib/components/ui/button/index.js";
@@ -23,57 +23,57 @@ import { fade, slide } from "svelte/transition";
 import { cn } from "$lib/utils";
 import { m } from "$lib/paraglide/messages.js";
 import type {
-	DuplicateMode,
-	VaultCategory,
-	VaultSort,
+  DuplicateMode,
+  VaultCategory,
+  VaultSort,
 } from "$lib/services/vault-filter";
 import type { VaultCipher } from "$lib/services/vault-types";
 import {
-	cipherDomain,
-	cipherTypeIcon,
-	cipherTypeName,
+  cipherDomain,
+  cipherTypeIcon,
+  cipherTypeName,
 } from "$lib/services/vault-item-display";
 
 let {
-	items,
-	isSyncing,
-	error,
-	activeCategory,
-	duplicateGroupCount,
-	searchQuery = $bindable(),
-	duplicateMode = $bindable(),
-	sortMode = $bindable(),
-	selectedItem = $bindable(),
-	selectedIds,
-	selectedCount,
-	onToggleSelection,
-	onBulkAction,
-	onClearSelection,
-	onSelectRedundant,
-	onMove,
-	onSelectItem,
-	onOpenFilters,
+  items,
+  isSyncing,
+  error,
+  activeCategory,
+  duplicateGroupCount,
+  searchQuery = $bindable(),
+  duplicateMode = $bindable(),
+  sortMode = $bindable(),
+  selectedItem = $bindable(),
+  selectedIds,
+  selectedCount,
+  onToggleSelection,
+  onBulkAction,
+  onClearSelection,
+  onSelectRedundant,
+  onMove,
+  onSelectItem,
+  onOpenFilters,
 }: {
-	items: VaultCipher[];
-	isSyncing: boolean;
-	error: string | null;
-	activeCategory: VaultCategory;
-	duplicateGroupCount: number;
-	searchQuery: string;
-	duplicateMode: DuplicateMode;
-	sortMode: VaultSort;
-	selectedItem: VaultCipher | null;
-	selectedIds: Record<string, boolean>;
-	selectedCount: number;
-	onToggleSelection: (id: string) => void;
-	onBulkAction: (
-		action: "restore" | "permanent" | "unarchive" | "delete" | "archive",
-	) => void;
-	onClearSelection: () => void;
-	onSelectRedundant: () => void;
-	onMove: () => void;
-	onSelectItem?: (item: VaultCipher) => void;
-	onOpenFilters?: () => void;
+  items: VaultCipher[];
+  isSyncing: boolean;
+  error: string | null;
+  activeCategory: VaultCategory;
+  duplicateGroupCount: number;
+  searchQuery: string;
+  duplicateMode: DuplicateMode;
+  sortMode: VaultSort;
+  selectedItem: VaultCipher | null;
+  selectedIds: Record<string, boolean>;
+  selectedCount: number;
+  onToggleSelection: (id: string) => void;
+  onBulkAction: (
+    action: "restore" | "permanent" | "unarchive" | "delete" | "archive",
+  ) => void;
+  onClearSelection: () => void;
+  onSelectRedundant: () => void;
+  onMove: () => void;
+  onSelectItem?: (item: VaultCipher) => void;
+  onOpenFilters?: () => void;
 } = $props();
 
 const rowHeight = 72;
@@ -83,50 +83,50 @@ let scrollTop = $state(0);
 let viewportHeight = $state(0);
 let currentBucket = $state(0);
 let startIndex = $derived(
-	Math.max(0, Math.floor(scrollTop / rowHeight) - overscan),
+  Math.max(0, Math.floor(scrollTop / rowHeight) - overscan),
 );
 let endIndex = $derived(
-	Math.min(
-		items.length,
-		Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan,
-	),
+  Math.min(
+    items.length,
+    Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan,
+  ),
 );
 let visibleItems = $derived(items.slice(startIndex, endIndex));
 let padTop = $derived(startIndex * rowHeight);
 let padBottom = $derived(Math.max(0, (items.length - endIndex) * rowHeight));
 
 $effect(() => {
-	items;
-	if (listContainer) listContainer.scrollTop = 0;
-	scrollTop = 0;
-	currentBucket = 0;
+  items;
+  if (listContainer) listContainer.scrollTop = 0;
+  scrollTop = 0;
+  currentBucket = 0;
 });
 
 function revealIcon(event: Event) {
-	(event.currentTarget as HTMLImageElement).style.opacity = "1";
+  (event.currentTarget as HTMLImageElement).style.opacity = "1";
 }
 
 function hideBrokenIcon(event: Event) {
-	const image = event.currentTarget as HTMLImageElement;
-	image.style.display = "none";
-	image.nextElementSibling?.classList.remove("invisible");
+  const image = event.currentTarget as HTMLImageElement;
+  image.style.display = "none";
+  image.nextElementSibling?.classList.remove("invisible");
 }
 
 function duplicateModeLabel(mode: DuplicateMode) {
-	return match(mode)
-		.with("exact", () => "完全相同")
-		.with("login-site", () => "网站、账号和密码")
-		.with("login-credentials", () => "账号和密码")
-		.with("password", () => "密码复用")
-		.exhaustive();
+  return match(mode)
+    .with("exact", () => "完全相同")
+    .with("login-site", () => "网站、账号和密码")
+    .with("login-credentials", () => "账号和密码")
+    .with("password", () => "密码复用")
+    .exhaustive();
 }
 
 function sortModeLabel(mode: VaultSort) {
-	return match(mode)
-		.with("edited", () => "最近修改")
-		.with("created", () => "最近创建")
-		.with("name", () => "名称")
-		.exhaustive();
+  return match(mode)
+    .with("edited", () => "最近修改")
+    .with("created", () => "最近创建")
+    .with("name", () => "名称")
+    .exhaustive();
 }
 </script>
 

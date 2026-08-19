@@ -2,9 +2,9 @@
 import { Dialog as DialogPrimitive } from "bits-ui";
 
 let {
-	ref = $bindable(null),
-	type = "button",
-	...restProps
+  ref = $bindable(null),
+  type = "button",
+  ...restProps
 }: DialogPrimitive.TriggerProps = $props();
 </script>
 

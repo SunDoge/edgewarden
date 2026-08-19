@@ -9,26 +9,26 @@ import { Search } from "@lucide/svelte";
 import { cn } from "$lib/utils";
 
 let {
-	rules,
-	excludedTypes = $bindable(),
+  rules,
+  excludedTypes = $bindable(),
 }: {
-	rules: GlobalEquivalentDomain[];
-	excludedTypes: Set<number>;
+  rules: GlobalEquivalentDomain[];
+  excludedTypes: Set<number>;
 } = $props();
 
 let searchQuery = $state("");
 let filteredRules = $derived(
-	rules.filter((rule) => {
-		const query = searchQuery.toLowerCase().trim();
-		return !query || rule.domains.some((domain) => domain.includes(query));
-	}),
+  rules.filter((rule) => {
+    const query = searchQuery.toLowerCase().trim();
+    return !query || rule.domains.some((domain) => domain.includes(query));
+  }),
 );
 
 function toggle(type: number) {
-	const next = new Set(excludedTypes);
-	if (next.has(type)) next.delete(type);
-	else next.add(type);
-	excludedTypes = next;
+  const next = new Set(excludedTypes);
+  if (next.has(type)) next.delete(type);
+  else next.add(type);
+  excludedTypes = next;
 }
 </script>
 

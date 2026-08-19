@@ -1,51 +1,51 @@
 {
-	"name": "@edgewarden/api",
-	"type": "module",
-	"exports": {
-		".": {
-			"types": "./dist/index.d.ts",
-			"import": "./src/index.ts"
-		},
-		"./contract": {
-			"types": "./dist/contract.d.ts",
-			"import": "./src/contract.ts"
-		}
-	},
-	"scripts": {
-		"predev": "mkdir -p ../web/build && pnpm run db:apply:local",
-		"dev": "wrangler dev --config ../../wrangler.jsonc",
-		"deploy": "wrangler deploy --config ../../wrangler.jsonc --minify",
-		"deploy:kv": "node ../../scripts/deploy.ts --kv",
-		"cf-typegen": "wrangler types worker-configuration.d.ts --config ../../wrangler.jsonc --env-interface CloudflareBindings",
-		"db:apply:local": "wrangler d1 migrations apply DB --config ../../wrangler.jsonc --local",
-		"db:apply:remote": "wrangler d1 migrations apply DB --config ../../wrangler.jsonc --remote",
-		"db:apply:remote:kv": "wrangler d1 migrations apply DB --config ../../wrangler.jsonc --remote",
-		"db:codegen": "node scripts/codegen.ts",
-		"rpc:types": "tsc --build tsconfig.rpc.json",
-		"check": "tsc --noEmit",
-		"pretest": "mkdir -p ../web/build",
-		"test": "vitest run && vitest run --config vitest.worker.config.ts"
-	},
-	"dependencies": {
-		"@edgewarden/shared": "workspace:*",
-		"@hono/valibot-validator": "^0.6.1",
-		"@simplewebauthn/server": "^13.3.1",
-		"@sundoge/kysely-d1": "^0.3.0",
-		"aws4fetch": "^1.0.20",
-		"fast-xml-parser": "^5.10.1",
-		"hono": "^4.12.26",
-		"kysely": "0.29.2",
-		"otpauth": "^9.5.1",
-		"valibot": "^1.4.1"
-	},
-	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.21.3",
-		"@types/better-sqlite3": "^7.6.13",
-		"@types/node": "^26.0.0",
-		"better-sqlite3": "^12.4.1",
-		"kysely-codegen": "^0.20.0",
-		"miniflare": "5.20260804.0-alpha",
-		"typescript": "^6.0.3",
-		"vitest": "^4.1.9"
-	}
+  "name": "@edgewarden/api",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./src/index.ts"
+    },
+    "./contract": {
+      "types": "./dist/contract.d.ts",
+      "import": "./src/contract.ts"
+    }
+  },
+  "scripts": {
+    "predev": "mkdir -p ../web/build && pnpm run db:apply:local",
+    "dev": "wrangler dev --config ../../wrangler.jsonc",
+    "deploy": "wrangler deploy --config ../../wrangler.jsonc --minify",
+    "deploy:kv": "node ../../scripts/deploy.ts --kv",
+    "cf-typegen": "wrangler types worker-configuration.d.ts --config ../../wrangler.jsonc --env-interface CloudflareBindings",
+    "db:apply:local": "wrangler d1 migrations apply DB --config ../../wrangler.jsonc --local",
+    "db:apply:remote": "wrangler d1 migrations apply DB --config ../../wrangler.jsonc --remote",
+    "db:apply:remote:kv": "wrangler d1 migrations apply DB --config ../../wrangler.jsonc --remote",
+    "db:codegen": "node scripts/codegen.ts",
+    "rpc:types": "tsc --build tsconfig.rpc.json",
+    "check": "tsc --noEmit",
+    "pretest": "mkdir -p ../web/build",
+    "test": "vitest run && vitest run --config vitest.worker.config.ts"
+  },
+  "dependencies": {
+    "@edgewarden/shared": "workspace:*",
+    "@hono/valibot-validator": "^0.6.1",
+    "@simplewebauthn/server": "^13.3.1",
+    "@sundoge/kysely-d1": "^0.3.0",
+    "aws4fetch": "^1.0.20",
+    "fast-xml-parser": "^5.10.1",
+    "hono": "^4.12.26",
+    "kysely": "0.29.2",
+    "otpauth": "^9.5.1",
+    "valibot": "^1.4.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.21.3",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^26.0.0",
+    "better-sqlite3": "^12.4.1",
+    "kysely-codegen": "^0.20.0",
+    "miniflare": "5.20260804.0-alpha",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
 }

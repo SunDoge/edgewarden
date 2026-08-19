@@ -1,25 +1,25 @@
 {
-	"name": "Edgewarden",
-	"short_name": "Edgewarden",
-	"description": "自托管的零知识密码库",
-	"id": "/",
-	"start_url": "/vault",
-	"scope": "/",
-	"display": "standalone",
-	"background_color": "#f8fafc",
-	"theme_color": "#0f172a",
-	"categories": ["security", "productivity", "utilities"],
-	"icons": [
-		{
-			"src": "/edgewarden-icon.svg",
-			"sizes": "any",
-			"type": "image/svg+xml",
-			"purpose": "any maskable"
-		}
-	],
-	"shortcuts": [
-		{ "name": "保险库", "short_name": "保险库", "url": "/vault" },
-		{ "name": "密码生成器", "short_name": "生成器", "url": "/vault/generator" },
-		{ "name": "Send", "short_name": "Send", "url": "/vault/sends" }
-	]
+  "name": "Edgewarden",
+  "short_name": "Edgewarden",
+  "description": "自托管的零知识密码库",
+  "id": "/",
+  "start_url": "/vault",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f172a",
+  "categories": ["security", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/edgewarden-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "保险库", "short_name": "保险库", "url": "/vault" },
+    { "name": "密码生成器", "short_name": "生成器", "url": "/vault/generator" },
+    { "name": "Send", "short_name": "Send", "url": "/vault/sends" }
+  ]
 }

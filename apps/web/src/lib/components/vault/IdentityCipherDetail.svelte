@@ -4,32 +4,32 @@ import { Button } from "$lib/components/ui/button/index.js";
 import type { VaultIdentityData } from "$lib/services/vault-types";
 
 let {
-	identity,
-	copiedField,
-	onCopy,
+  identity,
+  copiedField,
+  onCopy,
 }: {
-	identity: VaultIdentityData | null;
-	copiedField: string | null;
-	onCopy: (value: string, field: string) => void;
+  identity: VaultIdentityData | null;
+  copiedField: string | null;
+  onCopy: (value: string, field: string) => void;
 } = $props();
 const copyFields = $derived([
-	["用户名", identity?.username, "id-username"],
-	["电子邮箱", identity?.email, "id-email"],
-	["电话号码", identity?.phone, "id-phone"],
-	["证件号码", identity?.number, "id-number"],
+  ["用户名", identity?.username, "id-username"],
+  ["电子邮箱", identity?.email, "id-email"],
+  ["电话号码", identity?.phone, "id-phone"],
+  ["证件号码", identity?.number, "id-number"],
 ] as const);
 let fullAddress = $derived(
-	[
-		identity?.address1,
-		identity?.address2,
-		identity?.address3,
-		identity?.city,
-		identity?.state,
-		identity?.postalCode,
-		identity?.country,
-	]
-		.filter(Boolean)
-		.join(", "),
+  [
+    identity?.address1,
+    identity?.address2,
+    identity?.address3,
+    identity?.city,
+    identity?.state,
+    identity?.postalCode,
+    identity?.country,
+  ]
+    .filter(Boolean)
+    .join(", "),
 );
 </script>
 

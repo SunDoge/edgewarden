@@ -1,11 +1,11 @@
 <script lang="ts">
 import {
-	ArrowLeft,
-	CheckCircle,
-	Download,
-	FileCode,
-	ShieldAlert,
-	Upload,
+  ArrowLeft,
+  CheckCircle,
+  Download,
+  FileCode,
+  ShieldAlert,
+  Upload,
 } from "@lucide/svelte";
 import { slide } from "svelte/transition";
 import { goto } from "$app/navigation";
@@ -23,16 +23,16 @@ import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
 import { importCiphersApi } from "$lib/services/api-folders";
 import { errorDetail } from "$lib/services/error-message";
 import {
-	buildBitwardenCsv,
-	buildBitwardenJson,
-	buildPlainExportDocument,
-	deduplicateTransferDocument,
-	encryptTransferDocument,
-	type ImportDeduplicationResult,
-	inspectEncryptedVaultImport,
-	parseVaultImport,
-	parseVaultImportFile,
-	type TransferDocument,
+  buildBitwardenCsv,
+  buildBitwardenJson,
+  buildPlainExportDocument,
+  deduplicateTransferDocument,
+  encryptTransferDocument,
+  type ImportDeduplicationResult,
+  inspectEncryptedVaultImport,
+  parseVaultImport,
+  parseVaultImportFile,
+  type TransferDocument,
 } from "$lib/services/vault-transfer";
 import { syncVaultData, vault } from "$lib/stores/vault.svelte";
 
@@ -46,8 +46,8 @@ let importFormat = $state<"json" | "csv">("json");
 let exportFormat = $state<"json" | "csv">("json");
 let pendingImport = $state<TransferDocument | null>(null);
 let deduplicationReview = $state<{
-	original: TransferDocument;
-	result: ImportDeduplicationResult;
+  original: TransferDocument;
+  result: ImportDeduplicationResult;
 } | null>(null);
 let encryptedImport = $state(false);
 let importPassword = $state("");
@@ -56,170 +56,170 @@ const MAX_IMPORT_BYTES = 32 * 1024 * 1024;
 
 // Client-side export function
 function handleExport() {
-	errorMsg = "";
-	successMsg = "";
+  errorMsg = "";
+  successMsg = "";
 
-	try {
-		const exportData = buildPlainExportDocument(vault.folders, vault.ciphers);
-		const content =
-			exportFormat === "csv"
-				? buildBitwardenCsv(exportData)
-				: buildBitwardenJson(exportData);
-		const blob = new Blob([content], {
-			type:
-				exportFormat === "csv" ? "text/csv;charset=utf-8" : "application/json",
-		});
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement("a");
-		a.href = url;
-		a.download = `edgewarden-export-${new Date().toISOString().slice(0, 10)}.${exportFormat}`;
-		a.click();
-		URL.revokeObjectURL(url);
+  try {
+    const exportData = buildPlainExportDocument(vault.folders, vault.ciphers);
+    const content =
+      exportFormat === "csv"
+        ? buildBitwardenCsv(exportData)
+        : buildBitwardenJson(exportData);
+    const blob = new Blob([content], {
+      type:
+        exportFormat === "csv" ? "text/csv;charset=utf-8" : "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `edgewarden-export-${new Date().toISOString().slice(0, 10)}.${exportFormat}`;
+    a.click();
+    URL.revokeObjectURL(url);
 
-		successMsg = "导出成功！明文备份文件已下载。请妥善保存该文件。";
-	} catch (caught) {
-		errorMsg = `导出失败: ${errorDetail(caught)}`;
-	}
+    successMsg = "导出成功！明文备份文件已下载。请妥善保存该文件。";
+  } catch (caught) {
+    errorMsg = `导出失败: ${errorDetail(caught)}`;
+  }
 }
 
 async function prepareImport() {
-	errorMsg = "";
-	pendingImport = null;
-	deduplicationReview = null;
-	encryptedImport = false;
-	importPassword = "";
-	if (!files?.[0]) return;
-	if (files[0].size > MAX_IMPORT_BYTES) {
-		errorMsg = "导入文件不能超过 32 MiB。";
-		return;
-	}
-	try {
-		const text = await files[0].text();
-		if (importFormat === "json") {
-			const encryptedType = inspectEncryptedVaultImport(text);
-			if (encryptedType === "account-restricted")
-				throw new Error(
-					"账户限制型加密 JSON 不能跨服务器导入，请改用密码保护型加密导出",
-				);
-			if (encryptedType === "password-protected") {
-				encryptedImport = true;
-				return;
-			}
-		}
-		pendingImport = parseVaultImport(text, importFormat);
-	} catch (e) {
-		errorMsg = "解析失败: " + (e instanceof Error ? e.message : e);
-	}
+  errorMsg = "";
+  pendingImport = null;
+  deduplicationReview = null;
+  encryptedImport = false;
+  importPassword = "";
+  if (!files?.[0]) return;
+  if (files[0].size > MAX_IMPORT_BYTES) {
+    errorMsg = "导入文件不能超过 32 MiB。";
+    return;
+  }
+  try {
+    const text = await files[0].text();
+    if (importFormat === "json") {
+      const encryptedType = inspectEncryptedVaultImport(text);
+      if (encryptedType === "account-restricted")
+        throw new Error(
+          "账户限制型加密 JSON 不能跨服务器导入，请改用密码保护型加密导出",
+        );
+      if (encryptedType === "password-protected") {
+        encryptedImport = true;
+        return;
+      }
+    }
+    pendingImport = parseVaultImport(text, importFormat);
+  } catch (e) {
+    errorMsg = "解析失败: " + (e instanceof Error ? e.message : e);
+  }
 }
 
 function resetImportSelection() {
-	files = undefined;
-	pendingImport = null;
-	deduplicationReview = null;
-	encryptedImport = false;
-	importPassword = "";
-	errorMsg = "";
+  files = undefined;
+  pendingImport = null;
+  deduplicationReview = null;
+  encryptedImport = false;
+  importPassword = "";
+  errorMsg = "";
 }
 
 // Client-side import function
 async function handleImport(strategy?: "skip" | "all") {
-	errorMsg = "";
-	successMsg = "";
+  errorMsg = "";
+  successMsg = "";
 
-	if (!files || files.length === 0) {
-		errorMsg = "请先选择需要导入的 Bitwarden JSON 导出文件。";
-		return;
-	}
+  if (!files || files.length === 0) {
+    errorMsg = "请先选择需要导入的 Bitwarden JSON 导出文件。";
+    return;
+  }
 
-	importing = true;
-	importProgress = 5;
-	importProgressLabel = "正在读取并解密导出文件…";
-	try {
-		const importedData =
-			deduplicationReview?.original ??
-			pendingImport ??
-			(await parseVaultImportFile(
-				await files[0].text(),
-				importFormat,
-				importPassword,
-			));
-		if (importedData.folders.length === 0 && importedData.items.length === 0) {
-			throw new Error("导入的文件中没有发现任何文件夹或密码项。");
-		}
+  importing = true;
+  importProgress = 5;
+  importProgressLabel = "正在读取并解密导出文件…";
+  try {
+    const importedData =
+      deduplicationReview?.original ??
+      pendingImport ??
+      (await parseVaultImportFile(
+        await files[0].text(),
+        importFormat,
+        importPassword,
+      ));
+    if (importedData.folders.length === 0 && importedData.items.length === 0) {
+      throw new Error("导入的文件中没有发现任何文件夹或密码项。");
+    }
 
-		if (!vault.symEncKey || !vault.symMacKey) {
-			throw new Error("加密密钥未就绪，请重新解锁保险库。");
-		}
+    if (!vault.symEncKey || !vault.symMacKey) {
+      throw new Error("加密密钥未就绪，请重新解锁保险库。");
+    }
 
-		const existingData = buildPlainExportDocument(
-			vault.folders,
-			vault.ciphers.filter((cipher) => !cipher.organizationId),
-		);
-		importProgress = 12;
-		importProgressLabel = "正在检测重复条目…";
-		const deduplicated =
-			deduplicationReview?.result ??
-			deduplicateTransferDocument(importedData, existingData);
-		if (
-			strategy == null &&
-			(deduplicated.duplicateItems > 0 || deduplicated.duplicateFolders > 0)
-		) {
-			deduplicationReview = { original: importedData, result: deduplicated };
-			importProgress = 12;
-			importProgressLabel = "重复项检测完成，等待选择";
-			return;
-		}
-		const documentToImport =
-			strategy === "all"
-				? deduplicated.completeDocument
-				: deduplicated.document;
+    const existingData = buildPlainExportDocument(
+      vault.folders,
+      vault.ciphers.filter((cipher) => !cipher.organizationId),
+    );
+    importProgress = 12;
+    importProgressLabel = "正在检测重复条目…";
+    const deduplicated =
+      deduplicationReview?.result ??
+      deduplicateTransferDocument(importedData, existingData);
+    if (
+      strategy == null &&
+      (deduplicated.duplicateItems > 0 || deduplicated.duplicateFolders > 0)
+    ) {
+      deduplicationReview = { original: importedData, result: deduplicated };
+      importProgress = 12;
+      importProgressLabel = "重复项检测完成，等待选择";
+      return;
+    }
+    const documentToImport =
+      strategy === "all"
+        ? deduplicated.completeDocument
+        : deduplicated.document;
 
-		if (
-			documentToImport.folders.length === 0 &&
-			documentToImport.items.length === 0
-		) {
-			successMsg = `没有导入数据：${deduplicated.duplicateItems} 个密码项均已存在。`;
-			files = undefined;
-			pendingImport = null;
-			deduplicationReview = null;
-			encryptedImport = false;
-			importPassword = "";
-			return;
-		}
+    if (
+      documentToImport.folders.length === 0 &&
+      documentToImport.items.length === 0
+    ) {
+      successMsg = `没有导入数据：${deduplicated.duplicateItems} 个密码项均已存在。`;
+      files = undefined;
+      pendingImport = null;
+      deduplicationReview = null;
+      encryptedImport = false;
+      importPassword = "";
+      return;
+    }
 
-		importProgress = 15;
-		importProgressLabel = "正在加密导入数据…";
-		const encryptedPayload = await encryptTransferDocument(
-			documentToImport,
-			vault.symEncKey,
-			vault.symMacKey,
-			({ processed, total, kind }) => {
-				importProgress = total ? 15 + Math.round((processed / total) * 70) : 85;
-				importProgressLabel = `正在加密${kind === "folder" ? "文件夹" : "密码项"} ${processed}/${total}…`;
-			},
-		);
-		importProgress = 88;
-		importProgressLabel = "正在上传加密数据…";
-		await importCiphersApi(encryptedPayload);
+    importProgress = 15;
+    importProgressLabel = "正在加密导入数据…";
+    const encryptedPayload = await encryptTransferDocument(
+      documentToImport,
+      vault.symEncKey,
+      vault.symMacKey,
+      ({ processed, total, kind }) => {
+        importProgress = total ? 15 + Math.round((processed / total) * 70) : 85;
+        importProgressLabel = `正在加密${kind === "folder" ? "文件夹" : "密码项"} ${processed}/${total}…`;
+      },
+    );
+    importProgress = 88;
+    importProgressLabel = "正在上传加密数据…";
+    await importCiphersApi(encryptedPayload);
 
-		// 4. Reload local vault data
-		importProgress = 96;
-		importProgressLabel = "正在同步保险库…";
-		await syncVaultData();
-		importProgress = 100;
-		importProgressLabel = "导入完成";
+    // 4. Reload local vault data
+    importProgress = 96;
+    importProgressLabel = "正在同步保险库…";
+    await syncVaultData();
+    importProgress = 100;
+    importProgressLabel = "导入完成";
 
-		successMsg = `导入成功！已成功导入 ${encryptedPayload.folders.length} 个文件夹和 ${encryptedPayload.ciphers.length} 个密码项。`;
-		files = undefined;
-		pendingImport = null;
-		deduplicationReview = null;
-		encryptedImport = false;
-		importPassword = "";
-	} catch (caught) {
-		errorMsg = `导入失败: ${errorDetail(caught)}`;
-	} finally {
-		importing = false;
-	}
+    successMsg = `导入成功！已成功导入 ${encryptedPayload.folders.length} 个文件夹和 ${encryptedPayload.ciphers.length} 个密码项。`;
+    files = undefined;
+    pendingImport = null;
+    deduplicationReview = null;
+    encryptedImport = false;
+    importPassword = "";
+  } catch (caught) {
+    errorMsg = `导入失败: ${errorDetail(caught)}`;
+  } finally {
+    importing = false;
+  }
 }
 </script>
 

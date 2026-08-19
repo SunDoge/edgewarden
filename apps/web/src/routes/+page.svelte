@@ -7,12 +7,12 @@ import * as Empty from "$lib/components/ui/empty/index.js";
 import { Spinner } from "$lib/components/ui/spinner/index.js";
 
 onMount(async () => {
-	await restoreWebSession();
-	if (isLoggedIn()) {
-		goto("/vault");
-	} else {
-		goto("/login");
-	}
+  await restoreWebSession();
+  if (isLoggedIn()) {
+    goto("/vault");
+  } else {
+    goto("/login");
+  }
 });
 </script>
 

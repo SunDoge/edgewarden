@@ -6,41 +6,41 @@ import * as Field from "$lib/components/ui/field/index.js";
 import { Input } from "$lib/components/ui/input/index.js";
 
 let {
-	deleteAccountOpen = $bindable(),
-	deleteAccountPassword = $bindable(),
-	totpOpen = $bindable(),
-	totpKey,
-	totpToken = $bindable(),
-	disableOpen = $bindable(),
-	masterPassword = $bindable(),
-	passwordOpen = $bindable(),
-	currentPassword = $bindable(),
-	newPassword = $bindable(),
-	confirmPassword = $bindable(),
-	busy,
-	onCopy,
-	onDeleteAccount,
-	onEnableTotp,
-	onDisableTotp,
-	onChangePassword,
+  deleteAccountOpen = $bindable(),
+  deleteAccountPassword = $bindable(),
+  totpOpen = $bindable(),
+  totpKey,
+  totpToken = $bindable(),
+  disableOpen = $bindable(),
+  masterPassword = $bindable(),
+  passwordOpen = $bindable(),
+  currentPassword = $bindable(),
+  newPassword = $bindable(),
+  confirmPassword = $bindable(),
+  busy,
+  onCopy,
+  onDeleteAccount,
+  onEnableTotp,
+  onDisableTotp,
+  onChangePassword,
 }: {
-	deleteAccountOpen: boolean;
-	deleteAccountPassword: string;
-	totpOpen: boolean;
-	totpKey: string;
-	totpToken: string;
-	disableOpen: boolean;
-	masterPassword: string;
-	passwordOpen: boolean;
-	currentPassword: string;
-	newPassword: string;
-	confirmPassword: string;
-	busy: string;
-	onCopy: (value: string) => void;
-	onDeleteAccount: () => void;
-	onEnableTotp: () => void;
-	onDisableTotp: () => void;
-	onChangePassword: () => void;
+  deleteAccountOpen: boolean;
+  deleteAccountPassword: string;
+  totpOpen: boolean;
+  totpKey: string;
+  totpToken: string;
+  disableOpen: boolean;
+  masterPassword: string;
+  passwordOpen: boolean;
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+  busy: string;
+  onCopy: (value: string) => void;
+  onDeleteAccount: () => void;
+  onEnableTotp: () => void;
+  onDisableTotp: () => void;
+  onChangePassword: () => void;
 } = $props();
 </script>
 

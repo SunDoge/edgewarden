@@ -4,12 +4,12 @@ import { now } from "../../../utils/time";
 
 // Conditional WebAuthn statements couple a credential claim with its revision update inside the same D1 batch.
 export function webauthnCredentialRevisionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	credentialId: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  userId: string,
+  credentialId: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT user_id, ${timestamp}
 		FROM webauthn_credentials
@@ -23,24 +23,24 @@ export function webauthnCredentialRevisionQuery(
 }
 
 export function conditionalWebauthnEncryptionUpdateQuery(
-	db: Kysely<DB>,
-	credential: {
-		id: string;
-		user_id: string;
-		purpose: string;
-		encrypted_user_key: string | null;
-		encrypted_public_key: string | null;
-		encrypted_private_key: string | null;
-		supports_prf: number;
-		mutation_token: string | null;
-	},
-	encryptedUserKey: string,
-	encryptedPublicKey: string,
-	encryptedPrivateKey: string,
-	mutationToken: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  credential: {
+    id: string;
+    user_id: string;
+    purpose: string;
+    encrypted_user_key: string | null;
+    encrypted_public_key: string | null;
+    encrypted_private_key: string | null;
+    supports_prf: number;
+    mutation_token: string | null;
+  },
+  encryptedUserKey: string,
+  encryptedPublicKey: string,
+  encryptedPrivateKey: string,
+  mutationToken: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		UPDATE webauthn_credentials
 		SET encrypted_user_key = ${encryptedUserKey},
 		    encrypted_public_key = ${encryptedPublicKey},
@@ -60,13 +60,13 @@ export function conditionalWebauthnEncryptionUpdateQuery(
 }
 
 export function conditionalWebauthnEncryptionRevisionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	credentialId: string,
-	mutationToken: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  userId: string,
+  credentialId: string,
+  mutationToken: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT user_id, ${timestamp}
 		FROM webauthn_credentials
@@ -81,12 +81,12 @@ export function conditionalWebauthnEncryptionRevisionQuery(
 }
 
 export function conditionalUserRevisionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	securityStamp: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  userId: string,
+  securityStamp: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		INSERT INTO user_revisions (user_id, revision_date)
 		SELECT id, ${timestamp}
 		FROM users
@@ -100,16 +100,16 @@ export function conditionalUserRevisionQuery(
 }
 
 export function conditionalAuthenticatorUpdateQuery(
-	db: Kysely<DB>,
-	userId: string,
-	expectedSecurityStamp: string,
-	expectedSecret: string | null,
-	encryptedSecret: string,
-	encryptedRecoveryCode: string,
-	securityStamp: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  userId: string,
+  expectedSecurityStamp: string,
+  expectedSecret: string | null,
+  encryptedSecret: string,
+  encryptedRecoveryCode: string,
+  securityStamp: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		UPDATE users
 		SET totp_secret = ${encryptedSecret},
 		    totp_recovery_code = ${encryptedRecoveryCode},
@@ -122,16 +122,16 @@ export function conditionalAuthenticatorUpdateQuery(
 }
 
 export function conditionalYubikeyUpdateQuery(
-	db: Kysely<DB>,
-	userId: string,
-	expectedSecurityStamp: string,
-	expectedConfig: string,
-	yubikeyConfig: string,
-	encryptedRecoveryCode: string,
-	securityStamp: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  userId: string,
+  expectedSecurityStamp: string,
+  expectedConfig: string,
+  yubikeyConfig: string,
+  encryptedRecoveryCode: string,
+  securityStamp: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		UPDATE users
 		SET yubikey_config = ${yubikeyConfig},
 		    totp_recovery_code = COALESCE(
@@ -147,17 +147,17 @@ export function conditionalYubikeyUpdateQuery(
 }
 
 export function conditionalTwoFactorPasskeyClaimQuery(
-	db: Kysely<DB>,
-	userId: string,
-	expectedSecurityStamp: string,
-	credentialId: string,
-	encryptedRecoveryCode: string,
-	securityStamp: string,
-	maximumCredentials: number,
-	timestamp = now(),
-	challenge?: { hash: string; scope: string },
+  db: Kysely<DB>,
+  userId: string,
+  expectedSecurityStamp: string,
+  credentialId: string,
+  encryptedRecoveryCode: string,
+  securityStamp: string,
+  maximumCredentials: number,
+  timestamp = now(),
+  challenge?: { hash: string; scope: string },
 ) {
-	return sql`
+  return sql`
 		UPDATE users
 		SET totp_recovery_code = COALESCE(
 		      totp_recovery_code,
@@ -176,8 +176,8 @@ export function conditionalTwoFactorPasskeyClaimQuery(
 		    WHERE user_id = ${userId} AND purpose = 'twoFactor'
 		  ) < ${maximumCredentials}
 		  AND ${
-				challenge
-					? sql<boolean>`EXISTS (
+        challenge
+          ? sql<boolean>`EXISTS (
 		    SELECT 1 FROM webauthn_challenges
 		    WHERE challenge_hash = ${challenge.hash}
 		      AND scope = ${challenge.scope}
@@ -185,17 +185,17 @@ export function conditionalTwoFactorPasskeyClaimQuery(
 		      AND used_at IS NULL
 		      AND expires_at > ${timestamp}
 		  )`
-					: sql<boolean>`TRUE`
-			}
+          : sql<boolean>`TRUE`
+      }
 	`.compile(db);
 }
 
 export function conditionalWebauthnCredentialInsertQuery(
-	db: Kysely<DB>,
-	credential: Insertable<WebauthnCredentials>,
-	securityStamp: string,
+  db: Kysely<DB>,
+  credential: Insertable<WebauthnCredentials>,
+  securityStamp: string,
 ) {
-	return sql`
+  return sql`
 		INSERT INTO webauthn_credentials (
 		  id, user_id, purpose, name, public_key, credential_id, counter,
 		  type, aa_guid, transports, encrypted_user_key, encrypted_public_key,
@@ -217,16 +217,16 @@ export function conditionalWebauthnCredentialInsertQuery(
 }
 
 export function conditionalAccountPasskeyClaimQuery(
-	db: Kysely<DB>,
-	userId: string,
-	expectedSecurityStamp: string,
-	credentialId: string,
-	securityStamp: string,
-	maximumCredentials: number,
-	timestamp = now(),
-	challenge?: { hash: string; scope: string },
+  db: Kysely<DB>,
+  userId: string,
+  expectedSecurityStamp: string,
+  credentialId: string,
+  securityStamp: string,
+  maximumCredentials: number,
+  timestamp = now(),
+  challenge?: { hash: string; scope: string },
 ) {
-	return sql`
+  return sql`
 		UPDATE users
 		SET security_stamp = ${securityStamp}, updated_at = ${timestamp}
 		WHERE id = ${userId}
@@ -240,8 +240,8 @@ export function conditionalAccountPasskeyClaimQuery(
 		    WHERE user_id = ${userId} AND purpose = 'login'
 		  ) < ${maximumCredentials}
 		  AND ${
-				challenge
-					? sql<boolean>`EXISTS (
+        challenge
+          ? sql<boolean>`EXISTS (
 		    SELECT 1 FROM webauthn_challenges
 		    WHERE challenge_hash = ${challenge.hash}
 		      AND scope = ${challenge.scope}
@@ -249,23 +249,23 @@ export function conditionalAccountPasskeyClaimQuery(
 		      AND used_at IS NULL
 		      AND expires_at > ${timestamp}
 		  )`
-					: sql<boolean>`TRUE`
-			}
+          : sql<boolean>`TRUE`
+      }
 	`.compile(db);
 }
 
 export function conditionalWebauthnChallengeConsumptionQuery(
-	db: Kysely<DB>,
-	args: {
-		challengeHash: string;
-		scope: string;
-		userId: string;
-		credentialId: string;
-		mutationToken: string;
-		timestamp: number;
-	},
+  db: Kysely<DB>,
+  args: {
+    challengeHash: string;
+    scope: string;
+    userId: string;
+    credentialId: string;
+    mutationToken: string;
+    timestamp: number;
+  },
 ) {
-	return sql`
+  return sql`
 		UPDATE webauthn_challenges
 		SET used_at = ${args.timestamp}
 		WHERE challenge_hash = ${args.challengeHash}
@@ -282,15 +282,15 @@ export function conditionalWebauthnChallengeConsumptionQuery(
 }
 
 export function conditionalWebauthnCredentialDeletionClaimQuery(
-	db: Kysely<DB>,
-	userId: string,
-	credentialId: string,
-	purpose: string,
-	expectedSecurityStamp: string,
-	securityStamp: string,
-	timestamp = now(),
+  db: Kysely<DB>,
+  userId: string,
+  credentialId: string,
+  purpose: string,
+  expectedSecurityStamp: string,
+  securityStamp: string,
+  timestamp = now(),
 ) {
-	return sql`
+  return sql`
 		UPDATE users
 		SET security_stamp = ${securityStamp}, updated_at = ${timestamp}
 		WHERE id = ${userId}
@@ -305,13 +305,13 @@ export function conditionalWebauthnCredentialDeletionClaimQuery(
 }
 
 export function conditionalWebauthnCredentialDeletionQuery(
-	db: Kysely<DB>,
-	userId: string,
-	credentialId: string,
-	purpose: string,
-	securityStamp: string,
+  db: Kysely<DB>,
+  userId: string,
+  credentialId: string,
+  purpose: string,
+  securityStamp: string,
 ) {
-	return sql`
+  return sql`
 		DELETE FROM webauthn_credentials
 		WHERE id = ${credentialId}
 		  AND user_id = ${userId}

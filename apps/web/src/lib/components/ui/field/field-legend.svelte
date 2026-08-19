@@ -3,13 +3,13 @@ import { cn, type WithElementRef } from "$lib/utils.js";
 import type { HTMLAttributes } from "svelte/elements";
 
 let {
-	ref = $bindable(null),
-	class: className,
-	variant = "legend",
-	children,
-	...restProps
+  ref = $bindable(null),
+  class: className,
+  variant = "legend",
+  children,
+  ...restProps
 }: WithElementRef<HTMLAttributes<HTMLLegendElement>> & {
-	variant?: "legend" | "label";
+  variant?: "legend" | "label";
 } = $props();
 </script>
 

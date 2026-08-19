@@ -3,29 +3,29 @@ import type { Snippet } from "svelte";
 import { cn } from "$lib/utils";
 
 let {
-	title,
-	description,
-	actions,
-	children,
-	width = "wide",
-	fill = false,
+  title,
+  description,
+  actions,
+  children,
+  width = "wide",
+  fill = false,
 }: {
-	title: string;
-	description: string;
-	actions?: Snippet;
-	children: Snippet;
-	width?: "compact" | "default" | "wide" | "full";
-	fill?: boolean;
+  title: string;
+  description: string;
+  actions?: Snippet;
+  children: Snippet;
+  width?: "compact" | "default" | "wide" | "full";
+  fill?: boolean;
 } = $props();
 
 const widthClass = $derived(
-	width === "compact"
-		? "max-w-3xl"
-		: width === "default"
-			? "max-w-5xl"
-			: width === "wide"
-				? "max-w-6xl"
-				: "max-w-none",
+  width === "compact"
+    ? "max-w-3xl"
+    : width === "default"
+      ? "max-w-5xl"
+      : width === "wide"
+        ? "max-w-6xl"
+        : "max-w-none",
 );
 </script>
 

@@ -1,11 +1,11 @@
 {
-	"name": "@edgewarden/shared",
-	"version": "1.0.0",
-	"description": "Shared valibot schemas and TypeScript types for Edgewarden",
-	"type": "module",
-	"private": true,
-	"main": "index.ts",
-	"peerDependencies": {
-		"valibot": "^1.4.1"
-	}
+  "name": "@edgewarden/shared",
+  "version": "1.0.0",
+  "description": "Shared valibot schemas and TypeScript types for Edgewarden",
+  "type": "module",
+  "private": true,
+  "main": "index.ts",
+  "peerDependencies": {
+    "valibot": "^1.4.1"
+  }
 }

@@ -11,18 +11,18 @@ import { Progress } from "$lib/components/ui/progress/index.js";
 import { Spinner } from "$lib/components/ui/spinner/index.js";
 import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
 import {
-	inspectPasswordHealth,
-	type PasswordHealthReport,
+  inspectPasswordHealth,
+  type PasswordHealthReport,
 } from "$lib/services/password-health";
 import { vault } from "$lib/stores/vault.svelte";
 import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
 import {
-	AlertTriangle,
-	ArrowLeft,
-	CheckCircle2,
-	Eye,
-	EyeOff,
-	ShieldAlert,
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  ShieldAlert,
 } from "@lucide/svelte";
 
 let report = $state<PasswordHealthReport | null>(null);
@@ -33,56 +33,56 @@ let filter = $state<"all" | "exposed" | "reused" | "weak">("all");
 let progress = $state({ checked: 0, total: 0 });
 let revealed = $state<Set<string>>(new Set());
 let filteredItems = $derived(
-	report?.items.filter((item) =>
-		match(filter)
-			.with("exposed", () => (item.exposedCount ?? 0) > 0)
-			.with("reused", () => item.reusedCount > 1)
-			.with("weak", () => item.weak)
-			.otherwise(() => true),
-	) ?? [],
+  report?.items.filter((item) =>
+    match(filter)
+      .with("exposed", () => (item.exposedCount ?? 0) > 0)
+      .with("reused", () => item.reusedCount > 1)
+      .with("weak", () => item.weak)
+      .otherwise(() => true),
+  ) ?? [],
 );
 
 async function scan() {
-	controller?.abort();
-	controller = new AbortController();
-	scanning = true;
-	filter = "all";
-	revealed = new Set();
-	progress = {
-		checked: 0,
-		total: vault.ciphers.filter(
-			(cipher) =>
-				cipher.type === 1 &&
-				!cipher.deletedDate &&
-				!cipher.hidePasswords &&
-				cipher.login?.password,
-		).length,
-	};
-	scanError = null;
-	try {
-		report = await inspectPasswordHealth(
-			vault.ciphers,
-			fetch,
-			controller.signal,
-			(checked, total) => (progress = { checked, total }),
-		);
-	} catch (error) {
-		if (!controller.signal.aborted)
-			scanError = error instanceof Error ? error.message : String(error);
-	} finally {
-		scanning = false;
-	}
+  controller?.abort();
+  controller = new AbortController();
+  scanning = true;
+  filter = "all";
+  revealed = new Set();
+  progress = {
+    checked: 0,
+    total: vault.ciphers.filter(
+      (cipher) =>
+        cipher.type === 1 &&
+        !cipher.deletedDate &&
+        !cipher.hidePasswords &&
+        cipher.login?.password,
+    ).length,
+  };
+  scanError = null;
+  try {
+    report = await inspectPasswordHealth(
+      vault.ciphers,
+      fetch,
+      controller.signal,
+      (checked, total) => (progress = { checked, total }),
+    );
+  } catch (error) {
+    if (!controller.signal.aborted)
+      scanError = error instanceof Error ? error.message : String(error);
+  } finally {
+    scanning = false;
+  }
 }
 
 onMount(() => {
-	return () => controller?.abort();
+  return () => controller?.abort();
 });
 
 function toggleReveal(id: string) {
-	const next = new Set(revealed);
-	if (next.has(id)) next.delete(id);
-	else next.add(id);
-	revealed = next;
+  const next = new Set(revealed);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  revealed = next;
 }
 </script>
 
