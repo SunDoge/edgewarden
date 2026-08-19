@@ -39,6 +39,12 @@
   },
   "overrides": [
     {
+      "includes": ["**/*.svelte"],
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
       "includes": ["**/worker-configuration.d.ts"],
       "linter": {
         "enabled": false

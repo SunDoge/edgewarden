@@ -21,7 +21,8 @@
     "check": "pnpm --parallel --filter './apps/*' --if-present run check && node scripts/check-cloudflare-config.ts && node scripts/check-migrations.ts && node scripts/check-web-architecture.ts",
     "lint": "biome lint .",
     "lint:ci": "biome lint . --diagnostic-level=error --max-diagnostics=100",
-    "format": "biome format --write ."
+    "format": "biome format --write . && prettier --write \"apps/web/**/*.svelte\"",
+    "format:check": "biome format . && prettier --check \"apps/web/**/*.svelte\""
   },
   "keywords": [],
   "author": "",
@@ -45,6 +46,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.7",
+    "prettier": "^3.9.6",
+    "prettier-plugin-svelte": "^4.1.1",
     "wrangler": "^4.4.0"
   },
   "dependencies": {
