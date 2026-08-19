@@ -469,6 +469,7 @@ CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expir
 -- 15. DEVICES
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS devices (
+  id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL,
   device_identifier TEXT NOT NULL,
   name TEXT NOT NULL,
@@ -489,9 +490,10 @@ CREATE TABLE IF NOT EXISTS devices (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
 	mutation_token TEXT,
-  PRIMARY KEY (user_id, device_identifier),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_user_identifier
+  ON devices(user_id, device_identifier);
 CREATE INDEX IF NOT EXISTS idx_devices_user_updated ON devices(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_devices_user_last_seen ON devices(user_id, last_seen_at);
 CREATE INDEX IF NOT EXISTS idx_devices_mutation_token
@@ -514,12 +516,6 @@ CREATE TABLE IF NOT EXISTS auth_requests (
   request_country_name TEXT,
   response_device_identifier TEXT,
   access_code_hash TEXT NOT NULL,
-  access_code_encrypted TEXT NOT NULL CHECK (
-    json_valid(access_code_encrypted)
-    AND COALESCE(json_extract(access_code_encrypted, '$.v'), 0) = 1
-    AND COALESCE(json_type(access_code_encrypted, '$.iv') = 'text', 0)
-    AND COALESCE(json_type(access_code_encrypted, '$.data') = 'text', 0)
-  ),
   public_key TEXT NOT NULL,
   key TEXT,
   master_password_hash TEXT,

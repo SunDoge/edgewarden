@@ -1,6 +1,10 @@
 import { Hono } from "hono";
 import type { HonoEnv } from "../env";
 import { downloadAttachment, uploadAttachment } from "../handlers/attachments";
+import {
+  createAuthRequest,
+  getAuthRequestResponse,
+} from "../handlers/auth-requests";
 import { getKnownDevice } from "../handlers/devices";
 import {
   checkDigitalAssetLink,
@@ -55,6 +59,8 @@ export const publicRouter = new Hono<HonoEnv>()
   .post("/identity/connect/revoke", revocationRequestValidator, ...revokeToken)
   .post("/identity/accounts/recover-2fa", ...recoverTwoFactor)
   .get("/api/devices/knowndevice", ...getKnownDevice)
+  .post("/api/auth-requests", ...createAuthRequest)
+  .get("/api/auth-requests/:id/response", ...getAuthRequestResponse)
   .get("/fill-assist/manifest.json", ...getFillAssistManifest)
   .get("/fill-assist/:filename", ...getFillAssistFile)
   .get("/.well-known/assetlinks/check", ...checkDigitalAssetLink)

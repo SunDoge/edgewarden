@@ -7,8 +7,7 @@ type CredentialPurpose =
   | "api-key"
   | "totp-secret"
   | "totp-recovery"
-  | "invite-code"
-  | "auth-request-access-code";
+  | "invite-code";
 
 interface EncryptedEnvelope {
   v: typeof ENVELOPE_VERSION;

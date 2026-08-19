@@ -1159,11 +1159,6 @@ export function registerDatabaseMaintenanceScenarios(
           request_country_name: null,
           response_device_identifier: "approving-device",
           access_code_hash: "hash",
-          access_code_encrypted: JSON.stringify({
-            v: 1,
-            iv: "test",
-            data: "test",
-          }),
           public_key: "public-key",
           key: "encrypted-key",
           master_password_hash: null,
@@ -1230,11 +1225,6 @@ export function registerDatabaseMaintenanceScenarios(
         requestDeviceType: 0,
         requestIpAddress: null,
         accessCodeHash: "hash",
-        accessCodeEncrypted: JSON.stringify({
-          v: 1,
-          iv: "test",
-          data: "test",
-        }),
         publicKey: "public-key",
       });
       const outcomes = await Promise.all([

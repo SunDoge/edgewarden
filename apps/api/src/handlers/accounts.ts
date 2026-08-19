@@ -2,6 +2,7 @@ import { vValidator } from "@hono/valibot-validator";
 import { factory } from "../http/factory";
 import {
   ChangePasswordSchema,
+  SetVerifyDevicesSchema,
   SetKeysSchema,
   UpdateProfileSchema,
   VerifyPasswordSchema,
@@ -61,7 +62,7 @@ function buildProfileResponse(
     kdfMemory: user.kdf_memory ?? null,
     kdfParallelism: user.kdf_parallelism ?? null,
     creationDate: toIso(user.created_at),
-    verifyDevices: false,
+    verifyDevices: user.verify_devices === 1,
     organizations,
     organizationsNew: organizations,
     providers: [],
@@ -272,6 +273,38 @@ export const verifyAccountPassword = factory.createHandlers(
       user.email,
     );
     if (!valid) return errorResponse("Invalid password.", 400);
+    return new Response(null, { status: 200 });
+  },
+);
+
+export const setVerifyDevices = factory.createHandlers(
+  vValidator("json", SetVerifyDevicesSchema),
+  async (c) => {
+    const body = c.req.valid("json");
+    const user = c.get("user");
+    if (
+      !(await verifyPassword(
+        body.masterPasswordHash,
+        user.master_password_hash,
+        user.email,
+      ))
+    )
+      return errorResponse("User verification failed.", 400);
+
+    const updatedAt = Math.max(now(), user.updated_at + 1);
+    const changed = await c
+      .get("db")
+      .updateTable("users")
+      .set({
+        verify_devices: body.verifyDevices ? 1 : 0,
+        updated_at: updatedAt,
+      })
+      .where("id", "=", user.id)
+      .where("updated_at", "=", user.updated_at)
+      .executeTakeFirst();
+    if (changed.numUpdatedRows !== 1n)
+      return errorResponse("Account was changed by another request.", 409);
+    invalidateUserCache(user.id);
     return new Response(null, { status: 200 });
   },
 );

@@ -331,9 +331,10 @@ describe("Edgewarden API", () => {
       .run();
     await testDatabase
       .prepare(
-        "INSERT INTO devices (user_id,device_identifier,name,type,created_at,updated_at) VALUES (?,?,?,0,?,?)",
+        "INSERT INTO devices (id,user_id,device_identifier,name,type,created_at,updated_at) VALUES (?,?,?,?,0,?,?)",
       )
       .bind(
+        crypto.randomUUID(),
         owner.id,
         "backup-test-device",
         "backup test device",

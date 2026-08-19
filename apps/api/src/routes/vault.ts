@@ -17,6 +17,7 @@ import {
   requestPasswordHint,
   rotateApiKey,
   setKeys,
+  setVerifyDevices,
   updateProfile,
   verifyAccountPassword,
 } from "../handlers/accounts";
@@ -36,9 +37,9 @@ import {
   updateAuditSettings,
 } from "../handlers/admin";
 import {
-  createAuthRequest,
   getAuthRequest,
   listAuthRequests,
+  listPendingAuthRequests,
   updateAuthRequest,
 } from "../handlers/auth-requests";
 import {
@@ -120,6 +121,7 @@ import {
   requireAccountPasskey,
   requireAuthRequest,
   requireDevice,
+  requireDeviceByIdentifier,
   requireFolder,
   requireSend,
   requireSendFile,
@@ -142,6 +144,8 @@ const accountRoutes = new Hono<HonoEnv>()
   .post("/api/accounts/keys", ...setKeys)
   .post("/api/accounts/password", ...changePassword)
   .post("/api/accounts/verify-password", ...verifyAccountPassword)
+  .put("/api/accounts/verify-devices", ...setVerifyDevices)
+  .post("/api/accounts/verify-devices", ...setVerifyDevices)
   .get("/api/accounts/revision-date", ...getRevisionDate)
   .post("/api/accounts/password-hint", ...requestPasswordHint)
   .get("/api/accounts/api-key", ...getApiKey)
@@ -192,39 +196,46 @@ const folderAndDeviceRoutes = new Hono<HonoEnv>()
   .get("/api/devices", ...listDevices)
   .post("/api/devices/delete", ...deleteDevices)
   .get("/api/devices/knowndevice", ...getKnownDevice)
-  .get("/api/devices/identifier/:id", requireDevice, ...getDevice)
+  .get(
+    "/api/devices/identifier/:identifier",
+    requireDeviceByIdentifier,
+    ...getDevice,
+  )
   .get("/api/devices/:id", requireDevice, ...getDevice)
   .post(
-    "/api/devices/identifier/:id/token",
-    requireDevice,
+    "/api/devices/identifier/:identifier/token",
+    requireDeviceByIdentifier,
     ...updateDevicePushToken,
   )
   .put(
-    "/api/devices/identifier/:id/token",
-    requireDevice,
+    "/api/devices/identifier/:identifier/token",
+    requireDeviceByIdentifier,
     ...updateDevicePushToken,
   )
   .post(
-    "/api/devices/identifier/:id/clear-token",
-    requireDevice,
+    "/api/devices/identifier/:identifier/clear-token",
+    requireDeviceByIdentifier,
     ...clearDevicePushToken,
   )
   .put(
-    "/api/devices/identifier/:id/clear-token",
-    requireDevice,
+    "/api/devices/identifier/:identifier/clear-token",
+    requireDeviceByIdentifier,
     ...clearDevicePushToken,
   )
   .delete("/api/devices/:id", requireDevice, ...deleteDevice)
   .put("/api/devices/:id/name", requireDevice, ...updateDeviceName)
-  .put("/api/devices/:id/keys", requireDevice, ...updateDeviceKeys)
+  .put(
+    "/api/devices/:identifier/keys",
+    requireDeviceByIdentifier,
+    ...updateDeviceKeys,
+  )
   .post("/api/devices/update-trust", ...updateDevicesTrust)
   .post("/api/devices/untrust", ...untrustDevices)
   .delete("/api/devices", ...deleteAllDevices);
 
 const requestAndSettingsRoutes = new Hono<HonoEnv>()
-  .post("/api/auth-requests", ...createAuthRequest)
   .get("/api/auth-requests", ...listAuthRequests)
-  .get("/api/auth-requests/:id/response", requireAuthRequest, ...getAuthRequest)
+  .get("/api/auth-requests/pending", ...listPendingAuthRequests)
   .get("/api/auth-requests/:id", requireAuthRequest, ...getAuthRequest)
   .put("/api/auth-requests/:id", requireAuthRequest, ...updateAuthRequest)
   .get("/api/settings/domains", ...getDomains)

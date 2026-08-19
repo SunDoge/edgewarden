@@ -230,7 +230,7 @@ async function buildSyncPayload(c: Context<HonoEnv>, excludeDomains: boolean) {
     usesKeyConnector: false,
     avatarColor: null,
     creationDate: toIso(user.created_at),
-    verifyDevices: false,
+    verifyDevices: user.verify_devices === 1,
     kdf: user.kdf_type,
     kdfIterations: user.kdf_iterations,
     kdfMemory: user.kdf_memory ?? null,

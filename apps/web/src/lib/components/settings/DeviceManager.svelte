@@ -176,8 +176,8 @@
               </div>
               <div class="text-xs text-muted-foreground">{device.identifier}</div></Table.Cell
             ><Table.Cell
-              >{device.lastLoginDate
-                ? new Date(device.lastLoginDate).toLocaleString()
+              >{device.lastActivityDate
+                ? new Date(device.lastActivityDate).toLocaleString()
                 : "—"}</Table.Cell
             ><Table.Cell
               ><Badge variant="outline"

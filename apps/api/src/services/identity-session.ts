@@ -75,11 +75,11 @@ export function loginDeviceUpsertQuery(
 ) {
   return sql`
 		INSERT INTO devices (
-			user_id, device_identifier, name, type, session_stamp,
+			id, user_id, device_identifier, name, type, session_stamp,
 			push_token, push_uuid, created_at, updated_at
 		)
 		SELECT
-			current_user.id, ${args.device.identifier}, ${args.device.name},
+			${crypto.randomUUID()}, current_user.id, ${args.device.identifier}, ${args.device.name},
 			${args.device.type}, ${args.deviceSession.sessionStamp},
 			${args.device.pushToken ?? null},
 			${args.device.pushToken ? crypto.randomUUID() : null},

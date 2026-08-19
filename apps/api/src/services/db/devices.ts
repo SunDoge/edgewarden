@@ -17,6 +17,21 @@ export async function getDevice(
   );
 }
 
+export async function getDeviceById(
+  db: Kysely<DB>,
+  userId: string,
+  id: string,
+): Promise<Selectable<Devices> | null> {
+  return (
+    (await db
+      .selectFrom("devices")
+      .selectAll()
+      .where("user_id", "=", userId)
+      .where("id", "=", id)
+      .executeTakeFirst()) ?? null
+  );
+}
+
 export async function getDevicesByUserId(
   db: Kysely<DB>,
   userId: string,
@@ -41,6 +56,7 @@ export async function upsertDevice(
   await db
     .insertInto("devices")
     .values({
+      id: crypto.randomUUID(),
       user_id: userId,
       device_identifier: deviceIdentifier,
       name,

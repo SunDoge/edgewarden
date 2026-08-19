@@ -42,7 +42,6 @@ export interface AuditLogs {
 }
 
 export interface AuthRequests {
-  access_code_encrypted: string;
   access_code_hash: string;
   approved: number | null;
   authentication_date: number | null;
@@ -141,6 +140,7 @@ export interface Devices {
   encrypted_private_key: string | null;
   encrypted_public_key: string | null;
   encrypted_user_key: string | null;
+  id: string;
   last_seen_at: number | null;
   mutation_token: string | null;
   name: string;

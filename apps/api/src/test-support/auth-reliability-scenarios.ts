@@ -476,6 +476,7 @@ export function registerAuthReliabilityScenarios(
       await db
         .insertInto("devices")
         .values({
+          id: crypto.randomUUID(),
           user_id: user.id,
           device_identifier: deviceId,
           name: "Delete all reliability device",
@@ -825,6 +826,7 @@ export function registerAuthReliabilityScenarios(
       await db
         .insertInto("devices")
         .values({
+          id: crypto.randomUUID(),
           user_id: userId,
           device_identifier: deviceId,
           name: "Refresh reliability device",
@@ -1004,6 +1006,7 @@ export function registerAuthReliabilityScenarios(
       await db
         .insertInto("devices")
         .values({
+          id: crypto.randomUUID(),
           user_id: userId,
           device_identifier: deviceId,
           name: "Legacy unstamped device",
@@ -1075,6 +1078,7 @@ export function registerAuthReliabilityScenarios(
       await db
         .insertInto("devices")
         .values({
+          id: crypto.randomUUID(),
           user_id: userId,
           device_identifier: deviceId,
           name: "JWT revocation device",

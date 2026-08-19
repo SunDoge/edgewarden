@@ -26,11 +26,30 @@ export const requireFolder = createMiddleware<HonoEnv>(async (c, next) => {
 export const requireDevice = createMiddleware<HonoEnv>(async (c, next) => {
   const id = c.req.param("id");
   if (!id) return errorResponse("Not found", 404);
-  const device = await devicesDb.getDevice(c.get("db"), c.get("user").id, id);
+  const device = await devicesDb.getDeviceById(
+    c.get("db"),
+    c.get("user").id,
+    id,
+  );
   if (!device) return errorResponse("Not found", 404);
   c.set("device", device);
   await next();
 });
+
+export const requireDeviceByIdentifier = createMiddleware<HonoEnv>(
+  async (c, next) => {
+    const identifier = c.req.param("identifier");
+    if (!identifier) return errorResponse("Not found", 404);
+    const device = await devicesDb.getDevice(
+      c.get("db"),
+      c.get("user").id,
+      identifier,
+    );
+    if (!device) return errorResponse("Not found", 404);
+    c.set("device", device);
+    await next();
+  },
+);
 
 export const requireAuthRequest = createMiddleware<HonoEnv>(async (c, next) => {
   const id = c.req.param("id");

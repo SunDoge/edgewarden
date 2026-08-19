@@ -21,10 +21,9 @@ export interface AccountDevice {
   identifier: string;
   creationDate: string;
   revisionDate: string;
-  lastLoginDate: string | null;
+  lastActivityDate: string | null;
   encryptedUserKey: string | null;
   encryptedPublicKey: string | null;
-  encryptedPrivateKey: string | null;
   isTrusted: boolean;
   object: string;
 }

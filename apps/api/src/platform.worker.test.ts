@@ -70,8 +70,15 @@ describe("production Worker bindings", () => {
         "INSERT INTO ciphers (id,org_id,type,name,data,created_at,updated_at) VALUES (?,?,1,?,'{}',?,?)",
       ).bind(cipherA, orgA, "cipher", timestamp, timestamp),
       env.DB.prepare(
-        "INSERT INTO devices (user_id,device_identifier,name,type,created_at,updated_at) VALUES (?,?,?,0,?,?)",
-      ).bind(userId, deviceId, "device", timestamp, timestamp),
+        "INSERT INTO devices (id,user_id,device_identifier,name,type,created_at,updated_at) VALUES (?,?,?,?,0,?,?)",
+      ).bind(
+        crypto.randomUUID(),
+        userId,
+        deviceId,
+        "device",
+        timestamp,
+        timestamp,
+      ),
     ]);
 
     await expect(

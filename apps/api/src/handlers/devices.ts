@@ -36,16 +36,15 @@ import { now, toIso } from "../utils/time";
 
 function deviceToResponse(device: Selectable<Devices>) {
   return {
-    id: device.device_identifier,
+    id: device.id,
     name: device.name,
     type: device.type,
     identifier: device.device_identifier,
     creationDate: toIso(device.created_at),
     revisionDate: toIso(device.updated_at),
-    lastLoginDate: device.last_seen_at ? toIso(device.last_seen_at) : null,
+    lastActivityDate: device.last_seen_at ? toIso(device.last_seen_at) : null,
     encryptedUserKey: device.encrypted_user_key ?? null,
     encryptedPublicKey: device.encrypted_public_key ?? null,
-    encryptedPrivateKey: device.encrypted_private_key ?? null,
     isTrusted: Boolean(
       device.encrypted_user_key &&
         device.encrypted_public_key &&
@@ -129,14 +128,14 @@ export const updateDevicesTrust = factory.createHandlers(
     const updates = new Map(
       body.otherDevices.map((device) => [device.deviceId, device]),
     );
-    if (updates.has(currentIdentifier))
+    if (updates.has(current.id))
       return errorResponse(
         "Current device cannot be an optional rotation",
         400,
       );
     if (
       [...updates.keys()].some(
-        (id) => !devices.some((device) => device.device_identifier === id),
+        (id) => !devices.some((device) => device.id === id),
       )
     )
       return errorResponse("Device not found", 404);
@@ -177,7 +176,7 @@ export const updateDevicesTrust = factory.createHandlers(
             device.encrypted_private_key,
         )
         .map((device) => {
-          const update = updates.get(device.device_identifier);
+          const update = updates.get(device.id);
           return db
             .updateTable("devices")
             .set({
@@ -223,9 +222,9 @@ export const untrustDevices = factory.createHandlers(
     const owned = ids.length
       ? await db
           .selectFrom("devices")
-          .select("device_identifier")
+          .select("id")
           .where("user_id", "=", userId)
-          .where(textColumnInJson("device_identifier", ids))
+          .where(textColumnInJson("id", ids))
           .execute()
       : [];
     if (owned.length !== ids.length) return errorResponse("Forbidden", 403);
@@ -239,7 +238,7 @@ export const untrustDevices = factory.createHandlers(
           updated_at: now(),
         })
         .where("user_id", "=", userId)
-        .where(textColumnInJson("device_identifier", ids))
+        .where(textColumnInJson("id", ids))
         .execute();
     }
     return new Response(null, { status: 204 });
@@ -297,24 +296,25 @@ export const deleteDevice = factory.createHandlers(async (c) => {
   const db = c.get("db");
   const userId = c.get("user").id;
   const device = c.get("device");
-  const id = device.device_identifier;
+  const id = device.id;
+  const identifier = device.device_identifier;
   const currentDevice = db
     .selectFrom("devices")
-    .select("device_identifier")
+    .select("id")
     .where("user_id", "=", userId)
-    .where("device_identifier", "=", id)
+    .where("id", "=", id)
     .where(sql<boolean>`session_stamp IS ${device.session_stamp}`)
     .where(sql<boolean>`mutation_token IS ${device.mutation_token}`);
   const [, , , deleted] = await c.get("dbDialect").batch([
     db
       .deleteFrom("refresh_tokens")
       .where("user_id", "=", userId)
-      .where("device_identifier", "=", id)
+      .where("device_identifier", "=", identifier)
       .where(({ exists }) => exists(currentDevice)),
     db
       .deleteFrom("device_trust_tokens")
       .where("user_id", "=", userId)
-      .where("device_identifier", "=", id)
+      .where("device_identifier", "=", identifier)
       .where(({ exists }) => exists(currentDevice)),
     auditEventInsertQuery(
       db,
@@ -330,7 +330,7 @@ export const deleteDevice = factory.createHandlers(async (c) => {
       sql<boolean>`EXISTS (
 				SELECT 1 FROM devices
 				WHERE user_id = ${userId}
-				  AND device_identifier = ${id}
+				  AND id = ${id}
 				  AND session_stamp IS ${device.session_stamp}
 				  AND mutation_token IS ${device.mutation_token}
 			)`,
@@ -338,7 +338,7 @@ export const deleteDevice = factory.createHandlers(async (c) => {
     db
       .deleteFrom("devices")
       .where("user_id", "=", userId)
-      .where("device_identifier", "=", id)
+      .where("id", "=", id)
       .where(sql<boolean>`session_stamp IS ${device.session_stamp}`)
       .where(sql<boolean>`mutation_token IS ${device.mutation_token}`),
   ]);
@@ -358,20 +358,21 @@ export const deleteDevices = factory.createHandlers(
     const ownedDevices = await db
       .selectFrom("devices")
       .select([
+        "id",
         "device_identifier",
         "session_stamp",
         "mutation_token",
         "push_uuid",
       ])
       .where("user_id", "=", userId)
-      .where(textColumnInJson("device_identifier", ids))
+      .where(textColumnInJson("id", ids))
       .execute();
     if (ownedDevices.length) {
       const expectedState = JSON.stringify(ownedDevices);
       const matchesRefreshDevice = sql<boolean>`exists (
 				select 1 from devices current_device
 				join json_each(${expectedState}) expected
-				  on json_extract(expected.value, '$.device_identifier') = current_device.device_identifier
+				  on json_extract(expected.value, '$.id') = current_device.id
 				 and current_device.session_stamp is json_extract(expected.value, '$.session_stamp')
 				 and current_device.mutation_token is json_extract(expected.value, '$.mutation_token')
 				where current_device.user_id = ${userId}
@@ -380,7 +381,7 @@ export const deleteDevices = factory.createHandlers(
       const matchesTrustedDevice = sql<boolean>`exists (
 				select 1 from devices current_device
 				join json_each(${expectedState}) expected
-				  on json_extract(expected.value, '$.device_identifier') = current_device.device_identifier
+				  on json_extract(expected.value, '$.id') = current_device.id
 				 and current_device.session_stamp is json_extract(expected.value, '$.session_stamp')
 				 and current_device.mutation_token is json_extract(expected.value, '$.mutation_token')
 				where current_device.user_id = ${userId}
@@ -408,7 +409,7 @@ export const deleteDevices = factory.createHandlers(
           sql<boolean>`EXISTS (
 						SELECT 1 FROM devices current_device
 						JOIN json_each(${expectedState}) expected
-						  ON json_extract(expected.value, '$.device_identifier') = current_device.device_identifier
+						  ON json_extract(expected.value, '$.id') = current_device.id
 						 AND current_device.session_stamp IS json_extract(expected.value, '$.session_stamp')
 						 AND current_device.mutation_token IS json_extract(expected.value, '$.mutation_token')
 						WHERE current_device.user_id = ${userId}
@@ -419,7 +420,7 @@ export const deleteDevices = factory.createHandlers(
           .where("user_id", "=", userId)
           .where(sql<boolean>`exists (
 							select 1 from json_each(${expectedState}) expected
-							where json_extract(expected.value, '$.device_identifier') = devices.device_identifier
+							where json_extract(expected.value, '$.id') = devices.id
 							  and devices.session_stamp is json_extract(expected.value, '$.session_stamp')
 							  and devices.mutation_token is json_extract(expected.value, '$.mutation_token')
 						)`),

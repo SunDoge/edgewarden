@@ -28,6 +28,39 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
   const request = context.request;
   const EMAIL = context.email;
   const MASTER_PASSWORD_HASH = context.masterPasswordHash;
+  test("persists the account device-verification preference", async () => {
+    const headers = {
+      authorization: `Bearer ${context.accessToken}`,
+      "content-type": "application/json",
+    };
+    const wrong = await request("/api/accounts/verify-devices", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        verifyDevices: false,
+        masterPasswordHash: "wrong-password",
+      }),
+    });
+    assert.equal(wrong.status, 400);
+
+    for (const verifyDevices of [false, true]) {
+      const changed = await request("/api/accounts/verify-devices", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          verifyDevices,
+          masterPasswordHash: MASTER_PASSWORD_HASH,
+        }),
+      });
+      assert.equal(changed.status, 200, await changed.clone().text());
+      const profile = await request("/api/accounts/profile", { headers });
+      assert.equal(
+        (await profile.json<{ verifyDevices: boolean }>()).verifyDevices,
+        verifyDevices,
+      );
+    }
+  });
+
   test("creates a folder and cipher through authenticated batch-backed handlers", async () => {
     const auth = { authorization: `Bearer ${context.accessToken}` };
     const profileAlias = await request("/api/accounts/profile", {
@@ -38,7 +71,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     assert.equal(profileAlias.status, 200, await profileAlias.clone().text());
     const profile = await profileAlias.json<Record<string, unknown>>();
     assert.ok("accountKeys" in profile);
-    assert.equal(profile.verifyDevices, false);
+    assert.equal(profile.verifyDevices, true);
     assert.deepEqual(profile.organizationsNew, profile.organizations);
     const folderResponse = await request("/api/folders", {
       method: "POST",
@@ -105,7 +138,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     assert.equal(syncBody.ciphers[0].edit, true);
     assert.equal(syncBody.ciphers[0].viewPassword, true);
     assert.equal(typeof syncBody.profile.creationDate, "string");
-    assert.equal(syncBody.profile.verifyDevices, false);
+    assert.equal(syncBody.profile.verifyDevices, true);
     assert.ok("accountKeys" in syncBody.profile);
     assert.deepEqual(
       syncBody.profile.organizationsNew,
@@ -705,14 +738,11 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     assert.deepEqual(after, before);
   });
 
-  test("stores auth request access codes as protected credentials", async () => {
+  test("hashes auth request access codes and only exposes responses to the holder", async () => {
     const accessCode = "auth-request-client-secret";
     const response = await request("/api/auth-requests", {
       method: "POST",
-      headers: {
-        authorization: `Bearer ${context.accessToken}`,
-        "content-type": "application/json",
-      },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({
         email: EMAIL,
         deviceIdentifier: "auth-request-test-device",
@@ -722,21 +752,27 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       }),
     });
     assert.equal(response.status, 200, await response.clone().text());
-    const body = await response.json<{ id: string; accessCode: string }>();
-    assert.equal(body.accessCode, accessCode);
+    const body = await response.json<{ id: string; accessCode?: string }>();
+    assert.equal(body.accessCode, undefined);
     const stored = await context.database
-      .prepare(
-        "SELECT access_code_hash, access_code_encrypted FROM auth_requests WHERE id = ?",
-      )
+      .prepare("SELECT access_code_hash FROM auth_requests WHERE id = ?")
       .bind(body.id)
       .first<{
         access_code_hash: string;
-        access_code_encrypted: string;
       }>();
     assert.equal(stored?.access_code_hash, await hashCredential(accessCode));
-    assert.doesNotMatch(
-      stored?.access_code_encrypted ?? "",
-      new RegExp(accessCode),
+    assert.equal(
+      (await request(`/api/auth-requests/${body.id}/response?code=wrong`))
+        .status,
+      404,
+    );
+    assert.equal(
+      (
+        await request(
+          `/api/auth-requests/${body.id}/response?code=${encodeURIComponent(accessCode)}`,
+        )
+      ).status,
+      200,
     );
     const rejected = await request(`/api/auth-requests/${body.id}`, {
       method: "PUT",
@@ -744,11 +780,14 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
         authorization: `Bearer ${context.accessToken}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ approved: false }),
+      body: JSON.stringify({
+        requestApproved: false,
+        deviceIdentifier: "api-test-device",
+      }),
     });
     assert.equal(rejected.status, 200, await rejected.clone().text());
     assert.equal(
-      (await rejected.json<{ approved: boolean }>()).approved,
+      (await rejected.json<{ requestApproved: boolean }>()).requestApproved,
       false,
     );
     const reversed = await request(`/api/auth-requests/${body.id}`, {
@@ -757,7 +796,11 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
         authorization: `Bearer ${context.accessToken}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ approved: true, key: "late-key" }),
+      body: JSON.stringify({
+        requestApproved: true,
+        deviceIdentifier: "api-test-device",
+        key: "late-key",
+      }),
     });
     assert.equal(reversed.status, 409, await reversed.clone().text());
     assert.equal(
@@ -1197,19 +1240,27 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
 
   test("validates device updates and hides resources outside the user scope", async () => {
     const auth = { authorization: `Bearer ${context.accessToken}` };
-    const ownDevice = await request("/api/devices/api-test-device", {
+    const ownDeviceRecord = await context.database
+      .prepare("SELECT id FROM devices WHERE device_identifier = ?")
+      .bind("api-test-device")
+      .first<{ id: string }>();
+    assert.ok(ownDeviceRecord);
+    const ownDevice = await request(`/api/devices/${ownDeviceRecord.id}`, {
       headers: auth,
     });
     assert.equal(ownDevice.status, 200);
 
-    const invalidName = await request("/api/devices/api-test-device/name", {
-      method: "PUT",
-      headers: { ...auth, "content-type": "application/json" },
-      body: JSON.stringify({ name: "" }),
-    });
+    const invalidName = await request(
+      `/api/devices/${ownDeviceRecord.id}/name`,
+      {
+        method: "PUT",
+        headers: { ...auth, "content-type": "application/json" },
+        body: JSON.stringify({ name: "" }),
+      },
+    );
     assert.equal(invalidName.status, 400);
     const rename = (index: number) =>
-      request("/api/devices/api-test-device/name", {
+      request(`/api/devices/${ownDeviceRecord.id}/name`, {
         method: "PUT",
         headers: { ...auth, "content-type": "application/json" },
         body: JSON.stringify({ name: `Concurrent Device ${index}` }),
@@ -1252,7 +1303,8 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     });
     assert.equal(unverifiedDeleteAll.status, 400);
     assert.equal(
-      (await request("/api/devices/api-test-device", { headers: auth })).status,
+      (await request(`/api/devices/${ownDeviceRecord.id}`, { headers: auth }))
+        .status,
       200,
     );
 
@@ -1289,6 +1341,11 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       }),
     });
     assert.equal(secondaryKeys.status, 200, await secondaryKeys.clone().text());
+    const secondaryDevice = await context.database
+      .prepare("SELECT id FROM devices WHERE device_identifier = ?")
+      .bind("secondary-device")
+      .first<{ id: string }>();
+    assert.ok(secondaryDevice);
     const rotated = await request("/api/devices/update-trust", {
       method: "POST",
       headers: { ...auth, "content-type": "application/json" },
@@ -1300,7 +1357,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
         },
         otherDevices: [
           {
-            deviceId: "secondary-device",
+            deviceId: secondaryDevice.id,
             encryptedUserKey: "rotated-secondary-user-key",
             encryptedPublicKey: "rotated-secondary-public-key",
           },
@@ -1323,7 +1380,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     const untrusted = await request("/api/devices/untrust", {
       method: "POST",
       headers: { ...auth, "content-type": "application/json" },
-      body: JSON.stringify({ devices: ["secondary-device"] }),
+      body: JSON.stringify({ devices: [secondaryDevice.id] }),
     });
     assert.equal(untrusted.status, 204, await untrusted.clone().text());
     assert.deepEqual(
@@ -1341,7 +1398,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     const bulkRemoved = await request("/api/devices/delete", {
       method: "POST",
       headers: { ...auth, "content-type": "application/json" },
-      body: JSON.stringify({ ids: ["secondary-device", "member-test-device"] }),
+      body: JSON.stringify({ ids: [secondaryDevice.id, crypto.randomUUID()] }),
     });
     assert.equal(bulkRemoved.status, 200, await bulkRemoved.clone().text());
     assert.equal((await bulkRemoved.json<{ deleted: number }>()).deleted, 1);
@@ -1371,6 +1428,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       .first<{ id: string }>();
     assert.ok(user);
     const deviceId = `revoked-device-${crypto.randomUUID()}`;
+    const serverDeviceId = crypto.randomUUID();
     const sessionStamp = crypto.randomUUID();
     const refreshToken = `refresh-${crypto.randomUUID()}`;
     const trustToken = `trust-${crypto.randomUUID()}`;
@@ -1378,9 +1436,10 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     await context.database.batch([
       context.database
         .prepare(
-          "INSERT INTO devices (user_id,device_identifier,name,type,session_stamp,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+          "INSERT INTO devices (id,user_id,device_identifier,name,type,session_stamp,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
         )
         .bind(
+          serverDeviceId,
           user.id,
           deviceId,
           "Revoked Device",
@@ -1401,7 +1460,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
         .bind(trustToken, user.id, deviceId, timestamp + 3600),
     ]);
     const remove = () =>
-      request(`/api/devices/${deviceId}`, {
+      request(`/api/devices/${serverDeviceId}`, {
         method: "DELETE",
         headers: { authorization: `Bearer ${context.accessToken}` },
       });

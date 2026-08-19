@@ -140,15 +140,22 @@ export const AuthRequestUpdateSchema = v.pipe(
   v.looseObject({
     requestApproved: v.optional(v.boolean()),
     approved: v.optional(v.boolean()),
+    deviceIdentifier: v.optional(v.string()),
+    DeviceIdentifier: v.optional(v.string()),
     key: v.optional(v.nullable(v.string())),
     Key: v.optional(v.nullable(v.string())),
     masterPasswordHash: v.optional(v.nullable(v.string())),
   }),
   v.transform((body) => ({
     approved: body.requestApproved ?? body.approved ?? false,
+    deviceIdentifier: body.deviceIdentifier ?? body.DeviceIdentifier ?? "",
     key: body.key ?? body.Key ?? null,
     masterPasswordHash: body.masterPasswordHash ?? null,
   })),
+  v.check(
+    (body) => body.deviceIdentifier.length > 0,
+    "Device identifier is required",
+  ),
 );
 
 const equivalentDomains = v.array(v.array(nonEmptyString));
