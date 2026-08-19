@@ -1,7 +1,8 @@
 /// <reference lib="webworker" />
+/// <reference types="@sveltejs/kit" />
 
 import { build, files, version } from "$service-worker";
-import { mayCacheRequest } from "$lib/services/pwa-cache-policy";
+import { mayCacheRequest } from "./lib/services/pwa-cache-policy";
 
 declare const self: ServiceWorkerGlobalScope;
 
