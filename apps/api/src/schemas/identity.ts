@@ -9,6 +9,7 @@ export const TokenFormSchema = v.object({
     "password",
     "refresh_token",
     "client_credentials",
+    "send_access",
     "webauthn",
   ]),
   username: v.optional(v.string()),
@@ -38,6 +39,11 @@ export const TokenFormSchema = v.object({
   // Client creds
   client_id: v.optional(v.string()),
   client_secret: v.optional(v.string()),
+  // Anonymous Send access grant
+  send_id: v.optional(v.string()),
+  password_hash_b64: v.optional(v.string()),
+  email: v.optional(v.string()),
+  otp: v.optional(v.string()),
   // Passkey grant
   token: v.optional(v.string()),
   deviceResponse: v.optional(v.unknown()),

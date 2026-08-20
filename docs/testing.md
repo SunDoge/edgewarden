@@ -67,7 +67,7 @@ The API harness uses real Miniflare D1 and KV implementations while keeping R2, 
 
 Use the deployed Cloudflare smoke test for binding and deployment integration. Use the Bitwarden CLI smoke test for protocol compatibility. Neither replaces unit and integration tests because they require external state and are slower to diagnose.
 
-`test:compat:bw:local` creates a temporary Wrangler persistence directory, applies every migration, starts a self-signed HTTPS development Worker, registers a disposable account with the local `BOOTSTRAP_SECRET`, runs the same official CLI smoke suite, and removes the temporary state. It never modifies the normal `.wrangler/state` database.
+`test:compat:bw:local` creates a temporary Wrangler persistence directory, applies every migration, starts a self-signed HTTPS development Worker, registers a disposable account with the local `BOOTSTRAP_SECRET`, runs the same extended official CLI compatibility suite, and removes the temporary state. It never modifies the normal `.wrangler/state` database. The suite exercises all personal item types, lifecycle transitions, two-way sync, attachments, Sends, and lock/unlock behavior.
 
 ## What to add with a change
 

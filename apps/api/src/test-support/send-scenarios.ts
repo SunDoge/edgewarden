@@ -64,6 +64,67 @@ export function registerSendScenarios(context: SendScenarioContext): void {
     assert.equal(body.text.text, "encrypted-send-text");
   });
 
+  test("issues official send_access tokens for password-protected Sends", async () => {
+    const clientPasswordHash = "client-derived-send-password-hash";
+    const created = await request("/api/sends", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${context.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        type: 0,
+        name: "password-send",
+        key: "encrypted-send-key",
+        text: { text: "password-protected-text", hidden: false },
+        password: clientPasswordHash,
+        authType: 1,
+        deletionDate: new Date(Date.now() + 86_400_000).toISOString(),
+      }),
+    });
+    assert.equal(created.status, 200, await created.clone().text());
+    const send = await created.json<{ id: string; accessId: string }>();
+    const tokenRequest = (passwordHash?: string) =>
+      request("/identity/connect/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "send_access",
+          client_id: "send",
+          scope: "api.send.access",
+          send_id: send.accessId,
+          ...(passwordHash ? { password_hash_b64: passwordHash } : {}),
+        }),
+      });
+    const required = await tokenRequest();
+    assert.equal(required.status, 400);
+    assert.equal(
+      (await required.json<{ send_access_error_type: string }>())
+        .send_access_error_type,
+      "password_hash_b64_required",
+    );
+    assert.equal((await tokenRequest("wrong")).status, 400);
+
+    const granted = await tokenRequest(clientPasswordHash);
+    assert.equal(granted.status, 200, await granted.clone().text());
+    const accessToken = (
+      await granted.json<{ access_token: string; scope: string }>()
+    ).access_token;
+    const accessed = await request("/api/sends/access", {
+      method: "POST",
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    assert.equal(accessed.status, 200, await accessed.clone().text());
+    assert.equal(
+      (await accessed.json<{ text: { text: string } }>()).text.text,
+      "password-protected-text",
+    );
+    await context.database
+      .prepare("DELETE FROM sends WHERE id = ?")
+      .bind(send.id)
+      .run();
+  });
+
   test("enforces a Send access limit under concurrency", async () => {
     const created = await request("/api/sends", {
       method: "POST",

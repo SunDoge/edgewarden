@@ -6,12 +6,17 @@ import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import { authenticateApiKey } from "../services/identity-api-key";
 import { refreshIdentitySession } from "../services/identity-refresh";
 import { issueIdentitySession } from "../services/identity-session";
+import * as sendsDb from "../services/db/sends";
+import { getSafeSendJwtSecret } from "../services/sends/jwt-secret";
+import { verifySendPassword } from "../services/sends/password";
+import { fromAccessId, isSendAvailable } from "../services/sends/presentation";
 import {
   getPushRelayStatus,
   logPushRelayFailure,
   pushDeviceRegistrationFromDatabase,
 } from "../services/push-relay";
-import { identityErrorResponse } from "../utils/response";
+import { identityErrorResponse, jsonResponse } from "../utils/response";
+import { createSendAccessToken } from "../utils/jwt";
 import {
   assertAccountPasskeyCredential,
   buildAccountPasskeyTokenUserDecryptionOption,
@@ -24,6 +29,22 @@ import {
   setWebRefreshCookie,
   webRefreshCookieName,
 } from "./identity-token-helpers";
+
+function sendAccessError(
+  message: string,
+  error: string,
+  errorType: string,
+): Response {
+  return jsonResponse(
+    {
+      error,
+      error_description: message,
+      send_access_error_type: errorType,
+      ErrorModel: { Message: message, Object: "error" },
+    },
+    400,
+  );
+}
 
 // POST /identity/connect/token
 export const connectToken = factory.createHandlers(async (c) => {
@@ -40,6 +61,53 @@ export const connectToken = factory.createHandlers(async (c) => {
 
   const body = c.get("tokenRequest");
   const grantType = body.grant_type;
+  if (grantType === "send_access") {
+    const sendId = fromAccessId(body.send_id ?? "");
+    const send = sendId ? await sendsDb.getSendById(db, sendId) : null;
+    if (!send || !isSendAvailable(send)) {
+      return sendAccessError(
+        "send_id is invalid.",
+        "invalid_grant",
+        "send_id_invalid",
+      );
+    }
+    if (send.auth_type === 0) {
+      return sendAccessError(
+        body.email ? "email and otp are required." : "email is required.",
+        "invalid_request",
+        body.email ? "email_and_otp_required" : "email_required",
+      );
+    }
+    if (send.password_hash) {
+      if (!body.password_hash_b64) {
+        return sendAccessError(
+          "password_hash_b64 is required.",
+          "invalid_request",
+          "password_hash_b64_required",
+        );
+      }
+      if (!(await verifySendPassword(send, body.password_hash_b64))) {
+        return sendAccessError(
+          "password_hash_b64 is invalid.",
+          "invalid_grant",
+          "password_hash_b64_invalid",
+        );
+      }
+    }
+    const sendSecret = getSafeSendJwtSecret(c.env);
+    if (!sendSecret)
+      return identityErrorResponse(
+        "Server configuration error",
+        "server_error",
+        500,
+      );
+    return c.json({
+      access_token: await createSendAccessToken(send.id, sendSecret),
+      expires_in: LIMITS.auth.sendAccessTokenTtlSeconds,
+      token_type: "Bearer",
+      scope: "api.send.access",
+    });
+  }
   if (grantType === "password") return handlePasswordGrant(c);
 
   if (grantType === "webauthn") {

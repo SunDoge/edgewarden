@@ -17,7 +17,7 @@ BW_PASSWORD='disposable-password' \
 pnpm test:compat:bw
 ```
 
-The TypeScript test uses isolated temporary CLI profiles and covers password login, lock/unlock, sync, folder and item CRUD, and attachment upload/download. After editing an item, it logs in through a second fresh profile and verifies the saved value arrived from the server instead of trusting the first client's cache. Every CLI operation has a timeout, and the test deletes created data in a `finally` block. Never target an important account.
+The TypeScript test uses isolated temporary CLI profiles and covers password login, lock/unlock, repeated and bidirectional sync, folder CRUD, all four personal item types, TOTP and custom fields, archive/trash/restore, attachment upload/download/deletion, and password-protected text and file Sends. A second fresh profile verifies both directions of cloud synchronization instead of trusting one client's cache. Every CLI operation has a timeout, resources are registered for cleanup as soon as they are created, and the test deletes them in a `finally` block. Never target an important account.
 
 ## Release acceptance matrix
 
