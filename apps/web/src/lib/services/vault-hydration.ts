@@ -33,6 +33,31 @@ export interface HydratedVaultSnapshot {
   warning: string | null;
 }
 
+type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
+
+async function mapConcurrent<T, R>(
+  values: readonly T[],
+  mapper: (value: T) => Promise<R>,
+  concurrency = 12,
+): Promise<Settled<R>[]> {
+  const results = new Array<Settled<R>>(values.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < values.length) {
+      const index = next++;
+      try {
+        results[index] = { ok: true, value: await mapper(values[index]) };
+      } catch (error) {
+        results[index] = { ok: false, error };
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, worker),
+  );
+  return results;
+}
+
 export function applyOrganizationAccess(
   ciphers: CipherResponse[],
   collections: Array<{
@@ -110,18 +135,27 @@ export async function hydrateEncryptedVaultSnapshot(
     warnings,
   );
 
-  const ciphers: VaultCipher[] = [];
-  let cipherFailures = 0;
-  for (const cipher of snapshot.ciphers) {
-    try {
+  const cipherResults = await mapConcurrent(
+    snapshot.ciphers,
+    async (cipher) => {
       const keys = cipher.organizationId
         ? organizationKeys.get(cipher.organizationId)
         : userKeys;
       if (!keys) throw new Error("Organization key unavailable");
-      ciphers.push(await decryptCipher(cipher, keys.encKey, keys.macKey));
-    } catch (error) {
-      console.error("Failed to decrypt cipher:", cipher.id, error);
-      cipherFailures++;
+      return decryptCipher(cipher, keys.encKey, keys.macKey);
+    },
+  );
+  const ciphers: VaultCipher[] = [];
+  let cipherFailures = 0;
+  for (const [index, result] of cipherResults.entries()) {
+    if (result.ok) ciphers.push(result.value);
+    else {
+      console.error(
+        "Failed to decrypt cipher:",
+        snapshot.ciphers[index].id,
+        result.error,
+      );
+      cipherFailures += 1;
     }
   }
   if (cipherFailures)
@@ -129,17 +163,24 @@ export async function hydrateEncryptedVaultSnapshot(
       `${cipherFailures} 个保险库条目未通过完整性校验，已从当前会话隔离。`,
     );
 
+  const folderResults = await mapConcurrent(
+    snapshot.folders,
+    async (folder) => ({
+      ...folder,
+      name: await decryptStr(folder.name, userKeys.encKey, userKeys.macKey),
+    }),
+  );
   const folders: FolderResponse[] = [];
   let folderFailures = 0;
-  for (const folder of snapshot.folders) {
-    try {
-      folders.push({
-        ...folder,
-        name: await decryptStr(folder.name, userKeys.encKey, userKeys.macKey),
-      });
-    } catch (error) {
-      console.error("Failed to decrypt folder:", folder.id, error);
-      folderFailures++;
+  for (const [index, result] of folderResults.entries()) {
+    if (result.ok) folders.push(result.value);
+    else {
+      console.error(
+        "Failed to decrypt folder:",
+        snapshot.folders[index].id,
+        result.error,
+      );
+      folderFailures += 1;
     }
   }
   if (folderFailures)
@@ -165,20 +206,21 @@ export async function hydrateEncryptedVaultSnapshot(
   if (collectionFailures)
     warnings.push(`${collectionFailures} 个集合未通过完整性校验，已隔离。`);
 
+  const encryptedSends = snapshot.sends ?? [];
+  const sendResults = await mapConcurrent(encryptedSends, (send) =>
+    decryptOwnedSend(
+      send as EncryptedOwnedSend,
+      userKeys.encKey,
+      userKeys.macKey,
+    ),
+  );
   const sends: DecryptedSend[] = [];
   let sendFailures = 0;
-  for (const send of snapshot.sends ?? []) {
-    try {
-      sends.push(
-        await decryptOwnedSend(
-          send as EncryptedOwnedSend,
-          userKeys.encKey,
-          userKeys.macKey,
-        ),
-      );
-    } catch (error) {
-      console.error("Failed to decrypt Send:", error);
-      sendFailures++;
+  for (const result of sendResults) {
+    if (result.ok) sends.push(result.value);
+    else {
+      console.error("Failed to decrypt Send:", result.error);
+      sendFailures += 1;
     }
   }
   if (sendFailures)

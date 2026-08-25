@@ -108,6 +108,28 @@ let _vault = $state<VaultState>({
   warning: null,
 });
 let syncPromise: Promise<void> | null = null;
+let unlockPromise: Promise<void> | null = null;
+let resolveUnlock: (() => void) | null = null;
+let rejectUnlock: ((reason?: unknown) => void) | null = null;
+
+function beginUnlockWait(): Promise<void> {
+  if (vault.isUnlocked) return Promise.resolve();
+  if (!unlockPromise) {
+    unlockPromise = new Promise<void>((resolve, reject) => {
+      resolveUnlock = resolve;
+      rejectUnlock = reject;
+    }).finally(() => {
+      unlockPromise = null;
+      resolveUnlock = null;
+      rejectUnlock = null;
+    });
+  }
+  return unlockPromise;
+}
+
+function markVaultUnlocked(): void {
+  resolveUnlock?.();
+}
 
 // ── Public reactive surface ───────────────────────────────────────────────────
 
@@ -228,6 +250,7 @@ async function performVaultSync(): Promise<void> {
 
     // Decrypt keys in memory
     if (!_symEncKey || !_symMacKey) await setupUserKeys(data.profile.key);
+    markVaultUnlocked();
     const syncedAt = Date.now();
     await hydrateVaultSnapshot(
       {
@@ -273,15 +296,18 @@ async function performVaultSync(): Promise<void> {
       try {
         // Initialize keys from cached snapshot
         await setupUserKeys(cached.profile.key);
+        markVaultUnlocked();
         await hydrateVaultSnapshot(cached, "offline");
       } catch (decErr) {
         _vault.status = "error";
         _vault.error = "本地缓存解密失败，可能密码已更改。";
+        rejectUnlock?.(decErr);
         throw decErr;
       }
     } else {
       _vault.status = "error";
       _vault.error = "离线状态且无本地缓存，请先联网登录一次。";
+      rejectUnlock?.(error);
       throw new Error(_vault.error);
     }
   }
@@ -294,6 +320,17 @@ export function syncVaultData(): Promise<void> {
     });
   }
   return syncPromise;
+}
+
+/**
+ * Start the first sync but only block navigation until the user key is ready.
+ * The shared sync promise continues hydrating and caching behind the vault UI.
+ */
+export async function prepareVaultNavigation(): Promise<void> {
+  const unlocked = beginUnlockWait();
+  const syncing = syncVaultData();
+  syncing.catch(() => undefined);
+  await unlocked;
 }
 
 /** Ensure the first decrypted snapshot exists before rendering vault routes. */
@@ -343,6 +380,7 @@ export function setSymmetricKeys(encKey: Uint8Array, macKey: Uint8Array): void {
   _symEncKey = new Uint8Array(encKey);
   _symMacKey = new Uint8Array(macKey);
   persistDevKeys();
+  markVaultUnlocked();
 }
 
 /**

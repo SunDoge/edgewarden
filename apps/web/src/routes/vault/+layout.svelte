@@ -50,15 +50,12 @@
         return;
       }
       if (disposed) return;
-      if (page.url.pathname !== "/vault/unlock") {
-        try {
-          await ensureVaultData();
-        } catch {
-          // The store exposes its online/offline error state to route content.
-        }
-      }
-      if (disposed) return;
       ready = true;
+      if (page.url.pathname !== "/vault/unlock") {
+        void ensureVaultData().catch(() => {
+          // The store exposes its online/offline error state to route content.
+        });
+      }
     })();
     return () => {
       disposed = true;

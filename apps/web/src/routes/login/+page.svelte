@@ -11,7 +11,7 @@
     twoFactorProvidersFromError,
   } from "$lib/services/api-auth";
   import { errorMessage } from "$lib/services/error-message";
-  import { setMasterKey, setSymmetricKeys, syncVaultData } from "$lib/stores/vault.svelte";
+  import { prepareVaultNavigation, setMasterKey, setSymmetricKeys } from "$lib/stores/vault.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Alert from "$lib/components/ui/alert/index.js";
   import * as Field from "$lib/components/ui/field/index.js";
@@ -103,8 +103,8 @@
         turnstileToken || undefined,
       );
       setMasterKey(masterKey);
-      await syncVaultData(); // saves snapshot to IndexedDB for future offline use
-      goto("/vault");
+      await prepareVaultNavigation();
+      await goto("/vault");
     } catch (caught) {
       if (isTwoFactorRequiredError(caught)) {
         twoFactorRequired = true;
@@ -133,7 +133,7 @@
         turnstileToken || undefined,
       );
       setMasterKey(masterKey);
-      await syncVaultData();
+      await prepareVaultNavigation();
       await goto("/vault");
     } catch (value) {
       error = value instanceof Error ? value.message : "安全密钥验证失败";
@@ -150,7 +150,7 @@
       const result = await loginWithPasskeyApi();
       if (result.symEncKey && result.symMacKey) {
         setSymmetricKeys(result.symEncKey, result.symMacKey);
-        await syncVaultData();
+        await prepareVaultNavigation();
         await goto("/vault");
         return;
       }
@@ -171,7 +171,7 @@
       setMasterKey(
         await deriveMasterKey(passkeyPassword, passkeyUnlock.email, passkeyUnlock.iterations),
       );
-      await syncVaultData();
+      await prepareVaultNavigation();
       await goto("/vault");
     } catch (err) {
       error = err instanceof Error ? err.message : "主密码不正确";
