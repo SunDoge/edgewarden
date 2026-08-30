@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { shouldRateLimitIdentityGrant } from "./identity-token";
-import { supportsSshKeys } from "./sync";
+import { organizationRoleType, supportsSshKeys } from "./sync";
 
 describe("mobile client compatibility", () => {
   it("does not spend the login rate limit on refresh token rotation", () => {
@@ -16,5 +16,12 @@ describe("mobile client compatibility", () => {
     expect(supportsSshKeys("2026.8.1")).toBe(true);
     expect(supportsSshKeys(undefined)).toBe(true);
     expect(supportsSshKeys("not-semver")).toBe(true);
+  });
+
+  it("maps internal organization roles to Bitwarden integer enums", () => {
+    expect(organizationRoleType("owner")).toBe(0);
+    expect(organizationRoleType("admin")).toBe(1);
+    expect(organizationRoleType("member")).toBe(2);
+    expect(organizationRoleType("manager")).toBe(4);
   });
 });

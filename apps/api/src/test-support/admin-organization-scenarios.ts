@@ -1191,6 +1191,13 @@ export function registerAdminOrganizationScenarios(
       await restrictedSync.clone().text(),
     );
     const restrictedSyncBody = await restrictedSync.json<{
+      profile: {
+        organizations: Array<{
+          status: number;
+          type: number;
+          enabled: boolean;
+        }>;
+      };
       ciphers: Array<{
         id: string;
         collectionIds: string[];
@@ -1206,6 +1213,12 @@ export function registerAdminOrganizationScenarios(
         object: string;
       }>;
     }>();
+    assert.deepEqual(
+      restrictedSyncBody.profile.organizations.map(
+        ({ status, type, enabled }) => ({ status, type, enabled }),
+      ),
+      [{ status: 2, type: 2, enabled: true }],
+    );
     const syncedCipherRows = restrictedSyncBody.ciphers.filter(
       (item) => item.id === cipher.id,
     );
