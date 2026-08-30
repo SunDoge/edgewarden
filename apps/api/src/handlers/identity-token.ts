@@ -46,12 +46,24 @@ function sendAccessError(
   );
 }
 
+export function shouldRateLimitIdentityGrant(grantType: string): boolean {
+  return grantType !== "refresh_token";
+}
+
 // POST /identity/connect/token
 export const connectToken = factory.createHandlers(async (c) => {
   const db = c.get("db");
   const secret = c.env.JWT_SECRET;
+  const body = c.get("tokenRequest");
+  const grantType = body.grant_type;
 
-  if (!(await checkIpRateLimit(c, "identity"))) {
+  // Match Vaultwarden: refresh tokens are high-entropy, rotating credentials,
+  // not password guesses. Counting routine refreshes against the login bucket
+  // can lock every client behind one NAT out of sync.
+  if (
+    shouldRateLimitIdentityGrant(grantType) &&
+    !(await checkIpRateLimit(c, "identity"))
+  ) {
     return identityErrorResponse(
       "Too many requests. Try again later.",
       "TooManyRequests",
@@ -59,8 +71,6 @@ export const connectToken = factory.createHandlers(async (c) => {
     );
   }
 
-  const body = c.get("tokenRequest");
-  const grantType = body.grant_type;
   if (grantType === "send_access") {
     const sendId = fromAccessId(body.send_id ?? "");
     const send = sendId ? await sendsDb.getSendById(db, sendId) : null;

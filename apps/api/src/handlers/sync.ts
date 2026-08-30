@@ -30,6 +30,14 @@ import {
 } from "../utils/user-decryption";
 import { userYubicoPublicIds } from "../utils/yubico";
 
+export function supportsSshKeys(clientVersion: string | undefined): boolean {
+  if (!clientVersion) return true;
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(clientVersion.trim());
+  if (!match) return true;
+  const [year, month] = [Number(match[1]), Number(match[2])];
+  return year > 2024 || (year === 2024 && month >= 12);
+}
+
 function folderToResponse(folder: Selectable<Folders>) {
   return {
     id: folder.id,
@@ -163,7 +171,14 @@ async function buildSyncPayload(c: Context<HonoEnv>, excludeDomains: boolean) {
     firstPrfOption,
   );
 
-  const allCiphers = [...personalCiphers, ...organizationCiphers];
+  // Vaultwarden withholds SSH-key ciphers from clients older than 2024.12.0;
+  // those clients do not know cipher type 5 and can reject the entire sync.
+  const includeSshKeys = supportsSshKeys(
+    c.req.header("Bitwarden-Client-Version"),
+  );
+  const allCiphers = [...personalCiphers, ...organizationCiphers].filter(
+    (cipher) => includeSshKeys || cipher.type !== 5,
+  );
   const attachments = await attachmentsDb.listVisibleForSync(
     db,
     user.id,
