@@ -981,6 +981,43 @@ export function registerAdminOrganizationScenarios(
       key: "encrypted-item-key",
       login: { username: "encrypted-user", password: "encrypted-password" },
     };
+    const personalCipherResponse = await request("/api/ciphers", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${context.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        ...payload,
+        organizationId: null,
+        collectionIds: [],
+      }),
+    });
+    assert.equal(personalCipherResponse.status, 200);
+    const personalCipher = await personalCipherResponse.json<{ id: string }>();
+    const sharedCipherResponse = await request(
+      `/api/ciphers/${personalCipher.id}`,
+      {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${context.accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+    assert.equal(
+      sharedCipherResponse.status,
+      200,
+      await sharedCipherResponse.clone().text(),
+    );
+    assert.deepEqual(
+      await context.database
+        .prepare("SELECT user_id, org_id FROM ciphers WHERE id = ?")
+        .bind(personalCipher.id)
+        .first(),
+      { user_id: null, org_id: orgId },
+    );
     const crossOrganizationWrite = await request("/api/ciphers", {
       method: "POST",
       headers: {

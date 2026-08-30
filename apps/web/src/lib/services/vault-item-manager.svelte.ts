@@ -9,6 +9,7 @@ import {
   unarchiveCipherApi,
 } from "./api-vault";
 import {
+  cloneVaultCipherToPersonal,
   saveVaultCipher,
   updateEncryptedVaultCipher,
   type CipherOwnerKeyResolver,
@@ -201,6 +202,28 @@ export function createVaultItemManager(options: {
     }
   }
 
+  async function cloneToPersonal() {
+    const item = state.selected;
+    if (!item?.organizationId || item.hidePasswords) return;
+    const personalKeys = resolveOwnerKey(null);
+    if (!personalKeys) {
+      toast.error("个人保险库密钥不可用，请重新解锁");
+      return;
+    }
+    state.busy = true;
+    try {
+      const created = await cloneVaultCipherToPersonal(item, personalKeys);
+      await syncVaultData();
+      state.selected =
+        vault.ciphers.find((cipher) => cipher.id === created.id) ?? null;
+      toast.success("已保存到个人保险库，组织原件保持不变");
+    } catch (caught) {
+      toast.error(`保存个人副本失败：${errorDetail(caught)}`);
+    } finally {
+      state.busy = false;
+    }
+  }
+
   return {
     state,
     select,
@@ -214,5 +237,6 @@ export function createVaultItemManager(options: {
     restore,
     toggleArchive,
     toggleFavorite,
+    cloneToPersonal,
   };
 }

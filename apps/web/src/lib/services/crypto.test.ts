@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decryptCipher, encryptCipher } from "./cipher-crypto";
+import { decryptCipher, encryptCipher, rewrapCipherKey } from "./cipher-crypto";
 import {
   base64ToBytes,
   bytesToBase64,
@@ -268,6 +268,46 @@ describe("frontend crypto utils", () => {
         crypto.getRandomValues(new Uint8Array(32)),
         crypto.getRandomValues(new Uint8Array(32)),
       ),
+    ).rejects.toThrow("MAC mismatch");
+  });
+
+  it("rewraps an existing item key when sharing a personal cipher", async () => {
+    const personalEnc = crypto.getRandomValues(new Uint8Array(32));
+    const personalMac = crypto.getRandomValues(new Uint8Array(32));
+    const organizationEnc = crypto.getRandomValues(new Uint8Array(32));
+    const organizationMac = crypto.getRandomValues(new Uint8Array(32));
+    const encrypted = await encryptCipher(
+      { type: 1, name: "Personal", login: { password: "secret" } },
+      personalEnc,
+      personalMac,
+    );
+    const rewrappedKey = await rewrapCipherKey(
+      encrypted.key!,
+      personalEnc,
+      personalMac,
+      organizationEnc,
+      organizationMac,
+    );
+    const shared = await encryptCipher(
+      {
+        type: 1,
+        name: "Personal",
+        login: { password: "secret" },
+        organizationId: "org-1",
+        collectionIds: ["collection-1"],
+        key: rewrappedKey,
+      },
+      organizationEnc,
+      organizationMac,
+    );
+    const decrypted = await decryptCipher(
+      { ...shared, id: "shared" } as any,
+      organizationEnc,
+      organizationMac,
+    );
+    expect(decrypted.login?.password).toBe("secret");
+    await expect(
+      decryptBw(rewrappedKey, personalEnc, personalMac),
     ).rejects.toThrow("MAC mismatch");
   });
 

@@ -233,6 +233,7 @@
     collections={vault.collections}
     totp={totpLive}
     attachmentBusy={attachmentManager.busy}
+    cloneBusy={itemState.busy}
     isSyncing={vault.isSyncing}
     onBack={() => {
       if (itemState.isCreating || itemState.isEditing) itemManager.cancelEdit();
@@ -245,6 +246,7 @@
     onArchive={itemManager.toggleArchive}
     onRestore={itemManager.restore}
     onEdit={itemManager.startEdit}
+    onCloneToPersonal={itemManager.cloneToPersonal}
     onAttachmentUpload={attachmentManager.upload}
     onAttachmentDownload={attachmentManager.download}
     onAttachmentDelete={attachmentManager.requestDelete}

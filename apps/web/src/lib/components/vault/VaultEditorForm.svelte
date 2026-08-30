@@ -152,11 +152,11 @@
       /></Field.Field
     >
 
-    <Field.Field data-disabled={isEditing}
+    <Field.Field data-disabled={isEditing && Boolean(form.organizationId)}
       ><Field.Label>所有者</Field.Label><Select.Root
         type="single"
         value={form.organizationId ?? "__personal"}
-        disabled={isEditing}
+        disabled={isEditing && Boolean(form.organizationId)}
         onValueChange={(value) => {
           form.organizationId = value === "__personal" ? null : value;
           changeOwner();
@@ -174,6 +174,9 @@
               >{/each}</Select.Group
           ></Select.Content
         ></Select.Root
+      >{#if isEditing && !form.organizationId}<Field.Description
+          >选择组织会重新加密此条目，并将它共享给所选集合。</Field.Description
+        >{/if}
       ></Field.Field
     >
 

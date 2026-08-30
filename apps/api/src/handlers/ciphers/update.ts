@@ -15,7 +15,7 @@ import {
   getVisibleCipherCollectionIds,
   organizationCipherViewStateQuery,
   resolveOrganizationCipherCollectionsForUpdate,
-  revisionQueriesForCipher,
+  validateOrganizationCollections,
 } from "../../services/ciphers/access";
 import {
   buildCipherData,
@@ -62,10 +62,16 @@ export const updateCipher = factory.createHandlers(
     const user = c.get("user");
     const db = c.get("db");
     const cipher = c.get("cipher");
-    if ((body.organizationId ?? null) !== (cipher.org_id ?? null))
+    const requestedOrganizationId = body.organizationId ?? null;
+    const sharingPersonalCipher =
+      cipher.org_id === null && requestedOrganizationId !== null;
+    if (
+      requestedOrganizationId !== (cipher.org_id ?? null) &&
+      !sharingPersonalCipher
+    )
       return errorResponse("Cipher ownership cannot be changed", 400);
     let collectionIds = body.collectionIds ?? [];
-    if (!cipher.org_id && collectionIds.length)
+    if (!requestedOrganizationId && collectionIds.length)
       return errorResponse("Personal ciphers cannot use collections", 400);
     if (
       body.folderId &&
@@ -73,7 +79,19 @@ export const updateCipher = factory.createHandlers(
     ) {
       return errorResponse("Folder not found", 400);
     }
-    if (cipher.org_id) {
+    if (sharingPersonalCipher) {
+      const access = await validateOrganizationCollections(
+        db,
+        user.id,
+        requestedOrganizationId,
+        collectionIds,
+      );
+      if ("error" in access && access.error)
+        return errorResponse(
+          access.error,
+          access.error.includes("not found") ? 404 : 403,
+        );
+    } else if (cipher.org_id) {
       const member = c.get("orgMember");
       if (!member) return errorResponse("Organization not found", 404);
       const currentCollectionIds = await getCipherCollectionIds(db, cipher.id);
@@ -109,11 +127,13 @@ export const updateCipher = factory.createHandlers(
     const updateQuery = db
       .updateTable("ciphers")
       .set({
+        user_id: sharingPersonalCipher ? null : cipher.user_id,
+        org_id: sharingPersonalCipher ? requestedOrganizationId : cipher.org_id,
         type: body.type,
-        folder_id: cipher.org_id ? cipher.folder_id : (body.folderId ?? null),
+        folder_id: requestedOrganizationId ? null : (body.folderId ?? null),
         name: body.name,
         notes: body.notes ?? null,
-        favorite: cipher.org_id ? cipher.favorite : body.favorite ? 1 : 0,
+        favorite: requestedOrganizationId ? 0 : body.favorite ? 1 : 0,
         reprompt: body.reprompt ?? 0,
         key: body.key ?? null,
         data: buildCipherData(body),
@@ -134,7 +154,7 @@ export const updateCipher = factory.createHandlers(
       .where("id", "=", cipher.id)
       .where("mutation_token", "=", mutationToken);
     const followupQueries: EdgewardenBatchQuery[] = [
-      ...(cipher.org_id
+      ...(requestedOrganizationId
         ? [
             organizationCipherViewStateQuery(db, {
               cipherId: cipher.id,
@@ -160,7 +180,7 @@ export const updateCipher = factory.createHandlers(
               .selectNoFrom([
                 sql<string>`${cipher.id}`.as("cipher_id"),
                 sql<string>`${collectionId}`.as("collection_id"),
-                sql<string>`${cipher.org_id}`.as("org_id"),
+                sql<string>`${requestedOrganizationId}`.as("org_id"),
               ])
               .where(({ exists }) => exists(committedCipher)),
           ),
@@ -191,7 +211,13 @@ export const updateCipher = factory.createHandlers(
       cipherToResponse(
         updated,
         await attachmentsDb.listByCipherIds(db, [updated.id]),
-        await getVisibleCipherCollectionIds(db, updated.id, c.get("orgMember")),
+        sharingPersonalCipher
+          ? collectionIds
+          : await getVisibleCipherCollectionIds(
+              db,
+              updated.id,
+              c.get("orgMember"),
+            ),
       ),
     );
   },

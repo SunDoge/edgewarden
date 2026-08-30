@@ -18,6 +18,10 @@ const cipher = vi.hoisted(() => ({
   buildPayload: vi.fn(),
   encrypt: vi.fn(),
 }));
+const attachments = vi.hoisted(() => ({
+  download: vi.fn(),
+  upload: vi.fn(),
+}));
 
 vi.mock("./api-vault", () => ({
   archiveCipherApi: api.archiveOne,
@@ -36,8 +40,36 @@ vi.mock("./api-vault", () => ({
 
 vi.mock("./cipher-crypto", () => ({ encryptCipher: cipher.encrypt }));
 vi.mock("./cipher-draft", () => ({ buildCipherPayload: cipher.buildPayload }));
+vi.mock("./vault-editor", () => ({
+  vaultCipherToEditorForm: vi.fn(() => ({
+    type: 1,
+    name: "Shared",
+    notes: "",
+    favorite: false,
+    loginUsername: "member",
+    loginPassword: "secret",
+    loginUri: "",
+    loginUris: [],
+    loginTotp: "",
+    cardholderName: "",
+    cardNumber: "",
+    firstName: "",
+    lastName: "",
+    identityNumber: "",
+    customFields: [],
+    extraData: "{}",
+  })),
+}));
+vi.mock("./vault-attachments", () => ({
+  downloadVaultAttachment: attachments.download,
+  uploadVaultAttachment: attachments.upload,
+}));
 
-import { applyVaultBulkAction, saveVaultCipher } from "./vault-cipher-actions";
+import {
+  applyVaultBulkAction,
+  cloneVaultCipherToPersonal,
+  saveVaultCipher,
+} from "./vault-cipher-actions";
 
 describe("vault cipher actions", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -92,6 +124,52 @@ describe("vault cipher actions", () => {
       }),
     ).resolves.toBe(acknowledgement);
     expect(api.create).toHaveBeenCalledWith(encrypted);
+  });
+
+  it("clones an organization cipher and its attachments into the personal vault", async () => {
+    cipher.buildPayload.mockReturnValue({ type: 1, name: "Shared" });
+    cipher.encrypt.mockResolvedValue({
+      type: 1,
+      name: "encrypted",
+      organizationId: null,
+    });
+    api.create.mockResolvedValue({ id: "personal-copy", key: "personal-key" });
+    attachments.download.mockResolvedValue({
+      bytes: new Uint8Array([1, 2, 3]),
+      fileName: "secret.txt",
+    });
+    const personalKeys = {
+      encKey: new Uint8Array(32),
+      macKey: new Uint8Array(32),
+    };
+
+    await cloneVaultCipherToPersonal(
+      {
+        id: "organization-item",
+        organizationId: "org-1",
+        attachments: [{ id: "attachment-1" }],
+      } as never,
+      personalKeys,
+    );
+
+    expect(cipher.encrypt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: null,
+        organizationId: null,
+        collectionIds: [],
+      }),
+      personalKeys.encKey,
+      personalKeys.macKey,
+    );
+    expect(attachments.download).toHaveBeenCalledWith(
+      "organization-item",
+      expect.objectContaining({ id: "attachment-1" }),
+    );
+    expect(attachments.upload).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "personal-copy" }),
+      expect.objectContaining({ name: "secret.txt" }),
+      personalKeys,
+    );
   });
 
   it.each([

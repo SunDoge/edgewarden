@@ -13,7 +13,7 @@
     UserRoundCog,
     WandSparkles,
   } from "@lucide/svelte";
-  import { page } from "$app/state";
+  import { navigating, page } from "$app/state";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import { vault } from "$lib/stores/vault.svelte";
@@ -39,11 +39,15 @@
   ];
 
   function isActive(href: string) {
-    return href === "/vault" ? page.url.pathname === href : page.url.pathname.startsWith(href);
+    const pathname = navigating.to?.url.pathname ?? page.url.pathname;
+    return href === "/vault" ? pathname === href : pathname.startsWith(href);
   }
 </script>
 
-<aside class="flex h-full w-64 shrink-0 flex-col overflow-y-auto border-r bg-background p-4">
+<aside
+  class="flex h-full w-64 shrink-0 flex-col overflow-y-auto border-r bg-background p-4"
+  data-sveltekit-preload-code="eager"
+>
   <nav class="flex flex-col gap-1.5" aria-label="应用导航">
     <p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
       保险库与工具

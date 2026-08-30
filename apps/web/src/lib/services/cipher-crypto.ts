@@ -190,6 +190,18 @@ export interface PlainCipherInput extends Record<string, unknown> {
   passwordHistory?: Array<Record<string, unknown>> | null;
 }
 
+export async function rewrapCipherKey(
+  wrappedKey: string,
+  sourceEncKey: Uint8Array,
+  sourceMacKey: Uint8Array,
+  targetEncKey: Uint8Array,
+  targetMacKey: Uint8Array,
+): Promise<string> {
+  const rawKey = await decryptBw(wrappedKey, sourceEncKey, sourceMacKey);
+  if (rawKey.length < 64) throw new Error("Invalid cipher key");
+  return encryptBw(rawKey, targetEncKey, targetMacKey);
+}
+
 export async function encryptCipher<T extends PlainCipherInput>(
   fields: T,
   userEncKey: Uint8Array,

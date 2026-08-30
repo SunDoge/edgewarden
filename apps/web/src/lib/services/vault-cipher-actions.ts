@@ -13,8 +13,13 @@ import {
   unarchiveCiphersApi,
   updateCipherApi,
 } from "$lib/services/api-vault";
-import { encryptCipher } from "$lib/services/cipher-crypto";
+import { encryptCipher, rewrapCipherKey } from "$lib/services/cipher-crypto";
 import { buildCipherPayload } from "$lib/services/cipher-draft";
+import { vaultCipherToEditorForm } from "$lib/services/vault-editor";
+import {
+  downloadVaultAttachment,
+  uploadVaultAttachment,
+} from "$lib/services/vault-attachments";
 import type { VaultCipher } from "$lib/services/vault-types";
 
 export type CipherOwnerKey = { encKey: Uint8Array; macKey: Uint8Array };
@@ -77,6 +82,20 @@ export async function saveVaultCipher({
   }
   const ownerKey = resolveOwnerKey(editor.organizationId);
   if (!ownerKey) throw new Error("密钥未就绪，请重新解锁保险库");
+  const ownershipChanged =
+    Boolean(selectedItem) &&
+    (selectedItem?.organizationId ?? null) !== editor.organizationId;
+  if (ownershipChanged && selectedItem?.key) {
+    const sourceOwnerKey = resolveOwnerKey(selectedItem.organizationId);
+    if (!sourceOwnerKey) throw new Error("原所有者密钥不可用");
+    payload.key = await rewrapCipherKey(
+      selectedItem.key,
+      sourceOwnerKey.encKey,
+      sourceOwnerKey.macKey,
+      ownerKey.encKey,
+      ownerKey.macKey,
+    );
+  }
   const encryptedPayload = await encryptCipher(
     {
       ...payload,
@@ -91,6 +110,72 @@ export async function saveVaultCipher({
   if (isEditing && selectedItem)
     return updateCipherApi(selectedItem.id, encryptedPayload);
   throw new Error("没有可保存的保险库条目");
+}
+
+export async function cloneVaultCipherToPersonal(
+  item: VaultCipher,
+  personalKeys: CipherOwnerKey,
+) {
+  const editor = vaultCipherToEditorForm(item);
+  const payload = buildCipherPayload(
+    {
+      type: editor.type,
+      name: editor.name,
+      notes: editor.notes,
+      favorite: editor.favorite,
+      folderId: null,
+      login: {
+        username: editor.loginUsername,
+        password: editor.loginPassword,
+        uri: editor.loginUri,
+        uris: editor.loginUris,
+        totp: editor.loginTotp,
+      },
+      card: {
+        cardholderName: editor.cardholderName,
+        number: editor.cardNumber,
+      },
+      identity: {
+        firstName: editor.firstName,
+        lastName: editor.lastName,
+        number: editor.identityNumber,
+      },
+      customFields: editor.customFields,
+      extraData: editor.extraData,
+    },
+    item,
+    false,
+  );
+  const encrypted = await encryptCipher(
+    {
+      ...payload,
+      key: null,
+      folderId: null,
+      organizationId: null,
+      collectionIds: [],
+    },
+    personalKeys.encKey,
+    personalKeys.macKey,
+  );
+  const created = await createCipherApi(encrypted);
+  try {
+    for (const attachment of item.attachments ?? []) {
+      const downloaded = await downloadVaultAttachment(item.id, attachment);
+      const bytes = downloaded.bytes.buffer.slice(
+        downloaded.bytes.byteOffset,
+        downloaded.bytes.byteOffset + downloaded.bytes.byteLength,
+      ) as ArrayBuffer;
+      await uploadVaultAttachment(
+        created,
+        new File([bytes], downloaded.fileName),
+        personalKeys,
+      );
+    }
+  } catch (error) {
+    await hardDeleteCipherApi(created.id).catch(() => undefined);
+    throw error;
+  }
+  return created;
 }
 
 export async function updateEncryptedVaultCipher(

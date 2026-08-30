@@ -28,6 +28,7 @@
     collections,
     totp,
     attachmentBusy,
+    cloneBusy,
     isSyncing,
     onBack,
     onSave,
@@ -37,6 +38,7 @@
     onArchive,
     onRestore,
     onEdit,
+    onCloneToPersonal,
     onAttachmentUpload,
     onAttachmentDownload,
     onAttachmentDelete,
@@ -51,6 +53,7 @@
     collections: VaultCollection[];
     totp: VaultTotp | null;
     attachmentBusy: string | null;
+    cloneBusy: boolean;
     isSyncing: boolean;
     onBack: () => void;
     onSave: () => void;
@@ -60,6 +63,7 @@
     onArchive: () => void;
     onRestore: () => void;
     onEdit: () => void;
+    onCloneToPersonal: () => void;
     onAttachmentUpload: (event: Event) => void;
     onAttachmentDownload: (attachment: VaultAttachment) => void;
     onAttachmentDelete: (attachment: VaultAttachment) => void;
@@ -92,12 +96,16 @@
         <VaultItemDetail
           item={selectedItem}
           {folders}
+          canShare={organizations.length > 0}
           {totp}
           {attachmentBusy}
+          {cloneBusy}
           {onFavorite}
           {onArchive}
           {onRestore}
           {onEdit}
+          {onCloneToPersonal}
+          onShare={onEdit}
           {onDelete}
           {onAttachmentUpload}
           {onAttachmentDownload}

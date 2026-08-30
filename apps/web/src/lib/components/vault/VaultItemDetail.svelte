@@ -5,6 +5,7 @@
     ArchiveRestore,
     Check,
     Copy,
+    CopyPlus,
     Download,
     Edit,
     Eye,
@@ -12,6 +13,7 @@
     Folder,
     Paperclip,
     RotateCcw,
+    Share2,
     Star,
     Trash2,
     Upload,
@@ -19,6 +21,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Checkbox } from "$lib/components/ui/checkbox/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
+  import { Spinner } from "$lib/components/ui/spinner/index.js";
   import LoginCipherDetail from "./LoginCipherDetail.svelte";
   import CardCipherDetail from "./CardCipherDetail.svelte";
   import IdentityCipherDetail from "./IdentityCipherDetail.svelte";
@@ -40,10 +43,14 @@
     folders,
     totp,
     attachmentBusy,
+    cloneBusy,
     onFavorite,
     onArchive,
     onRestore,
     onEdit,
+    onShare,
+    onCloneToPersonal,
+    canShare,
     onDelete,
     onAttachmentUpload,
     onAttachmentDownload,
@@ -53,10 +60,14 @@
     folders: VaultFolder[];
     totp: VaultTotp | null;
     attachmentBusy: string | null;
+    cloneBusy: boolean;
     onFavorite: () => void;
     onArchive: () => void;
     onRestore: () => void;
     onEdit: () => void;
+    onShare: () => void;
+    onCloneToPersonal: () => void;
+    canShare: boolean;
     onDelete: () => void;
     onAttachmentUpload: (event: Event) => void;
     onAttachmentDownload: (attachment: VaultAttachment) => void;
@@ -161,6 +172,11 @@
           title="恢复"><RotateCcw class="size-4" /></Button
         >
       {:else if !item.readOnly}
+        {#if !item.organizationId && canShare}
+          <Button variant="ghost" size="icon-sm" onclick={onShare} title="共享到组织"
+            ><Share2 /></Button
+          >
+        {/if}
         <Button variant="ghost" size="icon-sm" onclick={onEdit} title="编辑"><Edit /></Button>
       {/if}
       {#if !item.readOnly}<Button
@@ -176,6 +192,12 @@
   </div>
 
   <Separator />
+
+  {#if item.organizationId && !item.hidePasswords}
+    <Button variant="outline" class="w-full" onclick={onCloneToPersonal} disabled={cloneBusy}
+      >{#if cloneBusy}<Spinner />{:else}<CopyPlus />{/if}保存到个人保险库</Button
+    >
+  {/if}
 
   <!-- Login -->
   {#if item.type === CipherType.Login}
