@@ -24,6 +24,10 @@ import {
 } from "../services/db/batch";
 import * as usersDb from "../services/db/users";
 import * as webauthnDb from "../services/db/webauthn";
+import {
+  createTwoFactorAuthenticatorToken,
+  verifyTwoFactorAuthenticatorToken,
+} from "../utils/jwt";
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
 import { isTotpEnabled, verifyTotpToken } from "../utils/totp";
@@ -67,6 +71,20 @@ export const listTwoFactor = factory.createHandlers(async (c) => {
 });
 
 export const getAuthenticator = factory.createHandlers(async (c) => {
+  const user = c.get("user");
+  const body: { masterPasswordHash?: string } = await c.req
+    .json<{ masterPasswordHash?: string }>()
+    .catch(() => ({}));
+  if (body.masterPasswordHash) {
+    if (
+      !(await verifyPassword(
+        body.masterPasswordHash,
+        user.master_password_hash,
+        user.email,
+      ))
+    )
+      return errorResponse("User verification failed.", 400);
+  }
   const encryptedSecret = c.get("user").totp_secret;
   let secret = randomBase32Secret();
   if (encryptedSecret) {
@@ -83,9 +101,16 @@ export const getAuthenticator = factory.createHandlers(async (c) => {
       );
     }
   }
+  const authenticator = { key: secret, enabled: Boolean(encryptedSecret) };
   return c.json({
-    key: secret,
-    enabled: Boolean(encryptedSecret),
+    authenticator,
+    userVerificationToken: await createTwoFactorAuthenticatorToken(
+      c.get("user").id,
+      secret,
+      c.get("user").security_stamp,
+      c.env.JWT_SECRET,
+    ),
+    ...authenticator,
     object: "twoFactorAuthenticator",
   });
 });
@@ -93,7 +118,20 @@ export const getAuthenticator = factory.createHandlers(async (c) => {
 export const enableAuthenticator = factory.createHandlers(
   vValidator("json", TotpSetupSchema),
   async (c) => {
-    const { token, key } = c.req.valid("json");
+    const { token, key, userVerificationToken } = c.req.valid("json");
+    if (userVerificationToken) {
+      const claims = await verifyTwoFactorAuthenticatorToken(
+        userVerificationToken,
+        c.env.JWT_SECRET,
+      );
+      if (
+        !claims ||
+        claims.sub !== c.get("user").id ||
+        claims.key !== key ||
+        claims.sstamp !== c.get("user").security_stamp
+      )
+        return errorResponse("User verification failed.", 400);
+    }
     if (!(await verifyTotpToken(key, token))) {
       return errorResponse("TOTP token is invalid.", 400);
     }
@@ -146,7 +184,12 @@ export const enableAuthenticator = factory.createHandlers(
         409,
       );
     invalidateUserCache(userId);
-    return c.json({ key, enabled: true, object: "twoFactorAuthenticator" });
+    return c.json({
+      authenticator: { key, enabled: true },
+      key,
+      enabled: true,
+      object: "twoFactorAuthenticatorUpdate",
+    });
   },
 );
 

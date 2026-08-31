@@ -3,6 +3,7 @@ import * as v from "valibot";
 export const TotpSetupSchema = v.object({
   token: v.pipe(v.string(), v.regex(/^\d{6}$/, "Must be 6 digits")),
   key: v.pipe(v.string(), v.minLength(1)), // base32 TOTP secret
+  userVerificationToken: v.optional(v.string()),
 });
 
 export const TotpVerifySchema = v.object({

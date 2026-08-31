@@ -19,6 +19,10 @@ import {
   buildDomainsResponse,
   parseStoredDomainSettings,
 } from "../services/domain-rules";
+import {
+  organizationRoleType,
+  profileOrganizationToResponse,
+} from "../services/organizations/profile-presentation";
 import { sendToResponse } from "../services/sends/presentation";
 import type { Folders } from "../types/db";
 import { buildWebAuthnPrfOption } from "../utils/account-passkeys";
@@ -38,15 +42,7 @@ export function supportsSshKeys(clientVersion: string | undefined): boolean {
   return year > 2024 || (year === 2024 && month >= 12);
 }
 
-export function organizationRoleType(role: string): number {
-  return role === "owner"
-    ? 0
-    : role === "admin"
-      ? 1
-      : role === "manager"
-        ? 4
-        : 2;
-}
+export { organizationRoleType };
 
 function folderToResponse(folder: Selectable<Folders>) {
   return {
@@ -220,82 +216,9 @@ async function buildSyncPayload(c: Context<HonoEnv>, excludeDomains: boolean) {
     (link) => link.cipher_id,
   );
 
-  const profileOrganizations = organizationRows.map((row) => {
-    const type = organizationRoleType(row.role);
-    const customManager = type === 4;
-    return {
-      id: row.org_id,
-      userId: user.id,
-      organizationUserId: row.member_id,
-      identifier: null,
-      name: row.name,
-      key: row.key,
-      publicKey: row.public_key,
-      privateKey: row.private_key,
-      role: row.role,
-      status: 2,
-      type,
-      enabled: true,
-      accessAll: Boolean(row.access_all),
-      usersGetPremium: true,
-      usePolicies: true,
-      useSso: false,
-      useKeyConnector: false,
-      useScim: false,
-      useGroups: false,
-      useDirectory: false,
-      useEvents: false,
-      useTotp: true,
-      use2fa: true,
-      useApi: true,
-      useResetPassword: false,
-      useSecretsManager: false,
-      usePasswordManager: true,
-      useCustomPermissions: true,
-      useActivateAutofillPolicy: false,
-      useRiskInsights: false,
-      useOrganizationDomains: false,
-      useAdminSponsoredFamilies: false,
-      useAutomaticUserConfirmation: false,
-      useDisableSMAdsForUsers: true,
-      usePhishingBlocker: false,
-      useMyItems: false,
-      useInviteLinks: false,
-      usePam: false,
-      selfHost: true,
-      seats: 20,
-      maxCollections: null,
-      maxStorageGb: 32767,
-      hasPublicAndPrivateKeys: Boolean(row.public_key && row.private_key),
-      ssoBound: false,
-      resetPasswordEnrolled: false,
-      limitCollectionCreation: customManager && !row.access_all,
-      limitCollectionDeletion: true,
-      limitItemDeletion: false,
-      allowAdminAccessToAllCollectionItems: true,
-      userIsClaimedByOrganization: false,
-      userIsManagedByOrganization: false,
-      permissions: customManager
-        ? {
-            accessEventLogs: false,
-            accessImportExport: false,
-            accessReports: false,
-            createNewCollections: Boolean(row.access_all),
-            editAnyCollection: Boolean(row.access_all),
-            deleteAnyCollection: Boolean(row.access_all),
-            manageGroups: false,
-            managePolicies: false,
-            manageSso: false,
-            manageUsers: false,
-            manageResetPassword: false,
-            manageScim: false,
-          }
-        : null,
-      creationDate: toIso(row.created_at),
-      revisionDate: toIso(row.updated_at),
-      object: "profileOrganization",
-    };
-  });
+  const profileOrganizations = organizationRows.map((row) =>
+    profileOrganizationToResponse(row, user.id),
+  );
   const profile = {
     id: user.id,
     name: user.name,

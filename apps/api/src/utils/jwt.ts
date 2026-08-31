@@ -9,7 +9,8 @@ export type JwtPurpose =
   | "send-file-download"
   | "send-file-upload"
   | "send-access"
-  | "account-passkey";
+  | "account-passkey"
+  | "two-factor-authenticator";
 
 export async function deriveJwtPurposeSecret(
   secret: string,
@@ -90,6 +91,14 @@ const SendAccessTokenClaimsSchema = v.object({
   exp: v.number(),
 });
 
+const TwoFactorAuthenticatorClaimsSchema = v.object({
+  sub: v.pipe(v.string(), v.minLength(1)),
+  key: v.pipe(v.string(), v.minLength(1)),
+  sstamp: v.pipe(v.string(), v.minLength(1)),
+  typ: v.literal("two_factor_authenticator"),
+  exp: v.number(),
+});
+
 export type JWTPayload = v.InferOutput<typeof JwtPayloadSchema>;
 export type RealtimeTicketClaims = v.InferOutput<
   typeof RealtimeTicketClaimsSchema
@@ -155,6 +164,35 @@ export async function verifyJWT(
   secret: string,
 ): Promise<JWTPayload | null> {
   return verifyJwtClaims(token, secret, JwtPayloadSchema);
+}
+
+export async function createTwoFactorAuthenticatorToken(
+  userId: string,
+  key: string,
+  securityStamp: string,
+  secret: string,
+): Promise<string> {
+  return sign(
+    {
+      sub: userId,
+      key,
+      sstamp: securityStamp,
+      typ: "two_factor_authenticator",
+      exp: Math.floor(Date.now() / 1000) + 600,
+    },
+    await deriveJwtPurposeSecret(secret, "two-factor-authenticator"),
+  );
+}
+
+export async function verifyTwoFactorAuthenticatorToken(
+  token: string,
+  secret: string,
+) {
+  return verifyJwtClaims(
+    token,
+    await deriveJwtPurposeSecret(secret, "two-factor-authenticator"),
+    TwoFactorAuthenticatorClaimsSchema,
+  );
 }
 
 export function createRefreshToken(): string {

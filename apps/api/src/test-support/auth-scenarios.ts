@@ -89,9 +89,20 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
     assert.equal(prelogin.status, 200);
     assert.deepEqual(
       await prelogin
-        .json<{ kdf: number; kdfIterations: number }>()
-        .then((body) => [body.kdf, body.kdfIterations]),
-      [0, 600_000],
+        .json<{
+          kdf: number;
+          kdfIterations: number;
+          kdfSettings: { kdfType: number; iterations: number };
+          salt: string;
+        }>()
+        .then((body) => [
+          body.kdf,
+          body.kdfIterations,
+          body.kdfSettings.kdfType,
+          body.kdfSettings.iterations,
+          body.salt,
+        ]),
+      [0, 600_000, 0, 600_000, EMAIL],
     );
 
     const passwordPrelogin = await request(

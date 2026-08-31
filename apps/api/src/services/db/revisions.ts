@@ -1,17 +1,17 @@
 import { type Kysely, sql } from "kysely";
 import type { DB } from "../../types/db";
-import { now, toIso } from "../../utils/time";
+import { now } from "../../utils/time";
 
 export async function getRevisionDate(
   db: Kysely<DB>,
   userId: string,
-): Promise<string> {
+): Promise<number> {
   const row = await db
     .selectFrom("user_revisions")
     .select("revision_date")
     .where("user_id", "=", userId)
     .executeTakeFirst();
-  return row ? toIso(row.revision_date) : new Date(0).toISOString();
+  return (row?.revision_date ?? 0) * 1000;
 }
 
 export async function getRevisionValue(

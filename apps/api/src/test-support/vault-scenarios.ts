@@ -147,6 +147,11 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     assert.equal(typeof syncBody.folders[0].creationDate, "string");
     assert.deepEqual(syncBody.policiesNew, []);
     assert.ok(syncBody.userDecryption.masterPasswordUnlock);
+    const revision = await request("/api/accounts/revision-date", {
+      headers: auth,
+    });
+    assert.equal(revision.status, 200);
+    assert.equal(typeof (await revision.json()), "number");
     const syncWithoutDomains = await request("/api/sync?excludeDomains=true", {
       headers: auth,
     });

@@ -305,7 +305,12 @@ export function registerSendScenarios(context: SendScenarioContext): void {
         }),
       });
       assert.equal(created.status, 200, await created.clone().text());
-      const sendId = (await created.json<{ id: string }>()).id;
+      const createdBody = await created.json<{
+        id: string;
+        emails: string | null;
+      }>();
+      assert.equal(createdBody.emails, "reader@example.com");
+      const sendId = createdBody.id;
       const removed = await request(`/api/sends/${sendId}/${endpoint}`, {
         method: "PUT",
         headers: auth,

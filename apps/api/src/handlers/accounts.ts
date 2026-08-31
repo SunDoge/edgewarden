@@ -2,8 +2,8 @@ import { vValidator } from "@hono/valibot-validator";
 import { factory } from "../http/factory";
 import {
   ChangePasswordSchema,
-  SetVerifyDevicesSchema,
   SetKeysSchema,
+  SetVerifyDevicesSchema,
   UpdateProfileSchema,
   VerifyPasswordSchema,
 } from "../schemas/accounts";
@@ -20,15 +20,16 @@ import {
 } from "../services/credential-protection";
 import {
   conditionalRefreshTokenDeletionQuery,
-  conditionalUserUpdatedAtRevisionQuery,
   conditionalUserRevisionQuery,
+  conditionalUserUpdatedAtRevisionQuery,
 } from "../services/db/batch";
 import * as revisionsDb from "../services/db/revisions";
 import * as usersDb from "../services/db/users";
 import * as webauthnDb from "../services/db/webauthn";
-import { buildAccountKeys } from "../utils/user-decryption";
+import { profileOrganizationToResponse } from "../services/organizations/profile-presentation";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
+import { buildAccountKeys } from "../utils/user-decryption";
 import { userYubicoPublicIds } from "../utils/yubico";
 
 function buildProfileResponse(
@@ -79,6 +80,7 @@ async function getProfileOrganizations(
     .selectFrom("org_members as member")
     .innerJoin("organizations as org", "org.id", "member.org_id")
     .select([
+      "member.id as member_id",
       "member.org_id",
       "member.key",
       "member.role",
@@ -94,19 +96,7 @@ async function getProfileOrganizations(
     .where("member.status", "=", "confirmed")
     .where("org.deletion_requested_at", "is", null)
     .execute();
-  return rows.map((row) => ({
-    id: row.org_id,
-    name: row.name,
-    key: row.key,
-    publicKey: row.public_key,
-    privateKey: row.private_key,
-    role: row.role,
-    status: row.status,
-    accessAll: Boolean(row.access_all),
-    creationDate: toIso(row.created_at),
-    revisionDate: toIso(row.updated_at),
-    object: "profileOrganization",
-  }));
+  return rows.map((row) => profileOrganizationToResponse(row, userId));
 }
 
 // GET /api/accounts/profile

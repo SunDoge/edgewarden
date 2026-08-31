@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { profileOrganizationToResponse } from "../services/organizations/profile-presentation";
 import { shouldRateLimitIdentityGrant } from "./identity-token";
 import { organizationRoleType, supportsSshKeys } from "./sync";
 
@@ -23,5 +24,42 @@ describe("mobile client compatibility", () => {
     expect(organizationRoleType("admin")).toBe(1);
     expect(organizationRoleType("member")).toBe(2);
     expect(organizationRoleType("manager")).toBe(4);
+  });
+
+  it("includes the complete native-client organization profile contract", () => {
+    const organization = profileOrganizationToResponse(
+      {
+        member_id: "member-id",
+        org_id: "org-id",
+        key: "2.encrypted-key",
+        role: "owner",
+        access_all: 1,
+        name: "Organization",
+        public_key: null,
+        private_key: null,
+      },
+      "user-id",
+    );
+
+    expect(organization).toMatchObject({
+      status: 2,
+      type: 0,
+      productTierType: 0,
+      ssoEnabled: false,
+      keyConnectorEnabled: false,
+      keyConnectorUrl: null,
+      ssoMemberDecryptionType: null,
+      providerId: null,
+      providerName: null,
+      providerType: null,
+      accessSecretsManager: false,
+      accessPam: false,
+      familySponsorshipFriendlyName: null,
+      familySponsorshipAvailable: false,
+      familySponsorshipLastSyncDate: null,
+      familySponsorshipValidUntil: null,
+      familySponsorshipToDelete: null,
+      isAdminInitiated: false,
+    });
   });
 });

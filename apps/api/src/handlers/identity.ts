@@ -23,13 +23,13 @@ export const prelogin = factory.createHandlers(
       kdfIterations,
       kdfMemory: user?.kdf_memory ?? null,
       kdfParallelism: user?.kdf_parallelism ?? null,
-      KdfSettings: {
-        KdfType: kdfType,
-        Iterations: kdfIterations,
-        Memory: user?.kdf_memory ?? null,
-        Parallelism: user?.kdf_parallelism ?? null,
+      kdfSettings: {
+        kdfType,
+        iterations: kdfIterations,
+        memory: user?.kdf_memory ?? null,
+        parallelism: user?.kdf_parallelism ?? null,
       },
-      Salt: email.toLowerCase(),
+      salt: email.toLowerCase(),
     });
   },
 );

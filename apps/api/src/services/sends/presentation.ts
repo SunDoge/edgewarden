@@ -113,7 +113,7 @@ export function sendToResponse(send: StoredSend) {
     maxAccessCount: send.max_access_count,
     accessCount: send.access_count,
     password: send.password_hash ? "true" : null,
-    emails: parseSendEmails(send.emails),
+    emails: parseSendEmails(send.emails)?.join(",") ?? null,
     authType: send.auth_type,
     disabled: send.disabled === 1,
     hideEmail: send.hide_email === 1,

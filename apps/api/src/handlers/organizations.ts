@@ -13,23 +13,49 @@ import {
   executeBatch,
   revisionQuery,
 } from "../services/db/batch";
+import { organizationAdminToResponse } from "../services/organizations/admin-presentation";
+import { profileOrganizationToResponse } from "../services/organizations/profile-presentation";
 import { errorResponse } from "../utils/response";
-import { now, toIso } from "../utils/time";
+import { now } from "../utils/time";
 
-function organizationResponse(org: any, member: any) {
-  return {
-    id: org.id,
-    name: org.name,
-    key: member.key,
-    publicKey: org.public_key,
-    privateKey: org.private_key,
-    role: member.role,
-    status: member.status,
-    accessAll: Boolean(member.access_all),
-    creationDate: toIso(org.created_at),
-    revisionDate: toIso(org.updated_at),
-    object: "profileOrganization",
-  };
+interface OrganizationResponseSource {
+  id?: string;
+  org_id?: string;
+  name: string;
+  public_key: string | null;
+  private_key: string | null;
+}
+
+interface OrganizationMemberResponseSource {
+  id?: string;
+  member_id?: string;
+  key: string | null;
+  role: string;
+  access_all: number;
+}
+
+function organizationResponse(
+  org: OrganizationResponseSource,
+  member: OrganizationMemberResponseSource,
+  userId: string,
+) {
+  const memberId = member.id ?? member.member_id;
+  const organizationId = org.id ?? org.org_id;
+  if (!memberId || !organizationId)
+    throw new Error("Organization response identifiers are required");
+  return profileOrganizationToResponse(
+    {
+      member_id: memberId,
+      org_id: organizationId,
+      key: member.key,
+      role: member.role,
+      access_all: member.access_all,
+      name: org.name,
+      public_key: org.public_key,
+      private_key: org.private_key,
+    },
+    userId,
+  );
 }
 
 export const listOrganizations = factory.createHandlers(async (c) => {
@@ -45,6 +71,7 @@ export const listOrganizations = factory.createHandlers(async (c) => {
       "org.created_at",
       "org.updated_at",
       "member.key",
+      "member.id as member_id",
       "member.role",
       "member.status",
       "member.access_all",
@@ -54,7 +81,7 @@ export const listOrganizations = factory.createHandlers(async (c) => {
     .where("org.deletion_requested_at", "is", null)
     .execute();
   return c.json({
-    data: rows.map((row) => organizationResponse(row, row)),
+    data: rows.map((row) => organizationResponse(row, row, c.get("user").id)),
     object: "list",
     continuationToken: null,
   });
@@ -121,12 +148,7 @@ export const createOrganization = factory.createHandlers(
       .selectAll()
       .where("id", "=", orgId)
       .executeTakeFirstOrThrow();
-    const member = await db
-      .selectFrom("org_members")
-      .selectAll()
-      .where("id", "=", memberId)
-      .executeTakeFirstOrThrow();
-    return c.json(organizationResponse(org, member), 201);
+    return c.json(organizationAdminToResponse(org), 201);
   },
 );
 
@@ -137,7 +159,7 @@ export const getOrganization = factory.createHandlers(async (c) => {
     .selectAll()
     .where("id", "=", c.get("orgMember").org_id)
     .executeTakeFirstOrThrow();
-  return c.json(organizationResponse(org, c.get("orgMember")));
+  return c.json(organizationAdminToResponse(org));
 });
 
 export const updateOrganization = factory.createHandlers(
@@ -190,7 +212,7 @@ export const updateOrganization = factory.createHandlers(
       .selectAll()
       .where("id", "=", member.org_id)
       .executeTakeFirstOrThrow();
-    return c.json(organizationResponse(org, member));
+    return c.json(organizationAdminToResponse(org));
   },
 );
 

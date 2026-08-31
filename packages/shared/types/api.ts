@@ -50,7 +50,13 @@ export interface PreloginResponse {
   kdfIterations: number;
   kdfMemory: number | null;
   kdfParallelism: number | null;
-  Salt: string;
+  salt: string;
+  kdfSettings: {
+    kdfType: KdfType;
+    iterations: number;
+    memory: number | null;
+    parallelism: number | null;
+  };
 }
 
 /** POST /identity/connect/token */
@@ -118,11 +124,11 @@ export interface FolderResponse {
 export interface ProfileOrganizationResponse {
   id: string;
   name: string;
-  key: string;
+  key: string | null;
   publicKey: string | null;
   privateKey: string | null;
   role: "owner" | "admin" | "manager" | "member";
-  status: string;
+  status: number;
   accessAll: boolean;
   creationDate?: string;
   revisionDate?: string;
