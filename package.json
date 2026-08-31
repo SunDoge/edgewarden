@@ -17,6 +17,7 @@
     "test:compat:bw": "node scripts/bw-compat-smoke.ts",
     "test:compat:bw:local": "node scripts/bw-compat-local.ts",
     "check:compat:models": "node scripts/check-bitwarden-model-contracts.ts && pnpm --filter @edgewarden/api exec vitest run src/handlers/mobile-compat.test.ts src/services/sends/presentation.test.ts",
+    "check:compat:routes": "node scripts/check-bitwarden-route-coverage.ts",
     "test:integration:cloudflare": "node scripts/cloudflare-integration-smoke.ts",
     "domains:sync": "node scripts/sync-bitwarden-domains.ts",
     "check": "pnpm --parallel --filter './apps/*' --if-present run check && node scripts/check-cloudflare-config.ts && node scripts/check-migrations.ts && node scripts/check-web-architecture.ts",

@@ -1,4 +1,3 @@
-import type { D1Dialect, EdgewardenBatchQuery } from "../db/d1-dialect";
 import {
   type CompiledQuery,
   type Kysely,
@@ -9,6 +8,7 @@ import {
 import type { Ciphers, DB, OrgMembers } from "../../types/db";
 import { now } from "../../utils/time";
 import { organizationRevisionQuery, revisionQuery } from "../db/batch";
+import type { D1Dialect, EdgewardenBatchQuery } from "../db/d1-dialect";
 import { textColumnInJson } from "../db/json-array";
 import type { CipherPermissions } from "./presentation";
 
@@ -90,8 +90,6 @@ export async function resolveOrganizationCipherCollectionsForUpdate(
   requestedCollectionIds: string[],
 ): Promise<{ collectionIds: string[] } | { error: string }> {
   const requestedIds = [...new Set(requestedCollectionIds)];
-  if (!requestedIds.length)
-    return { error: "At least one collection is required" };
   const requestedCollections = await db
     .selectFrom("collections")
     .select("id")
@@ -193,6 +191,45 @@ export function conditionalPersonalCipherBulkRevisionQuery(
 interface CipherMutationFenceCandidate {
   id: string;
   mutation_token: string | null;
+}
+
+/**
+ * Claims every candidate with one compare-and-swap statement. The count guard
+ * makes the claim all-or-nothing, so later statements cannot mutate only the
+ * subset that remained unchanged.
+ */
+export function bulkCipherMutationClaimQuery(
+  db: Kysely<DB>,
+  candidates: readonly CipherMutationFenceCandidate[],
+  mutationToken: string,
+  owner: { userId: string } | { organizationId: string },
+) {
+  const serializedState = JSON.stringify(candidates);
+  const expectedCount = candidates.length;
+  const query = db
+    .updateTable("ciphers")
+    .set({ mutation_token: mutationToken })
+    .where(
+      textColumnInJson(
+        "id",
+        candidates.map((cipher) => cipher.id),
+      ),
+    )
+    .where(sql<boolean>`(
+      SELECT COUNT(*)
+      FROM ciphers current
+      INNER JOIN json_each(${serializedState}) expected
+        ON json_extract(expected.value, '$.id') = current.id
+       AND current.mutation_token IS json_extract(expected.value, '$.mutation_token')
+      WHERE ${
+        "userId" in owner
+          ? sql<boolean>`current.user_id = ${owner.userId} AND current.org_id IS NULL`
+          : sql<boolean>`current.org_id = ${owner.organizationId}`
+      }
+    ) = ${expectedCount}`);
+  return "userId" in owner
+    ? query.where("user_id", "=", owner.userId).where("org_id", "is", null)
+    : query.where("org_id", "=", owner.organizationId);
 }
 
 export async function executeFencedPersonalCipherBulkMutation(

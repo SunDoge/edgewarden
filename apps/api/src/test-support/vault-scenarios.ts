@@ -73,6 +73,13 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     assert.ok("accountKeys" in profile);
     assert.equal(profile.verifyDevices, true);
     assert.deepEqual(profile.organizationsNew, profile.organizations);
+    const keysResponse = await request("/api/accounts/keys", { headers: auth });
+    assert.equal(keysResponse.status, 200, await keysResponse.clone().text());
+    const keys = await keysResponse.json<Record<string, unknown>>();
+    assert.equal(keys.object, "keys");
+    assert.equal(keys.publicKey, profile.publicKey);
+    assert.equal(keys.privateKey, profile.privateKey);
+    assert.deepEqual(keys.accountKeys, profile.accountKeys);
     const folderResponse = await request("/api/folders", {
       method: "POST",
       headers: { ...auth, "content-type": "application/json" },
@@ -982,6 +989,41 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
         .then((row) => row?.folder_id),
       null,
     );
+  });
+
+  test("supports the official DELETE folder aliases", async () => {
+    const headers = {
+      authorization: `Bearer ${context.memberAccessToken}`,
+      "content-type": "application/json",
+    };
+    const create = async (name: string) => {
+      const response = await request("/api/folders", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ name }),
+      });
+      assert.equal(response.status, 200, await response.clone().text());
+      return (await response.json<{ id: string }>()).id;
+    };
+
+    const selectiveId = await create("official-delete-selective");
+    const deleteMany = await request("/api/folders", {
+      method: "DELETE",
+      headers,
+      body: JSON.stringify({ ids: [selectiveId] }),
+    });
+    assert.equal(deleteMany.status, 204, await deleteMany.clone().text());
+
+    await create("official-delete-all-one");
+    await create("official-delete-all-two");
+    const deleteAll = await request("/api/folders/all", {
+      method: "DELETE",
+      headers,
+    });
+    assert.equal(deleteAll.status, 204, await deleteAll.clone().text());
+    const listed = await request("/api/folders", { headers });
+    assert.equal(listed.status, 200, await listed.clone().text());
+    assert.deepEqual((await listed.json<{ data: unknown[] }>()).data, []);
   });
 
   test("advances revision once for concurrent deletion of one folder", async () => {

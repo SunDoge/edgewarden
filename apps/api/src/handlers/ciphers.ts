@@ -1,3 +1,11 @@
+export {
+  purgeCiphers,
+  shareCiphers,
+  updateCipherCollections,
+  updateCipherCollectionsBulk,
+  updateCipherCollectionsV2,
+  updateCipherPartial,
+} from "./ciphers/compatibility";
 export { createCipher } from "./ciphers/create";
 export {
   archiveCipher,
@@ -7,8 +15,8 @@ export {
   restoreCipher,
   unarchiveCipher,
 } from "./ciphers/lifecycle";
-export { getCipher, updateCipher } from "./ciphers/update";
 export { listCiphers } from "./ciphers/list";
+export { getCipher, shareCipher, updateCipher } from "./ciphers/update";
 export {
   archiveCiphers,
   deleteCiphers,

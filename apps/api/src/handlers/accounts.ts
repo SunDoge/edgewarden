@@ -99,6 +99,26 @@ async function getProfileOrganizations(
   return rows.map((row) => profileOrganizationToResponse(row, userId));
 }
 
+export const listAccountOrganizations = factory.createHandlers(async (c) =>
+  c.json({
+    data: await getProfileOrganizations(c.get("db"), c.get("user").id),
+    object: "list",
+    continuationToken: null,
+  }),
+);
+
+// Current clients read accountKeys; the top-level fields remain for older clients.
+export const getKeys = factory.createHandlers(async (c) => {
+  const user = c.get("user");
+  return c.json({
+    key: user.key,
+    publicKey: user.public_key,
+    privateKey: user.private_key,
+    accountKeys: buildAccountKeys(user),
+    object: "keys",
+  });
+});
+
 // GET /api/accounts/profile
 export const getProfile = factory.createHandlers(async (c) => {
   const user = c.get("user");

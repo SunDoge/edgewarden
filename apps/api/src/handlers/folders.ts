@@ -1,5 +1,7 @@
 import { vValidator } from "@hono/valibot-validator";
+import type { Context } from "hono";
 import { type Selectable, sql } from "kysely";
+import type { HonoEnv } from "../env";
 import { factory } from "../http/factory";
 import { BulkIdsSchema } from "../schemas/ciphers";
 import { FolderSchema } from "../schemas/folders";
@@ -162,87 +164,103 @@ export const deleteFolder = factory.createHandlers(async (c) => {
   return new Response(null, { status: 200 });
 });
 
-export const deleteFolders = factory.createHandlers(
-  vValidator("json", BulkIdsSchema),
-  async (c) => {
-    const userId = c.get("user").id;
-    const db = c.get("db");
-    const ids = [...new Set(c.req.valid("json").ids)];
-    const ownedFolders = await db
-      .selectFrom("folders")
-      .select(["id", "mutation_token"])
+async function deleteOwnedFolders(c: Context<HonoEnv>, requestedIds: string[]) {
+  const userId = c.get("user").id;
+  const db = c.get("db");
+  const ids = [...new Set(requestedIds)];
+  const ownedFolders = await db
+    .selectFrom("folders")
+    .select(["id", "mutation_token"])
+    .where("user_id", "=", userId)
+    .where(textColumnInJson("id", ids))
+    .execute();
+  if (!ownedFolders.length) return new Response(null, { status: 204 });
+  const ts = now();
+  const mutationToken = crypto.randomUUID();
+  const expectedState = JSON.stringify(ownedFolders);
+  await c.get("dbDialect").batch([
+    db
+      .updateTable("folders")
+      .set({ mutation_token: mutationToken })
       .where("user_id", "=", userId)
-      .where(textColumnInJson("id", ids))
-      .execute();
-    if (!ownedFolders.length) return new Response(null, { status: 204 });
-    const ts = now();
-    const mutationToken = crypto.randomUUID();
-    const expectedState = JSON.stringify(ownedFolders);
-    await c.get("dbDialect").batch([
-      db
-        .updateTable("folders")
-        .set({ mutation_token: mutationToken })
-        .where("user_id", "=", userId)
-        .where(sql<boolean>`EXISTS (
+      .where(sql<boolean>`EXISTS (
 					SELECT 1 FROM json_each(${expectedState}) expected
 					WHERE json_extract(expected.value, '$.id') = folders.id
 					  AND folders.mutation_token IS json_extract(expected.value, '$.mutation_token')
 				)`),
-      conditionalFolderRevisionQuery(db, userId, mutationToken, ts),
-      db
-        .updateTable("ciphers")
-        .set({
-          folder_id: null,
-          updated_at: sql<number>`MAX(updated_at + 1, ${ts})`,
-        })
-        .where("user_id", "=", userId)
-        .where((eb) =>
-          eb(
-            "folder_id",
-            "in",
-            db
-              .selectFrom("folders")
-              .select("id")
-              .where("user_id", "=", userId)
-              .where("mutation_token", "=", mutationToken),
-          ),
+    conditionalFolderRevisionQuery(db, userId, mutationToken, ts),
+    db
+      .updateTable("ciphers")
+      .set({
+        folder_id: null,
+        updated_at: sql<number>`MAX(updated_at + 1, ${ts})`,
+      })
+      .where("user_id", "=", userId)
+      .where((eb) =>
+        eb(
+          "folder_id",
+          "in",
+          db
+            .selectFrom("folders")
+            .select("id")
+            .where("user_id", "=", userId)
+            .where("mutation_token", "=", mutationToken),
         ),
-      db
-        .updateTable("cipher_user_settings")
-        .set({ folder_id: null, updated_at: ts })
-        .where("user_id", "=", userId)
-        .where((eb) =>
-          eb(
-            "folder_id",
-            "in",
-            db
-              .selectFrom("folders")
-              .select("id")
-              .where("user_id", "=", userId)
-              .where("mutation_token", "=", mutationToken),
-          ),
+      ),
+    db
+      .updateTable("cipher_user_settings")
+      .set({ folder_id: null, updated_at: ts })
+      .where("user_id", "=", userId)
+      .where((eb) =>
+        eb(
+          "folder_id",
+          "in",
+          db
+            .selectFrom("folders")
+            .select("id")
+            .where("user_id", "=", userId)
+            .where("mutation_token", "=", mutationToken),
         ),
-      auditEventInsertQuery(
-        db,
-        {
-          actorUserId: userId,
-          action: "folder.delete.bulk",
-          category: "vault",
-          targetType: "folder",
-          metadata: auditRequestMetadata(c.req.raw),
-        },
-        sql<boolean>`EXISTS (
+      ),
+    auditEventInsertQuery(
+      db,
+      {
+        actorUserId: userId,
+        action: "folder.delete.bulk",
+        category: "vault",
+        targetType: "folder",
+        metadata: auditRequestMetadata(c.req.raw),
+      },
+      sql<boolean>`EXISTS (
 					SELECT 1 FROM folders
 					WHERE user_id = ${userId}
 					  AND mutation_token = ${mutationToken}
 				)`,
-        ts,
-      ),
-      db
-        .deleteFrom("folders")
-        .where("user_id", "=", userId)
-        .where("mutation_token", "=", mutationToken),
-    ]);
-    return new Response(null, { status: 204 });
-  },
+      ts,
+    ),
+    db
+      .deleteFrom("folders")
+      .where("user_id", "=", userId)
+      .where("mutation_token", "=", mutationToken),
+  ]);
+  return new Response(null, { status: 204 });
+}
+
+export const deleteFolders = factory.createHandlers(
+  vValidator("json", BulkIdsSchema),
+  (c) => deleteOwnedFolders(c, c.req.valid("json").ids),
 );
+
+export const deleteAllFolders = factory.createHandlers(async (c) => {
+  const folders = await foldersDb.getFoldersByUserId(
+    c.get("db"),
+    c.get("user").id,
+  );
+  if (!folders.length) return new Response(null, { status: 204 });
+
+  // Keep all cleanup and revision semantics identical to selective bulk deletion.
+  return deleteOwnedFolders(
+    c,
+    folders.map((folder) => folder.id),
+  );
+});

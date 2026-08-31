@@ -12,6 +12,7 @@ export const CipherSchema = v.looseObject({
     v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(1)),
   ),
   key: v.optional(v.nullable(v.string())),
+  encryptedFor: v.optional(v.nullable(v.pipe(v.string(), v.uuid()))),
   // Type-specific data — stored as opaque JSON, validated loosely
   login: v.optional(v.nullable(v.record(v.string(), v.unknown()))),
   card: v.optional(v.nullable(v.record(v.string(), v.unknown()))),
@@ -29,6 +30,70 @@ export const CipherSchema = v.looseObject({
   // optimistic concurrency control so an offline client cannot silently replace
   // a newer edit.
   lastKnownRevisionDate: v.optional(v.pipe(v.string(), v.isoTimestamp())),
+});
+
+// Native clients wrap the re-encrypted cipher when moving a personal item to
+// an organization. Collection assignments live beside the cipher payload.
+export const CipherShareSchema = v.object({
+  cipher: v.looseObject({
+    ...CipherSchema.entries,
+    organizationId: v.pipe(v.string(), v.uuid()),
+  }),
+  collectionIds: v.pipe(v.array(v.pipe(v.string(), v.uuid())), v.minLength(1)),
+});
+
+export const CipherPartialSchema = v.object({
+  folderId: v.optional(v.nullable(v.pipe(v.string(), v.uuid()))),
+  favorite: v.boolean(),
+});
+
+export const CipherCollectionsSchema = v.object({
+  collectionIds: v.array(v.pipe(v.string(), v.uuid())),
+});
+
+export const CipherBulkCollectionsSchema = v.object({
+  organizationId: v.pipe(v.string(), v.uuid()),
+  cipherIds: v.pipe(v.array(v.pipe(v.string(), v.uuid())), v.minLength(1)),
+  collectionIds: v.pipe(v.array(v.pipe(v.string(), v.uuid())), v.minLength(1)),
+  removeCollections: v.optional(v.boolean(), false),
+});
+
+export const CipherBulkShareSchema = v.pipe(
+  v.object({
+    collectionIds: v.pipe(
+      v.array(v.pipe(v.string(), v.uuid())),
+      v.minLength(1),
+    ),
+    ciphers: v.pipe(
+      v.array(
+        v.looseObject({
+          ...CipherSchema.entries,
+          id: v.pipe(v.string(), v.uuid()),
+          organizationId: v.pipe(v.string(), v.uuid()),
+        }),
+      ),
+      v.minLength(1),
+    ),
+  }),
+  v.check(
+    (body) =>
+      new Set(body.ciphers.map((cipher) => cipher.organizationId)).size === 1,
+    "All ciphers must be for the same organization",
+  ),
+  v.check(
+    (body) =>
+      new Set(body.ciphers.map((cipher) => cipher.id)).size ===
+      body.ciphers.length,
+    "Cipher IDs must be unique",
+  ),
+);
+
+export const CipherPurgeSchema = v.object({
+  secret: v.pipe(v.string(), v.minLength(1)),
+});
+
+export const CipherPurgeQuerySchema = v.object({
+  organizationId: v.optional(v.pipe(v.string(), v.uuid())),
 });
 
 export const BulkIdsSchema = v.object({
@@ -71,6 +136,15 @@ export const CipherImportSchema = v.object({
 });
 
 export type CipherInput = v.InferOutput<typeof CipherSchema>;
+export type CipherShareInput = v.InferOutput<typeof CipherShareSchema>;
+export type CipherPartialInput = v.InferOutput<typeof CipherPartialSchema>;
+export type CipherCollectionsInput = v.InferOutput<
+  typeof CipherCollectionsSchema
+>;
+export type CipherBulkCollectionsInput = v.InferOutput<
+  typeof CipherBulkCollectionsSchema
+>;
+export type CipherBulkShareInput = v.InferOutput<typeof CipherBulkShareSchema>;
 export type BulkIdsInput = v.InferOutput<typeof BulkIdsSchema>;
 export type MoveCiphersInput = v.InferOutput<typeof MoveCiphersSchema>;
 export type CipherImportInput = v.InferOutput<typeof CipherImportSchema>;

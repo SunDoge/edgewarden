@@ -16,12 +16,19 @@ import {
   importCiphers,
   listCiphers,
   moveCiphers,
+  purgeCiphers,
   putDeleteCipher,
   restoreCipher,
   restoreCiphers,
+  shareCipher,
+  shareCiphers,
   unarchiveCipher,
   unarchiveCiphers,
   updateCipher,
+  updateCipherCollections,
+  updateCipherCollectionsBulk,
+  updateCipherCollectionsV2,
+  updateCipherPartial,
 } from "../../handlers/ciphers";
 import { requireCipher, requireCipherWrite } from "../../middleware/resources";
 
@@ -42,9 +49,51 @@ export const cipherRoutes = new Hono<HonoEnv>()
   .post("/api/ciphers/archive", ...archiveCiphers)
   .put("/api/ciphers/unarchive", ...unarchiveCiphers)
   .post("/api/ciphers/unarchive", ...unarchiveCiphers)
+  .post("/api/ciphers/bulk-collections", ...updateCipherCollectionsBulk)
+  .put("/api/ciphers/share", ...shareCiphers)
+  .post("/api/ciphers/share", ...shareCiphers)
+  .post("/api/ciphers/purge", ...purgeCiphers)
   .get("/api/ciphers/:id", requireCipher, ...getCipher)
   .put("/api/ciphers/:id", requireCipher, requireCipherWrite, ...updateCipher)
   .post("/api/ciphers/:id", requireCipher, requireCipherWrite, ...updateCipher)
+  .put("/api/ciphers/:id/partial", requireCipher, ...updateCipherPartial)
+  .post("/api/ciphers/:id/partial", requireCipher, ...updateCipherPartial)
+  .put(
+    "/api/ciphers/:id/share",
+    requireCipher,
+    requireCipherWrite,
+    ...shareCipher,
+  )
+  .post(
+    "/api/ciphers/:id/share",
+    requireCipher,
+    requireCipherWrite,
+    ...shareCipher,
+  )
+  .put(
+    "/api/ciphers/:id/collections",
+    requireCipher,
+    requireCipherWrite,
+    ...updateCipherCollections,
+  )
+  .post(
+    "/api/ciphers/:id/collections",
+    requireCipher,
+    requireCipherWrite,
+    ...updateCipherCollections,
+  )
+  .put(
+    "/api/ciphers/:id/collections_v2",
+    requireCipher,
+    requireCipherWrite,
+    ...updateCipherCollectionsV2,
+  )
+  .post(
+    "/api/ciphers/:id/collections_v2",
+    requireCipher,
+    requireCipherWrite,
+    ...updateCipherCollectionsV2,
+  )
   .delete(
     "/api/ciphers/:id",
     requireCipher,

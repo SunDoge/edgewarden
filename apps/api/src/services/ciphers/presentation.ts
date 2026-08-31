@@ -44,6 +44,7 @@ const SERVER_MANAGED_CIPHER_FIELDS = new Set([
   "permissions",
   "organizationUseTotp",
   "lastKnownRevisionDate",
+  "encryptedFor",
 ]);
 const CipherDataStorageSchema = v.record(v.string(), v.unknown());
 const CipherFieldsStorageSchema = v.array(v.unknown());

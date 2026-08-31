@@ -12,8 +12,10 @@ import {
 import {
   changePassword,
   getApiKey,
+  getKeys,
   getProfile,
   getRevisionDate,
+  listAccountOrganizations,
   requestPasswordHint,
   rotateApiKey,
   setKeys,
@@ -73,13 +75,17 @@ import {
 import { getDomains, updateDomains } from "../handlers/domains";
 import {
   createFolder,
+  deleteAllFolders,
   deleteFolder,
   deleteFolders,
   getFolder,
   listFolders,
   updateFolder,
 } from "../handlers/folders";
-import { listUserCollections } from "../handlers/organizations";
+import {
+  getUserPublicKey,
+  listUserCollections,
+} from "../handlers/organizations";
 import { createRealtimeConnectionTicket } from "../handlers/realtime";
 import {
   createFileSend,
@@ -138,9 +144,12 @@ import {
 } from "./vault/organizations";
 
 const accountRoutes = new Hono<HonoEnv>()
+  .get("/api/accounts/organizations", ...listAccountOrganizations)
+  .get("/api/users/:userId/public-key", ...getUserPublicKey)
   .get("/api/accounts/profile", ...getProfile)
   .put("/api/accounts/profile", ...updateProfile)
   .post("/api/accounts/profile", ...updateProfile)
+  .get("/api/accounts/keys", ...getKeys)
   .post("/api/accounts/keys", ...setKeys)
   .post("/api/accounts/password", ...changePassword)
   .post("/api/accounts/verify-password", ...verifyAccountPassword)
@@ -187,6 +196,8 @@ const yubikeyCompatibilityRoutes = new Hono<HonoEnv>()
 const folderAndDeviceRoutes = new Hono<HonoEnv>()
   .get("/api/folders", ...listFolders)
   .post("/api/folders", ...createFolder)
+  .delete("/api/folders", ...deleteFolders)
+  .delete("/api/folders/all", ...deleteAllFolders)
   .post("/api/folders/delete", ...deleteFolders)
   .get("/api/folders/:id", requireFolder, ...getFolder)
   .put("/api/folders/:id", requireFolder, ...updateFolder)

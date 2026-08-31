@@ -1,17 +1,7 @@
 import { vValidator } from "@hono/valibot-validator";
-import { sql } from "kysely";
-import { LIMITS } from "../../config";
 import { factory } from "../../http/factory";
 import { CipherSchema } from "../../schemas/ciphers";
 import {
-  auditEventInsertQuery,
-  auditRequestMetadata,
-} from "../../services/audit";
-import {
-  conditionalCipherRevisionQuery,
-  getCipherCollectionIds,
-  getCipherPermissions,
-  organizationCipherViewStateQuery,
   revisionQueriesForCipher,
   validateOrganizationCollections,
 } from "../../services/ciphers/access";
@@ -19,7 +9,6 @@ import {
   buildCipherData,
   cipherToResponse,
 } from "../../services/ciphers/presentation";
-import * as attachmentsDb from "../../services/db/attachments";
 import { executeBatch } from "../../services/db/batch";
 import * as ciphersDb from "../../services/db/ciphers";
 import * as foldersDb from "../../services/db/folders";
@@ -98,13 +87,15 @@ export const createCipher = factory.createHandlers(
             }),
           ]
         : []),
-      ...collectionIds.map((collectionId) =>
-        db.insertInto("cipher_collections").values({
-          cipher_id: id,
-          collection_id: collectionId,
-          org_id: organizationId!,
-        }),
-      ),
+      ...(organizationId
+        ? collectionIds.map((collectionId) =>
+            db.insertInto("cipher_collections").values({
+              cipher_id: id,
+              collection_id: collectionId,
+              org_id: organizationId,
+            }),
+          )
+        : []),
       ...(await revisionQueriesForCipher(db, owner, ts)),
     ]);
 

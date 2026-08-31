@@ -844,6 +844,10 @@ export function registerAdminOrganizationScenarios(
       .bind(MEMBER_EMAIL)
       .first<{ id: string }>();
     assert.ok(owner?.id && restrictedUser?.id);
+    await context.database
+      .prepare("UPDATE users SET public_key = ? WHERE id = ?")
+      .bind("member-public-key", restrictedUser.id)
+      .run();
     const timestamp = Math.floor(Date.now() / 1000);
     const orgId = crypto.randomUUID();
     const ownerMemberId = crypto.randomUUID();
@@ -929,6 +933,35 @@ export function registerAdminOrganizationScenarios(
           timestamp,
         ),
     ]);
+    const accountOrganizations = await request("/api/accounts/organizations", {
+      headers: { authorization: `Bearer ${context.accessToken}` },
+    });
+    assert.equal(
+      accountOrganizations.status,
+      200,
+      await accountOrganizations.clone().text(),
+    );
+    assert.ok(
+      (
+        await accountOrganizations.json<{ data: Array<{ id: string }> }>()
+      ).data.some((organization) => organization.id === orgId),
+    );
+    assert.deepEqual(
+      await request(`/api/organizations/${orgId}/public-key`, {
+        headers: { authorization: `Bearer ${context.accessToken}` },
+      }).then((response) => response.json()),
+      { publicKey: "public", object: "organizationPublicKey" },
+    );
+    assert.deepEqual(
+      await request(`/api/users/${restrictedUser.id}/public-key`, {
+        headers: { authorization: `Bearer ${context.accessToken}` },
+      }).then((response) => response.json()),
+      {
+        userId: restrictedUser.id,
+        publicKey: "member-public-key",
+        object: "userKey",
+      },
+    );
     const restrictedCollections = await request("/api/collections", {
       headers: { authorization: `Bearer ${context.memberAccessToken}` },
     });
@@ -995,15 +1028,38 @@ export function registerAdminOrganizationScenarios(
     });
     assert.equal(personalCipherResponse.status, 200);
     const personalCipher = await personalCipherResponse.json<{ id: string }>();
-    const sharedCipherResponse = await request(
-      `/api/ciphers/${personalCipher.id}`,
+    const partialResponse = await request(
+      `/api/ciphers/${personalCipher.id}/partial`,
       {
         method: "PUT",
         headers: {
           authorization: `Bearer ${context.accessToken}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ folderId: null, favorite: true }),
+      },
+    );
+    assert.equal(
+      partialResponse.status,
+      200,
+      await partialResponse.clone().text(),
+    );
+    assert.equal(
+      (await partialResponse.json<{ favorite: boolean }>()).favorite,
+      true,
+    );
+    const sharedCipherResponse = await request(
+      `/api/ciphers/${personalCipher.id}/share`,
+      {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${context.accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          cipher: payload,
+          collectionIds: payload.collectionIds,
+        }),
       },
     );
     assert.equal(
@@ -1017,6 +1073,60 @@ export function registerAdminOrganizationScenarios(
         .bind(personalCipher.id)
         .first(),
       { user_id: null, org_id: orgId },
+    );
+    const readOnlyMemberPartial = await request(
+      `/api/ciphers/${personalCipher.id}/partial`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${context.memberAccessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ folderId: null, favorite: true }),
+      },
+    );
+    assert.equal(
+      readOnlyMemberPartial.status,
+      200,
+      await readOnlyMemberPartial.clone().text(),
+    );
+    const clearCollections = await request(
+      `/api/ciphers/${personalCipher.id}/collections_v2`,
+      {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${context.accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ collectionIds: [] }),
+      },
+    );
+    assert.equal(
+      clearCollections.status,
+      200,
+      await clearCollections.clone().text(),
+    );
+    assert.deepEqual(
+      (
+        await clearCollections.json<{
+          unavailable: boolean;
+          cipher: { collectionIds: string[] };
+        }>()
+      ).cipher.collectionIds,
+      [],
+    );
+    assert.equal(
+      (
+        await request(`/api/ciphers/${personalCipher.id}/collections`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${context.accessToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ collectionIds: [collectionId] }),
+        })
+      ).status,
+      200,
     );
     const crossOrganizationWrite = await request("/api/ciphers", {
       method: "POST",
@@ -1047,6 +1157,98 @@ export function registerAdminOrganizationScenarios(
     }>();
     assert.equal(cipher.organizationId, orgId);
     assert.deepEqual(cipher.collectionIds, [collectionId]);
+    assert.equal(
+      (
+        await request("/api/ciphers/bulk-collections", {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${context.accessToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            organizationId: orgId,
+            cipherIds: [cipher.id],
+            collectionIds: [collectionId],
+            removeCollections: true,
+          }),
+        })
+      ).status,
+      200,
+    );
+    const bulkShareInputs: Array<Record<string, unknown> & { id: string }> = [];
+    for (const name of ["bulk-share-one", "bulk-share-two"]) {
+      const response = await request("/api/ciphers", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${context.accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          ...payload,
+          name,
+          organizationId: null,
+          collectionIds: [],
+        }),
+      });
+      assert.equal(response.status, 200, await response.clone().text());
+      const created = await response.json<{ id: string }>();
+      bulkShareInputs.push({ ...payload, id: created.id, name });
+    }
+    const bulkShare = await request("/api/ciphers/share", {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${context.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        collectionIds: [collectionId],
+        ciphers: bulkShareInputs,
+      }),
+    });
+    assert.equal(bulkShare.status, 200, await bulkShare.clone().text());
+    assert.equal(
+      (await bulkShare.json<{ data: Array<{ organizationId: string }> }>()).data
+        .length,
+      2,
+    );
+    assert.equal(
+      await context.database
+        .prepare(
+          "SELECT COUNT(*) AS count FROM ciphers WHERE org_id = ? AND id IN (?, ?)",
+        )
+        .bind(orgId, bulkShareInputs[0].id, bulkShareInputs[1].id)
+        .first<{ count: number }>()
+        .then((row) => Number(row?.count)),
+      2,
+    );
+    assert.equal(
+      await context.database
+        .prepare(
+          "SELECT COUNT(*) AS count FROM cipher_collections WHERE cipher_id = ?",
+        )
+        .bind(cipher.id)
+        .first<{ count: number }>()
+        .then((row) => Number(row?.count)),
+      0,
+    );
+    assert.equal(
+      (
+        await request("/api/ciphers/bulk-collections", {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${context.accessToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            organizationId: orgId,
+            cipherIds: [cipher.id],
+            collectionIds: [collectionId],
+            removeCollections: false,
+          }),
+        })
+      ).status,
+      200,
+    );
     const stored = await context.database
       .prepare("SELECT user_id, org_id, folder_id FROM ciphers WHERE id = ?")
       .bind(cipher.id)
@@ -1570,5 +1772,75 @@ export function registerAdminOrganizationScenarios(
       ).status,
       404,
     );
+  }, 15_000);
+
+  test("purges the personal vault only after secret verification", async () => {
+    const owner = await context.database
+      .prepare("SELECT id FROM users WHERE email = ?")
+      .bind(EMAIL)
+      .first<{ id: string }>();
+    assert.ok(owner?.id);
+    const rows = await context.database
+      .prepare(
+        "SELECT id, deleted_at, purge_after, updated_at FROM ciphers WHERE user_id = ?",
+      )
+      .bind(owner.id)
+      .all<{
+        id: string;
+        deleted_at: number | null;
+        purge_after: number | null;
+        updated_at: number;
+      }>();
+    const revision = await context.database
+      .prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+      .bind(owner.id)
+      .first<{ revision_date: number }>();
+    assert.ok(rows.results.length > 0 && revision);
+    assert.equal(
+      (
+        await request("/api/ciphers/purge", {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${context.accessToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ secret: "wrong" }),
+        })
+      ).status,
+      400,
+    );
+    const purged = await request("/api/ciphers/purge", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${context.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ secret: MASTER_PASSWORD_HASH }),
+    });
+    assert.equal(purged.status, 200, await purged.clone().text());
+    assert.equal(
+      await context.database
+        .prepare(
+          "SELECT COUNT(*) AS count FROM ciphers WHERE user_id = ? AND purge_after IS NULL",
+        )
+        .bind(owner.id)
+        .first<{ count: number }>()
+        .then((row) => Number(row?.count)),
+      0,
+    );
+    await context.database.batch([
+      ...rows.results.map((row) =>
+        context.database
+          .prepare(
+            "UPDATE ciphers SET deleted_at = ?, purge_after = ?, updated_at = ? WHERE id = ?",
+          )
+          .bind(row.deleted_at, row.purge_after, row.updated_at, row.id),
+      ),
+      context.database
+        .prepare(
+          "UPDATE user_revisions SET revision_date = ? WHERE user_id = ?",
+        )
+        .bind(revision.revision_date, owner.id),
+    ]);
   });
 }

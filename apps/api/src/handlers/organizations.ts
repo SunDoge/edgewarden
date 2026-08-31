@@ -1,5 +1,6 @@
 import { vValidator } from "@hono/valibot-validator";
 import { sql } from "kysely";
+import * as v from "valibot";
 import { factory } from "../http/factory";
 import {
   CreateOrganizationSchema,
@@ -57,6 +58,45 @@ function organizationResponse(
     userId,
   );
 }
+
+export const getOrganizationPublicKey = factory.createHandlers(
+  vValidator("param", v.object({ orgId: v.pipe(v.string(), v.uuid()) })),
+  async (c) => {
+    const organization = await c
+      .get("db")
+      .selectFrom("organizations")
+      .select("public_key")
+      .where("id", "=", c.req.valid("param").orgId)
+      .where("deletion_requested_at", "is", null)
+      .executeTakeFirst();
+    if (!organization?.public_key)
+      return errorResponse("Organization public key not found", 404);
+    return c.json({
+      publicKey: organization.public_key,
+      object: "organizationPublicKey",
+    });
+  },
+);
+
+export const getUserPublicKey = factory.createHandlers(
+  vValidator("param", v.object({ userId: v.pipe(v.string(), v.uuid()) })),
+  async (c) => {
+    const user = await c
+      .get("db")
+      .selectFrom("users")
+      .select(["id", "public_key"])
+      .where("id", "=", c.req.valid("param").userId)
+      .where("status", "=", "active")
+      .executeTakeFirst();
+    if (!user?.public_key)
+      return errorResponse("User public key not found", 404);
+    return c.json({
+      userId: user.id,
+      publicKey: user.public_key,
+      object: "userKey",
+    });
+  },
+);
 
 export const listOrganizations = factory.createHandlers(async (c) => {
   const rows = await c
