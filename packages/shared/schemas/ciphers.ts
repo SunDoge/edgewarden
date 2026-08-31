@@ -1,5 +1,22 @@
 import * as v from "valibot";
 
+const APPLE_REFERENCE_DATE_SECONDS = 978_307_200;
+const LastKnownRevisionDateSchema = v.optional(
+  v.pipe(
+    v.union([
+      v.pipe(v.string(), v.isoTimestamp()),
+      v.pipe(v.number(), v.finite()),
+    ]),
+    // Swift's default Date encoding is seconds since 2001-01-01; Android and
+    // web clients send ISO timestamps. Normalize before concurrency checks.
+    v.transform((value) =>
+      typeof value === "number"
+        ? new Date((value + APPLE_REFERENCE_DATE_SECONDS) * 1_000).toISOString()
+        : value,
+    ),
+  ),
+);
+
 export const CipherSchema = v.looseObject({
   type: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(8)),
   name: v.pipe(v.string(), v.minLength(1)),
@@ -29,18 +46,38 @@ export const CipherSchema = v.looseObject({
   // Official clients send the revision they last observed. The API uses it for
   // optimistic concurrency control so an offline client cannot silently replace
   // a newer edit.
-  lastKnownRevisionDate: v.optional(v.pipe(v.string(), v.isoTimestamp())),
+  lastKnownRevisionDate: LastKnownRevisionDateSchema,
 });
 
-// Native clients wrap the re-encrypted cipher when moving a personal item to
-// an organization. Collection assignments live beside the cipher payload.
-export const CipherShareSchema = v.object({
-  cipher: v.looseObject({
-    ...CipherSchema.entries,
-    organizationId: v.pipe(v.string(), v.uuid()),
-  }),
-  collectionIds: v.pipe(v.array(v.pipe(v.string(), v.uuid())), v.minLength(1)),
+const CipherForOrganizationSchema = v.looseObject({
+  ...CipherSchema.entries,
+  organizationId: v.pipe(v.string(), v.uuid()),
 });
+const CollectionIdsSchema = v.pipe(
+  v.array(v.pipe(v.string(), v.uuid())),
+  v.minLength(1),
+);
+
+// Android serializes these wrapper properties in PascalCase while web/CLI use
+// camelCase. ASP.NET accepts both casing variants, so normalize them here and
+// keep the rest of the application on one typed representation.
+export const CipherShareSchema = v.pipe(
+  v.union([
+    v.object({
+      cipher: CipherForOrganizationSchema,
+      collectionIds: CollectionIdsSchema,
+    }),
+    v.object({
+      Cipher: CipherForOrganizationSchema,
+      CollectionIds: CollectionIdsSchema,
+    }),
+  ]),
+  v.transform((body) =>
+    "cipher" in body
+      ? body
+      : { cipher: body.Cipher, collectionIds: body.CollectionIds },
+  ),
+);
 
 export const CipherPartialSchema = v.object({
   folderId: v.optional(v.nullable(v.pipe(v.string(), v.uuid()))),
@@ -58,23 +95,33 @@ export const CipherBulkCollectionsSchema = v.object({
   removeCollections: v.optional(v.boolean(), false),
 });
 
+const CiphersForOrganizationSchema = v.pipe(
+  v.array(
+    v.looseObject({
+      ...CipherSchema.entries,
+      id: v.pipe(v.string(), v.uuid()),
+      organizationId: v.pipe(v.string(), v.uuid()),
+    }),
+  ),
+  v.minLength(1),
+);
+
 export const CipherBulkShareSchema = v.pipe(
-  v.object({
-    collectionIds: v.pipe(
-      v.array(v.pipe(v.string(), v.uuid())),
-      v.minLength(1),
-    ),
-    ciphers: v.pipe(
-      v.array(
-        v.looseObject({
-          ...CipherSchema.entries,
-          id: v.pipe(v.string(), v.uuid()),
-          organizationId: v.pipe(v.string(), v.uuid()),
-        }),
-      ),
-      v.minLength(1),
-    ),
-  }),
+  v.union([
+    v.object({
+      collectionIds: CollectionIdsSchema,
+      ciphers: CiphersForOrganizationSchema,
+    }),
+    v.object({
+      CollectionIds: CollectionIdsSchema,
+      Ciphers: CiphersForOrganizationSchema,
+    }),
+  ]),
+  v.transform((body) =>
+    "ciphers" in body
+      ? body
+      : { ciphers: body.Ciphers, collectionIds: body.CollectionIds },
+  ),
   v.check(
     (body) =>
       new Set(body.ciphers.map((cipher) => cipher.organizationId)).size === 1,

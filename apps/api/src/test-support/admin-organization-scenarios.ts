@@ -1044,10 +1044,11 @@ export function registerAdminOrganizationScenarios(
       200,
       await partialResponse.clone().text(),
     );
-    assert.equal(
-      (await partialResponse.json<{ favorite: boolean }>()).favorite,
-      true,
-    );
+    const partialCipher = await partialResponse.json<{
+      favorite: boolean;
+      revisionDate: string;
+    }>();
+    assert.equal(partialCipher.favorite, true);
     const sharedCipherResponse = await request(
       `/api/ciphers/${personalCipher.id}/share`,
       {
@@ -1057,8 +1058,14 @@ export function registerAdminOrganizationScenarios(
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          cipher: payload,
-          collectionIds: payload.collectionIds,
+          // Android uses PascalCase for the wrapper. iOS uses the same numeric
+          // Date representation exercised here for lastKnownRevisionDate.
+          Cipher: {
+            ...payload,
+            lastKnownRevisionDate:
+              Date.parse(partialCipher.revisionDate) / 1_000 - 978_307_200,
+          },
+          CollectionIds: payload.collectionIds,
         }),
       },
     );
