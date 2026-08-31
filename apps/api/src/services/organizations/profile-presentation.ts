@@ -93,22 +93,21 @@ export function profileOrganizationToResponse(
     familySponsorshipValidUntil: null,
     familySponsorshipToDelete: null,
     isAdminInitiated: false,
-    permissions: customManager
-      ? {
-          accessEventLogs: false,
-          accessImportExport: false,
-          accessReports: false,
-          createNewCollections: Boolean(row.access_all),
-          editAnyCollection: Boolean(row.access_all),
-          deleteAnyCollection: Boolean(row.access_all),
-          manageGroups: false,
-          managePolicies: false,
-          manageSso: false,
-          manageUsers: false,
-          manageResetPassword: false,
-          manageScim: false,
-        }
-      : null,
+    permissions: {
+      accessEventLogs: false,
+      accessImportExport: false,
+      accessReports: false,
+      createNewCollections: customManager && Boolean(row.access_all),
+      editAnyCollection: customManager && Boolean(row.access_all),
+      deleteAnyCollection: customManager && Boolean(row.access_all),
+      manageGroups: false,
+      managePolicies: false,
+      manageSso: false,
+      manageUsers: false,
+      manageResetPassword: false,
+      manageScim: false,
+      manageAccessRules: false,
+    },
     object: "profileOrganization",
   };
 }

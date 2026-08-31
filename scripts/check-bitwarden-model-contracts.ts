@@ -123,23 +123,21 @@ if (!existsSync(resolve(serverDirectory, "src"))) {
 }
 
 const models = readModels(serverDirectory);
-checkModel(
-  models,
-  "ProfileOrganizationResponseModel",
-  profileOrganizationToResponse(
-    {
-      member_id: "member-id",
-      org_id: "org-id",
-      key: "2.key",
-      role: "owner",
-      access_all: 1,
-      name: "Organization",
-      public_key: null,
-      private_key: null,
-    },
-    "user-id",
-  ),
+const profileOrganization = profileOrganizationToResponse(
+  {
+    member_id: "member-id",
+    org_id: "org-id",
+    key: "2.key",
+    role: "owner",
+    access_all: 1,
+    name: "Organization",
+    public_key: null,
+    private_key: null,
+  },
+  "user-id",
 );
+checkModel(models, "ProfileOrganizationResponseModel", profileOrganization);
+checkModel(models, "Permissions", profileOrganization.permissions);
 const organizationAdmin = organizationAdminToResponse({
   id: "org-id",
   name: "Organization",
