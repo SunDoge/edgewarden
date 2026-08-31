@@ -1,5 +1,6 @@
 export * from "./schemas/accounts.ts";
 export * from "./schemas/ciphers.ts";
+export * from "./schemas/dates.ts";
 export * from "./schemas/folders.ts";
 export * from "./schemas/two-factor.ts";
 export * from "./schemas/admin.ts";

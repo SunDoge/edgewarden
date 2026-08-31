@@ -107,7 +107,7 @@ export const createFileSend = factory.createHandlers(
       password_iterations: null,
       password_algorithm: null,
       auth_type: authType,
-      emails: serializeSendEmails(body.emails),
+      emails: serializeSendEmails(body.emails ?? body.Emails),
       max_access_count: maxAccess,
       access_count: 0,
       disabled,

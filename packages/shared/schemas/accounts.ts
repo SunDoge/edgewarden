@@ -37,14 +37,41 @@ export const UpdateProfileSchema = v.object({
   masterPasswordHint: v.optional(v.nullable(v.string())),
 });
 
-export const SetKeysSchema = v.object({
-  publicKey: v.pipe(v.string(), v.minLength(1)),
-  encryptedPrivateKey: v.pipe(v.string(), v.minLength(1)),
-});
+const PublicKeySchema = v.pipe(v.string(), v.minLength(1));
+const EncryptedPrivateKeySchema = v.pipe(v.string(), v.minLength(1));
+export const SetKeysSchema = v.pipe(
+  v.union([
+    v.object({
+      publicKey: PublicKeySchema,
+      encryptedPrivateKey: EncryptedPrivateKeySchema,
+    }),
+    v.object({
+      PublicKey: PublicKeySchema,
+      EncryptedPrivateKey: EncryptedPrivateKeySchema,
+    }),
+  ]),
+  v.transform((body) =>
+    "publicKey" in body
+      ? body
+      : {
+          publicKey: body.PublicKey,
+          encryptedPrivateKey: body.EncryptedPrivateKey,
+        },
+  ),
+);
 
-export const VerifyPasswordSchema = v.object({
-  masterPasswordHash: v.pipe(v.string(), v.minLength(1)),
-});
+const MasterPasswordHashSchema = v.pipe(v.string(), v.minLength(1));
+export const VerifyPasswordSchema = v.pipe(
+  v.union([
+    v.object({ masterPasswordHash: MasterPasswordHashSchema }),
+    v.object({ MasterPasswordHash: MasterPasswordHashSchema }),
+  ]),
+  v.transform((body) =>
+    "masterPasswordHash" in body
+      ? body
+      : { masterPasswordHash: body.MasterPasswordHash },
+  ),
+);
 
 export type RegisterInput = v.InferOutput<typeof RegisterSchema>;
 export type ChangePasswordInput = v.InferOutput<typeof ChangePasswordSchema>;

@@ -4,6 +4,7 @@ import type { Context } from "hono";
 import { sql } from "kysely";
 import type { HonoEnv } from "../../env";
 import { factory } from "../../http/factory";
+import { redactedValidationHook } from "../../middleware/validation";
 import { CipherSchema, CipherShareSchema } from "../../schemas/ciphers";
 import {
   conditionalCipherRevisionQuery,
@@ -217,13 +218,13 @@ const updateCipherFromBody = async (c: Context<HonoEnv>, body: CipherInput) => {
 };
 
 export const updateCipher = factory.createHandlers(
-  vValidator("json", CipherSchema),
+  vValidator("json", CipherSchema, redactedValidationHook),
   async (c) => updateCipherFromBody(c, c.req.valid("json")),
 );
 
 // PUT /api/ciphers/:id/share
 export const shareCipher = factory.createHandlers(
-  vValidator("json", CipherShareSchema),
+  vValidator("json", CipherShareSchema, redactedValidationHook),
   async (c) => {
     if (c.get("cipher").org_id !== null)
       return errorResponse("Cipher is already owned by an organization", 400);

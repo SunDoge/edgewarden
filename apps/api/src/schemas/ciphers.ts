@@ -7,6 +7,7 @@ export {
   CipherBulkShareSchema,
   type CipherCollectionsInput,
   CipherCollectionsSchema,
+  CipherCreateSchema,
   type CipherImportInput,
   CipherImportSchema,
   type CipherInput,

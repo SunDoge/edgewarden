@@ -1,28 +1,18 @@
 import * as v from "valibot";
+import { NativeDateSchema } from "./dates";
 
-const APPLE_REFERENCE_DATE_SECONDS = 978_307_200;
 const LastKnownRevisionDateSchema = v.optional(
-  v.pipe(
-    v.union([
-      v.pipe(v.string(), v.isoTimestamp()),
-      v.pipe(v.number(), v.finite()),
-    ]),
-    // Swift's default Date encoding is seconds since 2001-01-01; Android and
-    // web clients send ISO timestamps. Normalize before concurrency checks.
-    v.transform((value) =>
-      typeof value === "number"
-        ? new Date((value + APPLE_REFERENCE_DATE_SECONDS) * 1_000).toISOString()
-        : value,
-    ),
-  ),
+  // Normalize native-client dates before optimistic concurrency checks.
+  NativeDateSchema,
 );
 
-export const CipherSchema = v.looseObject({
+const CipherEntries = {
   type: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(8)),
   name: v.pipe(v.string(), v.minLength(1)),
   notes: v.optional(v.nullable(v.string())),
   folderId: v.optional(v.nullable(v.string())),
   organizationId: v.optional(v.nullable(v.string())),
+  organizationID: v.optional(v.nullable(v.string())),
   collectionIds: v.optional(v.array(v.pipe(v.string(), v.minLength(1))), []),
   favorite: v.optional(v.boolean()),
   reprompt: v.optional(
@@ -47,12 +37,49 @@ export const CipherSchema = v.looseObject({
   // optimistic concurrency control so an offline client cannot silently replace
   // a newer edit.
   lastKnownRevisionDate: LastKnownRevisionDateSchema,
-});
+};
 
-const CipherForOrganizationSchema = v.looseObject({
-  ...CipherSchema.entries,
-  organizationId: v.pipe(v.string(), v.uuid()),
-});
+export const CipherSchema = v.pipe(
+  v.looseObject(CipherEntries),
+  v.transform((cipher) => {
+    const { organizationID, ...rest } = cipher;
+    return {
+      ...rest,
+      organizationId:
+        rest.organizationId !== undefined
+          ? rest.organizationId
+          : (organizationID ?? undefined),
+    };
+  }),
+);
+
+const OrganizationIdSchema = v.pipe(v.string(), v.uuid());
+const CipherForOrganizationSchema = v.pipe(
+  v.union([
+    v.looseObject({
+      ...CipherEntries,
+      organizationId: OrganizationIdSchema,
+    }),
+    v.looseObject({
+      ...CipherEntries,
+      organizationID: OrganizationIdSchema,
+    }),
+  ]),
+  // Swift preserves the `ID` acronym in its synthesized JSON key. ASP.NET's
+  // case-insensitive binder treats it as OrganizationId; Valibot does not.
+  v.transform((cipher) => {
+    const { organizationID, ...rest } = cipher;
+    return {
+      ...rest,
+      organizationId:
+        typeof cipher.organizationId === "string"
+          ? cipher.organizationId
+          : typeof organizationID === "string"
+            ? organizationID
+            : "",
+    };
+  }),
+);
 const CollectionIdsSchema = v.pipe(
   v.array(v.pipe(v.string(), v.uuid())),
   v.minLength(1),
@@ -79,14 +106,24 @@ export const CipherShareSchema = v.pipe(
   ),
 );
 
+// `/ciphers/create` is wrapped by native clients but older clients send the
+// cipher directly. Both forms are part of the deployed Bitwarden contract.
+export const CipherCreateSchema = v.union([CipherShareSchema, CipherSchema]);
+
 export const CipherPartialSchema = v.object({
   folderId: v.optional(v.nullable(v.pipe(v.string(), v.uuid()))),
   favorite: v.boolean(),
 });
 
-export const CipherCollectionsSchema = v.object({
-  collectionIds: v.array(v.pipe(v.string(), v.uuid())),
-});
+export const CipherCollectionsSchema = v.pipe(
+  v.union([
+    v.object({ collectionIds: v.array(v.pipe(v.string(), v.uuid())) }),
+    v.object({ CollectionIds: v.array(v.pipe(v.string(), v.uuid())) }),
+  ]),
+  v.transform((body) =>
+    "collectionIds" in body ? body : { collectionIds: body.CollectionIds },
+  ),
+);
 
 export const CipherBulkCollectionsSchema = v.object({
   organizationId: v.pipe(v.string(), v.uuid()),
@@ -97,11 +134,32 @@ export const CipherBulkCollectionsSchema = v.object({
 
 const CiphersForOrganizationSchema = v.pipe(
   v.array(
-    v.looseObject({
-      ...CipherSchema.entries,
-      id: v.pipe(v.string(), v.uuid()),
-      organizationId: v.pipe(v.string(), v.uuid()),
-    }),
+    v.pipe(
+      v.union([
+        v.looseObject({
+          ...CipherEntries,
+          id: v.pipe(v.string(), v.uuid()),
+          organizationId: OrganizationIdSchema,
+        }),
+        v.looseObject({
+          ...CipherEntries,
+          id: v.pipe(v.string(), v.uuid()),
+          organizationID: OrganizationIdSchema,
+        }),
+      ]),
+      v.transform((cipher) => {
+        const { organizationID, ...rest } = cipher;
+        return {
+          ...rest,
+          organizationId:
+            typeof cipher.organizationId === "string"
+              ? cipher.organizationId
+              : typeof organizationID === "string"
+                ? organizationID
+                : "",
+        };
+      }),
+    ),
   ),
   v.minLength(1),
 );
@@ -164,10 +222,23 @@ export const CipherImportSchema = v.object({
   ),
   ciphers: v.optional(
     v.array(
-      v.looseObject({
-        ...CipherSchema.entries,
-        id: v.optional(v.nullable(v.string())),
-      }),
+      v.pipe(
+        v.looseObject({
+          ...CipherEntries,
+          id: v.optional(v.nullable(v.string())),
+        }),
+        // Imports use the same native cipher model as ordinary writes.
+        v.transform((cipher) => {
+          const { organizationID, ...rest } = cipher;
+          return {
+            ...rest,
+            organizationId:
+              rest.organizationId !== undefined
+                ? rest.organizationId
+                : (organizationID ?? undefined),
+          };
+        }),
+      ),
     ),
     [],
   ),

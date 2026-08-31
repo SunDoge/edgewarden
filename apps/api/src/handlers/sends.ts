@@ -98,7 +98,7 @@ export const createTextSend = factory.createHandlers(
       password_iterations: null,
       password_algorithm: null,
       auth_type: authType,
-      emails: serializeSendEmails(body.emails),
+      emails: serializeSendEmails(body.emails ?? body.Emails),
       max_access_count: maxAccess,
       access_count: 0,
       disabled,
@@ -215,8 +215,8 @@ export const updateSend = factory.createHandlers(
     if (notes !== undefined) updateData.notes = notes;
     if (authType !== null && authType !== undefined)
       updateData.auth_type = authType;
-    if (body.emails !== undefined) {
-      updateData.emails = serializeSendEmails(body.emails);
+    if (body.emails !== undefined || body.Emails !== undefined) {
+      updateData.emails = serializeSendEmails(body.emails ?? body.Emails);
     }
     if (textData !== undefined) {
       if (send.type !== 0)

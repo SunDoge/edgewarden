@@ -2,6 +2,7 @@ import type { CipherBulkShareInput } from "@edgewarden/shared";
 import { vValidator } from "@hono/valibot-validator";
 import { sql } from "kysely";
 import { factory } from "../../http/factory";
+import { redactedValidationHook } from "../../middleware/validation";
 import { CipherBulkShareSchema } from "../../schemas/ciphers";
 import {
   bulkCipherMutationClaimQuery,
@@ -16,7 +17,7 @@ import { now } from "../../utils/time";
 import { loadCipherResponse } from "./response";
 
 export const shareCiphers = factory.createHandlers(
-  vValidator("json", CipherBulkShareSchema),
+  vValidator("json", CipherBulkShareSchema, redactedValidationHook),
   async (c) => {
     const body: CipherBulkShareInput = c.req.valid("json");
     const firstRequest = body.ciphers.at(0);

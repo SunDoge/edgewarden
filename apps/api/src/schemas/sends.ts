@@ -1,17 +1,33 @@
+import { NativeDateSchema } from "@edgewarden/shared";
 import * as v from "valibot";
 
 const sendType = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(1));
 const authType = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2));
 const count = v.pipe(v.number(), v.integer(), v.minValue(0));
 const encryptedString = v.pipe(v.string(), v.trim(), v.minLength(1));
-const dateString = v.pipe(v.string(), v.isoTimestamp());
 const deletionDateString = v.pipe(
-  dateString,
+  NativeDateSchema,
   v.check((value) => {
     const deletionTime = new Date(value).getTime();
     const remaining = deletionTime - Date.now();
     return remaining > 0 && remaining <= 30 * 24 * 60 * 60 * 1000;
   }, "Send deletionDate must be in the future and no more than 30 days away"),
+);
+const emailAddress = v.pipe(v.string(), v.email());
+const sendEmails = v.pipe(
+  v.union([v.pipe(v.string(), v.trim()), v.array(emailAddress)]),
+  v.transform((value) =>
+    typeof value === "string"
+      ? value
+          .split(",")
+          .map((email) => email.trim())
+          .filter(Boolean)
+      : value,
+  ),
+  v.check(
+    (emails) => emails.every((email) => v.is(emailAddress, email)),
+    "Send emails must be valid email addresses",
+  ),
 );
 
 const sendAliases = {
@@ -27,15 +43,16 @@ const sendAliases = {
   Password: v.optional(v.nullable(v.string())),
   authType: v.optional(authType),
   AuthType: v.optional(authType),
-  emails: v.optional(v.nullable(v.array(v.pipe(v.string(), v.email())))),
+  emails: v.optional(v.nullable(sendEmails)),
+  Emails: v.optional(v.nullable(sendEmails)),
   maxAccessCount: v.optional(v.nullable(count)),
   MaxAccessCount: v.optional(v.nullable(count)),
   disabled: v.optional(v.boolean()),
   Disabled: v.optional(v.boolean()),
   hideEmail: v.optional(v.boolean()),
   HideEmail: v.optional(v.boolean()),
-  expirationDate: v.optional(v.nullable(dateString)),
-  ExpirationDate: v.optional(v.nullable(dateString)),
+  expirationDate: v.optional(v.nullable(NativeDateSchema)),
+  ExpirationDate: v.optional(v.nullable(NativeDateSchema)),
   deletionDate: v.optional(deletionDateString),
   DeletionDate: v.optional(deletionDateString),
 };

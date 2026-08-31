@@ -107,16 +107,19 @@ export const listAccountOrganizations = factory.createHandlers(async (c) =>
   }),
 );
 
-// Current clients read accountKeys; the top-level fields remain for older clients.
-export const getKeys = factory.createHandlers(async (c) => {
-  const user = c.get("user");
-  return c.json({
+function buildKeysResponse(user: Parameters<typeof buildAccountKeys>[0]) {
+  return {
     key: user.key,
     publicKey: user.public_key,
     privateKey: user.private_key,
     accountKeys: buildAccountKeys(user),
     object: "keys",
-  });
+  };
+}
+
+// Current clients read accountKeys; the top-level fields remain for older clients.
+export const getKeys = factory.createHandlers(async (c) => {
+  return c.json(buildKeysResponse(c.get("user")));
 });
 
 // GET /api/accounts/profile
@@ -220,7 +223,9 @@ export const setKeys = factory.createHandlers(
         409,
       );
     invalidateUserCache(user.id);
-    return new Response(null, { status: 200 });
+    const updated = await usersDb.getUserById(db, user.id);
+    if (!updated) return errorResponse("Account not found", 404);
+    return c.json(buildKeysResponse(updated));
   },
 );
 

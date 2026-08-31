@@ -2,6 +2,7 @@ import { vValidator } from "@hono/valibot-validator";
 import { sql } from "kysely";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
+import { redactedValidationHook } from "../middleware/validation";
 import { CreateAttachmentSchema } from "../schemas/attachments";
 import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import { discardUnpublishedBlob } from "../services/blob-gc";
@@ -87,7 +88,7 @@ function sizeName(bytes: number): string {
 }
 
 export const createAttachment = factory.createHandlers(
-  vValidator("json", CreateAttachmentSchema),
+  vValidator("json", CreateAttachmentSchema, redactedValidationHook),
   async (c) => {
     const cipher = c.get("cipher");
     const body = c.req.valid("json");

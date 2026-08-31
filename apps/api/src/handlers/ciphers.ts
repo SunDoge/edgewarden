@@ -6,7 +6,7 @@ export {
   updateCipherCollectionsV2,
   updateCipherPartial,
 } from "./ciphers/compatibility";
-export { createCipher } from "./ciphers/create";
+export { createCipher, createCipherInOrganization } from "./ciphers/create";
 export {
   archiveCipher,
   deleteCipher,

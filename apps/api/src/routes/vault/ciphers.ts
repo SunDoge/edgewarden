@@ -9,6 +9,7 @@ import {
   archiveCipher,
   archiveCiphers,
   createCipher,
+  createCipherInOrganization,
   deleteCiphers,
   getCipher,
   hardDeleteCipher,
@@ -35,7 +36,7 @@ import { requireCipher, requireCipherWrite } from "../../middleware/resources";
 export const cipherRoutes = new Hono<HonoEnv>()
   .get("/api/ciphers", ...listCiphers)
   .post("/api/ciphers", ...createCipher)
-  .post("/api/ciphers/create", ...createCipher)
+  .post("/api/ciphers/create", ...createCipherInOrganization)
   .post("/api/ciphers/import", ...importCiphers)
   .post("/api/ciphers/delete", ...hardDeleteCiphers)
   .put("/api/ciphers/delete", ...deleteCiphers)

@@ -32,13 +32,41 @@ export function registerSendScenarios(context: SendScenarioContext): void {
         name: "encrypted-send-name",
         key: "encrypted-send-key",
         text: { text: "encrypted-send-text", hidden: false },
-        deletionDate: new Date(Date.now() + 86_400_000).toISOString(),
+        // Swift JSONEncoder represents Date as seconds since 2001-01-01.
+        deletionDate: (Date.now() + 86_400_000) / 1_000 - 978_307_200,
       }),
     });
     assert.equal(created.status, 200, await created.clone().text());
     const send = await created.json<{ id: string; accessId: string }>();
     context.sendId = send.id;
     context.sendAccessId = send.accessId;
+
+    const emailSendResponse = await request("/api/sends", {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({
+        type: 0,
+        name: "encrypted-email-send-name",
+        key: "encrypted-email-send-key",
+        text: { text: "encrypted-email-send-text", hidden: false },
+        emails: "first@example.com, second@example.com",
+        deletionDate: new Date(Date.now() + 86_400_000).toISOString(),
+      }),
+    });
+    assert.equal(
+      emailSendResponse.status,
+      200,
+      await emailSendResponse.clone().text(),
+    );
+    const emailSend = await emailSendResponse.json<{
+      id: string;
+      emails: string;
+    }>();
+    assert.equal(emailSend.emails, "first@example.com,second@example.com");
+    await context.database
+      .prepare("DELETE FROM sends WHERE id = ?")
+      .bind(emailSend.id)
+      .run();
   });
 
   test("serves public Sends while private Send middleware hides unknown ids", async () => {

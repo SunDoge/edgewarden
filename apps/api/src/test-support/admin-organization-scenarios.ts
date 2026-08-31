@@ -950,7 +950,21 @@ export function registerAdminOrganizationScenarios(
       await request(`/api/organizations/${orgId}/public-key`, {
         headers: { authorization: `Bearer ${context.accessToken}` },
       }).then((response) => response.json()),
-      { publicKey: "public", object: "organizationPublicKey" },
+      {
+        publicKey: "public",
+        privateKey: null,
+        object: "organizationPublicKey",
+      },
+    );
+    assert.deepEqual(
+      await request(`/api/organizations/${orgId}/keys`, {
+        headers: { authorization: `Bearer ${context.accessToken}` },
+      }).then((response) => response.json()),
+      {
+        publicKey: "public",
+        privateKey: null,
+        object: "organizationPublicKey",
+      },
     );
     assert.deepEqual(
       await request(`/api/users/${restrictedUser.id}/public-key`, {
@@ -1062,6 +1076,8 @@ export function registerAdminOrganizationScenarios(
           // Date representation exercised here for lastKnownRevisionDate.
           Cipher: {
             ...payload,
+            organizationId: undefined,
+            organizationID: orgId,
             lastKnownRevisionDate:
               Date.parse(partialCipher.revisionDate) / 1_000 - 978_307_200,
           },
@@ -1105,7 +1121,7 @@ export function registerAdminOrganizationScenarios(
           authorization: `Bearer ${context.accessToken}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({ collectionIds: [] }),
+        body: JSON.stringify({ CollectionIds: [] }),
       },
     );
     assert.equal(
@@ -1148,13 +1164,16 @@ export function registerAdminOrganizationScenarios(
       }),
     });
     assert.equal(crossOrganizationWrite.status, 404);
-    const created = await request("/api/ciphers", {
+    const created = await request("/api/ciphers/create", {
       method: "POST",
       headers: {
         authorization: `Bearer ${context.accessToken}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        Cipher: payload,
+        CollectionIds: payload.collectionIds,
+      }),
     });
     assert.equal(created.status, 200, await created.clone().text());
     const cipher = await created.json<{

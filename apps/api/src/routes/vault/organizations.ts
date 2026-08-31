@@ -27,6 +27,7 @@ import {
 export const organizationBaseRoutes = new Hono<HonoEnv>()
   .get("/api/organizations", ...listOrganizations)
   .get("/api/organizations/:orgId/public-key", ...getOrganizationPublicKey)
+  .get("/api/organizations/:orgId/keys", ...getOrganizationPublicKey)
   .post("/api/organizations", ...createOrganization)
   .get("/api/organizations/:orgId", requireOrgMember, ...getOrganization)
   .put(

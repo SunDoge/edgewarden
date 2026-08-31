@@ -7,6 +7,7 @@ import type { Context } from "hono";
 import { sql } from "kysely";
 import type { HonoEnv } from "../../env";
 import { factory } from "../../http/factory";
+import { redactedValidationHook } from "../../middleware/validation";
 import {
   CipherBulkCollectionsSchema,
   CipherCollectionsSchema,
@@ -92,12 +93,12 @@ async function updateCollections(
 }
 
 export const updateCipherCollections = factory.createHandlers(
-  vValidator("json", CipherCollectionsSchema),
+  vValidator("json", CipherCollectionsSchema, redactedValidationHook),
   async (c) => updateCollections(c, false),
 );
 
 export const updateCipherCollectionsV2 = factory.createHandlers(
-  vValidator("json", CipherCollectionsSchema),
+  vValidator("json", CipherCollectionsSchema, redactedValidationHook),
   async (c) => updateCollections(c, true),
 );
 

@@ -1253,10 +1253,17 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
           request("/api/accounts/keys", {
             method: "POST",
             headers: { ...auth, "content-type": "application/json" },
-            body: JSON.stringify({
-              publicKey: `public-key-${index}`,
-              encryptedPrivateKey: `private-key-${index}`,
-            }),
+            body: JSON.stringify(
+              index % 2 === 0
+                ? {
+                    PublicKey: `public-key-${index}`,
+                    EncryptedPrivateKey: `private-key-${index}`,
+                  }
+                : {
+                    publicKey: `public-key-${index}`,
+                    encryptedPrivateKey: `private-key-${index}`,
+                  },
+            ),
           }),
         ),
       );
@@ -1731,6 +1738,21 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       assert.equal(response.status, 200, await response.clone().text());
       return (await response.json<{ id: string }>()).id;
     };
+    const rejectedSecret = "must-not-be-reflected";
+    const rejected = await request("/api/ciphers", {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({
+        type: 1,
+        name: "",
+        login: { password: rejectedSecret },
+      }),
+    });
+    assert.equal(rejected.status, 400);
+    const rejectedBody = await rejected.text();
+    assert.equal(rejectedBody.includes(rejectedSecret), false);
+    assert.match(rejectedBody, /validationErrors/);
+
     const singleId = await createCipher("encrypted-single-delete");
     assert.equal(
       (
@@ -1821,7 +1843,8 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
         body: JSON.stringify({
           fileName: "2.encrypted-file-name",
           key: attachmentKey,
-          fileSize: encryptedBytes.byteLength,
+          // Android's native request model declares fileSize as a string.
+          fileSize: String(encryptedBytes.byteLength),
         }),
       },
     );

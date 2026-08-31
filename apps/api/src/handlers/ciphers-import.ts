@@ -2,6 +2,7 @@ import { vValidator } from "@hono/valibot-validator";
 import type { EdgewardenBatchQuery } from "../services/db/d1-dialect";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
+import { redactedValidationHook } from "../middleware/validation";
 import { CipherImportSchema } from "../schemas/ciphers";
 import { buildCipherData } from "../services/ciphers/presentation";
 import { executeBatchInChunks, revisionQuery } from "../services/db/batch";
@@ -10,7 +11,7 @@ import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
 
 export const importCiphers = factory.createHandlers(
-  vValidator("json", CipherImportSchema),
+  vValidator("json", CipherImportSchema, redactedValidationHook),
   async (c) => {
     const user = c.get("user");
     const db = c.get("db");

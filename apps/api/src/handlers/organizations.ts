@@ -73,6 +73,7 @@ export const getOrganizationPublicKey = factory.createHandlers(
       return errorResponse("Organization public key not found", 404);
     return c.json({
       publicKey: organization.public_key,
+      privateKey: null,
       object: "organizationPublicKey",
     });
   },
