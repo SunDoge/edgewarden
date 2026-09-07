@@ -2,4 +2,4 @@
 node = "26"
 bitwarden = "2026.7.0"
 cocogitto = "latest"
-"github:pnpm/pnpm" = "latest"
+"github:pnpm/pnpm" = "12"
