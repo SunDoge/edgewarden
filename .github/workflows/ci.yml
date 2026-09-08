@@ -5,6 +5,7 @@ on:
     branches: [dev, main]
   push:
     branches: [dev, main]
+    tags: ["v*"]
 
 permissions:
   contents: read
@@ -31,7 +32,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check types, bindings, and migrations
+      - name: Check versions, types, bindings, and migrations
         run: pnpm check
 
       - name: Lint errors

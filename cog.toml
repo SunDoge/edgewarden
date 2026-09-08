@@ -1,4 +1,9 @@
 tag_prefix = "v"
+disable_changelog = true
+pre_bump_hooks = [
+  "node scripts/workspace-version.ts --write {{version}}",
+  "node scripts/workspace-version.ts --check {{version}}",
+]
 from_latest_tag = false
 ignore_merge_commits = true
 ignore_fixup_commits = false
@@ -9,3 +14,8 @@ exec mise exec -- cog verify --file "$1"
 """
 
 [commit_types]
+
+# Tag an already-reviewed release commit without changing its version files.
+[bump_profiles.publish]
+pre_bump_hooks = ["node scripts/workspace-version.ts --check {{version}}"]
+post_bump_hooks = []

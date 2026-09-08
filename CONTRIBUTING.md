@@ -14,3 +14,5 @@ cog commit fix "describe the corrected behavior" api
 Use `cog verify 'fix(api): describe the corrected behavior'` to check a proposed commit or PR title. Install the configured commit-message hook with `cog install-hook commit-msg`.
 
 For security issues, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
+
+All workspace packages are private and share the product version. Use `pnpm version:sync <version>` for release preparation and `pnpm version:check` to verify consistency; see [the release workflow](docs/releasing.md). Do not version internal packages independently.

@@ -9,6 +9,7 @@
 - Account security controls, device/session management, administrative audit events, and backup/restore with R2, S3, and WebDAV destinations.
 - Automated type, lint, API/Web/runtime, build, dependency-audit, secret-scan, and CodeQL checks. Official Bitwarden CLI compatibility checks now run against an isolated local Worker in CI.
 - Private vulnerability reporting, structured issue forms, contribution guidance, and weekly Dependabot updates.
+- A single product version for all private workspace packages, synchronized through cog hooks and checked in CI, including release-tag consistency.
 - Linear-time trailing-dot normalization, certificate verification in integration tests, and pinned workflow actions address findings from the initial CodeQL scan.
 
 ### Upgrade notes
@@ -19,7 +20,7 @@
 
 ### Validation and limitations
 
-- Local validation passed on Node.js 26.8.1: type/config/migration checks, lint, 258 API tests, 4 workerd tests, 152 Web tests, and production build. The dependency audit reports no known vulnerabilities.
+- Local validation passed on Node.js 26.8.1: type/config/migration checks, lint, 7 version-management tests, 258 API tests, 4 workerd tests, 152 Web tests, and production build. The dependency audit reports no known vulnerabilities.
 - Official Bitwarden CLI 2026.7.0 passed the extended local compatibility suite, including two-profile sync, item lifecycle, attachments, Sends, and lock/unlock with certificate verification enabled.
 - Android, iOS, desktop, browser-extension, and deployed Cloudflare acceptance remain pending for this release candidate.
 - Organization support covers basic sharing, not enterprise parity. SSO, SCIM, emergency access, billing, and mail-delivery workflows are outside the current scope.
@@ -36,6 +37,7 @@
 - 提供账户安全控制、设备与会话管理、管理审计，以及面向 R2、S3、WebDAV 的备份恢复。
 - 配置类型检查、lint、API/Web/运行时测试、构建、依赖审计、密钥扫描和 CodeQL；官方 Bitwarden CLI 兼容性检查接入 CI，使用隔离的本地 Worker。
 - 增加私密漏洞报告渠道、结构化问题表单、贡献指南及每周 Dependabot 更新。
+- 所有私有 workspace 包使用统一产品版本，通过 cog hooks 同步，并由 CI 检查版本与发布标签的一致性。
 - 针对首轮 CodeQL 告警，将域名末尾点号处理改为线性扫描、保留集成测试的证书验证，并固定工作流 Actions 的提交版本。
 
 ### 升级说明
@@ -46,7 +48,7 @@
 
 ### 验证与限制
 
-- 在 Node.js 26.8.1 上通过本地类型、配置、迁移检查、lint、258 个 API 测试、4 个 workerd 测试、152 个 Web 测试及生产构建；依赖审计未发现已知漏洞。
+- 在 Node.js 26.8.1 上通过本地类型、配置、迁移检查、lint、7 个版本管理测试、258 个 API 测试、4 个 workerd 测试、152 个 Web 测试及生产构建；依赖审计未发现已知漏洞。
 - 官方 Bitwarden CLI 2026.7.0 已通过扩展本地兼容性测试，覆盖双配置同步、条目生命周期、附件、Send 与锁定解锁，测试全程保留证书验证。
 - 本候选版本的 Android、iOS、桌面端、浏览器扩展及已部署 Cloudflare 环境验收仍待完成。
 - 组织功能面向基础共享，不承诺企业功能对等；SSO、SCIM、紧急访问、计费和邮件投递流程不在当前支持范围内。
