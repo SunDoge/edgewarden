@@ -41,3 +41,9 @@ The scheduled Bitwarden domain-rule workflow commits generated changes to `dev`,
 `codeql.yml` analyzes JavaScript/TypeScript and GitHub Actions with the extended security queries. Findings appear in GitHub code scanning; a successful analysis job does not mean there are no findings. Configure repository rules to block merges on the chosen code scanning severity. Code scanning must be available and enabled for the repository; use this advanced workflow instead of a duplicate default CodeQL setup.
 
 Both workflows run for pull requests into `dev` and `main`, pushes to those branches, weekly schedules, and manual dispatch. GitHub runs scheduled workflows on the default branch. New actions use full commit SHAs, and the Gitleaks binary uses a fixed version and SHA-256 checksum; update these pins when upgrading the tools.
+
+## Dependency updates
+
+Dependabot checks the pnpm workspace and GitHub Actions every Monday at 05:00 and 05:10 Asia/Shanghai respectively. Version-update pull requests target `dev`, with up to five open PRs per ecosystem. Minor and patch updates are grouped separately for production dependencies, development dependencies, and Actions; major updates remain individual PRs. Commits use Conventional Commits prefixes (`chore` or `ci`) with dependency scopes, matching cog's format.
+
+Merge `.github/dependabot.yml` into the default branch to activate it. Dependabot security updates apply to the default branch independently of the `dev` version-update configuration; enable Dependabot alerts and security updates in the repository settings. The manually downloaded Gitleaks binary and its checksum still require manual updates.
