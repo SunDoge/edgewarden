@@ -1,2 +1,3 @@
-/** Edgewarden release version shared by the API, Web Vault, and backups. */
-export const EDGEWARDEN_VERSION = "0.1.0";
+import packageJson from "../../package.json" with { type: "json" };
+
+export const EDGEWARDEN_VERSION = packageJson.version;

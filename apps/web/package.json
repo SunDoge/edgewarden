@@ -1,7 +1,6 @@
 {
   "name": "@edgewarden/web",
   "private": true,
-  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "i18n:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy localStorage preferredLanguage baseLocale --emit-ts-declarations --silent",

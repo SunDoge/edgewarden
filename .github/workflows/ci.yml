@@ -29,10 +29,14 @@ jobs:
           node-version: 26
           cache: pnpm
 
+      - name: Check release tag
+        if: github.ref_type == 'tag'
+        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check versions, types, bindings, and migrations
+      - name: Check types, bindings, and migrations
         run: pnpm check
 
       - name: Lint errors

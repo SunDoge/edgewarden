@@ -15,4 +15,4 @@ Use `cog verify 'fix(api): describe the corrected behavior'` to check a proposed
 
 For security issues, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
 
-All workspace packages are private and share the product version. Use `pnpm version:sync <version>` for release preparation and `pnpm version:check` to verify consistency; see [the release workflow](docs/releasing.md). Do not version internal packages independently.
+All workspace packages are private and are not published to npm. Only the root `package.json` carries the product version; see [the release workflow](docs/releasing.md).
