@@ -90,6 +90,13 @@ baseApp.use(
   }),
 );
 
+// Public icons are embedded by official clients, including notification iframes.
+// Wrap secureHeaders so its default same-origin policy is overridden last.
+baseApp.use("/icons/:host/icon.png", async (c, next) => {
+  await next();
+  c.header("Cross-Origin-Resource-Policy", "cross-origin");
+});
+
 // Security headers
 baseApp.use(
   "*",

@@ -212,7 +212,7 @@ function configPayload(
       api: `${origin}/api`,
       identity: `${origin}/identity`,
       notifications: `${origin}/notifications`,
-      icons: origin,
+      icons: `${origin}/icons`,
       fillAssistRules: `${origin}/fill-assist/`,
       sso: "",
     },
