@@ -1,0 +1,19 @@
+# Reviewed historical test fixtures only; do not ignore entire test paths.
+# jwt.test.ts: synthetic signing secret.
+# ssh-key-generator.test.ts: PEM header/footer assertions, no private key material.
+# vault-transfer.test.ts: synthetic wrapped-key placeholder.
+# app.test.ts and vault-scenarios.ts: synthetic attachment-key placeholder.
+164dac9c0a6ecce005c22cbe0021a6d9152249de:apps/api/src/utils/jwt.test.ts:generic-api-key:21
+164dac9c0a6ecce005c22cbe0021a6d9152249de:apps/web/src/lib/services/ssh-key-generator.test.ts:private-key:15
+164dac9c0a6ecce005c22cbe0021a6d9152249de:apps/web/src/lib/services/vault-transfer.test.ts:generic-api-key:241
+176487ca8ecba2e7b6c5d43c6cc9319f8ef74942:apps/web/src/lib/services/vault-transfer.test.ts:generic-api-key:23
+231e259c3c13bc09886352451a0dcd0da4ff4adf:apps/api/src/app.test.ts:generic-api-key:425
+231e259c3c13bc09886352451a0dcd0da4ff4adf:apps/api/src/app.test.ts:generic-api-key:468
+231e259c3c13bc09886352451a0dcd0da4ff4adf:apps/api/src/utils/jwt.test.ts:generic-api-key:15
+231e259c3c13bc09886352451a0dcd0da4ff4adf:apps/web/src/lib/services/ssh-key-generator.test.ts:private-key:9
+231e259c3c13bc09886352451a0dcd0da4ff4adf:apps/web/src/lib/services/vault-transfer.test.ts:generic-api-key:9
+3a75050289c265ac0b53e4619598d05c0bacc5d2:apps/web/src/lib/services/vault-transfer.test.ts:generic-api-key:23
+500efcdb59e15344ed17b2fd5d02d232d2005404:apps/api/src/test-support/vault-scenarios.ts:generic-api-key:660
+500efcdb59e15344ed17b2fd5d02d232d2005404:apps/api/src/test-support/vault-scenarios.ts:generic-api-key:734
+dbd897140c49e4ab3ba1f26fca8167c68f9b6038:apps/api/src/test-support/vault-scenarios.ts:generic-api-key:660
+dbd897140c49e4ab3ba1f26fca8167c68f9b6038:apps/api/src/test-support/vault-scenarios.ts:generic-api-key:734
