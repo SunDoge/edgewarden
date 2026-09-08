@@ -67,7 +67,7 @@ The API harness uses real Miniflare D1 and KV implementations while keeping R2, 
 
 Use the deployed Cloudflare smoke test for binding and deployment integration. Use the Bitwarden CLI smoke test for protocol compatibility. Neither replaces unit and integration tests because they require external state and are slower to diagnose.
 
-`test:compat:bw:local` creates a temporary Wrangler persistence directory, applies every migration, starts a self-signed HTTPS development Worker, registers a disposable account with the local `BOOTSTRAP_SECRET`, runs the same extended official CLI compatibility suite, and removes the temporary state. It never modifies the normal `.wrangler/state` database. The suite exercises all personal item types, lifecycle transitions, two-way sync, attachments, Sends, and lock/unlock behavior.
+`test:compat:bw:local` creates a temporary Wrangler persistence directory, applies every migration, generates independent temporary secrets and configuration, starts an HTTPS development Worker using a temporary certificate trusted explicitly by Node and the CLI, registers a disposable account with its temporary `BOOTSTRAP_SECRET`, runs the same extended official CLI compatibility suite, and removes the temporary state. It never modifies the normal `.wrangler/state` database. The suite exercises all personal item types, lifecycle transitions, two-way sync, attachments, Sends, and lock/unlock behavior.
 
 ## What to add with a change
 
@@ -77,3 +77,7 @@ Use the deployed Cloudflare smoke test for binding and deployment integration. U
 - Migration: migration verifier plus an API persistence scenario.
 - Binding/runtime behavior: Cloudflare integration smoke test or a focused workerd test.
 - Bitwarden protocol response: API test plus CLI smoke coverage when feasible.
+
+The `Bitwarden CLI compatibility` CI job installs the pinned official CLI, builds the Web Vault, and runs this isolated suite. Local `.dev.vars` and Cloudflare credentials are not required.
+
+The local CLI suite requires OpenSSL and Node.js 26. It keeps TLS certificate verification enabled. For the deployed integration smoke test against a private CA, launch Node with `NODE_EXTRA_CA_CERTS=/path/to/ca.pem`; disabling TLS verification is not supported.

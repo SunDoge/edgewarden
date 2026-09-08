@@ -117,10 +117,11 @@ function extractHost(input: string): string {
       raw = raw.slice(0, colonIndex);
   }
 
-  return raw
-    .replace(/^\*+\./, "")
-    .replace(/^\.+/, "")
-    .replace(/\.+$/, "");
+  raw = raw.replace(/^\*+\./, "").replace(/^\.+/, "");
+  // Scan once: an unanchored trailing-dot regex retries each start position.
+  let end = raw.length;
+  while (end > 0 && raw.charCodeAt(end - 1) === 46) end -= 1;
+  return raw.slice(0, end);
 }
 
 function isValidHost(host: string): boolean {

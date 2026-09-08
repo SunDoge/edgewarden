@@ -12,7 +12,7 @@ Edgewarden uses `dev` for ongoing development and `main` for production-ready re
 
 Do not develop directly on `main`, rewrite published migration files, or bypass a failed required check. Configure branch protection for both branches:
 
-- `dev`: require `Check, test, and build`, `Dependency audit`, and `Secret scan` before merge, and configure code scanning protection for CodeQL findings.
+- `dev`: require `Check, test, and build`, `Dependency audit`, `Secret scan`, and `Bitwarden CLI compatibility` before merge, and configure code scanning protection for CodeQL findings.
 - `main`: require a pull request from `dev`, the same checks and code scanning protection, and no force pushes.
 
 Cloudflare's production branch is configured in the dashboard rather than `wrangler.jsonc`. Set it to `main`. Non-production branch builds are optional; Edgewarden uses a Durable Object, so Cloudflare does not provide normal preview URLs for those builds.

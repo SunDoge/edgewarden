@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
+import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 
 interface InfrastructureScenarioContext {
   getBindings: () => CloudflareBindings;
@@ -87,7 +88,7 @@ export function registerInfrastructureScenarios(
     assert.equal(ready.status, 200, await ready.clone().text());
     assert.deepEqual(await ready.json(), {
       status: "ok",
-      edgewardenVersion: "1.0.0",
+      edgewardenVersion: EDGEWARDEN_VERSION,
     });
 
     const bindings = getBindings() as unknown as Record<string, unknown>;

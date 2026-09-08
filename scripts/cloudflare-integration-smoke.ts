@@ -6,14 +6,8 @@ import {
 const origin = process.env.EDGEWARDEN_SERVER;
 const email = process.env.EDGEWARDEN_EMAIL;
 const password = process.env.EDGEWARDEN_PASSWORD;
-const insecureTls = process.env.EDGEWARDEN_INSECURE_TLS === "1";
-
-if (insecureTls) {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-  console.warn(
-    "EDGEWARDEN_INSECURE_TLS disables TLS certificate verification for this process.",
-  );
-}
+// For a private test CA, start Node with NODE_EXTRA_CA_CERTS=/path/to/ca.pem.
+// Never disable certificate validation for deployed Worker checks.
 
 if (!origin || !email || !password) {
   throw new Error(

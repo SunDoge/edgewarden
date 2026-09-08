@@ -4,6 +4,8 @@ Edgewarden is a Bitwarden-compatible password manager designed for Cloudflare Wo
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/SunDoge/edgewarden)
 
+Current release line: **0.1.x**. See [release notes](RELEASE_NOTES.md), [contributing](CONTRIBUTING.md), and [private security reporting](SECURITY.md).
+
 ## Platform boundary
 
 Edgewarden is intentionally Cloudflare-native. The complete server must run on Cloudflare Workers and bindings that Workers can access directly, such as D1, R2, KV and Durable Objects. A feature is implemented only when it can be made reliable and secure within Worker execution, networking, storage and scheduling constraints.
@@ -57,7 +59,7 @@ On an R2 deployment, the backup center can use the existing `ATTACHMENTS_R2` bin
 
 ## Manual deployment
 
-The repository pins Node.js 26 and installs the latest pnpm release through `mise.toml`. For local development, install the toolchain and dependencies, create `.dev.vars` from `.dev.vars.example`, then run:
+The repository selects Node.js 26 and a pnpm launcher through `mise.toml`; `package.json` pins the pnpm version used by the workspace. For local development, install the toolchain and dependencies, create `.dev.vars` from `.dev.vars.example`, then run:
 
 ```sh
 mise install
@@ -105,3 +107,4 @@ The release number is shared by the API, Web Vault, and backup manifests through
 - [Supported product scope](docs/support-scope.md)
 - [Upgrade, restore, and troubleshooting guide](docs/operations.md)
 - [Security boundaries](docs/security.md)
+- [Release checklist](docs/releasing.md)

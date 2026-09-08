@@ -1,7 +1,8 @@
-import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { execFileSync, spawn } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { getCACertificates, setDefaultCACertificates } from "node:tls";
 import {
   bytesToBase64,
   deriveMasterKey,
@@ -17,25 +18,6 @@ const persistencePath = await mkdtemp(
 const email = `bw-compat-${crypto.randomUUID()}@example.com`;
 const password = `BwCompat-${crypto.randomUUID()}-aA1!`;
 const server = "https://127.0.0.1:8787";
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
-function parseDevVars(source: string): Record<string, string> {
-  return Object.fromEntries(
-    source
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith("#") && line.includes("="))
-      .map((line) => {
-        const separator = line.indexOf("=");
-        const key = line.slice(0, separator).trim();
-        const value = line
-          .slice(separator + 1)
-          .trim()
-          .replace(/^(['"])(.*)\1$/, "$2");
-        return [key, value];
-      }),
-  );
-}
 
 async function command(args: string[]): Promise<void> {
   await new Promise<void>((resolveCommand, reject) => {
@@ -50,7 +32,7 @@ async function command(args: string[]): Promise<void> {
 
 async function waitForServer(): Promise<void> {
   let lastError: unknown;
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     try {
       const response = await fetch(`${server}/api/config`, {
         signal: AbortSignal.timeout(1_000),
@@ -120,57 +102,129 @@ async function register(adminPassword: string): Promise<void> {
   }
 }
 
-const devVars = parseDevVars(
-  await readFile(resolve(root, ".dev.vars"), "utf8"),
+// Keep test bindings and secrets independent of the developer's .dev.vars.
+const config = JSON.parse(
+  await readFile(resolve(root, "wrangler.jsonc"), "utf8"),
 );
-if (!devVars.BOOTSTRAP_SECRET) {
-  throw new Error(".dev.vars must define BOOTSTRAP_SECRET");
+config.main = resolve(root, config.main);
+config.assets.directory = resolve(root, config.assets.directory);
+for (const database of config.d1_databases) {
+  database.migrations_dir = resolve(root, database.migrations_dir);
 }
-
-await command([
-  "exec",
-  "wrangler",
-  "d1",
-  "migrations",
-  "apply",
-  "DB",
-  "--config",
-  "wrangler.jsonc",
-  "--local",
-  "--persist-to",
-  persistencePath,
-]);
-
-const worker = spawn(
-  "pnpm",
+const certificatePath = join(persistencePath, "localhost.pem");
+const certificateKeyPath = join(persistencePath, "localhost-key.pem");
+execFileSync(
+  "openssl",
   [
+    "req",
+    "-x509",
+    "-newkey",
+    "rsa:2048",
+    "-nodes",
+    "-days",
+    "1",
+    "-keyout",
+    certificateKeyPath,
+    "-out",
+    certificatePath,
+    "-subj",
+    "/CN=localhost",
+    "-addext",
+    "subjectAltName=DNS:localhost,IP:127.0.0.1",
+  ],
+  { stdio: "ignore" },
+);
+setDefaultCACertificates([
+  ...getCACertificates("default"),
+  await readFile(certificatePath, "utf8"),
+]);
+// Child CLI processes trust only this test CA in addition to normal roots.
+process.env.NODE_EXTRA_CA_CERTS = certificatePath;
+const configPath = join(persistencePath, "wrangler.json");
+const bootstrapSecret = crypto.randomUUID() + crypto.randomUUID();
+await writeFile(configPath, JSON.stringify(config));
+await writeFile(
+  join(persistencePath, ".dev.vars"),
+  [
+    `JWT_SECRET=${crypto.randomUUID()}${crypto.randomUUID()}`,
+    `DATA_ENCRYPTION_SECRET=${crypto.randomUUID()}${crypto.randomUUID()}`,
+    `BOOTSTRAP_SECRET=${bootstrapSecret}`,
+  ].join("\n"),
+  { mode: 0o600 },
+);
+
+let worker: ReturnType<typeof spawn> | undefined;
+try {
+  await command([
     "exec",
     "wrangler",
-    "dev",
+    "d1",
+    "migrations",
+    "apply",
+    "DB",
     "--config",
-    "wrangler.jsonc",
-    "--port",
-    "8787",
-    "--local-protocol",
-    "https",
+    configPath,
+    "--local",
     "--persist-to",
     persistencePath,
-  ],
-  { cwd: root, stdio: ["ignore", "pipe", "pipe"] },
-);
+  ]);
 
-try {
+  worker = spawn(
+    "pnpm",
+    [
+      "exec",
+      "wrangler",
+      "dev",
+      "--local",
+      "--config",
+      configPath,
+      "--port",
+      "8787",
+      "--local-protocol",
+      "https",
+      "--https-cert-path",
+      certificatePath,
+      "--https-key-path",
+      certificateKeyPath,
+      "--persist-to",
+      persistencePath,
+    ],
+    {
+      cwd: root,
+      stdio: ["ignore", "inherit", "inherit"],
+      detached: process.platform !== "win32",
+    },
+  );
+
   await waitForServer();
-  await register(devVars.BOOTSTRAP_SECRET);
+  await register(bootstrapSecret);
   process.env.BW_SERVER = server;
   process.env.BW_EMAIL = email;
   process.env.BW_PASSWORD = password;
   await import("./bw-compat-smoke.ts");
 } finally {
-  worker.kill("SIGTERM");
-  await new Promise<void>((resolveExit) => {
-    if (worker.exitCode !== null) resolveExit();
-    else worker.once("exit", () => resolveExit());
-  });
+  if (worker) {
+    const child = worker;
+    if (child.pid && process.platform !== "win32") {
+      try {
+        process.kill(-child.pid, "SIGTERM");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+          console.error(
+            "Failed to stop the compatibility Worker process group",
+            error,
+          );
+          process.exitCode = 1;
+          child.kill("SIGTERM");
+        }
+      }
+    } else {
+      child.kill("SIGTERM");
+    }
+    await new Promise<void>((resolveExit) => {
+      if (child.exitCode !== null || child.signalCode !== null) resolveExit();
+      else child.once("exit", () => resolveExit());
+    });
+  }
   await rm(persistencePath, { recursive: true, force: true });
 }
