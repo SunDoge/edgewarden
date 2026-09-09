@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { unzipSync } from "fflate";
-import { test } from "vitest";
+import { test, vi } from "vitest";
 import { createDatabase } from "../middleware/db";
 import {
   acquireDataOperationLease,
@@ -784,56 +784,71 @@ export function registerAdminOrganizationScenarios(
           ],
         }),
       });
-    const responses = await Promise.all([
-      invite(),
-      invite(),
-      invite(),
-      invite(),
-    ]);
-    assert.equal(
-      responses.filter((response) => response.status === 201).length,
-      1,
-    );
-    assert.equal(
-      responses.filter((response) => response.status === 409).length,
-      3,
-    );
-    assert.equal(
+    // Cross a revision timestamp boundary deterministically. A successful write
+    // uses MAX(previous + 1, now), so elapsed wall time is not an extra mutation.
+    const invitationTime =
+      Math.max(
+        Math.floor(Date.now() / 1000),
+        ownerRevision.revision_date,
+        targetRevision.revision_date,
+      ) + 2;
+    const clock = vi.spyOn(Date, "now").mockReturnValue(invitationTime * 1000);
+    try {
+      const responses = await Promise.all([
+        invite(),
+        invite(),
+        invite(),
+        invite(),
+      ]);
+      assert.equal(
+        responses.filter((response) => response.status === 201).length,
+        1,
+      );
+      assert.equal(
+        responses.filter((response) => response.status === 409).length,
+        3,
+      );
+      assert.equal(
+        await context.database
+          .prepare(
+            "SELECT COUNT(*) AS count FROM org_members WHERE org_id = ? AND email = ?",
+          )
+          .bind(orgId, targetEmail)
+          .first<{ count: number }>()
+          .then((row) => Number(row?.count)),
+        1,
+      );
+      assert.equal(
+        await context.database
+          .prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+          .bind(owner.id)
+          .first<{ revision_date: number }>()
+          .then((row) => row?.revision_date),
+        invitationTime,
+      );
+      assert.equal(
+        await context.database
+          .prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+          .bind(target.id)
+          .first<{ revision_date: number }>()
+          .then((row) => row?.revision_date),
+        invitationTime,
+      );
+    } finally {
+      clock.mockRestore();
       await context.database
-        .prepare(
-          "SELECT COUNT(*) AS count FROM org_members WHERE org_id = ? AND email = ?",
-        )
-        .bind(orgId, targetEmail)
-        .first<{ count: number }>()
-        .then((row) => Number(row?.count)),
-      1,
-    );
-    assert.equal(
+        .prepare("DELETE FROM organizations WHERE id = ?")
+        .bind(orgId)
+        .run();
       await context.database
-        .prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
-        .bind(owner.id)
-        .first<{ revision_date: number }>()
-        .then((row) => row?.revision_date),
-      ownerRevision.revision_date + 1,
-    );
-    assert.equal(
-      await context.database
-        .prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
+        .prepare("DELETE FROM users WHERE id = ?")
         .bind(target.id)
-        .first<{ revision_date: number }>()
-        .then((row) => row?.revision_date),
-      targetRevision.revision_date + 1,
-    );
-    await context.database
-      .prepare("DELETE FROM organizations WHERE id = ?")
-      .bind(orgId)
-      .run();
-    await context.database
-      .prepare("DELETE FROM users WHERE id = ?")
-      .bind(target.id)
-      .run();
+        .run();
+    }
   });
 
+  // This end-to-end scenario performs many sequential requests and awaits their
+  // background work; allow headroom on shared CI runners without relaxing assertions.
   test("enforces organization collection visibility and read-only writes", async () => {
     const owner = await context.database
       .prepare("SELECT id FROM users WHERE email = ?")
@@ -1798,7 +1813,7 @@ export function registerAdminOrganizationScenarios(
       ).status,
       404,
     );
-  }, 15_000);
+  }, 30_000);
 
   test("purges the personal vault only after secret verification", async () => {
     const owner = await context.database
