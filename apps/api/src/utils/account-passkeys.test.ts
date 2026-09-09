@@ -5,11 +5,34 @@ import type { WorkerBindings } from "../worker-bindings";
 import {
   createAccountPasskeyToken,
   getAccountPasskeyRpConfig,
+  normalizeRegistrationResponse,
   verifyAccountPasskeyToken,
 } from "./account-passkeys";
 import { deriveJwtPurposeSecret } from "./jwt";
 
 const JWT_SECRET = "account-passkey-test-secret-at-least-thirty-two-characters";
+
+test("preserves legacy WebAuthn transports while filtering unsupported values", () => {
+  const transports = [
+    "ble",
+    "cable",
+    "hybrid",
+    "internal",
+    "nfc",
+    "smart-card",
+    "usb",
+  ];
+  const normalized = normalizeRegistrationResponse({
+    id: "credential-id",
+    rawId: "credential-id",
+    response: {
+      clientDataJSON: "client-data",
+      attestationObject: "attestation",
+      transports: [...transports, "unsupported-transport", 42],
+    },
+  });
+  assert.deepEqual(normalized?.response.transports, transports);
+});
 
 test("derives WebAuthn RP configuration from the request by default", () => {
   assert.deepEqual(
