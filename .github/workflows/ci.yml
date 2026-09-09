@@ -5,6 +5,7 @@ on:
     branches: [dev, main]
   push:
     branches: [dev, main]
+    tags: ["v*"]
 
 permissions:
   contents: read
@@ -19,14 +20,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 26
           cache: pnpm
+
+      - name: Check release tag
+        if: github.ref_type == 'tag'
+        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -42,3 +47,27 @@ jobs:
 
       - name: Build production assets
         run: pnpm build
+
+  compatibility:
+    name: Bitwarden CLI compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 26
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install official Bitwarden CLI
+        run: |
+          npm install --prefix "$RUNNER_TEMP/bitwarden" --no-package-lock @bitwarden/cli@2026.7.0
+          echo "$RUNNER_TEMP/bitwarden/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Build production assets
+        run: pnpm build
+      - name: Test an isolated local Worker with the official CLI
+        run: pnpm test:compat:bw:local

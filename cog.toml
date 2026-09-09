@@ -1,3 +1,6 @@
+tag_prefix = "v"
+disable_changelog = true
+pre_bump_hooks = ["npm version {{version}} --no-git-tag-version --allow-same-version --ignore-scripts"]
 from_latest_tag = false
 ignore_merge_commits = true
 ignore_fixup_commits = false

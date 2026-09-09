@@ -1,0 +1,23 @@
+name: Feature request
+description: Describe a use case within Edgewarden's Cloudflare-native scope.
+title: "[Feature] "
+body:
+  - type: markdown
+    attributes:
+      value: Please review the supported product scope in docs/support-scope.md first.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and affected clients

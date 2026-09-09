@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a reproducible Edgewarden problem.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For vulnerabilities, use the private security-report link instead.
+        Redact passwords, tokens, recovery codes, and vault contents from all examples.
+  - type: input
+    id: version
+    attributes:
+      label: Edgewarden version or commit
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Client, version, and operating system
+      placeholder: Bitwarden browser extension, exact version, browser and OS
+    validations:
+      required: true
+  - type: dropdown
+    id: storage
+    attributes:
+      label: Attachment storage backend
+      options:
+        - R2
+        - KV
+        - Unknown
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include deployment method and any relevant custom configuration, without secrets.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: HTTP status, error messages, or screenshots using disposable test data.

@@ -76,27 +76,35 @@ function assertEqual<T>(actual: T, expected: T, message: string): void {
 }
 
 async function bw(args: string[], options: BwOptions = {}): Promise<string> {
+  let result: { stdout: string; stderr: string };
   try {
-    const { stdout, stderr } = await execFileAsync("bw", args, {
+    result = await execFileAsync("bw", args, {
       env: {
         ...process.env,
         BITWARDENCLI_APPDATA_DIR: options.appDataDirectory ?? appDataDirectory,
         BW_PASSWORD: password,
         BW_SEND_PASSWORD: "edgewarden-send-password",
-        ...(options.session ? { BW_SESSION: options.session } : {}),
+        BW_SESSION: options.session ?? "",
+        BW_NOINTERACTION: "true",
       },
       maxBuffer: 10 * 1024 * 1024,
       timeout: 60_000,
     });
-    if (options.expectFailure) {
-      throw new Error(`Command unexpectedly succeeded: bw ${args.join(" ")}`);
-    }
-    if (!options.quiet && stderr.trim()) process.stderr.write(stderr);
-    return stdout.trim();
   } catch (error) {
-    if (options.expectFailure) return "";
+    if (
+      options.expectFailure &&
+      typeof (error as { code?: unknown }).code === "number" &&
+      !(error as { killed?: boolean }).killed
+    )
+      return "";
     throw error;
   }
+  if (options.expectFailure) {
+    throw new Error(`Command unexpectedly succeeded: bw ${args.join(" ")}`);
+  }
+  const { stdout, stderr } = result;
+  if (!options.quiet && stderr.trim()) process.stderr.write(stderr);
+  return stdout.trim();
 }
 
 function encode(value: unknown): string {
@@ -512,11 +520,11 @@ try {
   await bw(["send", "delete", fileSend.id], { session, quiet: true });
   sendIds.delete(fileSend.id);
 
-  step("锁定、拒绝旧会话、解锁并再次同步");
-  const lockedSession = session;
+  step("锁定、拒绝未解锁的保险库读取、解锁并再次同步");
   await bw(["lock"], { quiet: true });
-  await bw(["sync"], {
-    session: lockedSession,
+  const lockedStatus = await json<{ status: string }>(["status"]);
+  assertEqual(lockedStatus.status, "locked", "CLI must report a locked vault");
+  await bw(["list", "items"], {
     quiet: true,
     expectFailure: true,
   });

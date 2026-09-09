@@ -1,6 +1,5 @@
 {
   "name": "@edgewarden/shared",
-  "version": "1.0.0",
   "description": "Shared valibot schemas and TypeScript types for Edgewarden",
   "type": "module",
   "private": true,

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
+import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 
 interface InfrastructureScenarioContext {
   getBindings: () => CloudflareBindings;
@@ -67,7 +68,7 @@ export function registerInfrastructureScenarios(
       vault: "https://vault.example.test",
       api: "https://vault.example.test/api",
       identity: "https://vault.example.test/identity",
-      icons: "https://vault.example.test",
+      icons: "https://vault.example.test/icons",
       fillAssistRules: "https://vault.example.test/fill-assist/",
       sso: "",
     });
@@ -87,7 +88,7 @@ export function registerInfrastructureScenarios(
     assert.equal(ready.status, 200, await ready.clone().text());
     assert.deepEqual(await ready.json(), {
       status: "ok",
-      edgewardenVersion: "1.0.0",
+      edgewardenVersion: EDGEWARDEN_VERSION,
     });
 
     const bindings = getBindings() as unknown as Record<string, unknown>;
@@ -124,6 +125,10 @@ export function registerInfrastructureScenarios(
       headers: { origin: "https://evil.example" },
     });
     assert.equal(response.headers.get("access-control-allow-origin"), null);
+    assert.equal(
+      response.headers.get("cross-origin-resource-policy"),
+      "same-origin",
+    );
     const csp = response.headers.get("content-security-policy") ?? "";
     assert.match(csp, /default-src 'self'/);
     assert.match(csp, /object-src 'none'/);
@@ -176,6 +181,10 @@ export function registerInfrastructureScenarios(
       const response = await request(`/icons/${host}/icon.png`);
       assert.equal(response.status, 200);
       assert.equal(response.headers.get("content-type"), "image/svg+xml");
+      assert.equal(
+        response.headers.get("cross-origin-resource-policy"),
+        "cross-origin",
+      );
       assert.match(response.headers.get("cache-control") ?? "", /public/);
     }
   });
@@ -223,6 +232,12 @@ export function registerInfrastructureScenarios(
       const second = await request("/icons/example.com/icon.png");
       assert.equal(first.status, 200);
       assert.equal(second.status, 200);
+      for (const response of [first, second]) {
+        assert.equal(
+          response.headers.get("cross-origin-resource-policy"),
+          "cross-origin",
+        );
+      }
       assert.equal(upstreamRequests, 1);
       assert.equal(
         first.headers.get("cache-control"),
