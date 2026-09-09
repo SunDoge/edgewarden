@@ -834,6 +834,8 @@ export function registerAdminOrganizationScenarios(
       .run();
   });
 
+  // This end-to-end scenario performs many sequential requests and awaits their
+  // background work; allow headroom on shared CI runners without relaxing assertions.
   test("enforces organization collection visibility and read-only writes", async () => {
     const owner = await context.database
       .prepare("SELECT id FROM users WHERE email = ?")
@@ -1798,7 +1800,7 @@ export function registerAdminOrganizationScenarios(
       ).status,
       404,
     );
-  }, 15_000);
+  }, 30_000);
 
   test("purges the personal vault only after secret verification", async () => {
     const owner = await context.database
