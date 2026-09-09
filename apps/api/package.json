@@ -39,9 +39,9 @@
     "valibot": "^1.4.1"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.21.3",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.4.1",
     "better-sqlite3": "^12.4.1",
     "kysely-codegen": "^0.20.0",
     "miniflare": "5.20260804.0-alpha",
