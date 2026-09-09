@@ -22,23 +22,31 @@ Use `createApiTestHarness()` from `apps/api/src/test-support/api-harness.ts`. It
 ```ts
 const harness = await createApiTestHarness(TEST_SECRETS);
 
-const created = await harness.json("/api/example", { name: "encrypted" });
-const body = await expectJson<{ id: string }>(created, 201);
+try {
+  const client = harness.authenticated(accessToken).rpc;
+  const created = await client.api.folders.$post({
+    json: { name: "encrypted-folder" },
+  });
+  expect(created.status).toBe(200);
+  const folder = await expectJson<{ id: string }>(created);
+  expect(folder.id).toBeTruthy();
 
-const client = harness.authenticated(accessToken);
-const sync = await client.request("/api/sync");
-expect(sync.status).toBe(200);
-
-await harness.dispose();
+  const sync = await client.api.sync.$get({
+    query: { excludeDomains: "true" },
+  });
+  expect(sync.status).toBe(200);
+} finally {
+  await harness.dispose();
+}
 ```
 
-- Use `json()` instead of repeating the content type and `JSON.stringify()`.
-- Use `authenticated()` instead of manually rebuilding bearer headers.
-- Use `expectJson<T>()` when the response body is relevant. Status failures include the returned body.
+- Use `harness.rpc` for public routes and `harness.authenticated(token).rpc` for authenticated routes. Hono RPC checks route names, parameters, and validated request bodies; use inferred response types where available.
+- Keep `request()` and `json()` for malformed input, unknown fields, legacy client payloads, and other wire-protocol checks. These tests must remain independent of our inferred client contract.
+- Some handlers return native `Response` values or opaque encrypted JSON, which limits response inference. Use `expectJson<T>()` where a response shape must be stated explicitly; it includes the returned body on status failures.
 - Query `harness.database` when an externally visible response is insufficient to prove an atomicity or persistence invariant.
 - Use a deliberately failing D1 trigger for rollback tests; do not mock the query builder.
 
-Hono does not require its own test runner. Its `app.request()` API provides an in-memory HTTP boundary and works with Vitest. `hono/testing` also provides `testClient()` for small type-safe route units, but the main Edgewarden suite intentionally exercises the assembled middleware and Worker bindings.
+RPC calls use `hc<AppType>()` with a custom fetch that delegates to the same harness request function. Both request styles exercise the assembled middleware and real test bindings, and await background work. They do not start an HTTP server. Hono's `testClient()` is also suitable for small route tests, but does not perform the harness's background-task draining on its own.
 
 ## Web logic tests
 
