@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { decryptCipher, encryptCipher, rewrapCipherKey } from "./cipher-crypto";
 import {
@@ -15,6 +16,55 @@ import {
 } from "./crypto";
 
 describe("frontend crypto utils", () => {
+  it("encrypts fresh URI checksums with the item key on create and edit", async () => {
+    const enc = crypto.getRandomValues(new Uint8Array(32));
+    const mac = crypto.getRandomValues(new Uint8Array(32));
+    const login = {
+      uris: [
+        { uri: "https://example.com/login", match: null },
+        { uri: "https://example.org/登录", match: 1, uriChecksum: "stale" },
+      ],
+    };
+    const created = await encryptCipher(
+      { type: 1, name: "Login", login },
+      enc,
+      mac,
+    );
+    const edited = await encryptCipher(
+      {
+        type: 1,
+        name: "Login",
+        key: created.key,
+        login: {
+          uris: [
+            { uri: "https://changed.test", match: 2, uriChecksum: "stale" },
+          ],
+        },
+      },
+      enc,
+      mac,
+    );
+    for (const cipher of [created, edited]) {
+      const rawKey = await decryptBw(cipher.key!, enc, mac);
+      for (const entry of cipher.login.uris) {
+        const uri = await decryptStr(
+          entry.uri,
+          rawKey.slice(0, 32),
+          rawKey.slice(32),
+        );
+        const checksum = (entry as unknown as { uriChecksum: string })
+          .uriChecksum;
+        expect(checksum).toMatch(/^2\./);
+        expect(
+          await decryptStr(checksum, rawKey.slice(0, 32), rawKey.slice(32)),
+        ).toBe(createHash("sha256").update(uri).digest("base64"));
+      }
+    }
+    expect(created.login.uris.map((entry) => entry.match)).toEqual([null, 1]);
+    expect(login.uris[0]).not.toHaveProperty("uriChecksum");
+    expect(login.uris[1].uriChecksum).toBe("stale");
+  });
+
   it("bytesToBase64 and base64ToBytes should be duals", () => {
     const originalText = "hello, world! 123";
     const originalBytes = new TextEncoder().encode(originalText);
