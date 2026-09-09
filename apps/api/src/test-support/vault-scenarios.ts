@@ -8,7 +8,10 @@ import {
 import { invalidateUserCache } from "../services/auth";
 import { hashCredential } from "../services/credential-protection";
 
+import { expectJson, type ApiRpcClient } from "./api-harness";
+
 export interface VaultScenarioContext {
+  readonly rpc: ApiRpcClient;
   readonly bindings: CloudflareBindings;
   readonly database: D1Database;
   readonly accessToken: string;
@@ -29,10 +32,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
   const EMAIL = context.email;
   const MASTER_PASSWORD_HASH = context.masterPasswordHash;
   test("preserves login websites and checksums through create, edit, and sync", async () => {
-    const headers = {
-      authorization: `Bearer ${context.accessToken}`,
-      "content-type": "application/json",
-    };
+    const client = context.rpc;
     const payload = {
       type: 1,
       name: "encrypted-uri-roundtrip",
@@ -53,16 +53,11 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
         ],
       },
     };
-    const created = await request("/api/ciphers", {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-    });
+    const created = await client.api.ciphers.$post({ json: payload });
     assert.equal(created.status, 200, await created.clone().text());
-    const item = await created.json<{
-      id: string;
-      login: { uris: unknown[] };
-    }>();
+    const item = await expectJson<{ id: string; login: { uris: unknown[] } }>(
+      created,
+    );
     assert.deepEqual(item.login.uris, payload.login.uris);
     try {
       for (const uris of [
@@ -75,17 +70,14 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
           },
         ],
       ]) {
-        const updated = await request(`/api/ciphers/${item.id}`, {
-          method: "PUT",
-          headers,
-          body: JSON.stringify({
-            ...payload,
-            login: { ...payload.login, uris },
-          }),
+        const updated = await client.api.ciphers[":id"].$put({
+          param: { id: item.id },
+          json: { ...payload, login: { ...payload.login, uris } },
         });
         assert.equal(updated.status, 200, await updated.clone().text());
         assert.deepEqual(
-          (await updated.json<{ login: { uris: unknown[] } }>()).login.uris,
+          (await expectJson<{ login: { uris: unknown[] } }>(updated)).login
+            .uris,
           uris,
         );
         const stored = await context.database
@@ -94,25 +86,31 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
           .first<{ data: string }>();
         assert.ok(stored);
         assert.deepEqual(JSON.parse(stored.data).login.uris, uris);
-        const loaded = await request(`/api/ciphers/${item.id}`, { headers });
+        const loaded = await client.api.ciphers[":id"].$get({
+          param: { id: item.id },
+        });
         assert.equal(loaded.status, 200);
-        const detail = await loaded.json<{
-          key: string;
-          login: { uri: string; uris: unknown[] };
-        }>();
+        const detail = await loaded.json();
         assert.equal(detail.key, payload.key);
-        assert.equal(detail.login.uri, uris[0].uri);
-        assert.deepEqual(detail.login.uris, uris);
-        const synced = await request("/api/sync?excludeDomains=true", {
-          headers,
+        assert.deepEqual(detail.login, {
+          ...payload.login,
+          uri: uris[0].uri,
+          uris,
+          passwordRevisionDate: null,
+        });
+        const synced = await client.api.sync.$get({
+          query: { excludeDomains: "true" },
         });
         assert.equal(synced.status, 200);
-        const vault = await synced.json<{
-          ciphers: Array<{ id: string; login: { uris: unknown[] } }>;
-        }>();
+        const vault = await synced.json();
         assert.deepEqual(
-          vault.ciphers.find((cipher) => cipher.id === item.id)?.login.uris,
-          uris,
+          vault.ciphers.find((cipher) => cipher.id === item.id)?.login,
+          {
+            ...payload.login,
+            uri: uris[0].uri,
+            uris,
+            passwordRevisionDate: null,
+          },
         );
       }
     } finally {
@@ -139,24 +137,17 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     assert.equal(wrong.status, 400);
 
     for (const verifyDevices of [false, true]) {
-      const changed = await request("/api/accounts/verify-devices", {
-        method: "PUT",
-        headers,
-        body: JSON.stringify({
-          verifyDevices,
-          masterPasswordHash: MASTER_PASSWORD_HASH,
-        }),
+      const changed = await context.rpc.api.accounts["verify-devices"].$put({
+        json: { verifyDevices, masterPasswordHash: MASTER_PASSWORD_HASH },
       });
       assert.equal(changed.status, 200, await changed.clone().text());
-      const profile = await request("/api/accounts/profile", { headers });
-      assert.equal(
-        (await profile.json<{ verifyDevices: boolean }>()).verifyDevices,
-        verifyDevices,
-      );
+      const profile = await context.rpc.api.accounts.profile.$get();
+      assert.equal((await profile.json()).verifyDevices, verifyDevices);
     }
   });
 
   test("creates a folder and cipher through authenticated batch-backed handlers", async () => {
+    const client = context.rpc;
     const auth = { authorization: `Bearer ${context.accessToken}` };
     const profileAlias = await request("/api/accounts/profile", {
       method: "POST",
@@ -168,24 +159,22 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     assert.ok("accountKeys" in profile);
     assert.equal(profile.verifyDevices, true);
     assert.deepEqual(profile.organizationsNew, profile.organizations);
-    const keysResponse = await request("/api/accounts/keys", { headers: auth });
+    const keysResponse = await client.api.accounts.keys.$get();
     assert.equal(keysResponse.status, 200, await keysResponse.clone().text());
-    const keys = await keysResponse.json<Record<string, unknown>>();
+    const keys = await keysResponse.json();
     assert.equal(keys.object, "keys");
     assert.equal(keys.publicKey, profile.publicKey);
     assert.equal(keys.privateKey, profile.privateKey);
     assert.deepEqual(keys.accountKeys, profile.accountKeys);
-    const folderResponse = await request("/api/folders", {
-      method: "POST",
-      headers: { ...auth, "content-type": "application/json" },
-      body: JSON.stringify({ name: "encrypted-folder-name" }),
+    const folderResponse = await client.api.folders.$post({
+      json: { name: "encrypted-folder-name" },
     });
     assert.equal(
       folderResponse.status,
       200,
       await folderResponse.clone().text(),
     );
-    const folder = await folderResponse.json<{ id: string }>();
+    const folder = await expectJson<{ id: string }>(folderResponse);
 
     const cipherResponse = await request("/api/ciphers", {
       method: "POST",
@@ -226,15 +215,9 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       [true, true, "cipherDetails"],
     );
 
-    const sync = await request("/api/sync", { headers: auth });
+    const sync = await client.api.sync.$get();
     assert.equal(sync.status, 200);
-    const syncBody = await sync.json<{
-      profile: Record<string, unknown>;
-      folders: Array<Record<string, unknown>>;
-      ciphers: Array<{ edit: boolean; viewPassword: boolean }>;
-      policiesNew: unknown[];
-      userDecryption: Record<string, unknown>;
-    }>();
+    const syncBody = await sync.json();
     assert.equal(syncBody.folders.length, 1);
     assert.equal(syncBody.ciphers.length, 1);
     assert.equal(syncBody.ciphers[0].edit, true);
@@ -249,23 +232,18 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     assert.equal(typeof syncBody.folders[0].creationDate, "string");
     assert.deepEqual(syncBody.policiesNew, []);
     assert.ok(syncBody.userDecryption.masterPasswordUnlock);
-    const revision = await request("/api/accounts/revision-date", {
-      headers: auth,
-    });
+    const revision = await client.api.accounts["revision-date"].$get();
     assert.equal(revision.status, 200);
     assert.equal(typeof (await revision.json()), "number");
-    const syncWithoutDomains = await request("/api/sync?excludeDomains=true", {
-      headers: auth,
+    const syncWithoutDomains = await client.api.sync.$get({
+      query: { excludeDomains: "true" },
     });
     assert.equal(
       syncWithoutDomains.status,
       200,
       await syncWithoutDomains.clone().text(),
     );
-    assert.equal(
-      (await syncWithoutDomains.json<{ domains: unknown }>()).domains,
-      null,
-    );
+    assert.equal((await syncWithoutDomains.json()).domains, null);
 
     const updatePayload = {
       type: 1,
@@ -301,21 +279,15 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       body: JSON.stringify({ ...updatePayload, name: "stale-encrypted-name" }),
     });
     assert.equal(staleResponse.status, 409);
-    const currentResponse = await request(`/api/ciphers/${cipher.id}`, {
-      headers: auth,
+    const currentResponse = await client.api.ciphers[":id"].$get({
+      param: { id: cipher.id },
     });
     assert.equal(currentResponse.status, 200);
-    assert.equal(
-      (await currentResponse.json<{ name: string }>()).name,
-      "newer-encrypted-name",
-    );
+    assert.equal((await currentResponse.json()).name, "newer-encrypted-name");
   });
 
   test("publishes sync notifications only after sync state changes", async () => {
-    const auth = {
-      authorization: `Bearer ${context.accessToken}`,
-      "content-type": "application/json",
-    };
+    const client = context.rpc;
     const originalRealtime = context.bindings.REALTIME;
     let broadcasts = 0;
     context.bindings.REALTIME = {
@@ -332,32 +304,26 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       .first<{ name: string | null; master_password_hint: string | null }>();
     assert.ok(original);
     try {
-      const verification = await request("/api/accounts/verify-password", {
-        method: "POST",
-        headers: auth,
-        body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
+      const verification = await client.api.accounts["verify-password"].$post({
+        json: { masterPasswordHash: MASTER_PASSWORD_HASH },
       });
       assert.equal(verification.status, 200);
       assert.equal(broadcasts, 0);
 
-      const changed = await request("/api/accounts/profile", {
-        method: "PUT",
-        headers: auth,
-        body: JSON.stringify({
+      const changed = await client.api.accounts.profile.$put({
+        json: {
           name: `Notification Test ${crypto.randomUUID()}`,
           masterPasswordHint: original.master_password_hint,
-        }),
+        },
       });
       assert.equal(changed.status, 200, await changed.clone().text());
       assert.equal(broadcasts, 1);
     } finally {
-      await request("/api/accounts/profile", {
-        method: "PUT",
-        headers: auth,
-        body: JSON.stringify({
+      await client.api.accounts.profile.$put({
+        json: {
           name: original.name,
           masterPasswordHint: original.master_password_hint,
-        }),
+        },
       });
       context.bindings.REALTIME = originalRealtime;
     }
