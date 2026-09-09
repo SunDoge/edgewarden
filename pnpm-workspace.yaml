@@ -3,6 +3,8 @@ packages:
   - "packages/*"
 
 overrides:
+  # GHSA-rgj7-g3m4-5g8c: remove once Miniflare requires sharp >=0.35.4.
+  "miniflare>sharp@<0.35.4": 0.35.4
   # GHSA-pxg6-pf52-xh8x: remove once SvelteKit requires cookie >=0.7.0.
   "@sveltejs/kit>cookie@<0.7.0": 0.7.2
 
