@@ -28,6 +28,101 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
   const request = context.request;
   const EMAIL = context.email;
   const MASTER_PASSWORD_HASH = context.masterPasswordHash;
+  test("preserves login websites and checksums through create, edit, and sync", async () => {
+    const headers = {
+      authorization: `Bearer ${context.accessToken}`,
+      "content-type": "application/json",
+    };
+    const payload = {
+      type: 1,
+      name: "encrypted-uri-roundtrip",
+      key: "encrypted-item-key",
+      login: {
+        username: "encrypted-username",
+        uris: [
+          {
+            uri: "encrypted-first-uri",
+            match: null,
+            uriChecksum: "encrypted-first-checksum",
+          },
+          {
+            uri: "encrypted-second-uri",
+            match: 3,
+            uriChecksum: "encrypted-second-checksum",
+          },
+        ],
+      },
+    };
+    const created = await request("/api/ciphers", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    assert.equal(created.status, 200, await created.clone().text());
+    const item = await created.json<{
+      id: string;
+      login: { uris: unknown[] };
+    }>();
+    assert.deepEqual(item.login.uris, payload.login.uris);
+    try {
+      for (const uris of [
+        payload.login.uris,
+        [
+          {
+            uri: "encrypted-edited-uri",
+            match: 1,
+            uriChecksum: "encrypted-edited-checksum",
+          },
+        ],
+      ]) {
+        const updated = await request(`/api/ciphers/${item.id}`, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({
+            ...payload,
+            login: { ...payload.login, uris },
+          }),
+        });
+        assert.equal(updated.status, 200, await updated.clone().text());
+        assert.deepEqual(
+          (await updated.json<{ login: { uris: unknown[] } }>()).login.uris,
+          uris,
+        );
+        const stored = await context.database
+          .prepare("SELECT data FROM ciphers WHERE id = ?")
+          .bind(item.id)
+          .first<{ data: string }>();
+        assert.ok(stored);
+        assert.deepEqual(JSON.parse(stored.data).login.uris, uris);
+        const loaded = await request(`/api/ciphers/${item.id}`, { headers });
+        assert.equal(loaded.status, 200);
+        const detail = await loaded.json<{
+          key: string;
+          login: { uri: string; uris: unknown[] };
+        }>();
+        assert.equal(detail.key, payload.key);
+        assert.equal(detail.login.uri, uris[0].uri);
+        assert.deepEqual(detail.login.uris, uris);
+        const synced = await request("/api/sync?excludeDomains=true", {
+          headers,
+        });
+        assert.equal(synced.status, 200);
+        const vault = await synced.json<{
+          ciphers: Array<{ id: string; login: { uris: unknown[] } }>;
+        }>();
+        assert.deepEqual(
+          vault.ciphers.find((cipher) => cipher.id === item.id)?.login.uris,
+          uris,
+        );
+      }
+    } finally {
+      await context.database
+        .prepare("DELETE FROM ciphers WHERE id = ?")
+        .bind(item.id)
+        .run();
+    }
+  });
+
   test("persists the account device-verification preference", async () => {
     const headers = {
       authorization: `Bearer ${context.accessToken}`,
