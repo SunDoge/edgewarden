@@ -1,6 +1,7 @@
 import type { CipherInput, CipherResponse } from "@edgewarden/shared";
 import type { VaultCipher } from "./vault-types";
 import {
+  bytesToBase64,
   decryptBw,
   decryptStr,
   encryptBw,
@@ -246,9 +247,27 @@ export async function encryptCipher<T extends PlainCipherInput>(
     key: wrappedKey,
   };
 
+  let login = fields.login;
+  if (login && Array.isArray(login.uris)) {
+    login = {
+      ...login,
+      uris: await Promise.all(
+        login.uris.map(async (entry) => {
+          if (!entry || typeof entry.uri !== "string") return entry;
+          // Bitwarden validates keyed items against the encrypted SHA-256 URI hash.
+          const hash = await crypto.subtle.digest(
+            "SHA-256",
+            encoder.encode(entry.uri),
+          );
+          return { ...entry, uriChecksum: bytesToBase64(new Uint8Array(hash)) };
+        }),
+      ),
+    };
+  }
+
   const typeData =
     fields.type === 1
-      ? ["login", fields.login]
+      ? ["login", login]
       : fields.type === 2
         ? ["secureNote", fields.secureNote ?? {}]
         : fields.type === 3
