@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { CipherType } from "@edgewarden/shared";
 import { argon2id } from "hash-wasm";
 import { describe, expect, it } from "vitest";
@@ -525,6 +526,15 @@ describe("vault import and export", () => {
       login: {
         username: "alice",
         password: "hunter2",
+        uris: [
+          {
+            uri: "https://bank.test",
+            match: null,
+            uriChecksum: createHash("sha256")
+              .update("https://bank.test")
+              .digest("base64"),
+          },
+        ],
         fido2Credentials: [
           {
             credentialId: "credential-id",
