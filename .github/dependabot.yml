@@ -11,6 +11,10 @@ updates:
       time: "05:00"
       timezone: Asia/Shanghai
     open-pull-requests-limit: 5
+    ignore:
+      # Keep TypeScript 6 until the Svelte/tooling ecosystem supports 7 directly.
+      - dependency-name: typescript
+        versions: ["7.x"]
     commit-message:
       prefix: chore
       include: scope

@@ -2,15 +2,19 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Miniflare } from "miniflare";
+import { hc } from "hono/client";
 import { unstable_splitSqlQuery } from "wrangler";
-import { app } from "../index";
+import { app, type AppType } from "../index";
+
+export type ApiRpcClient = ReturnType<typeof hc<AppType>>;
 
 export interface ApiTestHarness {
+  rpc: ApiRpcClient;
   bindings: CloudflareBindings;
   database: D1Database;
   r2Values: Map<string, Uint8Array>;
   request: (
-    path: string,
+    path: string | Request,
     init?: RequestInit,
     executionContext?: ExecutionContext,
   ) => Promise<Response>;
@@ -24,6 +28,7 @@ export interface ApiTestHarness {
 }
 
 export interface ApiTestClient {
+  rpc: ApiRpcClient;
   request: (path: string, init?: RequestInit) => Promise<Response>;
   json: <TBody>(
     path: string,
@@ -34,7 +39,7 @@ export interface ApiTestClient {
 
 /** Parse a response and include its body in the failure, instead of emitting an opaque status mismatch. */
 export async function expectJson<T>(
-  response: Response,
+  response: Pick<Response, "status" | "text">,
   expectedStatus = 200,
 ): Promise<T> {
   const text = await response.text();
@@ -204,7 +209,17 @@ export async function createApiTestHarness(secrets: {
   const json: ApiTestHarness["json"] = (path, body, init) =>
     request(path, jsonInit(body, init));
 
+  // Use the same in-process transport so RPC also receives bindings and awaits
+  // waitUntil work before returning. No HTTP server or network fetch is needed.
+  const createRpc = (accessToken?: string) =>
+    hc<AppType>("http://localhost", {
+      fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+        request(new Request(input, init)),
+      headers: accessToken ? { authorization: `Bearer ${accessToken}` } : {},
+    });
+
   return {
+    rpc: createRpc(),
     bindings,
     database,
     r2Values,
@@ -217,6 +232,7 @@ export async function createApiTestHarness(secrets: {
         return { ...init, headers };
       };
       return {
+        rpc: createRpc(accessToken),
         request: (path, init) => request(path, withAuthorization(init)),
         json: (path, body, init) =>
           request(path, withAuthorization(jsonInit(body, init))),

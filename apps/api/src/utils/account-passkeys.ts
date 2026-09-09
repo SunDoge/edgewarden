@@ -1,6 +1,5 @@
 import type {
   AuthenticationResponseJSON,
-  AuthenticatorTransportFuture,
   RegistrationResponseJSON,
   WebAuthnCredential,
 } from "@simplewebauthn/server";
@@ -244,9 +243,8 @@ export function accountPasskeyCredentialToResponse(
 export function toSimpleWebAuthnCredential(
   credential: Selectable<WebauthnCredentials>,
 ): WebAuthnCredential {
-  const transports = parseTransports(credential.transports)?.filter(
-    (value): value is AuthenticatorTransportFuture =>
-      AUTHENTICATOR_TRANSPORTS.has(value as AuthenticatorTransportFuture),
+  const transports = parseTransports(credential.transports)?.filter((value) =>
+    AUTHENTICATOR_TRANSPORTS.has(value),
   );
   return {
     id: credential.credential_id,
@@ -256,7 +254,7 @@ export function toSimpleWebAuthnCredential(
   };
 }
 
-const AUTHENTICATOR_TRANSPORTS = new Set<AuthenticatorTransportFuture>([
+const AUTHENTICATOR_TRANSPORTS = new Set([
   "ble",
   "cable",
   "hybrid",
@@ -320,11 +318,7 @@ export function normalizeRegistrationResponse(
       transports: Array.isArray(response.transports)
         ? response.transports
             .map(String)
-            .filter((value): value is AuthenticatorTransportFuture =>
-              AUTHENTICATOR_TRANSPORTS.has(
-                value as AuthenticatorTransportFuture,
-              ),
-            )
+            .filter((value) => AUTHENTICATOR_TRANSPORTS.has(value))
         : undefined,
       publicKey: response.publicKey ? String(response.publicKey) : undefined,
       publicKeyAlgorithm:

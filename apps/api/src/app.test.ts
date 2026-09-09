@@ -115,6 +115,9 @@ describe("Edgewarden API", () => {
     email: EMAIL,
   });
   registerVaultScenarios({
+    get rpc() {
+      return harness.authenticated(accessToken).rpc;
+    },
     get bindings() {
       return bindings;
     },

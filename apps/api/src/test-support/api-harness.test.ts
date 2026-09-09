@@ -18,9 +18,9 @@ describe("API test harness", () => {
 
   afterAll(async () => harness.dispose());
 
-  test("sends JSON requests without repeating headers and serialization", async () => {
-    const response = await harness.json("/identity/accounts/prelogin", {
-      email: "missing@example.com",
+  test("sends typed RPC requests through the in-process harness", async () => {
+    const response = await harness.rpc.identity.accounts.prelogin.$post({
+      json: { email: "missing@example.com" },
     });
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("application/json");
@@ -29,7 +29,7 @@ describe("API test harness", () => {
   test("adds bearer authorization through a scoped client", async () => {
     const response = await harness
       .authenticated("invalid-test-token")
-      .request("/api/sync");
+      .rpc.api.sync.$get();
     expect(response.status).toBe(401);
   });
 
