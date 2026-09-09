@@ -53,7 +53,7 @@
     "@edgewarden/shared": "workspace:*",
     "dexie": "^4.4.4",
     "hash-wasm": "^4.12.0",
-    "hono": "^4.12.26",
+    "hono": "^4.13.5",
     "minisearch": "^7.2.0",
     "otpauth": "^9.5.1",
     "papaparse": "^5.6.0",
