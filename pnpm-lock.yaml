@@ -36,7 +36,7 @@ importers:
         version: link:../../packages/shared
       '@hono/valibot-validator':
         specifier: ^0.6.1
-        version: 0.6.1(hono@4.13.7)(valibot@1.4.2(typescript@6.0.3))
+        version: 0.6.1(hono@4.13.7)(valibot@1.5.0(typescript@6.0.3))
       '@simplewebauthn/server':
         specifier: ^14.0.1
         version: 14.0.1
@@ -59,8 +59,8 @@ importers:
         specifier: ^9.5.2
         version: 9.5.2
       valibot:
-        specifier: ^1.4.1
-        version: 1.4.2(typescript@6.0.3)
+        specifier: ^1.5.0
+        version: 1.5.0(typescript@6.0.3)
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.22.0
@@ -96,8 +96,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared
       dexie:
-        specifier: ^4.4.5
-        version: 4.4.5
+        specifier: ^4.4.6
+        version: 4.4.6
       hash-wasm:
         specifier: ^4.12.0
         version: 4.12.0
@@ -120,8 +120,8 @@ importers:
         specifier: ^5.9.0
         version: 5.9.0
       valibot:
-        specifier: ^1.4.1
-        version: 1.4.2(typescript@6.0.3)
+        specifier: ^1.5.0
+        version: 1.5.0(typescript@6.0.3)
     devDependencies:
       '@fontsource-variable/inter':
         specifier: ^5.2.8
@@ -1505,8 +1505,8 @@ packages:
   devalue@5.9.2:
     resolution: {integrity: sha512-po4PAY5c53tw5XMocSnf8A/5OHhbbUftpr93aEN6BBoAdntUmK7vu7wOATqvt7cXO7m1Cl4gMVn6p7n6n4mj0w==}
 
-  dexie@4.4.5:
-    resolution: {integrity: sha512-wWCHdihT3dmlUSuNhn5mMZDWSpG0suxjAni7YjjiZdzabZcKmy3uNZGZ7AeYYXBoLbpSXX35fikPLkPC44Osiw==}
+  dexie@4.4.6:
+    resolution: {integrity: sha512-hJP/BO6mjB+tX6hToIO1kmxYLNmun90wYbfcoAoLpKEyDYal/k33dg0TAfoUe2TDsbbLoVIzljJ3BN2UbR5EOg==}
 
   diff@8.0.4:
     resolution: {integrity: sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==}
@@ -2314,6 +2314,14 @@ packages:
       typescript:
         optional: true
 
+  valibot@1.5.0:
+    resolution: {integrity: sha512-nil6AkP2TChWL43Z5uJ6GTxX01CUA+g8LWUM+N/rB9NBbkUMaUsi9PUNzlUPgoKASgmx9f7eGOYpJ04/fSa6FQ==}
+    peerDependencies:
+      typescript: '>=5'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   vite@8.2.2:
     resolution: {integrity: sha512-cFKLV/PRgAUlIRm5WjMjJ86jrftzpqcgH+Us+DS8mI3CDNiH30Whrz8uHL3+MOLPAgqbMBAqWdAHAphOAM+z/Q==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -2777,10 +2785,10 @@ snapshots:
 
   '@hexagon/base64@1.1.28': {}
 
-  '@hono/valibot-validator@0.6.1(hono@4.13.7)(valibot@1.4.2(typescript@6.0.3))':
+  '@hono/valibot-validator@0.6.1(hono@4.13.7)(valibot@1.5.0(typescript@6.0.3))':
     dependencies:
       hono: 4.13.7
-      valibot: 1.4.2(typescript@6.0.3)
+      valibot: 1.5.0(typescript@6.0.3)
 
   '@img/colour@1.1.0': {}
 
@@ -2898,7 +2906,7 @@ snapshots:
       json5: 2.2.3
       unplugin: 2.3.11
       urlpattern-polyfill: 10.1.0
-      valibot: 1.4.2(typescript@6.0.3)
+      valibot: 1.5.0(typescript@6.0.3)
     optionalDependencies:
       typescript: 6.0.3
       vite: 8.2.2(@types/node@26.4.1)(esbuild@0.28.1)(jiti@2.7.0)
@@ -3572,7 +3580,7 @@ snapshots:
 
   devalue@5.9.2: {}
 
-  dexie@4.4.5: {}
+  dexie@4.4.6: {}
 
   diff@8.0.4: {}
 
@@ -4315,6 +4323,10 @@ snapshots:
   uuid@14.0.2: {}
 
   valibot@1.4.2(typescript@6.0.3):
+    optionalDependencies:
+      typescript: 6.0.3
+
+  valibot@1.5.0(typescript@6.0.3):
     optionalDependencies:
       typescript: 6.0.3
 
