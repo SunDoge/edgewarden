@@ -36,13 +36,13 @@
     "hono": "^4.12.26",
     "kysely": "0.29.5",
     "otpauth": "^9.5.2",
-    "valibot": "^1.4.1"
+    "valibot": "^1.5.0"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^26.4.1",
-    "better-sqlite3": "^12.4.1",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.5.1",
+    "better-sqlite3": "^13.0.3",
     "kysely-codegen": "^0.20.0",
     "miniflare": "5.20260804.0-alpha",
     "typescript": "^6.0.3",
