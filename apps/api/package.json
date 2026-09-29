@@ -29,12 +29,12 @@
   "dependencies": {
     "@edgewarden/shared": "workspace:*",
     "@hono/valibot-validator": "^0.6.1",
-    "@simplewebauthn/server": "^14.0.1",
+    "@simplewebauthn/server": "^14.0.2",
     "@sundoge/kysely-d1": "^0.3.0",
     "aws4fetch": "^1.0.20",
     "fast-xml-parser": "^5.11.1",
-    "hono": "^4.12.26",
-    "kysely": "0.29.5",
+    "hono": "^4.13.8",
+    "kysely": "0.29.6",
     "otpauth": "^9.5.2",
     "valibot": "^1.5.0"
   },
