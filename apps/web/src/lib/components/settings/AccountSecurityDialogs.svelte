@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { Copy } from "@lucide/svelte";
+  import { Copy, Download, ShieldAlert } from "@lucide/svelte";
+  import * as Alert from "$lib/components/ui/alert/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
+  import { Checkbox } from "$lib/components/ui/checkbox/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as Field from "$lib/components/ui/field/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -11,6 +13,9 @@
     totpOpen = $bindable(),
     totpKey,
     totpToken = $bindable(),
+    recoveryOpen = $bindable(),
+    recoveryCode,
+    recoveryConfirmed = $bindable(),
     disableOpen = $bindable(),
     masterPassword = $bindable(),
     passwordOpen = $bindable(),
@@ -29,6 +34,9 @@
     totpOpen: boolean;
     totpKey: string;
     totpToken: string;
+    recoveryOpen: boolean;
+    recoveryCode: string;
+    recoveryConfirmed: boolean;
     disableOpen: boolean;
     masterPassword: string;
     passwordOpen: boolean;
@@ -42,6 +50,23 @@
     onDisableTotp: () => void;
     onChangePassword: () => void;
   } = $props();
+
+  function downloadRecoveryCode() {
+    const blob = new Blob(
+      [
+        "Edgewarden 两步验证恢复代码\n\n",
+        `${recoveryCode}\n\n`,
+        "此代码只能使用一次。请离线保存在安全位置。\n",
+      ],
+      { type: "text/plain;charset=utf-8" },
+    );
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "edgewarden-recovery-code.txt";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
 </script>
 
 <Dialog.Root bind:open={deleteAccountOpen}
@@ -102,6 +127,55 @@
     ></Dialog.Content
   ></Dialog.Root
 >
+
+<Dialog.Root
+  open={recoveryOpen}
+  onOpenChange={(open) => {
+    recoveryOpen = open || !recoveryConfirmed;
+  }}
+>
+  <Dialog.Content>
+    <Dialog.Header>
+      <Dialog.Title>保存恢复代码</Dialog.Title>
+      <Dialog.Description>
+        如果身份验证器丢失，这是关闭两步验证并恢复账户访问的唯一备用凭据。
+      </Dialog.Description>
+    </Dialog.Header>
+    <Alert.Root>
+      <ShieldAlert />
+      <Alert.Title>只显示给你，请立即保存</Alert.Title>
+      <Alert.Description>
+        恢复代码只能使用一次。不要只保存在本密码库中，建议下载后离线保存。
+      </Alert.Description>
+    </Alert.Root>
+    <Field.Group>
+      <Field.Field>
+        <Field.Label for="new-recovery-code">恢复代码</Field.Label>
+        <div class="flex gap-2">
+          <Input id="new-recovery-code" value={recoveryCode} readonly class="font-mono" />
+          <Button
+            variant="outline"
+            size="icon"
+            onclick={() => onCopy(recoveryCode)}
+            aria-label="复制恢复代码"><Copy /></Button
+          >
+        </div>
+      </Field.Field>
+      <Field.Field orientation="horizontal">
+        <Checkbox id="recovery-code-saved" bind:checked={recoveryConfirmed} />
+        <Field.Label for="recovery-code-saved">
+          我已将恢复代码保存在密码库之外的安全位置
+        </Field.Label>
+      </Field.Field>
+    </Field.Group>
+    <Dialog.Footer>
+      <Button variant="outline" onclick={downloadRecoveryCode}>
+        <Download data-icon="inline-start" />下载
+      </Button>
+      <Button onclick={() => (recoveryOpen = false)} disabled={!recoveryConfirmed}>完成</Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
 
 <Dialog.Root bind:open={disableOpen}
   ><Dialog.Content

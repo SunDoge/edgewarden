@@ -53,6 +53,8 @@
   let disableOpen = $state(false);
   let masterPassword = $state("");
   let recoveryCode = $state("");
+  let recoveryOpen = $state(false);
+  let recoveryConfirmed = $state(false);
   let passwordOpen = $state(false);
   let currentPassword = $state("");
   let newPassword = $state("");
@@ -178,12 +180,13 @@
     if (!profile) return;
     busy = "totp-enable";
     try {
-      await enableAuthenticatorApi(totpKey, totpToken.replace(/\s/g, ""));
+      const result = await enableAuthenticatorApi(totpKey, totpToken.replace(/\s/g, ""));
       profile.twoFactorEnabled = true;
       totpOpen = false;
-      message = "身份验证器已启用，请保存恢复代码";
-      const result = await fetchRecoveryCodeApi();
-      recoveryCode = result.code ?? "";
+      recoveryCode = result.recoveryCode;
+      recoveryConfirmed = false;
+      recoveryOpen = true;
+      message = "身份验证器已启用，请先保存恢复代码";
     } catch (e) {
       fail(e);
     } finally {
@@ -353,6 +356,9 @@
   bind:totpOpen
   {totpKey}
   bind:totpToken
+  bind:recoveryOpen
+  {recoveryCode}
+  bind:recoveryConfirmed
   bind:disableOpen
   bind:masterPassword
   bind:passwordOpen

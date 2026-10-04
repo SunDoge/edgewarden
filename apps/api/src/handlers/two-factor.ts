@@ -140,10 +140,11 @@ export const enableAuthenticator = factory.createHandlers(
     const userId = user.id;
     const ts = now();
     const securityStamp = crypto.randomUUID();
+    const recoveryCode = generateRecoveryCode();
     const [encryptedSecret, encryptedRecoveryCode] = await Promise.all([
       encryptCredential(key, c.env.DATA_ENCRYPTION_SECRET, "totp-secret"),
       encryptCredential(
-        generateRecoveryCode(),
+        recoveryCode,
         c.env.DATA_ENCRYPTION_SECRET,
         "totp-recovery",
       ),
@@ -188,6 +189,7 @@ export const enableAuthenticator = factory.createHandlers(
       authenticator: { key, enabled: true },
       key,
       enabled: true,
+      recoveryCode,
       object: "twoFactorAuthenticatorUpdate",
     });
   },

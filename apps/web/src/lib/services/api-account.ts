@@ -123,10 +123,10 @@ export async function getAuthenticatorApi(): Promise<{
 export async function enableAuthenticatorApi(
   key: string,
   token: string,
-): Promise<TwoFactorProvider> {
+): Promise<TwoFactorProvider & { recoveryCode: string }> {
   return (await rpcJson(
     await rpc.api["two-factor"].authenticator.$put({ json: { key, token } }),
-  )) as TwoFactorProvider;
+  )) as TwoFactorProvider & { recoveryCode: string };
 }
 
 export async function disableTwoFactorApi(
