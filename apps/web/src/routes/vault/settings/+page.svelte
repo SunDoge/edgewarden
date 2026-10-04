@@ -36,6 +36,7 @@
   } from "$lib/services/client-preferences";
   import { ArrowLeft, LoaderCircle } from "@lucide/svelte";
   import type { AccountDevice, AccountProfile } from "$lib/services/account-types";
+  import { summarizeTwoFactorProviders } from "$lib/services/two-factor-status";
 
   let loading = $state(true);
   let busy = $state("");
@@ -83,12 +84,9 @@
       ]);
       profile = nextProfile;
       devices = deviceResult.data;
-      totpEnabled = twoFactorResult.data.some(
-        (provider) => provider.type === 0 && provider.enabled,
-      );
-      otherTwoFactorEnabled = twoFactorResult.data.some(
-        (provider) => provider.type !== 0 && provider.enabled,
-      );
+      const twoFactorStatus = summarizeTwoFactorProviders(twoFactorResult.data);
+      totpEnabled = twoFactorStatus.totpEnabled;
+      otherTwoFactorEnabled = twoFactorStatus.otherEnabled;
       name = profile.name ?? "";
       hint = profile.masterPasswordHint ?? "";
     } catch (e) {

@@ -528,6 +528,29 @@ export function registerAccountSecurityScenarios(
       }>();
     assert.equal(stored?.totp_secret, null);
     assert.equal(stored?.totp_recovery_code, null);
+    assert.equal(
+      (
+        await request("/api/accounts/profile", {
+          headers: { authorization: `Bearer ${token}` },
+        })
+      ).status,
+      401,
+    );
+
+    const loginAfterDisable = await request("/identity/connect/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "password",
+        username: email,
+        password: MASTER_PASSWORD_HASH,
+      }),
+    });
+    assert.equal(
+      loginAfterDisable.status,
+      200,
+      await loginAfterDisable.clone().text(),
+    );
   });
 
   test("deletes an account only after password verification and blocks organization owners", async () => {
