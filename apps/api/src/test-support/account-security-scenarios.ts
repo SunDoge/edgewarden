@@ -439,6 +439,97 @@ export function registerAccountSecurityScenarios(
     if (yubikeyUser) invalidateUserCache(yubikeyUser.id);
   });
 
+  test("disables TOTP only after password verification", async () => {
+    const email = `disable-totp-${crypto.randomUUID()}@example.com`;
+    const registration = await request("/api/accounts/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email,
+        name: "Disable TOTP",
+        masterPasswordHash: MASTER_PASSWORD_HASH,
+        key: "encrypted-disable-totp-key",
+        kdf: 0,
+        kdfIterations: 600_000,
+      }),
+    });
+    assert.equal(registration.status, 204, await registration.clone().text());
+
+    const encryptedSecret = await encryptCredential(
+      "JBSWY3DPEHPK3PXP",
+      DATA_ENCRYPTION_SECRET,
+      "totp-secret",
+    );
+    const encryptedRecoveryCode = await encryptCredential(
+      "A1B2C3D4E5F60718",
+      DATA_ENCRYPTION_SECRET,
+      "totp-recovery",
+    );
+    await context.database
+      .prepare(
+        "UPDATE users SET totp_secret = ?, totp_recovery_code = ? WHERE email = ?",
+      )
+      .bind(encryptedSecret, encryptedRecoveryCode, email)
+      .run();
+    const user = await context.database
+      .prepare("SELECT id FROM users WHERE email = ?")
+      .bind(email)
+      .first<{ id: string }>();
+    assert.ok(user?.id);
+    invalidateUserCache(user.id);
+
+    // Temporarily remove TOTP to obtain an authenticated session, then restore
+    // it before exercising the authenticated disable endpoint.
+    await context.database
+      .prepare("UPDATE users SET totp_secret = NULL WHERE id = ?")
+      .bind(user.id)
+      .run();
+    invalidateUserCache(user.id);
+    const login = await request("/identity/connect/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "password",
+        username: email,
+        password: MASTER_PASSWORD_HASH,
+      }),
+    });
+    assert.equal(login.status, 200, await login.clone().text());
+    const token = (await login.json<{ access_token: string }>()).access_token;
+    await context.database
+      .prepare("UPDATE users SET totp_secret = ? WHERE id = ?")
+      .bind(encryptedSecret, user.id)
+      .run();
+    invalidateUserCache(user.id);
+
+    const headers = {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    };
+    const rejected = await request("/api/two-factor/disable", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ masterPasswordHash: "wrong" }),
+    });
+    assert.equal(rejected.status, 400, await rejected.clone().text());
+
+    const disabled = await request("/api/two-factor/disable", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
+    });
+    assert.equal(disabled.status, 200, await disabled.clone().text());
+    const stored = await context.database
+      .prepare("SELECT totp_secret, totp_recovery_code FROM users WHERE id = ?")
+      .bind(user.id)
+      .first<{
+        totp_secret: string | null;
+        totp_recovery_code: string | null;
+      }>();
+    assert.equal(stored?.totp_secret, null);
+    assert.equal(stored?.totp_recovery_code, null);
+  });
+
   test("deletes an account only after password verification and blocks organization owners", async () => {
     const ownerLogin = await request("/identity/connect/token", {
       method: "POST",

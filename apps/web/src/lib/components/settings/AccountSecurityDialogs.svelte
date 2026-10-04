@@ -181,7 +181,7 @@
   ><Dialog.Content
     ><Dialog.Header
       ><Dialog.Title>关闭两步验证</Dialog.Title><Dialog.Description
-        >请输入主密码确认。此操作会撤销现有刷新令牌。</Dialog.Description
+        >请输入主密码确认。关闭后会撤销现有会话，并将你转到登录页面。</Dialog.Description
       ></Dialog.Header
     ><Field.Field
       ><Field.Label for="master-password">主密码</Field.Label><Input

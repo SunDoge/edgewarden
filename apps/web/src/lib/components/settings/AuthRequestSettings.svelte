@@ -10,7 +10,6 @@
   } from "$lib/services/auth-requests";
   import { vault } from "$lib/stores/vault.svelte";
   import { RefreshCw, ShieldCheck } from "@lucide/svelte";
-  import { match } from "ts-pattern";
 
   let {
     email,
@@ -24,15 +23,6 @@
 
   let requests = $state<AuthRequest[]>([]);
   let busy = $state("");
-
-  function deviceTypeLabel(type: number): string {
-    return match(type)
-      .with(0, () => "浏览器")
-      .with(1, () => "Android")
-      .with(2, () => "iOS")
-      .with(3, () => "桌面客户端")
-      .otherwise(() => `设备类型 ${type}`);
-  }
 
   async function refresh() {
     busy = "refresh";
@@ -88,7 +78,7 @@
         class="flex flex-col gap-3 rounded-md border p-3 md:flex-row md:items-center md:justify-between"
       >
         <div class="min-w-0">
-          <div class="font-medium">{deviceTypeLabel(request.requestDeviceType)}</div>
+          <div class="font-medium">{request.requestDeviceType}</div>
           <div class="truncate text-xs text-muted-foreground">
             {request.requestDeviceIdentifier}
           </div>

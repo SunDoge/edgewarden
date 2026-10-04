@@ -11,6 +11,7 @@
 
   let {
     profile,
+    totpEnabled,
     isAdmin,
     recoveryCode,
     busy,
@@ -27,6 +28,7 @@
       kdfIterations: number;
       twoFactorEnabled: boolean;
     };
+    totpEnabled: boolean;
     isAdmin: boolean;
     recoveryCode: string;
     busy: string;
@@ -54,14 +56,14 @@
 
   <Card.Root>
     <Card.Header
-      ><Card.Title>两步验证</Card.Title><Card.Description
+      ><Card.Title>身份验证器（TOTP）</Card.Title><Card.Description
         >使用兼容 TOTP 的身份验证器保护登录。</Card.Description
       ></Card.Header
     >
     <Card.Content class="flex flex-col gap-4">
       <div class="flex items-center gap-2">
-        <Badge variant={profile.twoFactorEnabled ? "default" : "secondary"}
-          >{profile.twoFactorEnabled ? "已启用" : "未启用"}</Badge
+        <Badge variant={totpEnabled ? "default" : "secondary"}
+          >{totpEnabled ? "已启用" : "未启用"}</Badge
         >
       </div>
       {#if recoveryCode}<div class="flex gap-2">
@@ -73,7 +75,7 @@
           >
         </div>{/if}
       <div class="flex flex-wrap gap-2">
-        {#if profile.twoFactorEnabled}<Button
+        {#if totpEnabled}<Button
             variant="outline"
             onclick={onShowRecoveryCode}
             disabled={busy === "recovery"}>查看恢复代码</Button

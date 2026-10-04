@@ -10,6 +10,7 @@
     fetchDevicesApi,
     fetchProfileApi,
     fetchRecoveryCodeApi,
+    fetchTwoFactorApi,
     getAuthenticatorApi,
     rotateApiKeyApi,
     updateProfileApi,
@@ -41,6 +42,8 @@
   let message = $state("");
   let error = $state("");
   let profile = $state<AccountProfile | null>(null);
+  let totpEnabled = $state(false);
+  let otherTwoFactorEnabled = $state(false);
   let devices = $state<AccountDevice[]>([]);
   let apiKey = $state("");
   let name = $state("");
@@ -73,7 +76,19 @@
     loading = true;
     error = "";
     try {
-      [profile, { data: devices }] = await Promise.all([fetchProfileApi(), fetchDevicesApi()]);
+      const [nextProfile, deviceResult, twoFactorResult] = await Promise.all([
+        fetchProfileApi(),
+        fetchDevicesApi(),
+        fetchTwoFactorApi(),
+      ]);
+      profile = nextProfile;
+      devices = deviceResult.data;
+      totpEnabled = twoFactorResult.data.some(
+        (provider) => provider.type === 0 && provider.enabled,
+      );
+      otherTwoFactorEnabled = twoFactorResult.data.some(
+        (provider) => provider.type !== 0 && provider.enabled,
+      );
       name = profile.name ?? "";
       hint = profile.masterPasswordHint ?? "";
     } catch (e) {
@@ -182,6 +197,7 @@
     try {
       const result = await enableAuthenticatorApi(totpKey, totpToken.replace(/\s/g, ""));
       profile.twoFactorEnabled = true;
+      totpEnabled = true;
       totpOpen = false;
       recoveryCode = result.recoveryCode;
       recoveryConfirmed = false;
@@ -212,11 +228,13 @@
       const key = await deriveMasterKey(masterPassword, profile.email, profile.kdfIterations);
       const hash = await deriveMasterPasswordHash(key, masterPassword);
       await disableTwoFactorApi(hash);
-      profile.twoFactorEnabled = false;
+      totpEnabled = false;
+      profile.twoFactorEnabled = otherTwoFactorEnabled;
       disableOpen = false;
       masterPassword = "";
       recoveryCode = "";
-      message = "两步验证已关闭";
+      await logout();
+      await goto("/login?reason=two-factor-disabled");
     } catch (e) {
       fail(e);
     } finally {
@@ -303,6 +321,7 @@
       <Tabs.Content value="security"
         ><SettingsSecurityPanel
           {profile}
+          {totpEnabled}
           isAdmin={vault.profile?.role === "admin"}
           {recoveryCode}
           {busy}

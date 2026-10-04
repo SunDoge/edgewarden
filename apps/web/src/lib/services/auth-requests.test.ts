@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { base64ToBytes, bytesToBase64, toBufferSource } from "./crypto";
 import {
   encryptVaultKeyForAuthRequest,
+  normalizeAuthRequest,
   publicKeyFingerprint,
 } from "./auth-requests";
 
@@ -59,5 +60,29 @@ describe("auth request cryptography", () => {
         new Uint8Array(32),
       ),
     ).rejects.toThrow("保险库密钥无效");
+  });
+});
+
+describe("auth request response normalization", () => {
+  it("keeps the server device type name and numeric value separate", () => {
+    const request = normalizeAuthRequest({
+      id: "request-id",
+      requestDeviceIdentifier: "device-id",
+      requestDeviceTypeValue: 1,
+      requestDeviceType: "iOS",
+    });
+
+    expect(request.requestDeviceTypeValue).toBe(1);
+    expect(request.requestDeviceType).toBe("iOS");
+  });
+
+  it("never produces NaN for malformed or legacy device types", () => {
+    const malformed = normalizeAuthRequest({ requestDeviceType: "iOS" });
+    const legacy = normalizeAuthRequest({ requestDeviceType: 6 });
+
+    expect(malformed.requestDeviceTypeValue).toBe(14);
+    expect(malformed.requestDeviceType).toBe("iOS");
+    expect(legacy.requestDeviceTypeValue).toBe(6);
+    expect(legacy.requestDeviceType).toBe("Device type 6");
   });
 });

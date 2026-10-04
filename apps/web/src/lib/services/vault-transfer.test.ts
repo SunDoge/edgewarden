@@ -3,6 +3,10 @@ import { CipherType } from "@edgewarden/shared";
 import { argon2id } from "hash-wasm";
 import { describe, expect, it } from "vitest";
 import { decryptCipher } from "./cipher-crypto";
+import {
+  decryptPasswordProtectedExport,
+  encryptPasswordProtectedExport,
+} from "./bitwarden-encrypted-export";
 import { decryptStr, encryptBw, hkdfExpand, pbkdf2 } from "./crypto";
 import {
   buildBitwardenCsv,
@@ -15,6 +19,34 @@ import {
 } from "./vault-transfer";
 
 describe("vault import and export", () => {
+  it("creates a portable Bitwarden password-protected export", async () => {
+    const plaintext = JSON.stringify({
+      encrypted: false,
+      folders: [],
+      items: [],
+    });
+    const encrypted = await encryptPasswordProtectedExport(
+      plaintext,
+      "correct horse battery staple",
+    );
+    const envelope = JSON.parse(encrypted) as Record<string, unknown>;
+
+    expect(envelope.encrypted).toBe(true);
+    expect(envelope.passwordProtected).toBe(true);
+    expect(envelope.kdfType).toBe(0);
+    expect(envelope.kdfIterations).toBe(600_000);
+    expect(envelope.data).toMatch(/^2\./);
+    expect(
+      await decryptPasswordProtectedExport(
+        envelope,
+        "correct horse battery staple",
+      ),
+    ).toBe(plaintext);
+    await expect(
+      decryptPasswordProtectedExport(envelope, "wrong password"),
+    ).rejects.toThrow("导出密码错误");
+  });
+
   it("detects duplicate decrypted items despite different IDs and timestamps", () => {
     const existing = {
       folders: [{ id: "existing-folder", name: "Work" }],

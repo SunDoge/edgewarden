@@ -9,7 +9,8 @@ import {
 export interface AuthRequest {
   id: string;
   requestDeviceIdentifier: string;
-  requestDeviceType: number;
+  requestDeviceTypeValue: number;
+  requestDeviceType: string;
   requestIpAddress: string | null;
   requestCountryName: string | null;
   publicKey: string;
@@ -23,15 +24,29 @@ interface AuthRequestsResponse {
   data?: unknown[];
 }
 
-function normalize(value: unknown): Omit<AuthRequest, "fingerprint"> {
+export function normalizeAuthRequest(
+  value: unknown,
+): Omit<AuthRequest, "fingerprint"> {
   const raw =
     value && typeof value === "object"
       ? (value as Record<string, unknown>)
       : {};
+  const parsedDeviceType = Number(
+    raw.requestDeviceTypeValue ??
+      (typeof raw.requestDeviceType === "number" ? raw.requestDeviceType : 14),
+  );
+  const requestDeviceTypeValue = Number.isInteger(parsedDeviceType)
+    ? parsedDeviceType
+    : 14;
+
   return {
     id: String(raw.id ?? ""),
     requestDeviceIdentifier: String(raw.requestDeviceIdentifier ?? ""),
-    requestDeviceType: Number(raw.requestDeviceType ?? 0),
+    requestDeviceTypeValue,
+    requestDeviceType:
+      typeof raw.requestDeviceType === "string" && raw.requestDeviceType
+        ? raw.requestDeviceType
+        : `Device type ${requestDeviceTypeValue}`,
     requestIpAddress:
       typeof raw.requestIpAddress === "string" ? raw.requestIpAddress : null,
     requestCountryName:
@@ -66,11 +81,11 @@ export async function listPendingAuthRequestsApi(
   email: string,
 ): Promise<AuthRequest[]> {
   const result = await rpcJson<AuthRequestsResponse>(
-    await rpc.api["auth-requests"].$get(),
+    await rpc.api["auth-requests"].pending.$get(),
   );
   return Promise.all(
     (result.data ?? []).map(async (row) => {
-      const request = normalize(row);
+      const request = normalizeAuthRequest(row);
       let fingerprint = "";
       try {
         fingerprint = await publicKeyFingerprint(email, request.publicKey);

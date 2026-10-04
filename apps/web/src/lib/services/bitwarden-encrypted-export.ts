@@ -1,5 +1,11 @@
 import { argon2id } from "hash-wasm";
-import { decryptStr, hkdfExpand, pbkdf2 } from "./crypto";
+import {
+  bytesToBase64,
+  decryptStr,
+  encryptStr,
+  hkdfExpand,
+  pbkdf2,
+} from "./crypto";
 
 interface PasswordProtectedExport {
   encrypted: true;
@@ -17,6 +23,7 @@ const MAX_PBKDF2_ITERATIONS = 10_000_000;
 const MAX_ARGON2_ITERATIONS = 100;
 const MAX_ARGON2_MEMORY_MIB = 1024;
 const MAX_ARGON2_PARALLELISM = 16;
+const EXPORT_PBKDF2_ITERATIONS = 600_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -113,4 +120,34 @@ export async function decryptPasswordProtectedExport(
   } catch {
     throw new Error("导出密码错误或加密文件已损坏");
   }
+}
+
+/**
+ * Produces Bitwarden's portable password-protected JSON envelope. Unlike an
+ * account-restricted export, this can be restored into a different account or
+ * server. The plaintext and password are handled only by the browser.
+ */
+export async function encryptPasswordProtectedExport(
+  plaintext: string,
+  password: string,
+): Promise<string> {
+  if (!password) throw new Error("请输入加密导出密码");
+
+  const document: PasswordProtectedExport = {
+    encrypted: true,
+    passwordProtected: true,
+    salt: bytesToBase64(crypto.getRandomValues(new Uint8Array(16))),
+    kdfType: 0,
+    kdfIterations: EXPORT_PBKDF2_ITERATIONS,
+    encKeyValidation_DO_NOT_EDIT: "",
+    data: "",
+  };
+  const { encKey, macKey } = await deriveExportKey(document, password);
+  document.encKeyValidation_DO_NOT_EDIT = await encryptStr(
+    crypto.randomUUID(),
+    encKey,
+    macKey,
+  );
+  document.data = await encryptStr(plaintext, encKey, macKey);
+  return JSON.stringify(document, null, 2);
 }
