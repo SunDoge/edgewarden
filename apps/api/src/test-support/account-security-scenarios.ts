@@ -230,6 +230,40 @@ export function registerAccountSecurityScenarios(
     }>();
     assert.ok(challenge.TwoFactorProviders.includes("7"));
     assert.ok(challenge.TwoFactorProviders2["7"].Challenge.token);
+
+    const encryptedTotpSecret = await encryptCredential(
+      "JBSWY3DPEHPK3PXP",
+      DATA_ENCRYPTION_SECRET,
+      "totp-secret",
+    );
+    await context.database
+      .prepare("UPDATE users SET totp_secret = ? WHERE id = ?")
+      .bind(encryptedTotpSecret, user.id)
+      .run();
+    invalidateUserCache(user.id);
+    const nativeLogin = await request("/identity/connect/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "password",
+        client_id: "mobile",
+        username: MEMBER_EMAIL,
+        password: MASTER_PASSWORD_HASH,
+      }),
+    });
+    assert.equal(nativeLogin.status, 400);
+    const nativeChallenge = await nativeLogin.json<{
+      TwoFactorProviders: string[];
+      TwoFactorProviders2: Record<string, unknown>;
+    }>();
+    assert.deepEqual(nativeChallenge.TwoFactorProviders, ["0"]);
+    assert.deepEqual(nativeChallenge.TwoFactorProviders2["0"], {});
+    await context.database
+      .prepare("UPDATE users SET totp_secret = NULL WHERE id = ?")
+      .bind(user.id)
+      .run();
+    invalidateUserCache(user.id);
+
     const revisionBeforeDelete = await context.database
       .prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
       .bind(user.id)

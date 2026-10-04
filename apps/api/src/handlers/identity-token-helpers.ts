@@ -22,6 +22,7 @@ export async function twoFactorRequiredResponse(
   env: CloudflareBindings,
   db: Kysely<DB>,
   user: Selectable<Users>,
+  options: { nativeClient?: boolean } = {},
 ): Promise<Response> {
   const providers: string[] = [];
   const totpSecret = user.totp_secret
@@ -41,10 +42,18 @@ export async function twoFactorRequiredResponse(
     db,
     user.id,
   );
-  if (webAuthn) providers.push(String(TWO_FACTOR_WEBAUTHN));
+  // Edgewarden's web client wraps its passkey challenge in a signed token,
+  // while official native clients expect Bitwarden's legacy flat WebAuthn
+  // challenge. Do not let that incompatible provider outrank a working TOTP
+  // or YubiKey method on native clients. If it is the only method, retain it so
+  // native clients can still expose their recovery-code entry point.
+  const exposeWebAuthn = Boolean(
+    webAuthn && (!options.nativeClient || providers.length === 0),
+  );
+  if (exposeWebAuthn) providers.push(String(TWO_FACTOR_WEBAUTHN));
   const providers2: Record<string, Record<string, unknown>> = {};
-  for (const provider of providers) providers2[provider] = { Email: null };
-  if (webAuthn)
+  for (const provider of providers) providers2[provider] = {};
+  if (webAuthn && exposeWebAuthn)
     providers2[String(TWO_FACTOR_WEBAUTHN)] = {
       Email: null,
       Challenge: webAuthn,

@@ -181,7 +181,9 @@ export async function handlePasswordGrant(
     const provider = twoFactorProvider.trim();
     const token = twoFactorToken.trim();
     if (!provider || !token) {
-      return twoFactorRequiredResponse(c.req.raw, c.env, db, user);
+      return twoFactorRequiredResponse(c.req.raw, c.env, db, user, {
+        nativeClient: !isWebClient(body),
+      });
     }
 
     if (provider === String(TWO_FACTOR_AUTHENTICATOR)) {
