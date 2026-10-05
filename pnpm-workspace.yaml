@@ -14,8 +14,10 @@ overrides:
 
 auditConfig:
   ignoreGhsas:
-    # The advisory names braces 3.0.4 as patched, but npm currently publishes
-    # only 3.0.3. This path is confined to the local kysely-codegen CLI.
+    # Reviewed 2026-10-05: upstream lists no patched release; npm latest is
+    # 3.0.3. Dependency path: kysely-codegen -> micromatch -> braces.
+    # Used only by local database type generation, not the deployed Worker.
+    # Remove this exception when a fixed release or codegen replacement exists.
     - GHSA-vfj7-8cjw-p6xm
 
 allowBuilds:

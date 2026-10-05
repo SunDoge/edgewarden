@@ -12,6 +12,7 @@ pnpm test:compat:bw:local        # isolated local Worker + disposable account
 pnpm test:compat:bw              # official Bitwarden CLI smoke test
 pnpm check:compat:models         # current native-client response contracts
 pnpm check:compat:routes         # current upstream route coverage
+pnpm --filter @edgewarden/api db:check # generated types match migrations
 pnpm test:integration:cloudflare # deployed Worker smoke test
 ```
 

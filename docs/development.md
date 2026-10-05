@@ -25,12 +25,18 @@ Run the same gates before pushing:
 pnpm install --frozen-lockfile
 pnpm audit --audit-level=high
 pnpm check
+pnpm --filter @edgewarden/api db:check
 pnpm lint:ci
 pnpm test
 pnpm build
 ```
 
 `pnpm lint` still shows advisory warnings for cleanup work. CI uses `lint:ci` to reject correctness errors without flooding logs with existing warnings.
+
+After adding a migration, run `pnpm --filter @edgewarden/api db:codegen` and
+commit the generated database types alongside the migration. `db:check` applies
+all migrations to an in-memory SQLite database and compares the formatted types
+without changing the checked-in file. CI rejects stale generated types.
 
 The scheduled Bitwarden domain-rule workflow commits generated changes to `dev`, never directly to production.
 

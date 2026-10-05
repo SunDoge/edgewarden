@@ -15,16 +15,6 @@ export interface AttachmentDownloadTokens {
   jti: string;
 }
 
-export interface AttachmentUploads {
-  cipher_id: string;
-  created_at: number;
-  expires_at: number;
-  file_name: string;
-  id: string;
-  key: string;
-  size: number;
-}
-
 export interface Attachments {
   cipher_id: string;
   created_at: number;
@@ -36,6 +26,16 @@ export interface Attachments {
   size: number;
   size_name: string;
   storage_key: string | null;
+}
+
+export interface AttachmentUploads {
+  cipher_id: string;
+  created_at: number;
+  expires_at: number;
+  file_name: string;
+  id: string;
+  key: string;
+  size: number;
 }
 
 export interface AuditLogs {
@@ -324,9 +324,9 @@ export interface WebauthnCredentials {
   id: string;
   mutation_token: string | null;
   name: string;
+  provider_key_id: number | null;
   public_key: string;
   purpose: Generated<string>;
-  provider_key_id: Generated<number | null>;
   supports_prf: Generated<number>;
   transports: string | null;
   type: string | null;
