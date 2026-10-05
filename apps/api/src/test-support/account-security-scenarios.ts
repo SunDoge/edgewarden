@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as OTPAuth from "otpauth";
 import { test } from "vitest";
 import { createDatabase } from "../middleware/db";
 import { invalidateUserCache } from "../services/auth";
@@ -30,6 +31,325 @@ export function registerAccountSecurityScenarios(
   const MEMBER_EMAIL = context.memberEmail;
   const MASTER_PASSWORD_HASH = context.masterPasswordHash;
   const DATA_ENCRYPTION_SECRET = context.dataEncryptionSecret;
+
+  test("requires current user verification for authenticator secrets", async () => {
+    const headers = {
+      authorization: `Bearer ${context.memberAccessToken}`,
+      "content-type": "application/json",
+    };
+    const missingVerification = await request(
+      "/api/two-factor/get-authenticator",
+      {
+        method: "POST",
+        headers,
+        body: "{}",
+      },
+    );
+    assert.equal(missingVerification.status, 400);
+
+    const wrongVerification = await request(
+      "/api/two-factor/get-authenticator",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ masterPasswordHash: "wrong" }),
+      },
+    );
+    assert.equal(wrongVerification.status, 400);
+
+    const verified = await request("/api/two-factor/get-authenticator", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
+    });
+    assert.equal(verified.status, 200, await verified.clone().text());
+    const setup = await verified.json<{
+      authenticator: { key: string; enabled: boolean };
+      userVerificationToken: string;
+      key?: string;
+      enabled?: boolean;
+    }>();
+    assert.ok(setup.authenticator.key);
+    assert.ok(setup.userVerificationToken);
+    assert.equal(setup.key, undefined);
+    assert.equal(setup.enabled, undefined);
+
+    const missingSetupToken = await request("/api/two-factor/authenticator", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        key: setup.authenticator.key,
+        token: "000000",
+      }),
+    });
+    assert.equal(missingSetupToken.status, 400);
+
+    const forgedSetupToken = await request("/api/two-factor/authenticator", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        key: setup.authenticator.key,
+        token: "000000",
+        userVerificationToken: "forged",
+      }),
+    });
+    assert.equal(forgedSetupToken.status, 400);
+
+    const legacyUpdate = await request("/api/two-factor/authenticator", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        key: setup.authenticator.key,
+        token: "000000",
+        userVerificationToken: setup.userVerificationToken,
+      }),
+    });
+    assert.equal(legacyUpdate.status, 404);
+
+    const legacyDelete = await request("/api/two-factor/authenticator", {
+      method: "DELETE",
+      headers,
+      body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
+    });
+    assert.equal(legacyDelete.status, 400);
+
+    const missingRecoveryVerification = await request(
+      "/api/two-factor/get-recover",
+      {
+        method: "POST",
+        headers,
+        body: "{}",
+      },
+    );
+    assert.equal(missingRecoveryVerification.status, 400);
+
+    const recovery = await request("/api/two-factor/get-recover", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
+    });
+    assert.equal(recovery.status, 200, await recovery.clone().text());
+    assert.deepEqual(await recovery.json(), {
+      code: null,
+      object: "twoFactorRecover",
+    });
+  });
+
+  test("manages an authenticator through the current verification-token contract", async () => {
+    const email = `authenticator-contract-${crypto.randomUUID()}@example.com`;
+    const registration = await request("/api/edgewarden/accounts/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email,
+        name: "Authenticator contract",
+        masterPasswordHash: MASTER_PASSWORD_HASH,
+        key: "encrypted-authenticator-contract-key",
+        kdf: 0,
+        kdfIterations: 600_000,
+      }),
+    });
+    assert.equal(registration.status, 204, await registration.clone().text());
+
+    const login = async (twoFactorToken?: string) => {
+      const form = new URLSearchParams({
+        grant_type: "password",
+        username: email,
+        password: MASTER_PASSWORD_HASH,
+      });
+      if (twoFactorToken) {
+        form.set("twoFactorProvider", "0");
+        form.set("twoFactorToken", twoFactorToken);
+      }
+      return request("/identity/connect/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: form,
+      });
+    };
+
+    const initialLogin = await login();
+    assert.equal(initialLogin.status, 200, await initialLogin.clone().text());
+    const initialAccessToken = (
+      await initialLogin.json<{ access_token: string }>()
+    ).access_token;
+    const headers = (accessToken: string) => ({
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+    });
+    const getSetup = await request("/api/two-factor/get-authenticator", {
+      method: "POST",
+      headers: headers(initialAccessToken),
+      body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
+    });
+    assert.equal(getSetup.status, 200, await getSetup.clone().text());
+    const setup = await getSetup.json<{
+      authenticator: { key: string; enabled: boolean };
+      userVerificationToken: string;
+    }>();
+    assert.equal(setup.authenticator.enabled, false);
+    const totp = new OTPAuth.TOTP({
+      secret: OTPAuth.Secret.fromBase32(setup.authenticator.key),
+      digits: 6,
+      period: 30,
+    });
+    const enabled = await request("/api/two-factor/authenticator", {
+      method: "PUT",
+      headers: headers(initialAccessToken),
+      body: JSON.stringify({
+        key: setup.authenticator.key,
+        token: totp.generate(),
+        userVerificationToken: setup.userVerificationToken,
+      }),
+    });
+    assert.equal(enabled.status, 200, await enabled.clone().text());
+    assert.ok((await enabled.json<{ recoveryCode: string }>()).recoveryCode);
+    assert.equal(
+      (
+        await request("/api/accounts/profile", {
+          headers: headers(initialAccessToken),
+        })
+      ).status,
+      401,
+    );
+
+    const secondLogin = await login(totp.generate());
+    assert.equal(secondLogin.status, 200, await secondLogin.clone().text());
+    const secondAccessToken = (
+      await secondLogin.json<{ access_token: string }>()
+    ).access_token;
+    const getRemoval = await request("/api/two-factor/get-authenticator", {
+      method: "POST",
+      headers: headers(secondAccessToken),
+      body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
+    });
+    assert.equal(getRemoval.status, 200, await getRemoval.clone().text());
+    const removal = await getRemoval.json<{
+      authenticator: { key: string; enabled: boolean };
+      userVerificationToken: string;
+    }>();
+    assert.equal(removal.authenticator.enabled, true);
+    assert.equal(removal.authenticator.key, setup.authenticator.key);
+
+    const disabled = await request("/api/two-factor/authenticator", {
+      method: "DELETE",
+      headers: headers(secondAccessToken),
+      body: JSON.stringify({
+        key: removal.authenticator.key,
+        userVerificationToken: removal.userVerificationToken,
+      }),
+    });
+    assert.equal(disabled.status, 204, await disabled.clone().text());
+    const stored = await context.database
+      .prepare(
+        "SELECT totp_secret, totp_recovery_code FROM users WHERE email = ?",
+      )
+      .bind(email)
+      .first<{
+        totp_secret: string | null;
+        totp_recovery_code: string | null;
+      }>();
+    assert.equal(stored?.totp_secret, null);
+    assert.equal(stored?.totp_recovery_code, null);
+  });
+
+  test("keeps approved device logins pending until account 2FA succeeds", async () => {
+    const secret = "JBSWY3DPEHPK3PXP";
+    const encryptedSecret = await encryptCredential(
+      secret,
+      DATA_ENCRYPTION_SECRET,
+      "totp-secret",
+    );
+    const member = await context.database
+      .prepare("SELECT id FROM users WHERE email = ?")
+      .bind(MEMBER_EMAIL)
+      .first<{ id: string }>();
+    assert.ok(member?.id);
+    await context.database
+      .prepare("UPDATE users SET totp_secret = ? WHERE id = ?")
+      .bind(encryptedSecret, member.id)
+      .run();
+    invalidateUserCache(member.id);
+
+    try {
+      const accessCode = crypto.randomUUID().replaceAll("-", "").slice(0, 25);
+      const created = await request("/api/auth-requests", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: MEMBER_EMAIL,
+          type: 0,
+          deviceIdentifier: `device-${crypto.randomUUID()}`,
+          deviceType: 14,
+          accessCode,
+          publicKey: "test-public-key",
+        }),
+      });
+      assert.equal(created.status, 200, await created.clone().text());
+      const authRequest = await created.json<{ id: string }>();
+      const approved = await request(`/api/auth-requests/${authRequest.id}`, {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${context.memberAccessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          requestApproved: true,
+          deviceIdentifier: "member-test-device",
+          key: "encrypted-key",
+          masterPasswordHash: null,
+        }),
+      });
+      assert.equal(approved.status, 200, await approved.clone().text());
+      const form = new URLSearchParams({
+        grant_type: "password",
+        username: MEMBER_EMAIL,
+        password: accessCode,
+        authRequest: authRequest.id,
+        client_id: "web",
+        deviceIdentifier: "approved-login-device",
+        deviceName: "Approved browser",
+        deviceType: "14",
+      });
+      const challenge = await request("/identity/connect/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: form,
+      });
+      assert.equal(challenge.status, 400, await challenge.clone().text());
+      assert.equal(
+        await context.database
+          .prepare("SELECT authentication_date FROM auth_requests WHERE id = ?")
+          .bind(authRequest.id)
+          .first<{ authentication_date: number | null }>()
+          .then((row) => row?.authentication_date),
+        null,
+      );
+
+      form.set("twoFactorProvider", "0");
+      form.set(
+        "twoFactorToken",
+        new OTPAuth.TOTP({
+          secret: OTPAuth.Secret.fromBase32(secret),
+          digits: 6,
+          period: 30,
+        }).generate(),
+      );
+      const completed = await request("/identity/connect/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: form,
+      });
+      assert.equal(completed.status, 200, await completed.clone().text());
+    } finally {
+      await context.database
+        .prepare("UPDATE users SET totp_secret = NULL WHERE id = ?")
+        .bind(member.id)
+        .run();
+      invalidateUserCache(member.id);
+    }
+  });
+
   test("recovers two-factor authentication with two independent secrets", async () => {
     const recoveryCode = "A1B2C3D4E5F60718";
     const [encryptedTotpSecret, encryptedRecoveryCode] = await Promise.all([
@@ -60,7 +380,7 @@ export function registerAccountSecurityScenarios(
     const timestamp = Math.floor(Date.now() / 1000);
     await context.database
       .prepare(
-        "INSERT INTO webauthn_credentials (id,user_id,name,public_key,credential_id,counter,type,transports,supports_prf,created_at,updated_at,purpose) VALUES (?,?,?,?,?,0,'public-key','[]',0,?,?, 'twoFactor')",
+        "INSERT INTO webauthn_credentials (id,user_id,name,public_key,credential_id,counter,type,transports,supports_prf,created_at,updated_at,purpose,provider_key_id) VALUES (?,?,?,?,?,0,'public-key','[]',0,?,?, 'twoFactor',0)",
       )
       .bind(
         securityKeyId,
@@ -177,7 +497,7 @@ export function registerAccountSecurityScenarios(
     ] as const) {
       await context.database
         .prepare(
-          "INSERT INTO webauthn_credentials (id,user_id,name,public_key,credential_id,counter,type,transports,supports_prf,created_at,updated_at,purpose) VALUES (?,?,?,?,?,0,'public-key','[]',0,?,?,?)",
+          "INSERT INTO webauthn_credentials (id,user_id,name,public_key,credential_id,counter,type,transports,supports_prf,created_at,updated_at,purpose,provider_key_id) VALUES (?,?,?,?,?,0,'public-key','[]',0,?,?,?,?)",
         )
         .bind(
           id,
@@ -188,6 +508,7 @@ export function registerAccountSecurityScenarios(
           timestamp,
           timestamp,
           purpose,
+          purpose === "twoFactor" ? 0 : null,
         )
         .run();
     }
@@ -207,12 +528,49 @@ export function registerAccountSecurityScenarios(
       body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
     });
     assert.equal(settings.status, 200, await settings.clone().text());
+    const settingsBody = await settings.json<{
+      webAuthn: { keys: Array<{ id: number }> };
+      userVerificationToken: string;
+    }>();
     assert.deepEqual(
-      (await settings.json<{ keys: Array<{ id: string }> }>()).keys.map(
-        (item) => item.id,
-      ),
-      [twoFactorId],
+      settingsBody.webAuthn.keys.map((item) => item.id),
+      [0],
     );
+    assert.ok(settingsBody.userVerificationToken);
+
+    const missingChallengeToken = await request(
+      "/api/two-factor/get-webauthn-challenge",
+      {
+        method: "POST",
+        headers: { ...auth, "content-type": "application/json" },
+        body: "{}",
+      },
+    );
+    assert.equal(missingChallengeToken.status, 400);
+    const forgedChallengeToken = await request(
+      "/api/two-factor/get-webauthn-challenge",
+      {
+        method: "POST",
+        headers: { ...auth, "content-type": "application/json" },
+        body: JSON.stringify({ userVerificationToken: "forged" }),
+      },
+    );
+    assert.equal(forgedChallengeToken.status, 400);
+    const legacyCreate = await request("/api/two-factor/webauthn", {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(legacyCreate.status, 404);
+    const legacyDelete = await request("/api/two-factor/webauthn", {
+      method: "DELETE",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({
+        id: twoFactorId,
+        masterPasswordHash: MASTER_PASSWORD_HASH,
+      }),
+    });
+    assert.equal(legacyDelete.status, 400);
 
     const login = await request("/identity/connect/token", {
       method: "POST",
@@ -230,6 +588,40 @@ export function registerAccountSecurityScenarios(
     }>();
     assert.ok(challenge.TwoFactorProviders.includes("7"));
     assert.ok(challenge.TwoFactorProviders2["7"].Challenge.token);
+
+    const encryptedTotpSecret = await encryptCredential(
+      "JBSWY3DPEHPK3PXP",
+      DATA_ENCRYPTION_SECRET,
+      "totp-secret",
+    );
+    await context.database
+      .prepare("UPDATE users SET totp_secret = ? WHERE id = ?")
+      .bind(encryptedTotpSecret, user.id)
+      .run();
+    invalidateUserCache(user.id);
+    const nativeLogin = await request("/identity/connect/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "password",
+        client_id: "mobile",
+        username: MEMBER_EMAIL,
+        password: MASTER_PASSWORD_HASH,
+      }),
+    });
+    assert.equal(nativeLogin.status, 400);
+    const nativeChallenge = await nativeLogin.json<{
+      TwoFactorProviders: string[];
+      TwoFactorProviders2: Record<string, unknown>;
+    }>();
+    assert.deepEqual(nativeChallenge.TwoFactorProviders, ["0"]);
+    assert.equal(nativeChallenge.TwoFactorProviders2["0"], null);
+    await context.database
+      .prepare("UPDATE users SET totp_secret = NULL WHERE id = ?")
+      .bind(user.id)
+      .run();
+    invalidateUserCache(user.id);
+
     const revisionBeforeDelete = await context.database
       .prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
       .bind(user.id)
@@ -237,17 +629,16 @@ export function registerAccountSecurityScenarios(
     assert.ok(revisionBeforeDelete);
 
     const remove = () =>
-      request("/api/two-factor/webauthn", {
+      request("/api/two-factor/webauthn/all", {
         method: "DELETE",
         headers: { ...auth, "content-type": "application/json" },
         body: JSON.stringify({
-          masterPasswordHash: MASTER_PASSWORD_HASH,
-          id: twoFactorId,
+          userVerificationToken: settingsBody.userVerificationToken,
         }),
       });
     const removals = await Promise.all([remove(), remove()]);
     assert.equal(
-      removals.filter((response) => response.status === 200).length,
+      removals.filter((response) => response.status === 204).length,
       1,
     );
     assert.equal(
@@ -256,9 +647,6 @@ export function registerAccountSecurityScenarios(
       ).length,
       1,
     );
-    const removed = removals.find((response) => response.status === 200);
-    assert.ok(removed);
-    assert.equal((await removed.json<{ enabled: boolean }>()).enabled, false);
     const revisionAfterDelete = await context.database
       .prepare("SELECT revision_date FROM user_revisions WHERE user_id = ?")
       .bind(user.id)
@@ -369,18 +757,37 @@ export function registerAccountSecurityScenarios(
       await rotatedJwtDb.destroy();
     }
 
-    const settings = await request("/api/yubico-enrollment/settings", {
+    const settings = await request("/api/two-factor/get-yubikey", {
       method: "POST",
       headers: { ...auth, "content-type": "application/json" },
       body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
     });
     assert.equal(settings.status, 200, await settings.clone().text());
+    const settingsBody = await settings.json<{
+      yubiKey: { configured: boolean; enabled: boolean; nfc: boolean };
+      userVerificationToken: string;
+    }>();
     assert.deepEqual(
-      await settings
-        .json<{ configured: boolean; enabled: boolean; nfc: boolean }>()
-        .then((body) => [body.configured, body.enabled, body.nfc]),
+      [
+        settingsBody.yubiKey.configured,
+        settingsBody.yubiKey.enabled,
+        settingsBody.yubiKey.nfc,
+      ],
       [true, true, true],
     );
+    assert.ok(settingsBody.userVerificationToken);
+    const legacyUpdate = await request("/api/two-factor/yubikey", {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(legacyUpdate.status, 404);
+    const legacyDelete = await request("/api/two-factor/yubikey", {
+      method: "DELETE",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
+    });
+    assert.equal(legacyDelete.status, 400);
 
     const login = await request("/identity/connect/token", {
       method: "POST",
@@ -405,6 +812,156 @@ export function registerAccountSecurityScenarios(
     if (yubikeyUser) invalidateUserCache(yubikeyUser.id);
   });
 
+  test("disables TOTP only after password verification", async () => {
+    const email = `disable-totp-${crypto.randomUUID()}@example.com`;
+    const registration = await request("/api/edgewarden/accounts/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email,
+        name: "Disable TOTP",
+        masterPasswordHash: MASTER_PASSWORD_HASH,
+        key: "encrypted-disable-totp-key",
+        kdf: 0,
+        kdfIterations: 600_000,
+      }),
+    });
+    assert.equal(registration.status, 204, await registration.clone().text());
+
+    const encryptedSecret = await encryptCredential(
+      "JBSWY3DPEHPK3PXP",
+      DATA_ENCRYPTION_SECRET,
+      "totp-secret",
+    );
+    const encryptedRecoveryCode = await encryptCredential(
+      "A1B2C3D4E5F60718",
+      DATA_ENCRYPTION_SECRET,
+      "totp-recovery",
+    );
+    await context.database
+      .prepare(
+        "UPDATE users SET totp_secret = ?, totp_recovery_code = ? WHERE email = ?",
+      )
+      .bind(encryptedSecret, encryptedRecoveryCode, email)
+      .run();
+    const user = await context.database
+      .prepare("SELECT id FROM users WHERE email = ?")
+      .bind(email)
+      .first<{ id: string }>();
+    assert.ok(user?.id);
+    invalidateUserCache(user.id);
+
+    // Temporarily remove TOTP to obtain an authenticated session, then restore
+    // it before exercising the authenticated disable endpoint.
+    await context.database
+      .prepare("UPDATE users SET totp_secret = NULL WHERE id = ?")
+      .bind(user.id)
+      .run();
+    invalidateUserCache(user.id);
+    const login = await request("/identity/connect/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "password",
+        username: email,
+        password: MASTER_PASSWORD_HASH,
+      }),
+    });
+    assert.equal(login.status, 200, await login.clone().text());
+    const token = (await login.json<{ access_token: string }>()).access_token;
+    const securityKeyId = crypto.randomUUID();
+    const timestamp = Math.floor(Date.now() / 1000);
+    await context.database.batch([
+      context.database
+        .prepare(
+          "UPDATE users SET totp_secret = ?, yubikey_config = ? WHERE id = ?",
+        )
+        .bind(
+          encryptedSecret,
+          JSON.stringify({ keys: ["ccccccbcgujh"], nfc: false }),
+          user.id,
+        ),
+      context.database
+        .prepare(
+          "INSERT INTO webauthn_credentials (id,user_id,name,public_key,credential_id,counter,type,transports,supports_prf,created_at,updated_at,purpose,provider_key_id) VALUES (?,?,?,?,?,0,'public-key','[]',0,?,?, 'twoFactor',0)",
+        )
+        .bind(
+          securityKeyId,
+          user.id,
+          "disable-all test key",
+          "AQID",
+          `disable-all-${securityKeyId}`,
+          timestamp,
+          timestamp,
+        ),
+    ]);
+    invalidateUserCache(user.id);
+
+    const headers = {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    };
+    const rejected = await request("/api/edgewarden/two-factor/disable", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ masterPasswordHash: "wrong" }),
+    });
+    assert.equal(rejected.status, 400, await rejected.clone().text());
+
+    const disabled = await request("/api/edgewarden/two-factor/disable", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
+    });
+    assert.equal(disabled.status, 200, await disabled.clone().text());
+    const stored = await context.database
+      .prepare(
+        "SELECT totp_secret, totp_recovery_code, yubikey_config FROM users WHERE id = ?",
+      )
+      .bind(user.id)
+      .first<{
+        totp_secret: string | null;
+        totp_recovery_code: string | null;
+        yubikey_config: string | null;
+      }>();
+    assert.equal(stored?.totp_secret, null);
+    assert.equal(stored?.totp_recovery_code, null);
+    assert.deepEqual(JSON.parse(stored?.yubikey_config ?? "{}"), {
+      keys: [],
+      nfc: false,
+    });
+    const remainingSecurityKeys = await context.database
+      .prepare(
+        "SELECT COUNT(*) AS count FROM webauthn_credentials WHERE user_id = ? AND purpose = 'twoFactor'",
+      )
+      .bind(user.id)
+      .first<{ count: number }>();
+    assert.equal(remainingSecurityKeys?.count, 0);
+    assert.equal(
+      (
+        await request("/api/accounts/profile", {
+          headers: { authorization: `Bearer ${token}` },
+        })
+      ).status,
+      401,
+    );
+
+    const loginAfterDisable = await request("/identity/connect/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "password",
+        username: email,
+        password: MASTER_PASSWORD_HASH,
+      }),
+    });
+    assert.equal(
+      loginAfterDisable.status,
+      200,
+      await loginAfterDisable.clone().text(),
+    );
+  });
+
   test("deletes an account only after password verification and blocks organization owners", async () => {
     const ownerLogin = await request("/identity/connect/token", {
       method: "POST",
@@ -418,8 +975,8 @@ export function registerAccountSecurityScenarios(
     assert.equal(ownerLogin.status, 200, await ownerLogin.clone().text());
     const ownerToken = (await ownerLogin.json<{ access_token: string }>())
       .access_token;
-    const blocked = await request("/api/accounts/delete", {
-      method: "POST",
+    const blocked = await request("/api/accounts", {
+      method: "DELETE",
       headers: {
         authorization: `Bearer ${ownerToken}`,
         "content-type": "application/json",
@@ -431,7 +988,7 @@ export function registerAccountSecurityScenarios(
     const email = "delete-me@example.com";
     assert.equal(
       (
-        await request("/api/accounts/register", {
+        await request("/api/edgewarden/accounts/register", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -500,8 +1057,8 @@ export function registerAccountSecurityScenarios(
     ]);
     const r2 = context.bindings.ATTACHMENTS_R2 as R2Bucket;
     await r2.put(deletingAttachmentKey, new Uint8Array([1]));
-    const wrongPassword = await request("/api/accounts/delete", {
-      method: "POST",
+    const wrongPassword = await request("/api/accounts", {
+      method: "DELETE",
       headers: {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
@@ -598,7 +1155,7 @@ export function registerAccountSecurityScenarios(
     });
     assert.equal(login.status, 200, await login.clone().text());
     const token = (await login.json<{ access_token: string }>()).access_token;
-    const removed = await request("/api/devices", {
+    const removed = await request("/api/edgewarden/devices", {
       method: "DELETE",
       headers: {
         authorization: `Bearer ${token}`,

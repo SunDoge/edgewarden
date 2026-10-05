@@ -1,5 +1,5 @@
 import { vValidator } from "@hono/valibot-validator";
-import { sql } from "kysely";
+import { type Kysely, sql } from "kysely";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { redactedValidationHook } from "../middleware/validation";
@@ -17,16 +17,20 @@ import {
   getVisibleCipherCollectionIds,
 } from "../services/ciphers/access";
 import { cipherToResponse } from "../services/ciphers/presentation";
+import * as attachmentUploadsDb from "../services/db/attachment-uploads";
 import * as attachmentsDb from "../services/db/attachments";
 import {
   attachmentCipherUpdateQuery,
   attachmentRevisionQuery,
+  completePendingAttachmentUploadQuery,
   deletedAttachmentCipherUpdateQuery,
   deletedAttachmentRevisionQuery,
   executeBatch,
+  publishPendingAttachmentQuery,
 } from "../services/db/batch";
 import * as ciphersDb from "../services/db/ciphers";
 import { textColumnInJson } from "../services/db/json-array";
+import type { DB } from "../types/db";
 import {
   buildDirectUploadUrl,
   getSafeJwtSecret,
@@ -42,7 +46,7 @@ import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
 
 async function canUploadAttachment(
-  db: any,
+  db: Kysely<DB>,
   cipher: { id: string; user_id: string | null; org_id: string | null },
   userId: string,
 ) {
@@ -71,7 +75,7 @@ async function canUploadAttachment(
     .where(
       textColumnInJson(
         "collection_id",
-        links.map((link: any) => link.collection_id),
+        links.map((link) => link.collection_id),
       ),
     )
     .where("read_only", "=", 0)
@@ -103,6 +107,7 @@ export const createAttachment = factory.createHandlers(
 
     const id = crypto.randomUUID();
     const db = c.get("db");
+    const timestamp = now();
     const attachments = await attachmentsDb.listByCipherIds(db, [cipher.id]);
     const collectionIds = await getVisibleCipherCollectionIds(
       db,
@@ -138,6 +143,18 @@ export const createAttachment = factory.createHandlers(
       },
       secret,
     );
+    await db
+      .insertInto("attachment_uploads")
+      .values({
+        id,
+        cipher_id: cipher.id,
+        file_name: body.fileName,
+        size: body.fileSize,
+        key: body.key,
+        created_at: timestamp,
+        expires_at: timestamp + LIMITS.attachment.pendingUploadTtlSeconds,
+      })
+      .execute();
     return c.json({
       object: "attachment-fileUpload",
       attachmentId: id,
@@ -189,6 +206,21 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
       ? new Response(null, { status: 201 })
       : errorResponse("Attachment not found", 404);
   }
+  const timestamp = now();
+  const pending = await attachmentUploadsDb.getPendingAttachmentUpload(
+    c.get("db"),
+    claims.attachmentId,
+    cipher.id,
+    timestamp,
+  );
+  if (
+    !pending ||
+    pending.file_name !== claims.fileName ||
+    pending.key !== claims.key ||
+    pending.size !== claims.fileSize
+  ) {
+    return errorResponse("Attachment upload is no longer available", 409);
+  }
   const upload = await parseDirectUploadPayload(c.req.raw, {
     expectedSize: claims.fileSize,
     maxFileSize: getBlobStorageMaxBytes(
@@ -212,22 +244,24 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
         attachmentId: claims.attachmentId,
       },
     });
-    const ts = Math.max(now(), cipher.updated_at + 1);
+    const ts = Math.max(timestamp, cipher.updated_at + 1);
     await executeBatch(c.get("dbDialect"), [
-      c
-        .get("db")
-        .insertInto("attachments")
-        .values({
-          id: claims.attachmentId,
-          cipher_id: cipher.id,
-          file_name: claims.fileName,
-          size: claims.fileSize,
-          size_name: sizeName(claims.fileSize),
-          key: claims.key,
-          storage_key: objectKey,
-          created_at: ts,
-        })
-        .onConflict((conflict) => conflict.column("id").doNothing()),
+      publishPendingAttachmentQuery(c.get("db"), {
+        attachmentId: claims.attachmentId,
+        cipherId: cipher.id,
+        fileName: claims.fileName,
+        key: claims.key,
+        fileSize: claims.fileSize,
+        sizeName: sizeName(claims.fileSize),
+        storageKey: objectKey,
+        timestamp: ts,
+        authorizationTime: timestamp,
+      }),
+      completePendingAttachmentUploadQuery(
+        c.get("db"),
+        claims.attachmentId,
+        objectKey,
+      ),
       attachmentCipherUpdateQuery(
         c.get("db"),
         cipher.id,
@@ -247,8 +281,45 @@ export const uploadAttachment = factory.createHandlers(async (c) => {
   );
   if (published?.storage_key !== objectKey) {
     await discardUnpublishedBlob(c.env, objectKey);
+    if (!published)
+      return errorResponse("Attachment upload is no longer available", 409);
   }
   return new Response(null, { status: 201 });
+});
+
+export const renewAttachmentUpload = factory.createHandlers(async (c) => {
+  const cipher = c.get("cipher");
+  const attachmentId = c.req.param("attachmentId");
+  if (!attachmentId) return errorResponse("Attachment id required", 400);
+  const pending = await attachmentUploadsDb.getPendingAttachmentUpload(
+    c.get("db"),
+    attachmentId,
+    cipher.id,
+    now(),
+  );
+  if (!pending) return errorResponse("Attachment upload not found", 404);
+  const secret = getSafeJwtSecret(c.env);
+  if (!secret) return errorResponse("Server configuration error", 500);
+  const token = await createAttachmentUploadToken(
+    c.get("user").id,
+    cipher.id,
+    pending.id,
+    {
+      fileName: pending.file_name,
+      key: pending.key,
+      fileSize: pending.size,
+    },
+    secret,
+  );
+  return c.json({
+    object: "attachment-fileUpload",
+    fileUploadType: 1,
+    url: buildDirectUploadUrl(
+      c.req.raw,
+      `/api/ciphers/${cipher.id}/attachment/${pending.id}`,
+      token,
+    ),
+  });
 });
 
 export const getAttachment = factory.createHandlers(async (c) => {

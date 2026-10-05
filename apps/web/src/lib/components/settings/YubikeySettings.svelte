@@ -24,12 +24,14 @@
     isAdmin,
     onMessage,
     onError,
+    onSessionRevoked,
   }: {
     email: string;
     kdfIterations: number;
     isAdmin: boolean;
     onMessage: (message: string) => void;
     onError: (error: unknown) => void;
+    onSessionRevoked: (reason: string) => void | Promise<void>;
   } = $props();
 
   let open = $state(false);
@@ -41,6 +43,13 @@
   let clientId = $state("");
   let secretKey = $state("");
   let disableConfirmOpen = $state(false);
+  let userVerificationToken = $state("");
+
+  function registeredKeys(value: YubikeySettingsResult): string[] {
+    return [value.key1, value.key2, value.key3, value.key4, value.key5].filter(
+      (key): key is string => Boolean(key),
+    );
+  }
 
   async function passwordHash(): Promise<string> {
     const key = await deriveMasterKey(password, email, kdfIterations);
@@ -52,8 +61,9 @@
     busy = "load";
     try {
       const result = await getYubikeySettingsApi(await passwordHash());
-      settings = result;
-      nfc = Boolean(result.nfc);
+      settings = result.yubiKey;
+      userVerificationToken = result.userVerificationToken;
+      nfc = Boolean(result.yubiKey.nfc);
     } catch (error) {
       onError(error);
     } finally {
@@ -62,16 +72,22 @@
   }
 
   async function save() {
-    if (!password || !otps.trim()) return;
+    if (!userVerificationToken || !otps.trim()) return;
     busy = "save";
     try {
-      settings = await saveYubikeysApi({
-        masterPasswordHash: await passwordHash(),
-        otps: otps.split(/\s+/).filter(Boolean),
+      const values = otps.split(/\s+/).filter(Boolean).slice(0, 5);
+      await saveYubikeysApi({
+        key1: values[0],
+        key2: values[1],
+        key3: values[2],
+        key4: values[3],
+        key5: values[4],
         nfc,
+        userVerificationToken,
       });
       otps = "";
       onMessage("YubiKey 两步验证已启用");
+      await onSessionRevoked("two-factor-updated");
     } catch (error) {
       onError(error);
     } finally {
@@ -80,12 +96,13 @@
   }
 
   async function disable() {
-    if (!password) return;
+    if (!userVerificationToken) return;
     disableConfirmOpen = false;
     busy = "disable";
     try {
-      settings = await disableYubikeysApi(await passwordHash());
+      await disableYubikeysApi(userVerificationToken);
       onMessage("YubiKey 两步验证已关闭");
+      await onSessionRevoked("two-factor-updated");
     } catch (error) {
       onError(error);
     } finally {
@@ -126,7 +143,17 @@
   >
 </Card.Root>
 
-<Dialog.Root bind:open>
+<Dialog.Root
+  {open}
+  onOpenChange={(value) => {
+    open = value;
+    if (!value) {
+      password = "";
+      userVerificationToken = "";
+      settings = null;
+    }
+  }}
+>
   <Dialog.Content class="max-h-[90vh] overflow-y-auto">
     <Dialog.Header
       ><Dialog.Title>YubiKey OTP</Dialog.Title><Dialog.Description
@@ -153,7 +180,7 @@
               >{settings.enabled ? "已启用" : "未启用"}</Badge
             >
           </div>
-          <div>已登记：{(settings.keys ?? []).join("、") || "无"}</div>
+          <div>已登记：{registeredKeys(settings).join("、") || "无"}</div>
           <div>Yubico 验证：{settings.configured ? "已配置" : "未配置"}</div>
         </div>{/if}
       <Field.Field
@@ -200,7 +227,7 @@
         variant="destructive"
         onclick={() => (disableConfirmOpen = true)}
         disabled={!settings?.enabled || busy === "disable"}>关闭 YubiKey</Button
-      ><Button onclick={save} disabled={!password || !otps.trim() || busy === "save"}
+      ><Button onclick={save} disabled={!userVerificationToken || !otps.trim() || busy === "save"}
         >验证并保存</Button
       ></Dialog.Footer
     >

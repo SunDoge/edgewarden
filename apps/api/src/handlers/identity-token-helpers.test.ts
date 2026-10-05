@@ -1,4 +1,6 @@
+import { safeParse } from "valibot";
 import { describe, expect, it } from "vitest";
+import { TokenFormSchema } from "../schemas/identity";
 import {
   isWebClient,
   readDeviceInfo,
@@ -21,6 +23,30 @@ describe("identity token helpers", () => {
       pushToken: "mobile-push-token",
     });
   });
+
+  it.each(["NaN", "-1", "1.5", "256", "01", ""])(
+    "rejects malformed device type %j at the token boundary",
+    (deviceType) => {
+      expect(
+        safeParse(TokenFormSchema, {
+          grant_type: "password",
+          deviceType,
+        }).success,
+      ).toBe(false);
+    },
+  );
+
+  it.each(["0", "14", "255"])(
+    "accepts Bitwarden device type %s",
+    (deviceType) => {
+      expect(
+        safeParse(TokenFormSchema, {
+          grant_type: "password",
+          deviceType,
+        }).success,
+      ).toBe(true);
+    },
+  );
 
   it("uses host-only refresh cookies for HTTPS", () => {
     expect(

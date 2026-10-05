@@ -6,8 +6,10 @@ import {
   checkIpRateLimit,
 } from "../middleware/rate-limit";
 import {
+  AuthenticatorDeleteSchema,
   DisableTotpSchema,
   RecoverTwoFactorSchema,
+  SecretVerificationSchema,
   TotpSetupSchema,
 } from "../schemas/two-factor";
 import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
@@ -24,6 +26,12 @@ import {
 } from "../services/db/batch";
 import * as usersDb from "../services/db/users";
 import * as webauthnDb from "../services/db/webauthn";
+import {
+  authenticatorDetails,
+  authenticatorReadResponse,
+  authenticatorUpdateResponse,
+  twoFactorRecoveryResponse,
+} from "../services/two-factor-presentation";
 import {
   createTwoFactorAuthenticatorToken,
   verifyTwoFactorAuthenticatorToken,
@@ -70,68 +78,69 @@ export const listTwoFactor = factory.createHandlers(async (c) => {
   return c.json({ data: providers, object: "list", continuationToken: null });
 });
 
-export const getAuthenticator = factory.createHandlers(async (c) => {
-  const user = c.get("user");
-  const body: { masterPasswordHash?: string } = await c.req
-    .json<{ masterPasswordHash?: string }>()
-    .catch(() => ({}));
-  if (body.masterPasswordHash) {
+export const getAuthenticator = factory.createHandlers(
+  vValidator("json", SecretVerificationSchema),
+  async (c) => {
+    const user = c.get("user");
+    const { masterPasswordHash } = c.req.valid("json");
     if (
       !(await verifyPassword(
-        body.masterPasswordHash,
+        masterPasswordHash,
         user.master_password_hash,
         user.email,
       ))
-    )
+    ) {
       return errorResponse("User verification failed.", 400);
-  }
-  const encryptedSecret = c.get("user").totp_secret;
-  let secret = randomBase32Secret();
-  if (encryptedSecret) {
-    try {
-      secret = await decryptCredential(
-        encryptedSecret,
-        c.env.DATA_ENCRYPTION_SECRET,
-        "totp-secret",
-      );
-    } catch {
-      return errorResponse(
-        "Authenticator configuration cannot be decrypted",
-        500,
-      );
     }
-  }
-  const authenticator = { key: secret, enabled: Boolean(encryptedSecret) };
-  return c.json({
-    authenticator,
-    userVerificationToken: await createTwoFactorAuthenticatorToken(
-      c.get("user").id,
+    const encryptedSecret = user.totp_secret;
+    let secret = randomBase32Secret();
+    if (encryptedSecret) {
+      try {
+        secret = await decryptCredential(
+          encryptedSecret,
+          c.env.DATA_ENCRYPTION_SECRET,
+          "totp-secret",
+        );
+      } catch {
+        return errorResponse(
+          "Authenticator configuration cannot be decrypted",
+          500,
+        );
+      }
+    }
+    const authenticator = authenticatorDetails(
       secret,
-      c.get("user").security_stamp,
-      c.env.JWT_SECRET,
-    ),
-    ...authenticator,
-    object: "twoFactorAuthenticator",
-  });
-});
+      Boolean(encryptedSecret),
+    );
+    return c.json(
+      authenticatorReadResponse(
+        authenticator,
+        await createTwoFactorAuthenticatorToken(
+          user.id,
+          secret,
+          user.security_stamp,
+          c.env.JWT_SECRET,
+        ),
+      ),
+    );
+  },
+);
 
 export const enableAuthenticator = factory.createHandlers(
   vValidator("json", TotpSetupSchema),
   async (c) => {
     const { token, key, userVerificationToken } = c.req.valid("json");
-    if (userVerificationToken) {
-      const claims = await verifyTwoFactorAuthenticatorToken(
-        userVerificationToken,
-        c.env.JWT_SECRET,
-      );
-      if (
-        !claims ||
-        claims.sub !== c.get("user").id ||
-        claims.key !== key ||
-        claims.sstamp !== c.get("user").security_stamp
-      )
-        return errorResponse("User verification failed.", 400);
-    }
+    const claims = await verifyTwoFactorAuthenticatorToken(
+      userVerificationToken,
+      c.env.JWT_SECRET,
+    );
+    if (
+      !claims ||
+      claims.sub !== c.get("user").id ||
+      claims.key !== key ||
+      claims.sstamp !== c.get("user").security_stamp
+    )
+      return errorResponse("User verification failed.", 400);
     if (!(await verifyTotpToken(key, token))) {
       return errorResponse("TOTP token is invalid.", 400);
     }
@@ -140,10 +149,11 @@ export const enableAuthenticator = factory.createHandlers(
     const userId = user.id;
     const ts = now();
     const securityStamp = crypto.randomUUID();
+    const recoveryCode = generateRecoveryCode();
     const [encryptedSecret, encryptedRecoveryCode] = await Promise.all([
       encryptCredential(key, c.env.DATA_ENCRYPTION_SECRET, "totp-secret"),
       encryptCredential(
-        generateRecoveryCode(),
+        recoveryCode,
         c.env.DATA_ENCRYPTION_SECRET,
         "totp-recovery",
       ),
@@ -184,94 +194,168 @@ export const enableAuthenticator = factory.createHandlers(
         409,
       );
     invalidateUserCache(userId);
-    return c.json({
-      authenticator: { key, enabled: true },
-      key,
-      enabled: true,
-      object: "twoFactorAuthenticatorUpdate",
-    });
+    return c.json(
+      authenticatorUpdateResponse(
+        authenticatorDetails(key, true),
+        recoveryCode,
+      ),
+    );
   },
 );
 
-function disableAuthenticatorHandler(providerResponse: boolean) {
-  return factory.createHandlers(
-    vValidator("json", DisableTotpSchema),
-    async (c) => {
-      const user = c.get("user");
-      const { masterPasswordHash } = c.req.valid("json");
-      if (
-        !(await verifyPassword(
-          masterPasswordHash,
-          user.master_password_hash,
-          user.email,
-        ))
-      ) {
-        return errorResponse("Password is incorrect.", 400);
-      }
-      const db = c.get("db");
-      const response = () =>
-        providerResponse
-          ? c.json({ enabled: false, type: 0, object: "twoFactorProvider" })
-          : c.json({ enabled: false, object: "twoFactorAuthenticator" });
-      if (!user.totp_secret) return response();
-      const ts = now();
-      const securityStamp = crypto.randomUUID();
-      const [updated] = await c.get("dbDialect").batch([
-        db
-          .updateTable("users")
-          .set({
-            totp_secret: null,
-            totp_recovery_code: null,
-            security_stamp: securityStamp,
-            updated_at: ts,
-          })
-          .where("id", "=", user.id)
-          .where("totp_secret", "=", user.totp_secret),
-        conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
-        conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
-        auditEventInsertQuery(
-          db,
-          {
-            actorUserId: user.id,
-            action: "account.two_factor.authenticator.disable",
-            category: "auth",
-            targetType: "user",
-            targetId: user.id,
-            metadata: auditRequestMetadata(c.req.raw),
-          },
-          sql<boolean>`EXISTS (
+export const disableAuthenticator = factory.createHandlers(
+  vValidator("json", AuthenticatorDeleteSchema),
+  async (c) => {
+    const user = c.get("user");
+    const { key, userVerificationToken } = c.req.valid("json");
+    const claims = await verifyTwoFactorAuthenticatorToken(
+      userVerificationToken,
+      c.env.JWT_SECRET,
+    );
+    if (
+      !claims ||
+      claims.sub !== user.id ||
+      claims.key !== key ||
+      claims.sstamp !== user.security_stamp
+    ) {
+      return errorResponse("User verification failed.", 400);
+    }
+    const db = c.get("db");
+    if (!user.totp_secret) return new Response(null, { status: 204 });
+    const ts = now();
+    const securityStamp = crypto.randomUUID();
+    const [updated] = await c.get("dbDialect").batch([
+      db
+        .updateTable("users")
+        .set({
+          totp_secret: null,
+          totp_recovery_code: null,
+          security_stamp: securityStamp,
+          updated_at: ts,
+        })
+        .where("id", "=", user.id)
+        .where("totp_secret", "=", user.totp_secret),
+      conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+      conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
+      auditEventInsertQuery(
+        db,
+        {
+          actorUserId: user.id,
+          action: "account.two_factor.authenticator.disable",
+          category: "auth",
+          targetType: "user",
+          targetId: user.id,
+          metadata: auditRequestMetadata(c.req.raw),
+        },
+        sql<boolean>`EXISTS (
 						SELECT 1 FROM users
 						WHERE id = ${user.id} AND security_stamp = ${securityStamp}
 					)`,
-          ts,
-        ),
-      ]);
-      if (updated.numAffectedRows !== 1n) return response();
-      invalidateUserCache(user.id);
-      return response();
-    },
-  );
-}
-
-export const disableAuthenticator = disableAuthenticatorHandler(false);
-export const disableTwoFactor = disableAuthenticatorHandler(true);
-
-export const getRecoveryCode = factory.createHandlers(async (c) => {
-  const encrypted = c.get("user").totp_recovery_code;
-  if (!encrypted) return c.json({ code: null, object: "twoFactorRecovery" });
-  try {
-    return c.json({
-      code: await decryptCredential(
-        encrypted,
-        c.env.DATA_ENCRYPTION_SECRET,
-        "totp-recovery",
+        ts,
       ),
-      object: "twoFactorRecovery",
-    });
-  } catch {
-    return errorResponse("Recovery code cannot be decrypted", 500);
-  }
-});
+    ]);
+    if (updated.numAffectedRows !== 1n)
+      return errorResponse(
+        "Authenticator was changed by another request.",
+        409,
+      );
+    invalidateUserCache(user.id);
+    return new Response(null, { status: 204 });
+  },
+);
+
+/** Disables every login second factor; provider-specific endpoints remain available for selective removal. */
+export const disableTwoFactor = factory.createHandlers(
+  vValidator("json", DisableTotpSchema),
+  async (c) => {
+    const user = c.get("user");
+    const { masterPasswordHash } = c.req.valid("json");
+    if (
+      !(await verifyPassword(
+        masterPasswordHash,
+        user.master_password_hash,
+        user.email,
+      ))
+    )
+      return errorResponse("Password is incorrect.", 400);
+
+    const db = c.get("db");
+    const ts = now();
+    const securityStamp = crypto.randomUUID();
+    const [updated] = await c.get("dbDialect").batch([
+      db
+        .updateTable("users")
+        .set({
+          totp_secret: null,
+          totp_recovery_code: null,
+          yubikey_config: serializeYubikeyConfig({ keys: [], nfc: false }),
+          security_stamp: securityStamp,
+          updated_at: ts,
+        })
+        .where("id", "=", user.id)
+        .where("security_stamp", "=", user.security_stamp),
+      conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+      conditionalTwoFactorCredentialDeletionQuery(db, user.id, securityStamp),
+      conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
+      auditEventInsertQuery(
+        db,
+        {
+          actorUserId: user.id,
+          action: "account.two_factor.disable_all",
+          category: "auth",
+          level: "warning",
+          targetType: "user",
+          targetId: user.id,
+          metadata: auditRequestMetadata(c.req.raw),
+        },
+        sql<boolean>`EXISTS (
+					SELECT 1 FROM users
+					WHERE id = ${user.id} AND security_stamp = ${securityStamp}
+				)`,
+        ts,
+      ),
+    ]);
+    if (updated.numAffectedRows !== 1n)
+      return errorResponse(
+        "Two-step verification changed; reload and try again.",
+        409,
+      );
+    invalidateUserCache(user.id);
+    return c.json({ enabled: false, type: 0, object: "twoFactorProvider" });
+  },
+);
+
+export const getRecoveryCode = factory.createHandlers(
+  vValidator("json", SecretVerificationSchema),
+  async (c) => {
+    const user = c.get("user");
+    const { masterPasswordHash } = c.req.valid("json");
+    if (
+      !(await verifyPassword(
+        masterPasswordHash,
+        user.master_password_hash,
+        user.email,
+      ))
+    ) {
+      return errorResponse("User verification failed.", 400);
+    }
+    const encrypted = user.totp_recovery_code;
+    if (!encrypted) return c.json(twoFactorRecoveryResponse(null));
+    try {
+      return c.json(
+        twoFactorRecoveryResponse(
+          await decryptCredential(
+            encrypted,
+            c.env.DATA_ENCRYPTION_SECRET,
+            "totp-recovery",
+          ),
+        ),
+      );
+    } catch {
+      return errorResponse("Recovery code cannot be decrypted", 500);
+    }
+  },
+);
 
 function normalizeRecoveryCode(value: string): string {
   return value.replace(/[\s-]/g, "").toUpperCase();

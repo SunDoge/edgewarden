@@ -1,9 +1,9 @@
 import { type Kysely, type Selectable, sql } from "kysely";
-import type { DB, AuthRequests } from "../../types/db";
+import type { AuthRequests, DB } from "../../types/db";
 import { now } from "../../utils/time";
 
-// Auth requests expire after 15 minutes
-const AUTH_REQUEST_TTL_SECONDS = 15 * 60;
+// Bitwarden user device-approval requests expire after 15 minutes.
+export const AUTH_REQUEST_TTL_SECONDS = 15 * 60;
 
 export function isAuthRequestExpired(req: Selectable<AuthRequests>): boolean {
   return req.creation_date + AUTH_REQUEST_TTL_SECONDS < now();
@@ -63,7 +63,7 @@ export async function getPendingAuthRequestsForDevice(
     .where("user_id", "=", userId)
     .where("request_device_identifier", "=", deviceIdentifier)
     .where("approved", "is", null)
-    .where("creation_date", ">", cutoff)
+    .where("creation_date", ">=", cutoff)
     .orderBy("creation_date", "desc")
     .execute();
 }
@@ -91,16 +91,23 @@ export async function getPendingAuthRequestsByUserId(
     .where("request.user_id", "=", userId)
     .where("request.approved", "is", null)
     .where("request.response_date", "is", null)
-    .where("request.creation_date", ">", cutoff)
+    .where("request.creation_date", ">=", cutoff)
     .where(sql<boolean>`NOT EXISTS (
       SELECT 1 FROM auth_requests newer
       WHERE newer.user_id = request.user_id
         AND newer.request_device_identifier = request.request_device_identifier
         AND newer.approved IS NULL
         AND newer.response_date IS NULL
-        AND newer.creation_date > request.creation_date
+        AND (
+          newer.creation_date > request.creation_date
+          OR (
+            newer.creation_date = request.creation_date
+            AND newer.rowid > request.rowid
+          )
+        )
     )`)
     .orderBy("request.creation_date", "desc")
+    .orderBy(sql`request.rowid`, "desc")
     .execute();
 }
 
@@ -113,7 +120,7 @@ export async function approveAuthRequest(
   masterPasswordHash: string | null,
 ): Promise<boolean> {
   const cutoff = now() - AUTH_REQUEST_TTL_SECONDS;
-  const result = await db
+  let query = db
     .updateTable("auth_requests")
     .set({
       approved: approved ? 1 : 0,
@@ -127,15 +134,29 @@ export async function approveAuthRequest(
     .where("response_date", "is", null)
     .where("authentication_date", "is", null)
     .where("consumption_token", "is", null)
-    .where("creation_date", ">", cutoff)
-    .where(sql<boolean>`NOT EXISTS (
+    .where("creation_date", ">=", cutoff);
+
+  // Bitwarden only requires the latest request for an originating device when
+  // approving it. An older prompt may still be rejected to dismiss it safely.
+  // rowid breaks ties because Edgewarden stores protocol dates in Unix seconds,
+  // so two requests created during the same second otherwise both look latest.
+  if (approved) {
+    query = query.where(sql<boolean>`NOT EXISTS (
       SELECT 1 FROM auth_requests newer
       WHERE newer.user_id = auth_requests.user_id
         AND newer.request_device_identifier = auth_requests.request_device_identifier
         AND newer.approved IS NULL
         AND newer.response_date IS NULL
-        AND newer.creation_date > auth_requests.creation_date
-    )`)
-    .executeTakeFirst();
+        AND (
+          newer.creation_date > auth_requests.creation_date
+          OR (
+            newer.creation_date = auth_requests.creation_date
+            AND newer.rowid > auth_requests.rowid
+          )
+        )
+    )`);
+  }
+
+  const result = await query.executeTakeFirst();
   return result.numUpdatedRows === 1n;
 }

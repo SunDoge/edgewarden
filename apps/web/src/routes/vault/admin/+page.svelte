@@ -274,7 +274,7 @@
             <div>
               <h2 class="font-semibold">移动端 Push Relay</h2>
               <p class="text-xs text-muted-foreground">
-                用于在后台唤醒 Bitwarden Android 和 iOS 客户端。
+                用于后台同步，以及向 Bitwarden Android 和 iOS 客户端发送设备登录审批通知。
               </p>
             </div>
             <Badge variant={pushRelay?.enabled ? "secondary" : "outline"}

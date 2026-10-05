@@ -1,5 +1,5 @@
 import type { InferRequestType } from "hono/client";
-import { rpc, rpcJson, rpcVoid } from "./rpc";
+import { ApiError, rpc, rpcJson, rpcVoid } from "./rpc";
 import type {
   FileSendUpload,
   OwnedSend,
@@ -56,14 +56,14 @@ export async function deleteSendApi(id: string): Promise<void> {
 }
 
 export async function deleteSendsApi(ids: string[]): Promise<void> {
-  rpcVoid(await rpc.api.sends.delete.$post({ json: { ids } }));
+  rpcVoid(await rpc.api.edgewarden.sends.delete.$post({ json: { ids } }));
 }
 
 /**
  * 15. Remove send password
  */
 export async function removeSendPasswordApi(id: string) {
-  const response = await rpc.api.sends[":id"]["remove-password"].$post({
+  const response = await rpc.api.sends[":id"]["remove-password"].$put({
     param: { id },
   });
   return (await rpcJson(response)) as OwnedSend;
@@ -74,25 +74,58 @@ export async function removeSendPasswordApi(id: string) {
  */
 export async function accessSendPublicApi(
   accessId: string,
-  payload?: { password?: string },
-): Promise<PublicSend> {
-  const response = await rpc.api.sends.access[":idOrAccessId"].$post({
-    param: { idOrAccessId: accessId },
-    json: payload ?? {},
+  payload?: { passwordHash?: string },
+): Promise<{ send: PublicSend; accessToken: string }> {
+  const tokenResponse = await fetch("/identity/connect/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "send_access",
+      client_id: "send",
+      scope: "api.send.access",
+      send_id: accessId,
+      ...(payload?.passwordHash
+        ? { password_hash_b64: payload.passwordHash }
+        : {}),
+    }),
   });
-  return (await rpcJson(response)) as PublicSend;
+  const tokenPayload = (await tokenResponse.json().catch(() => null)) as {
+    access_token?: string;
+    error_description?: string;
+    send_access_error_type?: string;
+  } | null;
+  if (!tokenResponse.ok || !tokenPayload?.access_token) {
+    const passwordFailure = Boolean(tokenPayload?.send_access_error_type);
+    throw new ApiError(
+      tokenPayload?.error_description || "无法验证 Send 访问权限",
+      passwordFailure ? 401 : tokenResponse.status,
+      tokenPayload,
+    );
+  }
+
+  const response = await fetch("/api/sends/access", {
+    method: "POST",
+    headers: { authorization: `Bearer ${tokenPayload.access_token}` },
+  });
+  if (!response.ok) {
+    throw new ApiError("无法读取 Send", response.status, null);
+  }
+  return {
+    send: (await response.json()) as PublicSend,
+    accessToken: tokenPayload.access_token,
+  };
 }
 
 export async function requestSendFileDownloadApi(
-  sendId: string,
+  accessToken: string,
   fileId: string,
-  payload: { password?: string },
 ): Promise<{ url: string }> {
-  const response = await rpc.api.sends[":idOrAccessId"].access.file[
-    ":fileId"
-  ].$post({
-    param: { idOrAccessId: sendId, fileId },
-    json: payload,
+  const response = await fetch(`/api/sends/access/file/${fileId}`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${accessToken}` },
   });
-  return rpcJson(response) as Promise<{ url: string }>;
+  if (!response.ok) {
+    throw new ApiError("无法获取文件下载地址", response.status, null);
+  }
+  return response.json() as Promise<{ url: string }>;
 }

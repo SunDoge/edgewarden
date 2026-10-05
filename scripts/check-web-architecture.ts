@@ -32,6 +32,14 @@ for (const file of sourceFiles(webSource)) {
       `${file}: production Web code must use explicit domain types, not any`,
     );
   }
+  if (
+    isProductionSource &&
+    source.includes("identity.accounts.prelogin.$post")
+  ) {
+    violations.push(
+      `${file}: first-party Web code must use the current password prelogin route`,
+    );
+  }
 }
 
 const vaultPage = join(vaultRoutes, "+page.svelte");

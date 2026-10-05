@@ -19,9 +19,10 @@ describe("API test harness", () => {
   afterAll(async () => harness.dispose());
 
   test("sends typed RPC requests through the in-process harness", async () => {
-    const response = await harness.rpc.identity.accounts.prelogin.$post({
-      json: { email: "missing@example.com" },
-    });
+    const response =
+      await harness.rpc.identity.accounts.prelogin.password.$post({
+        json: { email: "missing@example.com" },
+      });
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("application/json");
   });

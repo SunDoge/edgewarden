@@ -18,6 +18,7 @@ describe("vault realtime client", () => {
   it("uses a short-lived ticket and forwards revision events", async () => {
     const socket = new FakeSocket();
     const onRevision = vi.fn();
+    const onAuthRequest = vi.fn();
     const createSocket = vi.fn(
       (_url: string) => socket as unknown as WebSocket,
     );
@@ -25,6 +26,7 @@ describe("vault realtime client", () => {
       origin: "https://vault.example.test",
       getTicket: async () => "short-lived-ticket",
       onRevision,
+      onAuthRequest,
       createSocket,
     });
     client.start();
@@ -33,8 +35,15 @@ describe("vault realtime client", () => {
       "wss://vault.example.test/api/notifications/hub?ticket=short-lived-ticket",
     );
     socket.message({ type: "vault-revision", revisionDate: 1234 });
+    socket.message({
+      type: "auth-request",
+      authRequestId: "request-id",
+      userId: "user-id",
+      requestDeviceIdentifier: "requesting-device",
+    });
     socket.message({ type: "unrelated", revisionDate: 5678 });
     expect(onRevision).toHaveBeenCalledExactlyOnceWith(1234);
+    expect(onAuthRequest).toHaveBeenCalledExactlyOnceWith("request-id");
     client.stop();
     expect(socket.closed).toBe(true);
   });

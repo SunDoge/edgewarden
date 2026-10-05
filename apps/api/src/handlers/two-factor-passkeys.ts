@@ -4,6 +4,7 @@ export {
 } from "./two-factor-passkeys/assertion";
 export {
   createTwoFactorPasskey,
+  deleteAllTwoFactorPasskeys,
   deleteTwoFactorPasskey,
   getTwoFactorPasskeyChallenge,
   getTwoFactorPasskeys,

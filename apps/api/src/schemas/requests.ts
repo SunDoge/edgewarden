@@ -1,7 +1,12 @@
 import * as v from "valibot";
 
 const nonEmptyString = v.pipe(v.string(), v.trim(), v.minLength(1));
-const deviceType = v.pipe(v.number(), v.integer(), v.minValue(0));
+const deviceType = v.pipe(
+  v.number(),
+  v.integer(),
+  v.minValue(0),
+  v.maxValue(255),
+);
 
 export const DeviceNameSchema = v.object({
   name: v.pipe(nonEmptyString, v.maxLength(128)),
@@ -110,20 +115,20 @@ export const AuthRequestCreateSchema = v.pipe(
       v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2)),
       0,
     ),
-    deviceIdentifier: v.optional(v.string()),
-    DeviceIdentifier: v.optional(v.string()),
+    deviceIdentifier: v.optional(v.pipe(v.string(), v.maxLength(50))),
+    DeviceIdentifier: v.optional(v.pipe(v.string(), v.maxLength(50))),
     deviceType: v.optional(deviceType),
     DeviceType: v.optional(deviceType),
-    accessCode: v.optional(v.string()),
-    AccessCode: v.optional(v.string()),
-    publicKey: v.optional(v.string()),
-    PublicKey: v.optional(v.string()),
+    accessCode: v.optional(v.pipe(v.string(), v.maxLength(25))),
+    AccessCode: v.optional(v.pipe(v.string(), v.maxLength(25))),
+    publicKey: v.optional(v.pipe(v.string(), v.maxLength(4096))),
+    PublicKey: v.optional(v.pipe(v.string(), v.maxLength(4096))),
   }),
   v.transform((body) => ({
     email: body.email.toLowerCase(),
     type: body.type,
     deviceIdentifier: body.deviceIdentifier ?? body.DeviceIdentifier ?? "",
-    deviceType: body.deviceType ?? body.DeviceType ?? 0,
+    deviceType: body.deviceType ?? body.DeviceType,
     accessCode: body.accessCode ?? body.AccessCode ?? "",
     publicKey: body.publicKey ?? body.PublicKey ?? "",
   })),
@@ -136,15 +141,21 @@ export const AuthRequestCreateSchema = v.pipe(
   ),
 );
 
+export const AuthRequestResponseQuerySchema = v.object({
+  code: v.pipe(v.string(), v.minLength(1)),
+});
+
 export const AuthRequestUpdateSchema = v.pipe(
   v.looseObject({
     requestApproved: v.optional(v.boolean()),
     approved: v.optional(v.boolean()),
-    deviceIdentifier: v.optional(v.string()),
-    DeviceIdentifier: v.optional(v.string()),
-    key: v.optional(v.nullable(v.string())),
-    Key: v.optional(v.nullable(v.string())),
-    masterPasswordHash: v.optional(v.nullable(v.string())),
+    deviceIdentifier: v.optional(v.pipe(v.string(), v.maxLength(50))),
+    DeviceIdentifier: v.optional(v.pipe(v.string(), v.maxLength(50))),
+    key: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(4096)))),
+    Key: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(4096)))),
+    masterPasswordHash: v.optional(
+      v.nullable(v.pipe(v.string(), v.maxLength(4096))),
+    ),
   }),
   v.transform((body) => ({
     approved: body.requestApproved ?? body.approved ?? false,
@@ -155,6 +166,10 @@ export const AuthRequestUpdateSchema = v.pipe(
   v.check(
     (body) => body.deviceIdentifier.length > 0,
     "Device identifier is required",
+  ),
+  v.check(
+    (body) => !body.approved || Boolean(body.key),
+    "An encrypted key is required to approve an auth request",
   ),
 );
 

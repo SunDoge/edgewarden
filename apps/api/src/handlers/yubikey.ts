@@ -1,10 +1,13 @@
 import { vValidator } from "@hono/valibot-validator";
+import type { Context } from "hono";
 import { sql } from "kysely";
+import type { HonoEnv } from "../env";
 import { factory } from "../http/factory";
 import {
+  DeleteYubicoKeysSchema,
   SaveYubicoConfigSchema,
   SaveYubicoKeysSchema,
-  YubicoSettingsSchema,
+  SecretVerificationSchema,
 } from "../schemas/two-factor";
 import { auditEventInsertQuery, auditRequestMetadata } from "../services/audit";
 import { invalidateUserCache, verifyPassword } from "../services/auth";
@@ -19,7 +22,16 @@ import {
   prepareYubicoCredentialsUpdate,
   YUBICO_CONFIG_KEY,
 } from "../services/yubico-config";
+import {
+  yubiKeyDetails,
+  yubiKeyReadResponse,
+  yubiKeyUpdateResponse,
+} from "../services/two-factor-presentation";
 import { errorResponse } from "../utils/response";
+import {
+  createTwoFactorProviderToken,
+  verifyTwoFactorProviderToken,
+} from "../utils/jwt";
 import { now } from "../utils/time";
 import {
   parseYubikeyConfig,
@@ -27,6 +39,8 @@ import {
   verifyYubicoOtp,
   yubicoPublicId,
 } from "../utils/yubico";
+
+const YUBIKEY_PROVIDER = 3;
 
 function recoveryCode(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) =>
@@ -36,30 +50,51 @@ function recoveryCode(): string {
     .toUpperCase();
 }
 
-async function verified(c: any, hash: string): Promise<boolean> {
+async function verified(c: Context<HonoEnv>, hash: string): Promise<boolean> {
   const user = c.get("user");
   return verifyPassword(hash, user.master_password_hash, user.email);
 }
 
-async function settingsPayload(c: any) {
+async function hasValidUserVerificationToken(
+  c: Context<HonoEnv>,
+  token: string,
+): Promise<boolean> {
+  const claims = await verifyTwoFactorProviderToken(token, c.env.JWT_SECRET);
+  const user = c.get("user");
+  return Boolean(
+    claims &&
+      claims.sub === user.id &&
+      claims.provider === YUBIKEY_PROVIDER &&
+      claims.sstamp === user.security_stamp,
+  );
+}
+
+async function settingsDetails(c: Context<HonoEnv>) {
   const user = c.get("user");
   const yubikey = parseYubikeyConfig(user.yubikey_config);
-  return {
-    enabled: yubikey.keys.length > 0,
-    keys: yubikey.keys,
-    nfc: yubikey.nfc,
+  return yubiKeyDetails(yubikey.keys, yubikey.nfc, {
     configured: Boolean(await loadYubicoCredentials(c.get("db"), c.env)),
     canManageConfig: user.role === "admin",
-    object: "twoFactorYubiKey" as const,
-  };
+  });
 }
 
 export const getYubikeySettings = factory.createHandlers(
-  vValidator("json", YubicoSettingsSchema),
+  vValidator("json", SecretVerificationSchema),
   async (c) => {
     if (!(await verified(c, c.req.valid("json").masterPasswordHash)))
       return errorResponse("Master password verification failed", 400);
-    return c.json(await settingsPayload(c));
+    const user = c.get("user");
+    return c.json(
+      yubiKeyReadResponse(
+        await settingsDetails(c),
+        await createTwoFactorProviderToken(
+          user.id,
+          YUBIKEY_PROVIDER,
+          user.security_stamp,
+          c.env.JWT_SECRET,
+        ),
+      ),
+    );
   },
 );
 
@@ -67,8 +102,8 @@ export const saveYubikeys = factory.createHandlers(
   vValidator("json", SaveYubicoKeysSchema),
   async (c) => {
     const body = c.req.valid("json");
-    if (!(await verified(c, body.masterPasswordHash)))
-      return errorResponse("Master password verification failed", 400);
+    if (!(await hasValidUserVerificationToken(c, body.userVerificationToken)))
+      return errorResponse("User verification failed.", 400);
     const credentials = await loadYubicoCredentials(c.get("db"), c.env);
     if (!credentials)
       return errorResponse(
@@ -76,7 +111,13 @@ export const saveYubikeys = factory.createHandlers(
         409,
       );
     const publicIds: string[] = [];
-    for (const otp of body.otps) {
+    for (const otp of [
+      body.key1,
+      body.key2,
+      body.key3,
+      body.key4,
+      body.key5,
+    ].filter((value): value is string => Boolean(value))) {
       const publicId = yubicoPublicId(otp);
       if (!publicId || !(await verifyYubicoOtp(otp, credentials)))
         return errorResponse("Invalid YubiKey OTP", 400);
@@ -137,27 +178,20 @@ export const saveYubikeys = factory.createHandlers(
       .where("id", "=", user.id)
       .executeTakeFirstOrThrow();
     c.set("user", updated);
-    return c.json(await settingsPayload(c));
+    return c.json(yubiKeyUpdateResponse(await settingsDetails(c)));
   },
 );
 
 export const disableYubikeys = factory.createHandlers(
-  vValidator("json", YubicoSettingsSchema),
+  vValidator("json", DeleteYubicoKeysSchema),
   async (c) => {
     const body = c.req.valid("json");
-    if (!(await verified(c, body.masterPasswordHash)))
-      return errorResponse("Master password verification failed", 400);
+    if (!(await hasValidUserVerificationToken(c, body.userVerificationToken)))
+      return errorResponse("User verification failed.", 400);
     const user = c.get("user");
     const db = c.get("db");
-    const disabledResponse = () =>
-      c.json({
-        enabled: false,
-        keys: [],
-        nfc: false,
-        object: "twoFactorYubiKey" as const,
-      });
     if (parseYubikeyConfig(user.yubikey_config).keys.length === 0)
-      return disabledResponse();
+      return new Response(null, { status: 204 });
     const ts = now();
     const securityStamp = crypto.randomUUID();
     const [updated] = await c.get("dbDialect").batch([
@@ -189,9 +223,10 @@ export const disableYubikeys = factory.createHandlers(
         ts,
       ),
     ]);
-    if (updated.numAffectedRows !== 1n) return disabledResponse();
+    if (updated.numAffectedRows !== 1n)
+      return errorResponse("YubiKey settings changed by another request", 409);
     invalidateUserCache(user.id);
-    return disabledResponse();
+    return new Response(null, { status: 204 });
   },
 );
 

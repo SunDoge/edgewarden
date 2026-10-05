@@ -39,6 +39,9 @@ jobs:
       - name: Check types, bindings, and migrations
         run: pnpm check
 
+      - name: Check database types match migrations
+        run: pnpm --filter @edgewarden/api db:check
+
       - name: Lint errors
         run: pnpm lint:ci
 

@@ -22,7 +22,7 @@ export type CipherType = (typeof CipherType)[keyof typeof CipherType];
 
 // ── Request payloads ─────────────────────────────────────────────────────────
 
-/** POST /api/accounts/register */
+/** POST /api/edgewarden/accounts/register */
 export interface RegisterPayload {
   email: string;
   masterPasswordHash: string;

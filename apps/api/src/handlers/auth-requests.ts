@@ -1,8 +1,9 @@
 import { vValidator } from "@hono/valibot-validator";
-import type { Selectable } from "kysely";
 import { factory } from "../http/factory";
+import { checkIpRateLimit } from "../middleware/rate-limit";
 import {
   AuthRequestCreateSchema,
+  AuthRequestResponseQuerySchema,
   AuthRequestUpdateSchema,
 } from "../schemas/requests";
 import * as authRequestsDb from "../services/db/auth-requests";
@@ -12,70 +13,34 @@ import {
   constantTimeCredentialEqual,
   hashCredential,
 } from "../services/credential-protection";
-import type { AuthRequests } from "../types/db";
+import { parseDeviceTypeHeader } from "../services/auth-requests/device-type";
+import { authRequestToResponse } from "../services/auth-requests/presentation";
+import {
+  logPushRelayFailure,
+  publishPushAuthRequest,
+} from "../services/push-relay";
+import { publishAuthRequestNotification } from "../services/realtime";
 import { errorResponse } from "../utils/response";
-import { toIso } from "../utils/time";
-
-const DEVICE_TYPE_NAMES = [
-  "Android",
-  "iOS",
-  "Chrome Extension",
-  "Firefox Extension",
-  "Opera Extension",
-  "Edge Extension",
-  "Windows",
-  "macOS",
-  "Linux",
-  "Chrome",
-  "Firefox",
-  "Opera",
-  "Edge",
-  "Internet Explorer",
-  "Unknown Browser",
-  "Android",
-  "UWP",
-  "Safari",
-  "Vivaldi",
-  "Vivaldi Extension",
-  "Safari Extension",
-  "SDK",
-  "Server",
-  "Windows CLI",
-  "MacOs CLI",
-  "Linux CLI",
-  "DuckDuckGo",
-] as const;
-
-function authRequestToResponse(
-  authRequest: Selectable<AuthRequests>,
-  origin: string,
-) {
-  return {
-    id: authRequest.id,
-    requestDeviceIdentifier: authRequest.request_device_identifier,
-    requestDeviceTypeValue: authRequest.request_device_type,
-    requestDeviceType:
-      DEVICE_TYPE_NAMES[authRequest.request_device_type] ?? "Unknown Browser",
-    requestIpAddress: authRequest.request_ip_address ?? null,
-    requestCountryName: authRequest.request_country_name ?? null,
-    publicKey: authRequest.public_key,
-    key: authRequest.key ?? null,
-    masterPasswordHash: authRequest.master_password_hash ?? null,
-    requestApproved: authRequest.approved === 1,
-    origin,
-    creationDate: toIso(authRequest.creation_date),
-    responseDate: authRequest.response_date
-      ? toIso(authRequest.response_date)
-      : null,
-    object: "auth-request",
-  };
-}
 
 export const createAuthRequest = factory.createHandlers(
   vValidator("json", AuthRequestCreateSchema),
   async (c) => {
+    // Rate-limit only creation. The requester polls every few seconds while it
+    // waits, so applying the shared IP quota to reads would break valid logins.
+    if (!(await checkIpRateLimit(c, "auth-request"))) {
+      return errorResponse("Too many auth requests. Try again later.", 429);
+    }
     const db = c.get("db");
     const body = c.req.valid("json");
+    const deviceTypeHeader = c.req.header("Device-Type");
+    const headerDeviceType = parseDeviceTypeHeader(deviceTypeHeader);
+    if (deviceTypeHeader !== undefined && headerDeviceType === null) {
+      return errorResponse("Invalid device type", 400);
+    }
+    const requestDeviceType = headerDeviceType ?? body.deviceType;
+    if (requestDeviceType === undefined) {
+      return errorResponse("Device type not provided", 400);
+    }
     if (body.type === 2)
       return errorResponse("Admin approval requires authentication", 400);
     const user = await usersDb.getUserByEmail(db, body.email);
@@ -87,7 +52,7 @@ export const createAuthRequest = factory.createHandlers(
       userId: user.id,
       type: body.type ?? 0,
       requestDeviceIdentifier: body.deviceIdentifier,
-      requestDeviceType: body.deviceType,
+      requestDeviceType,
       requestIpAddress: c.req.header("CF-Connecting-IP") ?? null,
       accessCodeHash: await hashCredential(body.accessCode),
       publicKey: body.publicKey,
@@ -95,6 +60,21 @@ export const createAuthRequest = factory.createHandlers(
     const authRequest = await authRequestsDb.getAuthRequestById(db, id);
     if (!authRequest)
       return errorResponse("Failed to create auth request", 500);
+    c.executionCtx.waitUntil(
+      Promise.all([
+        publishPushAuthRequest(c.env, user.id, id, body.deviceIdentifier).catch(
+          (error) => logPushRelayFailure("push.auth-request.failed", error),
+        ),
+        publishAuthRequestNotification(
+          c.env,
+          user.id,
+          id,
+          body.deviceIdentifier,
+        ).catch((error) =>
+          logPushRelayFailure("realtime.auth-request.failed", error),
+        ),
+      ]).then(() => undefined),
+    );
     return c.json(authRequestToResponse(authRequest, new URL(c.req.url).host));
   },
 );
@@ -103,22 +83,25 @@ export const getAuthRequest = factory.createHandlers(async (c) =>
   c.json(authRequestToResponse(c.get("authRequest"), new URL(c.req.url).host)),
 );
 
-export const getAuthRequestResponse = factory.createHandlers(async (c) => {
-  const id = c.req.param("id");
-  const code = c.req.query("code") ?? "";
-  if (!id || !code) return errorResponse("Not found", 404);
-  const request = await authRequestsDb.getAuthRequestById(c.get("db"), id);
-  if (
-    !request ||
-    authRequestsDb.isAuthRequestExpired(request) ||
-    !constantTimeCredentialEqual(
-      request.access_code_hash,
-      await hashCredential(code),
+export const getAuthRequestResponse = factory.createHandlers(
+  vValidator("query", AuthRequestResponseQuerySchema),
+  async (c) => {
+    const id = c.req.param("id");
+    const { code } = c.req.valid("query");
+    if (!id) return errorResponse("Not found", 404);
+    const request = await authRequestsDb.getAuthRequestById(c.get("db"), id);
+    if (
+      !request ||
+      authRequestsDb.isAuthRequestExpired(request) ||
+      !constantTimeCredentialEqual(
+        request.access_code_hash,
+        await hashCredential(code),
+      )
     )
-  )
-    return errorResponse("Not found", 404);
-  return c.json(authRequestToResponse(request, new URL(c.req.url).host));
-});
+      return errorResponse("Not found", 404);
+    return c.json(authRequestToResponse(request, new URL(c.req.url).host));
+  },
+);
 
 export const updateAuthRequest = factory.createHandlers(
   vValidator("json", AuthRequestUpdateSchema),
@@ -129,6 +112,12 @@ export const updateAuthRequest = factory.createHandlers(
       return errorResponse("Auth request has expired", 400);
     }
     const body = c.req.valid("json");
+    const responseDevice = await devicesDb.getDevice(
+      db,
+      c.get("user").id,
+      body.deviceIdentifier,
+    );
+    if (!responseDevice) return errorResponse("Invalid device", 400);
     const decided = await authRequestsDb.approveAuthRequest(
       db,
       authRequest.id,

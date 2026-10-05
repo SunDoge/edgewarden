@@ -8,7 +8,17 @@ import {
 import { invalidateUserCache } from "../services/auth";
 import { hashCredential } from "../services/credential-protection";
 
-import { expectJson, type ApiRpcClient } from "./api-harness";
+import { type ApiRpcClient, expectJson } from "./api-harness";
+
+function bytesToBase64(value: Uint8Array): string {
+  let binary = "";
+  for (const byte of value) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function base64ToBytes(value: string): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
+}
 
 export interface VaultScenarioContext {
   readonly rpc: ApiRpcClient;
@@ -149,13 +159,17 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
   test("creates a folder and cipher through authenticated batch-backed handlers", async () => {
     const client = context.rpc;
     const auth = { authorization: `Bearer ${context.accessToken}` };
-    const profileAlias = await request("/api/accounts/profile", {
-      method: "POST",
+    const profileResponse = await request("/api/accounts/profile", {
+      method: "PUT",
       headers: { ...auth, "content-type": "application/json" },
       body: JSON.stringify({ name: "API Test", masterPasswordHint: null }),
     });
-    assert.equal(profileAlias.status, 200, await profileAlias.clone().text());
-    const profile = await profileAlias.json<Record<string, unknown>>();
+    assert.equal(
+      profileResponse.status,
+      200,
+      await profileResponse.clone().text(),
+    );
+    const profile = await profileResponse.json<Record<string, unknown>>();
     assert.ok("accountKeys" in profile);
     assert.equal(profile.verifyDevices, true);
     assert.deepEqual(profile.organizationsNew, profile.organizations);
@@ -213,6 +227,37 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     assert.deepEqual(
       [cipher.edit, cipher.viewPassword, cipher.object],
       [true, true, "cipherDetails"],
+    );
+    const cipherDetailsResponse = await request(
+      `/api/ciphers/${cipher.id}/details`,
+      {
+        headers: auth,
+      },
+    );
+    assert.equal(
+      cipherDetailsResponse.status,
+      200,
+      await cipherDetailsResponse.clone().text(),
+    );
+    const cipherDetails = await cipherDetailsResponse.json<{
+      id: string;
+      object: string;
+      name: string;
+      folderId: string | null;
+    }>();
+    assert.deepEqual(
+      {
+        id: cipherDetails.id,
+        object: cipherDetails.object,
+        name: cipherDetails.name,
+        folderId: cipherDetails.folderId,
+      },
+      {
+        id: cipher.id,
+        object: "cipherDetails",
+        name: "encrypted-cipher-name",
+        folderId: folder.id,
+      },
     );
 
     const sync = await client.api.sync.$get();
@@ -463,8 +508,8 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       .first<{ count: number }>()
       .then((row) => Number(row?.count));
     const bulkDelete = () =>
-      request("/api/ciphers/delete-permanent", {
-        method: "POST",
+      request("/api/ciphers", {
+        method: "DELETE",
         headers: auth,
         body: JSON.stringify({ ids: [bulkId] }),
       });
@@ -508,14 +553,16 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     const cipherId = (await created.json<{ id: string }>()).id;
 
     await context.database
-      .prepare(`
+      .prepare(
+        `
 				CREATE TRIGGER test_fail_atomic_delete_audit
 				BEFORE INSERT ON audit_logs
 				WHEN NEW.action = 'cipher.delete'
 				BEGIN
 					SELECT RAISE(ABORT, 'simulated audit outage');
 				END
-			`)
+			`,
+      )
       .run();
     try {
       const failed = await request(`/api/ciphers/${cipherId}/delete`, {
@@ -671,7 +718,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
         .first<{ deleted_at: number | null }>()
         .then((row) => row?.deleted_at),
     );
-    await runRepeated("/api/ciphers/restore", { ids: [cipherId] });
+    await runRepeated("/api/ciphers/restore", { ids: [cipherId] }, "PUT");
     assert.equal(
       await context.database
         .prepare("SELECT deleted_at FROM ciphers WHERE id = ?")
@@ -680,7 +727,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
         .then((row) => row?.deleted_at),
       null,
     );
-    await runRepeated("/api/ciphers/archive", { ids: [cipherId] });
+    await runRepeated("/api/ciphers/archive", { ids: [cipherId] }, "PUT");
     assert.ok(
       await context.database
         .prepare("SELECT archived_at FROM ciphers WHERE id = ?")
@@ -688,7 +735,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
         .first<{ archived_at: number | null }>()
         .then((row) => row?.archived_at),
     );
-    await runRepeated("/api/ciphers/unarchive", { ids: [cipherId] });
+    await runRepeated("/api/ciphers/unarchive", { ids: [cipherId] }, "PUT");
 
     const folder = await request("/api/folders", {
       method: "POST",
@@ -697,10 +744,14 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     });
     assert.equal(folder.status, 200, await folder.clone().text());
     const folderId = (await folder.json<{ id: string }>()).id;
-    await runRepeated("/api/ciphers/move", {
-      ids: [cipherId],
-      folderId,
-    });
+    await runRepeated(
+      "/api/ciphers/move",
+      {
+        ids: [cipherId],
+        folderId,
+      },
+      "PUT",
+    );
     assert.equal(
       await context.database
         .prepare("SELECT folder_id FROM ciphers WHERE id = ?")
@@ -745,7 +796,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
         cipherIds.length,
       );
       const bulkResponse = await request("/api/ciphers/archive", {
-        method: "POST",
+        method: "PUT",
         headers: {
           authorization: `Bearer ${context.accessToken}`,
           "content-type": "application/json",
@@ -771,13 +822,15 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       revisionDate: string;
     }>();
     await context.database
-      .prepare(`
+      .prepare(
+        `
 				CREATE TRIGGER test_fail_cipher_revision
 				BEFORE UPDATE ON user_revisions
 				BEGIN
 					SELECT RAISE(ABORT, 'forced revision failure');
 				END
-			`)
+			`,
+      )
       .run();
     try {
       const response = await request(`/api/ciphers/${context.cipherId}`, {
@@ -812,7 +865,70 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
   });
 
   test("hashes auth request access codes and only exposes responses to the holder", async () => {
-    const accessCode = "auth-request-client-secret";
+    for (const invalidFields of [
+      {
+        deviceIdentifier: "d".repeat(51),
+        accessCode: "valid-code",
+        publicKey: "test-public-key",
+      },
+      {
+        deviceIdentifier: "valid-device",
+        accessCode: "a".repeat(26),
+        publicKey: "test-public-key",
+      },
+      {
+        deviceIdentifier: "valid-device",
+        accessCode: "valid-code",
+        publicKey: "p".repeat(4097),
+      },
+    ]) {
+      const oversized = await request("/api/auth-requests", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: EMAIL,
+          deviceType: 0,
+          ...invalidFields,
+        }),
+      });
+      assert.equal(oversized.status, 400, await oversized.clone().text());
+    }
+    const missingDeviceType = await request("/api/auth-requests", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: EMAIL,
+        deviceIdentifier: "missing-device-type",
+        accessCode: "valid-code",
+        publicKey: "test-public-key",
+      }),
+    });
+    assert.equal(
+      missingDeviceType.status,
+      400,
+      await missingDeviceType.clone().text(),
+    );
+    const invalidHeaderDeviceType = await request("/api/auth-requests", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "Device-Type": "NotADevice",
+      },
+      body: JSON.stringify({
+        email: EMAIL,
+        deviceIdentifier: "invalid-header-device-type",
+        deviceType: 0,
+        accessCode: "valid-code",
+        publicKey: "test-public-key",
+      }),
+    });
+    assert.equal(
+      invalidHeaderDeviceType.status,
+      400,
+      await invalidHeaderDeviceType.clone().text(),
+    );
+
+    const accessCode = "auth-request-code-1234567";
     const response = await request("/api/auth-requests", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -846,6 +962,22 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
         )
       ).status,
       200,
+    );
+    const unknownApprover = await request(`/api/auth-requests/${body.id}`, {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${context.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        requestApproved: false,
+        deviceIdentifier: "unknown-approving-device",
+      }),
+    });
+    assert.equal(
+      unknownApprover.status,
+      400,
+      await unknownApprover.clone().text(),
     );
     const rejected = await request(`/api/auth-requests/${body.id}`, {
       method: "PUT",
@@ -884,6 +1016,133 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
         .then((row) => row?.approved),
       0,
     );
+
+    const approvalCode = "approved-code-12345678901";
+    const approvalKeyPair = (await crypto.subtle.generateKey(
+      {
+        name: "RSA-OAEP",
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: "SHA-1",
+      },
+      true,
+      ["encrypt", "decrypt"],
+    )) as CryptoKeyPair;
+    const approvalPublicKeyBytes = (await crypto.subtle.exportKey(
+      "spki",
+      approvalKeyPair.publicKey,
+    )) as ArrayBuffer;
+    const approvalPublicKey = bytesToBase64(
+      new Uint8Array(approvalPublicKeyBytes),
+    );
+    const expectedVaultKey = crypto.getRandomValues(new Uint8Array(64));
+    const encryptedVaultKey = `4.${bytesToBase64(
+      new Uint8Array(
+        await crypto.subtle.encrypt(
+          { name: "RSA-OAEP" },
+          approvalKeyPair.publicKey,
+          expectedVaultKey,
+        ),
+      ),
+    )}`;
+    const approvalCreation = await request("/api/auth-requests", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Device-Type": "iOS" },
+      body: JSON.stringify({
+        email: EMAIL,
+        deviceIdentifier: "approved-auth-request-device",
+        accessCode: approvalCode,
+        publicKey: approvalPublicKey,
+      }),
+    });
+    assert.equal(
+      approvalCreation.status,
+      200,
+      await approvalCreation.clone().text(),
+    );
+    const approval = await approvalCreation.json<{
+      id: string;
+      requestDeviceTypeValue: number;
+      requestDeviceType: string;
+    }>();
+    assert.equal(approval.requestDeviceTypeValue, 1);
+    assert.equal(approval.requestDeviceType, "iOS");
+    const missingKey = await request(`/api/auth-requests/${approval.id}`, {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${context.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        requestApproved: true,
+        deviceIdentifier: "api-test-device",
+      }),
+    });
+    assert.equal(missingKey.status, 400, await missingKey.clone().text());
+    const approved = await request(`/api/auth-requests/${approval.id}`, {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${context.accessToken}`,
+        "content-type": "application/json",
+        "x-device-identifier": "api-test-device",
+      },
+      body: JSON.stringify({
+        requestApproved: true,
+        deviceIdentifier: "api-test-device",
+        key: encryptedVaultKey,
+        masterPasswordHash: null,
+      }),
+    });
+    assert.equal(approved.status, 200, await approved.clone().text());
+    const polled = await request(
+      `/api/auth-requests/${approval.id}/response?code=${encodeURIComponent(approvalCode)}`,
+    );
+    assert.equal(polled.status, 200, await polled.clone().text());
+    const approvalResponse = await polled.json<{
+      requestApproved: boolean;
+      key: string | null;
+      masterPasswordHash: string | null;
+    }>();
+    assert.partialDeepStrictEqual(approvalResponse, {
+      requestApproved: true,
+      key: encryptedVaultKey,
+      masterPasswordHash: null,
+    });
+    const responseKey = approvalResponse.key;
+    if (responseKey === null)
+      assert.fail("Approved auth request omitted its key");
+    assert.ok(responseKey.startsWith("4."));
+    const decryptedVaultKey = new Uint8Array(
+      await crypto.subtle.decrypt(
+        { name: "RSA-OAEP" },
+        approvalKeyPair.privateKey,
+        base64ToBytes(responseKey.slice(2)),
+      ),
+    );
+    assert.deepEqual(decryptedVaultKey, expectedVaultKey);
+    const tokenForm = new URLSearchParams({
+      grant_type: "password",
+      username: EMAIL,
+      password: approvalCode,
+      authRequest: approval.id,
+      client_id: "web",
+      deviceIdentifier: "approved-auth-request-device",
+      deviceName: "Approval test browser",
+      deviceType: "14",
+    });
+    const token = await request("/identity/connect/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: tokenForm,
+    });
+    assert.equal(token.status, 200, await token.clone().text());
+    assert.ok((await token.json<{ access_token?: string }>()).access_token);
+    const replay = await request("/identity/connect/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: tokenForm,
+    });
+    assert.equal(replay.status, 400, await replay.clone().text());
   });
 
   test("fails closed on malformed local account invariants", async () => {
@@ -1007,8 +1266,8 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       .bind(firstId, context.cipherId)
       .run();
 
-    const invalid = await request("/api/folders/delete", {
-      method: "POST",
+    const invalid = await request("/api/folders", {
+      method: "DELETE",
       headers: {
         authorization: `Bearer ${context.accessToken}`,
         "content-type": "application/json",
@@ -1016,8 +1275,8 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       body: JSON.stringify({ ids: [] }),
     });
     assert.equal(invalid.status, 400);
-    const deleted = await request("/api/folders/delete", {
-      method: "POST",
+    const deleted = await request("/api/folders", {
+      method: "DELETE",
       headers: {
         authorization: `Bearer ${context.accessToken}`,
         "content-type": "application/json",
@@ -1144,13 +1403,15 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     assert.ok(user);
 
     await context.database
-      .prepare(`
+      .prepare(
+        `
 				CREATE TRIGGER test_fail_folder_revision
 				BEFORE UPDATE ON user_revisions
 				BEGIN
 					SELECT RAISE(ABORT, 'forced folder revision failure');
 				END
-			`)
+			`,
+      )
       .run();
     try {
       const failed = await request(`/api/folders/${folderId}`, {
@@ -1233,8 +1494,8 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       .first<{ count: number }>()
       .then((row) => Number(row?.count));
     const remove = () =>
-      request("/api/folders/delete", {
-        method: "POST",
+      request("/api/folders", {
+        method: "DELETE",
         headers: auth,
         body: JSON.stringify({ ids: [folderId] }),
       });
@@ -1366,7 +1627,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     assert.equal(ownDevice.status, 200);
 
     const invalidName = await request(
-      `/api/devices/${ownDeviceRecord.id}/name`,
+      `/api/edgewarden/devices/${ownDeviceRecord.id}/name`,
       {
         method: "PUT",
         headers: { ...auth, "content-type": "application/json" },
@@ -1375,7 +1636,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     );
     assert.equal(invalidName.status, 400);
     const rename = (index: number) =>
-      request(`/api/devices/${ownDeviceRecord.id}/name`, {
+      request(`/api/edgewarden/devices/${ownDeviceRecord.id}/name`, {
         method: "PUT",
         headers: { ...auth, "content-type": "application/json" },
         body: JSON.stringify({ name: `Concurrent Device ${index}` }),
@@ -1411,7 +1672,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     });
     assert.equal(missingDevice.status, 404);
 
-    const unverifiedDeleteAll = await request("/api/devices", {
+    const unverifiedDeleteAll = await request("/api/edgewarden/devices", {
       method: "DELETE",
       headers: { ...auth, "content-type": "application/json" },
       body: JSON.stringify({ masterPasswordHash: "wrong-password" }),
@@ -1510,7 +1771,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
         encrypted_private_key: null,
       },
     );
-    const bulkRemoved = await request("/api/devices/delete", {
+    const bulkRemoved = await request("/api/edgewarden/devices/delete", {
       method: "POST",
       headers: { ...auth, "content-type": "application/json" },
       body: JSON.stringify({ ids: [secondaryDevice.id, crypto.randomUUID()] }),
@@ -1717,7 +1978,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     );
 
     const bulkArchived = await request("/api/ciphers/archive", {
-      method: "POST",
+      method: "PUT",
       headers: { ...auth, "content-type": "application/json" },
       body: JSON.stringify({ ids: [context.cipherId] }),
     });
@@ -1725,7 +1986,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     const restored = await request(
       `/api/ciphers/${context.cipherId}/unarchive`,
       {
-        method: "POST",
+        method: "PUT",
         headers: auth,
       },
     );
@@ -1750,7 +2011,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     assert.equal(
       (
         await request(`/api/folders/${folderId}`, {
-          method: "POST",
+          method: "PUT",
           headers: auth,
           body: JSON.stringify({ name: "encrypted-renamed-folder" }),
         })
@@ -1778,7 +2039,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     assert.equal(
       (
         await request("/api/ciphers/move", {
-          method: "POST",
+          method: "PUT",
           headers: auth,
           body: JSON.stringify({ ids: [context.cipherId], folderId: null }),
         })
@@ -1818,7 +2079,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     assert.equal(
       (
         await request(`/api/ciphers/${singleId}`, {
-          method: "POST",
+          method: "PUT",
           headers: auth,
           body: JSON.stringify({
             type: 1,
@@ -1866,8 +2127,8 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     );
     assert.equal(
       (
-        await request("/api/ciphers/delete", {
-          method: "POST",
+        await request("/api/ciphers", {
+          method: "DELETE",
           headers: auth,
           body: JSON.stringify({ ids: [softId] }),
         })
@@ -1880,8 +2141,8 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     );
     assert.equal(
       (
-        await request(`/api/folders/${folderId}/delete`, {
-          method: "POST",
+        await request(`/api/folders/${folderId}`, {
+          method: "DELETE",
           headers: auth,
         })
       ).status,
@@ -1922,6 +2183,20 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     const pendingAttachment = metadata.cipherResponse.attachments.at(-1);
     assert.equal(pendingAttachment?.id, metadata.attachmentId);
     assert.equal(pendingAttachment?.key, attachmentKey);
+    assert.deepEqual(
+      await context.database
+        .prepare(
+          "SELECT cipher_id, file_name, size, key FROM attachment_uploads WHERE id = ?",
+        )
+        .bind(metadata.attachmentId)
+        .first(),
+      {
+        cipher_id: context.cipherId,
+        file_name: "2.encrypted-file-name",
+        size: encryptedBytes.byteLength,
+        key: attachmentKey,
+      },
+    );
     const beforeUpload = await request(`/api/ciphers/${context.cipherId}`, {
       headers: auth,
     });
@@ -1943,7 +2218,19 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     );
     assert.equal(crossUser.status, 404);
 
-    const uploadUrl = new URL(metadata.url);
+    const renewed = await request(
+      `/api/ciphers/${context.cipherId}/attachment/${metadata.attachmentId}/renew`,
+      { headers: auth },
+    );
+    assert.equal(renewed.status, 200, await renewed.clone().text());
+    const renewedMetadata = await renewed.json<{
+      object: string;
+      fileUploadType: number;
+      url: string;
+    }>();
+    assert.equal(renewedMetadata.object, "attachment-fileUpload");
+    assert.equal(renewedMetadata.fileUploadType, 1);
+    const uploadUrl = new URL(renewedMetadata.url);
     const wrongSize = await request(
       `${uploadUrl.pathname}${uploadUrl.search}`,
       {
@@ -1966,6 +2253,22 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       body: encryptedBytes,
     });
     assert.equal(uploaded.status, 201, await uploaded.clone().text());
+    assert.equal(
+      await context.database
+        .prepare("SELECT id FROM attachment_uploads WHERE id = ?")
+        .bind(metadata.attachmentId)
+        .first(),
+      null,
+    );
+    assert.equal(
+      (
+        await request(
+          `/api/ciphers/${context.cipherId}/attachment/${metadata.attachmentId}/renew`,
+          { headers: auth },
+        )
+      ).status,
+      404,
+    );
 
     const replay = await request(`${uploadUrl.pathname}${uploadUrl.search}`, {
       method: "PUT",
@@ -2039,7 +2342,10 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     );
     const manifest = JSON.parse(
       new TextDecoder().decode(backupFiles["manifest.json"]),
-    ) as { storageKind: string; blobSummary: { attachmentFiles: number } };
+    ) as {
+      storageKind: string;
+      blobSummary: { attachmentFiles: number };
+    };
     assert.equal(manifest.storageKind, "r2");
     assert.equal(manifest.blobSummary.attachmentFiles, 1);
     assert.ok(
@@ -2051,8 +2357,8 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     );
 
     const removed = await request(
-      `/api/ciphers/${context.cipherId}/attachment/${metadata.attachmentId}/delete`,
-      { method: "POST", headers: auth },
+      `/api/ciphers/${context.cipherId}/attachment/${metadata.attachmentId}`,
+      { method: "DELETE", headers: auth },
     );
     assert.equal(removed.status, 204, await removed.clone().text());
     const gone = await request(
@@ -2101,13 +2407,15 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       });
 
     await context.database
-      .prepare(`
+      .prepare(
+        `
 				CREATE TRIGGER test_fail_attachment_publish
 				BEFORE INSERT ON attachments
 				BEGIN
 					SELECT RAISE(ABORT, 'forced attachment publication failure');
 				END
-			`)
+			`,
+      )
       .run();
     try {
       const failed = await upload();
@@ -2164,8 +2472,11 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       encryptedBytes,
     );
     await request(
-      `/api/ciphers/${context.cipherId}/attachment/${metadata.attachmentId}/delete`,
-      { method: "POST", headers: auth },
+      `/api/ciphers/${context.cipherId}/attachment/${metadata.attachmentId}`,
+      {
+        method: "DELETE",
+        headers: auth,
+      },
     );
   });
 }

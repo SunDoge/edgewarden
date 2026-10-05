@@ -1,3 +1,4 @@
+import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 import { vValidator } from "@hono/valibot-validator";
 import { sql } from "kysely";
 import { LIMITS } from "../config";
@@ -5,10 +6,11 @@ import { factory } from "../http/factory";
 import { checkIpRateLimit } from "../middleware/rate-limit";
 import { RegisterSchema } from "../schemas/accounts";
 import { hashPasswordServer } from "../services/auth";
+import { getBlobStorageKind } from "../services/blob-store";
 import { hashCredential } from "../services/credential-protection";
 import { executeBatch, revisionQuery } from "../services/db/batch";
-import type { EdgewardenBatchQuery } from "../services/db/d1-dialect";
 import { getConfigValue } from "../services/db/config";
+import type { EdgewardenBatchQuery } from "../services/db/d1-dialect";
 import * as usersDb from "../services/db/users";
 import {
   adminPasswordConfigured,
@@ -22,11 +24,9 @@ import {
   turnstileSiteKey,
   verifyTurnstileToken,
 } from "../services/turnstile";
+import { getSafeJwtSecret } from "../utils/direct-upload";
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
-import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
-import { getBlobStorageKind } from "../services/blob-store";
-import { getSafeJwtSecret } from "../utils/direct-upload";
 
 export const registerAccount = factory.createHandlers(
   vValidator("json", RegisterSchema),
@@ -281,7 +281,13 @@ export const getHealth = factory.createHandlers(async (c) => {
     }
     // Probe both the binding and the newest schema contract. LIMIT 0 avoids
     // reading user data while still failing when a migration is missing.
-    await c.env.DB.prepare("SELECT storage_key FROM attachments LIMIT 0").run();
+    await c.env.DB.prepare(
+      `SELECT upload.expires_at, attachment.storage_key, credential.provider_key_id
+       FROM attachment_uploads upload
+       LEFT JOIN attachments attachment ON 0
+       LEFT JOIN webauthn_credentials credential ON 0
+       LIMIT 0`,
+    ).run();
     return c.json({ status: "ok", edgewardenVersion: EDGEWARDEN_VERSION });
   } catch (error) {
     console.error("Readiness check failed", error);

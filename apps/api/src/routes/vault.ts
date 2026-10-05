@@ -98,7 +98,6 @@ import {
   removeSendAuth,
   removeSendPassword,
   updateSend,
-  uploadSendFile,
 } from "../handlers/sends";
 import { sync } from "../handlers/sync";
 import {
@@ -111,6 +110,7 @@ import {
 } from "../handlers/two-factor";
 import {
   createTwoFactorPasskey,
+  deleteAllTwoFactorPasskeys,
   deleteTwoFactorPasskey,
   getTwoFactorPasskeyChallenge,
   getTwoFactorPasskeys,
@@ -148,26 +148,24 @@ const accountRoutes = new Hono<HonoEnv>()
   .get("/api/users/:userId/public-key", ...getUserPublicKey)
   .get("/api/accounts/profile", ...getProfile)
   .put("/api/accounts/profile", ...updateProfile)
-  .post("/api/accounts/profile", ...updateProfile)
   .get("/api/accounts/keys", ...getKeys)
   .post("/api/accounts/keys", ...setKeys)
   .post("/api/accounts/password", ...changePassword)
   .post("/api/accounts/verify-password", ...verifyAccountPassword)
   .put("/api/accounts/verify-devices", ...setVerifyDevices)
-  .post("/api/accounts/verify-devices", ...setVerifyDevices)
   .get("/api/accounts/revision-date", ...getRevisionDate)
   .post("/api/accounts/password-hint", ...requestPasswordHint)
-  .get("/api/accounts/api-key", ...getApiKey)
   .post("/api/accounts/api-key", ...getApiKey)
   .post("/api/accounts/rotate-api-key", ...rotateApiKey)
   .delete("/api/accounts", ...deleteAccount)
-  .post("/api/accounts/delete", ...deleteAccount)
   .get("/api/two-factor", ...listTwoFactor)
   .post("/api/two-factor/get-authenticator", ...getAuthenticator)
   .put("/api/two-factor/authenticator", ...enableAuthenticator)
-  .post("/api/two-factor/authenticator", ...enableAuthenticator)
   .delete("/api/two-factor/authenticator", ...disableAuthenticator)
-  .post("/api/two-factor/disable", ...disableTwoFactor)
+  // Edgewarden recovery extension: the Bitwarden API only exposes
+  // provider-specific removal endpoints, while this action intentionally
+  // removes every configured provider after password re-verification.
+  .post("/api/edgewarden/two-factor/disable", ...disableTwoFactor)
   .post("/api/two-factor/get-recover", ...getRecoveryCode)
   .post("/api/two-factor/get-webauthn", ...getTwoFactorPasskeys)
   .post(
@@ -175,37 +173,30 @@ const accountRoutes = new Hono<HonoEnv>()
     ...getTwoFactorPasskeyChallenge,
   )
   .put("/api/two-factor/webauthn", ...createTwoFactorPasskey)
-  .post("/api/two-factor/webauthn", ...createTwoFactorPasskey)
-  .delete("/api/two-factor/webauthn", ...deleteTwoFactorPasskey);
+  .delete("/api/two-factor/webauthn", ...deleteTwoFactorPasskey)
+  .delete("/api/two-factor/webauthn/all", ...deleteAllTwoFactorPasskeys);
 
-const yubikeyEnrollmentRoutes = new Hono<HonoEnv>()
-  .post("/settings", ...getYubikeySettings)
-  .post("/save", ...saveYubikeys);
-
-const yubikeyControlRoutes = new Hono<HonoEnv>()
-  .post("/disable", ...disableYubikeys)
-  .put("/config", requireAdmin, ...saveYubicoConfig);
+const yubikeyControlRoutes = new Hono<HonoEnv>().put(
+  "/config",
+  requireAdmin,
+  ...saveYubicoConfig,
+);
 
 const yubikeyCompatibilityRoutes = new Hono<HonoEnv>()
   .post("/api/two-factor/get-yubikey", ...getYubikeySettings)
   .put("/api/two-factor/yubikey", ...saveYubikeys)
-  .post("/api/two-factor/yubikey", ...saveYubikeys)
-  .delete("/api/two-factor/yubikey", ...disableYubikeys)
-  .put("/api/two-factor/yubikey/config", requireAdmin, ...saveYubicoConfig);
+  .delete("/api/two-factor/yubikey", ...disableYubikeys);
 
 const folderAndDeviceRoutes = new Hono<HonoEnv>()
   .get("/api/folders", ...listFolders)
   .post("/api/folders", ...createFolder)
   .delete("/api/folders", ...deleteFolders)
   .delete("/api/folders/all", ...deleteAllFolders)
-  .post("/api/folders/delete", ...deleteFolders)
   .get("/api/folders/:id", requireFolder, ...getFolder)
   .put("/api/folders/:id", requireFolder, ...updateFolder)
-  .post("/api/folders/:id", requireFolder, ...updateFolder)
-  .post("/api/folders/:id/delete", requireFolder, ...deleteFolder)
   .delete("/api/folders/:id", requireFolder, ...deleteFolder)
   .get("/api/devices", ...listDevices)
-  .post("/api/devices/delete", ...deleteDevices)
+  .post("/api/edgewarden/devices/delete", ...deleteDevices)
   .get("/api/devices/knowndevice", ...getKnownDevice)
   .get(
     "/api/devices/identifier/:identifier",
@@ -213,20 +204,10 @@ const folderAndDeviceRoutes = new Hono<HonoEnv>()
     ...getDevice,
   )
   .get("/api/devices/:id", requireDevice, ...getDevice)
-  .post(
-    "/api/devices/identifier/:identifier/token",
-    requireDeviceByIdentifier,
-    ...updateDevicePushToken,
-  )
   .put(
     "/api/devices/identifier/:identifier/token",
     requireDeviceByIdentifier,
     ...updateDevicePushToken,
-  )
-  .post(
-    "/api/devices/identifier/:identifier/clear-token",
-    requireDeviceByIdentifier,
-    ...clearDevicePushToken,
   )
   .put(
     "/api/devices/identifier/:identifier/clear-token",
@@ -234,7 +215,7 @@ const folderAndDeviceRoutes = new Hono<HonoEnv>()
     ...clearDevicePushToken,
   )
   .delete("/api/devices/:id", requireDevice, ...deleteDevice)
-  .put("/api/devices/:id/name", requireDevice, ...updateDeviceName)
+  .put("/api/edgewarden/devices/:id/name", requireDevice, ...updateDeviceName)
   .put(
     "/api/devices/:identifier/keys",
     requireDeviceByIdentifier,
@@ -242,7 +223,7 @@ const folderAndDeviceRoutes = new Hono<HonoEnv>()
   )
   .post("/api/devices/update-trust", ...updateDevicesTrust)
   .post("/api/devices/untrust", ...untrustDevices)
-  .delete("/api/devices", ...deleteAllDevices);
+  .delete("/api/edgewarden/devices", ...deleteAllDevices);
 
 const requestAndSettingsRoutes = new Hono<HonoEnv>()
   .get("/api/auth-requests", ...listAuthRequests)
@@ -251,7 +232,6 @@ const requestAndSettingsRoutes = new Hono<HonoEnv>()
   .put("/api/auth-requests/:id", requireAuthRequest, ...updateAuthRequest)
   .get("/api/settings/domains", ...getDomains)
   .put("/api/settings/domains", ...updateDomains)
-  .post("/api/settings/domains", ...updateDomains)
   .get("/api/collections", ...listUserCollections)
   .get("/api/policies", ...getEmptyCompatibilityList);
 
@@ -318,31 +298,17 @@ const sendRoutes = new Hono<HonoEnv>()
   .get("/api/sends", ...listSends)
   .post("/api/sends", ...createTextSend)
   .post("/api/sends/file/v2", ...createFileSend)
-  .post("/api/sends/delete", ...deleteSends)
+  .post("/api/edgewarden/sends/delete", ...deleteSends)
   .get("/api/sends/:id", requireSend, ...getSend)
   .put("/api/sends/:id", requireSend, ...updateSend)
   .delete("/api/sends/:id", requireSend, ...deleteSend)
   .put("/api/sends/:id/remove-password", requireSend, ...removeSendPassword)
-  .post("/api/sends/:id/remove-password", requireSend, ...removeSendPassword)
   .put("/api/sends/:id/remove-auth", requireSend, ...removeSendAuth)
-  .post("/api/sends/:id/remove-auth", requireSend, ...removeSendAuth)
   .get(
     "/api/sends/:id/file/:fileId",
     requireSend,
     requireSendFile,
     ...getSendFileUpload,
-  )
-  .post(
-    "/api/sends/:id/file/:fileId",
-    requireSend,
-    requireSendFile,
-    ...uploadSendFile,
-  )
-  .put(
-    "/api/sends/:id/file/:fileId",
-    requireSend,
-    requireSendFile,
-    ...uploadSendFile,
   );
 
 export const vaultRouter = new Hono<HonoEnv>()
@@ -356,7 +322,6 @@ export const vaultRouter = new Hono<HonoEnv>()
   .route("/", organizationBaseRoutes)
   .route("/", organizationMemberRoutes)
   .route("/", organizationCollectionRoutes)
-  .route("/api/yubico-enrollment", yubikeyEnrollmentRoutes)
   .route("/api/yubico-control", yubikeyControlRoutes)
   .route("/", yubikeyCompatibilityRoutes)
   .route("/", cipherRoutes)

@@ -6,6 +6,7 @@ export const SIGNALR_HANDSHAKE_ACK = new TextEncoder().encode(
   `{}${SIGNALR_RECORD_SEPARATOR}`,
 );
 export const SIGNALR_SYNC_VAULT = 5;
+export const SIGNALR_AUTH_REQUEST = 15;
 
 export type SignalRProtocol = "json" | "messagepack";
 const SignalRHandshakeSchema = v.object({

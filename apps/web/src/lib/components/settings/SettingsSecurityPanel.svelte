@@ -11,6 +11,8 @@
 
   let {
     profile,
+    totpEnabled,
+    twoFactorEnabled,
     isAdmin,
     recoveryCode,
     busy,
@@ -21,12 +23,15 @@
     onBeginTotp,
     onMessage,
     onError,
+    onSessionRevoked,
   }: {
     profile: {
       email: string;
       kdfIterations: number;
       twoFactorEnabled: boolean;
     };
+    totpEnabled: boolean;
+    twoFactorEnabled: boolean;
     isAdmin: boolean;
     recoveryCode: string;
     busy: string;
@@ -37,6 +42,7 @@
     onBeginTotp: () => void | Promise<void>;
     onMessage: (value: string) => void;
     onError: (value: unknown) => void;
+    onSessionRevoked: (reason: string) => void | Promise<void>;
   } = $props();
 </script>
 
@@ -54,14 +60,14 @@
 
   <Card.Root>
     <Card.Header
-      ><Card.Title>两步验证</Card.Title><Card.Description
+      ><Card.Title>身份验证器（TOTP）</Card.Title><Card.Description
         >使用兼容 TOTP 的身份验证器保护登录。</Card.Description
       ></Card.Header
     >
     <Card.Content class="flex flex-col gap-4">
       <div class="flex items-center gap-2">
-        <Badge variant={profile.twoFactorEnabled ? "default" : "secondary"}
-          >{profile.twoFactorEnabled ? "已启用" : "未启用"}</Badge
+        <Badge variant={totpEnabled ? "default" : "secondary"}
+          >{totpEnabled ? "已启用" : "未启用"}</Badge
         >
       </div>
       {#if recoveryCode}<div class="flex gap-2">
@@ -73,13 +79,17 @@
           >
         </div>{/if}
       <div class="flex flex-wrap gap-2">
-        {#if profile.twoFactorEnabled}<Button
+        {#if totpEnabled}<Button
             variant="outline"
             onclick={onShowRecoveryCode}
             disabled={busy === "recovery"}>查看恢复代码</Button
-          ><Button variant="destructive" onclick={onDisableTwoFactor}>关闭两步验证</Button
+          ><Button variant="destructive" onclick={onDisableTwoFactor}>关闭全部两步验证</Button
           >{:else}<Button onclick={onBeginTotp} disabled={busy === "totp"}
             ><ShieldCheck data-icon="inline-start" />设置身份验证器</Button
+          >{/if}
+        {#if twoFactorEnabled && !totpEnabled}<Button
+            variant="destructive"
+            onclick={onDisableTwoFactor}>关闭全部两步验证</Button
           >{/if}
       </div>
     </Card.Content>
@@ -90,6 +100,7 @@
     kdfIterations={profile.kdfIterations}
     {onMessage}
     {onError}
+    {onSessionRevoked}
   />
   <YubikeySettings
     email={profile.email}
@@ -97,6 +108,7 @@
     {isAdmin}
     {onMessage}
     {onError}
+    {onSessionRevoked}
   />
   <AccountPasskeys
     email={profile.email}

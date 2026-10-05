@@ -27,8 +27,6 @@ import {
 } from "../handlers/public";
 import { connectRealtime, negotiateRealtime } from "../handlers/realtime";
 import {
-  accessPublicSend,
-  accessPublicSendFile,
   accessSendFileWithToken,
   accessSendWithToken,
   downloadSendFile,
@@ -56,7 +54,6 @@ export const publicRouter = new Hono<HonoEnv>()
     revocationRequestValidator,
     ...revokeToken,
   )
-  .post("/identity/connect/revoke", revocationRequestValidator, ...revokeToken)
   .post("/identity/accounts/recover-2fa", ...recoverTwoFactor)
   .get("/api/devices/knowndevice", ...getKnownDevice)
   .post("/api/auth-requests", ...createAuthRequest)
@@ -67,14 +64,13 @@ export const publicRouter = new Hono<HonoEnv>()
   .get("/icons/:host/icon.png", ...getWebsiteIcon)
   .put("/api/ciphers/:id/attachment/:attachmentId", ...uploadAttachment)
   .get("/api/attachments/download", ...downloadAttachment)
-  .post("/api/sends/access/:idOrAccessId", ...accessPublicSend)
   .post("/api/sends/access", ...accessSendWithToken)
   .post("/api/sends/access/file/:fileId", ...accessSendFileWithToken)
-  .post("/api/sends/:idOrAccessId/access/file/:fileId", ...accessPublicSendFile)
   .get("/api/sends/:idOrAccessId/:fileId", ...downloadSendFile)
-  .post("/api/sends/:id/file/:fileId", ...uploadPublicSendFile)
   .put("/api/sends/:id/file/:fileId", ...uploadPublicSendFile)
-  .post("/api/accounts/register", ...registerAccount)
+  // Edgewarden owns this flow (bootstrap secret, invite code, and Turnstile).
+  // Current Bitwarden registration instead uses identity email verification.
+  .post("/api/edgewarden/accounts/register", ...registerAccount)
   .post("/api/accounts/password-hint", ...publicPasswordHint)
   .get("/config", ...getConfig)
   .get("/api/config", ...getConfig)

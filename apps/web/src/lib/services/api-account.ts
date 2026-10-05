@@ -56,16 +56,24 @@ export async function changeMasterPasswordApi(args: {
   });
 }
 
-export async function fetchApiKeyApi(): Promise<{ apiKey: string }> {
-  return rpcJson(await rpc.api.accounts["api-key"].$get()) as Promise<{
+export async function fetchApiKeyApi(
+  masterPasswordHash: string,
+): Promise<{ apiKey: string }> {
+  return rpcJson(
+    await rpc.api.accounts["api-key"].$post({ json: { masterPasswordHash } }),
+  ) as Promise<{
     apiKey: string;
   }>;
 }
 
-export async function rotateApiKeyApi(): Promise<{ apiKey: string }> {
-  return rpcJson(await rpc.api.accounts["rotate-api-key"].$post()) as Promise<{
-    apiKey: string;
-  }>;
+export async function rotateApiKeyApi(
+  masterPasswordHash: string,
+): Promise<{ apiKey: string }> {
+  return rpcJson(
+    await rpc.api.accounts["rotate-api-key"].$post({
+      json: { masterPasswordHash },
+    }),
+  ) as Promise<{ apiKey: string }>;
 }
 
 export async function fetchDevicesApi(): Promise<ApiList<AccountDevice>> {
@@ -79,7 +87,10 @@ export async function renameDeviceApi(
   name: string,
 ): Promise<AccountDevice> {
   return (await rpcJson(
-    await rpc.api.devices[":id"].name.$put({ param: { id }, json: { name } }),
+    await rpc.api.edgewarden.devices[":id"].name.$put({
+      param: { id },
+      json: { name },
+    }),
   )) as AccountDevice;
 }
 
@@ -88,21 +99,21 @@ export async function deleteDeviceApi(id: string): Promise<void> {
 }
 
 export async function deleteDevicesApi(ids: string[]): Promise<void> {
-  rpcVoid(await rpc.api.devices.delete.$post({ json: { ids } }));
+  rpcVoid(await rpc.api.edgewarden.devices.delete.$post({ json: { ids } }));
 }
 
 export async function deleteAllDevicesApi(
   masterPasswordHash: string,
 ): Promise<void> {
-  rpcVoid(await rpc.api.devices.$delete({ json: { masterPasswordHash } }));
+  rpcVoid(
+    await rpc.api.edgewarden.devices.$delete({ json: { masterPasswordHash } }),
+  );
 }
 
 export async function deleteAccountApi(
   masterPasswordHash: string,
 ): Promise<void> {
-  rpcVoid(
-    await rpc.api.accounts.delete.$post({ json: { masterPasswordHash } }),
-  );
+  rpcVoid(await rpc.api.accounts.$delete({ json: { masterPasswordHash } }));
 }
 
 export async function fetchTwoFactorApi(): Promise<ApiList<TwoFactorProvider>> {
@@ -111,37 +122,55 @@ export async function fetchTwoFactorApi(): Promise<ApiList<TwoFactorProvider>> {
   )) as ApiList<TwoFactorProvider>;
 }
 
-export async function getAuthenticatorApi(): Promise<{
-  key: string;
-  enabled: boolean;
+export async function getAuthenticatorApi(masterPasswordHash: string): Promise<{
+  authenticator: { key: string; enabled: boolean };
+  userVerificationToken: string;
 }> {
   return rpcJson(
-    await rpc.api["two-factor"]["get-authenticator"].$post(),
-  ) as Promise<{ key: string; enabled: boolean }>;
+    await rpc.api["two-factor"]["get-authenticator"].$post({
+      json: { masterPasswordHash },
+    }),
+  ) as Promise<{
+    authenticator: { key: string; enabled: boolean };
+    userVerificationToken: string;
+  }>;
 }
 
 export async function enableAuthenticatorApi(
   key: string,
   token: string,
-): Promise<TwoFactorProvider> {
+  userVerificationToken: string,
+): Promise<{
+  authenticator: { key: string; enabled: boolean };
+  recoveryCode: string;
+}> {
   return (await rpcJson(
-    await rpc.api["two-factor"].authenticator.$put({ json: { key, token } }),
-  )) as TwoFactorProvider;
+    await rpc.api["two-factor"].authenticator.$put({
+      json: { key, token, userVerificationToken },
+    }),
+  )) as {
+    authenticator: { key: string; enabled: boolean };
+    recoveryCode: string;
+  };
 }
 
 export async function disableTwoFactorApi(
   masterPasswordHash: string,
 ): Promise<void> {
   rpcVoid(
-    await rpc.api["two-factor"].disable.$post({
+    await rpc.api.edgewarden["two-factor"].disable.$post({
       json: { masterPasswordHash },
     }),
   );
 }
 
-export async function fetchRecoveryCodeApi(): Promise<{ code: string | null }> {
+export async function fetchRecoveryCodeApi(
+  masterPasswordHash: string,
+): Promise<{ code: string | null }> {
   return rpcJson(
-    await rpc.api["two-factor"]["get-recover"].$post(),
+    await rpc.api["two-factor"]["get-recover"].$post({
+      json: { masterPasswordHash },
+    }),
   ) as Promise<{ code: string | null }>;
 }
 

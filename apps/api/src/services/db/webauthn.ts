@@ -43,6 +43,7 @@ export async function saveAccountPasskeyCredential(
         encrypted_public_key: values.encrypted_public_key,
         encrypted_private_key: values.encrypted_private_key,
         supports_prf: values.supports_prf,
+        provider_key_id: values.provider_key_id,
         mutation_token: values.mutation_token,
         updated_at: values.updated_at,
       }),
@@ -89,6 +90,22 @@ export async function getAccountPasskeyCredentialById(
       .where("user_id", "=", userId)
       .where("id", "=", id)
       .where("purpose", "=", purpose)
+      .executeTakeFirst()) ?? null
+  );
+}
+
+export async function getTwoFactorCredentialByProviderKeyId(
+  db: Kysely<DB>,
+  userId: string,
+  providerKeyId: number,
+): Promise<Selectable<WebauthnCredentials> | null> {
+  return (
+    (await db
+      .selectFrom("webauthn_credentials")
+      .selectAll()
+      .where("user_id", "=", userId)
+      .where("purpose", "=", "twoFactor")
+      .where("provider_key_id", "=", providerKeyId)
       .executeTakeFirst()) ?? null
   );
 }

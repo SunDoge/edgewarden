@@ -59,10 +59,15 @@ export async function handlePasswordGrant(
   const twoFactorToken = body.twoFactorToken ?? body.TwoFactorToken ?? "";
   const twoFactorProvider =
     body.twoFactorProvider ?? body.TwoFactorProvider ?? "";
+  const requestedAuthRequestId = (
+    body.authRequest ??
+    body.AuthRequest ??
+    ""
+  ).trim();
   const deviceInfo = readDeviceInfo(body);
   if (!getPushRelayStatus(c.env).enabled) deviceInfo.pushToken = null;
 
-  if (turnstileEnabled(c.env)) {
+  if (turnstileEnabled(c.env) && !requestedAuthRequestId) {
     const captchaResponse = body.captchaResponse ?? body.CaptchaResponse ?? "";
     const remoteIp = c.req.header("CF-Connecting-IP") ?? undefined;
     if (
@@ -104,7 +109,7 @@ export async function handlePasswordGrant(
     );
   }
 
-  const authRequestId = (body.authRequest ?? body.AuthRequest ?? "").trim();
+  const authRequestId = requestedAuthRequestId;
   let valid = false;
   let validatedAuthRequestId: string | null = null;
   if (authRequestId) {
@@ -173,6 +178,8 @@ export async function handlePasswordGrant(
     );
   }
 
+  // Device approval replaces the master-password proof, but account 2FA still
+  // applies and the request is consumed only after that second step succeeds.
   if (
     isTotpEnabled(totpSecret) ||
     twoFactorPasskeys > 0 ||
@@ -181,7 +188,9 @@ export async function handlePasswordGrant(
     const provider = twoFactorProvider.trim();
     const token = twoFactorToken.trim();
     if (!provider || !token) {
-      return twoFactorRequiredResponse(c.req.raw, c.env, db, user);
+      return twoFactorRequiredResponse(c.req.raw, c.env, db, user, {
+        nativeClient: !isWebClient(body),
+      });
     }
 
     if (provider === String(TWO_FACTOR_AUTHENTICATOR)) {

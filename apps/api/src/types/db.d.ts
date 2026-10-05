@@ -28,6 +28,16 @@ export interface Attachments {
   storage_key: string | null;
 }
 
+export interface AttachmentUploads {
+  cipher_id: string;
+  created_at: number;
+  expires_at: number;
+  file_name: string;
+  id: string;
+  key: string;
+  size: number;
+}
+
 export interface AuditLogs {
   action: string;
   actor_user_id: string | null;
@@ -314,6 +324,7 @@ export interface WebauthnCredentials {
   id: string;
   mutation_token: string | null;
   name: string;
+  provider_key_id: number | null;
   public_key: string;
   purpose: Generated<string>;
   supports_prf: Generated<number>;
@@ -325,6 +336,7 @@ export interface WebauthnCredentials {
 
 export interface DB {
   attachment_download_tokens: AttachmentDownloadTokens;
+  attachment_uploads: AttachmentUploads;
   attachments: Attachments;
   audit_logs: AuditLogs;
   auth_requests: AuthRequests;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test, vi } from "vitest";
-import { publishVaultChange } from "./realtime";
+import { publishAuthRequestNotification, publishVaultChange } from "./realtime";
 
 test("publishes one vault revision event per distinct user", async () => {
   const deliveries: Array<{ userId: string; body: unknown }> = [];
@@ -61,4 +61,41 @@ test("reports rejected and non-successful realtime deliveries", async () => {
   } finally {
     error.mockRestore();
   }
+});
+
+test("publishes a new auth request event to the user's realtime channel", async () => {
+  const deliveries: Array<{ userId: string; body: unknown }> = [];
+  const env = {
+    REALTIME: {
+      getByName(userId: string) {
+        return {
+          async fetch(_url: string, init: RequestInit) {
+            deliveries.push({ userId, body: JSON.parse(String(init.body)) });
+            return new Response(null, { status: 204 });
+          },
+        };
+      },
+    },
+  } as unknown as CloudflareBindings;
+
+  assert.deepEqual(
+    await publishAuthRequestNotification(
+      env,
+      "user-a",
+      "request-a",
+      "requesting-device",
+    ),
+    { delivered: 1, failed: 0 },
+  );
+  assert.deepEqual(deliveries, [
+    {
+      userId: "user-a",
+      body: {
+        type: "auth-request",
+        authRequestId: "request-a",
+        userId: "user-a",
+        requestDeviceIdentifier: "requesting-device",
+      },
+    },
+  ]);
 });

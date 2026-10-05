@@ -3,7 +3,6 @@ import {
   type SendPasswordFields,
   setSendPassword,
   verifySendPassword,
-  verifySendPasswordHashB64,
 } from "./password";
 
 describe("send passwords", () => {
@@ -37,9 +36,24 @@ describe("send passwords", () => {
     });
   });
 
-  it("rejects malformed pre-hashed credentials", () => {
+  it("rejects incomplete password metadata instead of using a legacy fallback", async () => {
     expect(
-      verifySendPasswordHashB64({ password_hash: "invalid!" }, "invalid!"),
+      await verifySendPassword({ password_hash: "invalid!" }, "invalid!"),
     ).toBe(false);
+  });
+
+  it.each([
+    ["wrong auth type", { auth_type: 2 }],
+    ["unsupported algorithm", { password_algorithm: "argon2id" }],
+    ["unexpected iteration count", { password_iterations: 1 }],
+    ["short salt", { password_salt: "AQID" }],
+    ["short hash", { password_hash: "AQID" }],
+  ])("rejects %s without attempting a legacy format", async (_name, patch) => {
+    const send: SendPasswordFields = {};
+    await setSendPassword(send, "secret");
+
+    expect(await verifySendPassword({ ...send, ...patch }, "secret")).toBe(
+      false,
+    );
   });
 });

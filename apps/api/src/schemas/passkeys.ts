@@ -71,13 +71,22 @@ export const PasskeyEncryptionSchema = v.pipe(
 );
 
 export const TwoFactorPasskeyRegistrationSchema = v.looseObject({
-  ...optionalSecretFields,
+  id: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(4)),
+  userVerificationToken: v.pipe(v.string(), v.minLength(1)),
   token: v.pipe(v.string(), v.minLength(1)),
   deviceResponse: v.unknown(),
   name: v.optional(v.string()),
 });
 
-export const TwoFactorPasskeyDeleteSchema = v.looseObject({
-  ...optionalSecretFields,
-  id: v.pipe(v.string(), v.minLength(1)),
+export const TwoFactorPasskeyChallengeSchema = v.object({
+  userVerificationToken: v.pipe(v.string(), v.minLength(1)),
+});
+
+export const TwoFactorPasskeyDeleteSchema = v.object({
+  id: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  userVerificationToken: v.pipe(v.string(), v.minLength(1)),
+});
+
+export const TwoFactorPasskeyDeleteAllSchema = v.object({
+  userVerificationToken: v.pipe(v.string(), v.minLength(1)),
 });

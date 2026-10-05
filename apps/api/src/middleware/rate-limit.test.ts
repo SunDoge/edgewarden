@@ -17,11 +17,15 @@ describe("IP rate limiting", () => {
     await checkIpRateLimit(context as never, "register");
     await checkIpRateLimit(context as never, "identity");
     await checkIpRateLimit(context as never, "two-factor");
+    await checkIpRateLimit(context as never, "auth-request");
+    await checkIpRateLimit(context as never, "send");
 
     expect(limit.mock.calls.map(([request]) => request.key)).toEqual([
       "register:203.0.113.7",
       "identity:203.0.113.7",
       "two-factor:203.0.113.7",
+      "auth-request:203.0.113.7",
+      "send:203.0.113.7",
     ]);
   });
 });

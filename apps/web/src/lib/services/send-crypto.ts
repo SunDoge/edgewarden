@@ -1,4 +1,11 @@
-import { base64ToBytes, bytesToBase64, decryptBw, encryptBw } from "./crypto";
+import {
+  base64ToBytes,
+  bytesToBase64,
+  decryptBw,
+  encryptBw,
+  hkdfExpand,
+  toBufferSource,
+} from "./crypto";
 import type {
   EncryptedOwnedSend,
   EncryptedPublicSend,
@@ -9,6 +16,7 @@ import type {
 } from "./send-types";
 
 export interface SendKeys {
+  /** The 16-byte secret carried in the Send URL fragment. */
   raw: Uint8Array;
   enc: Uint8Array;
   mac: Uint8Array;
@@ -41,16 +49,59 @@ export function encodeSendShareKey(raw: Uint8Array): string {
     .replace(/=+$/, "");
 }
 
-export function decodeSendShareKey(encoded: string): SendKeys {
-  if (!/^[A-Za-z0-9_-]+$/.test(encoded)) throw new Error("Send 密钥格式无效");
-  const raw = base64ToBytes(encoded.replace(/-/g, "+").replace(/_/g, "/"));
-  if (raw.length !== 64) throw new Error("Send 密钥长度无效");
-  return { raw, enc: raw.slice(0, 32), mac: raw.slice(32, 64) };
+async function deriveSendKeys(raw: Uint8Array): Promise<SendKeys> {
+  if (raw.length !== 16) throw new Error("Send 密钥长度无效");
+  // Match the current Bitwarden SDK: extract with HMAC-SHA256("bitwarden-send"),
+  // then HKDF-expand with "send" into separate encryption and MAC keys.
+  const hmacKey = await crypto.subtle.importKey(
+    "raw",
+    toBufferSource(new TextEncoder().encode("bitwarden-send")),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const prk = new Uint8Array(
+    await crypto.subtle.sign("HMAC", hmacKey, toBufferSource(raw)),
+  );
+  const derived = await hkdfExpand(prk, "send", 64);
+  return { raw, enc: derived.slice(0, 32), mac: derived.slice(32, 64) };
 }
 
-export function createSendKeys(): SendKeys {
-  const raw = crypto.getRandomValues(new Uint8Array(64));
-  return { raw, enc: raw.slice(0, 32), mac: raw.slice(32, 64) };
+export async function decodeSendShareKey(encoded: string): Promise<SendKeys> {
+  if (!/^[A-Za-z0-9_-]+$/.test(encoded)) throw new Error("Send 密钥格式无效");
+  const raw = base64ToBytes(encoded.replace(/-/g, "+").replace(/_/g, "/"));
+  return deriveSendKeys(raw);
+}
+
+export async function createSendKeys(): Promise<SendKeys> {
+  return deriveSendKeys(crypto.getRandomValues(new Uint8Array(16)));
+}
+
+export async function deriveSendPasswordHash(
+  password: string,
+  rawSendKey: Uint8Array,
+): Promise<string> {
+  if (rawSendKey.length !== 16) throw new Error("Send 密钥长度无效");
+  const passwordKey = await crypto.subtle.importKey(
+    "raw",
+    toBufferSource(utf8(password)),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const hash = new Uint8Array(
+    await crypto.subtle.deriveBits(
+      {
+        name: "PBKDF2",
+        hash: "SHA-256",
+        salt: toBufferSource(rawSendKey),
+        iterations: 100_000,
+      },
+      passwordKey,
+      256,
+    ),
+  );
+  return bytesToBase64(hash);
 }
 
 export async function decryptOwnedSend(
@@ -59,8 +110,7 @@ export async function decryptOwnedSend(
   userMacKey: Uint8Array,
 ): Promise<DecryptedSend> {
   const raw = await decryptBw(send.key, userEncKey, userMacKey);
-  if (raw.length !== 64) throw new Error("Send 包装密钥长度无效");
-  const keys = { raw, enc: raw.slice(0, 32), mac: raw.slice(32, 64) };
+  const keys = await deriveSendKeys(raw);
   const result = {
     ...send,
     _sendKeys: keys,

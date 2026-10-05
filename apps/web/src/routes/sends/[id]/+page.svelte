@@ -5,6 +5,7 @@
   import { decryptBwFileData } from "$lib/services/crypto";
   import {
     decodeSendShareKey,
+    deriveSendPasswordHash,
     decryptPublicSend,
     type DecryptedPublicSend,
     type SendKeys,
@@ -47,6 +48,7 @@
   let showPassword = $state(false);
 
   let sendData = $state<DecryptedPublicSend | null>(null);
+  let sendAccessToken = $state("");
   let decryptedText = $state("");
   let decryptedFileName = $state("");
   let decryptedFileSizeName = $state("");
@@ -63,7 +65,7 @@
     }
 
     try {
-      sendKeys = decodeSendShareKey(hash);
+      sendKeys = await decodeSendShareKey(hash);
       sendEncKey = sendKeys.enc;
       sendMacKey = sendKeys.mac;
     } catch (e) {
@@ -79,14 +81,14 @@
     loading = true;
     error = "";
     try {
-      const payload: { password?: string } = {};
-      if (accessPassword) {
-        payload.password = accessPassword;
-      }
+      const payload: { passwordHash?: string } = {};
+      if (accessPassword && sendKeys)
+        payload.passwordHash = await deriveSendPasswordHash(accessPassword, sendKeys.raw);
 
-      const res = await accessSendPublicApi(accessId, payload);
+      const session = await accessSendPublicApi(accessId, payload);
+      sendAccessToken = session.accessToken;
       if (!sendKeys) throw new Error("Send 解密密钥不可用");
-      const decrypted = await decryptPublicSend(res, sendKeys);
+      const decrypted = await decryptPublicSend(session.send, sendKeys);
       sendData = decrypted;
       passwordRequired = false;
 
@@ -113,18 +115,22 @@
   }
 
   async function handleDownloadFile() {
-    if (!sendData || sendData.type !== 1 || !sendData.file || !sendEncKey || !sendMacKey) return;
+    if (
+      !sendData ||
+      sendData.type !== 1 ||
+      !sendData.file ||
+      !sendEncKey ||
+      !sendMacKey ||
+      !sendAccessToken
+    )
+      return;
     const file = sendData.file;
     fileDownloading = true;
     error = "";
 
     try {
       // 1. Fetch a typed file access ticket through the Hono RPC client.
-      const ticket = await requestSendFileDownloadApi(
-        sendData.id,
-        file.id,
-        accessPassword ? { password: accessPassword } : {},
-      );
+      const ticket = await requestSendFileDownloadApi(sendAccessToken, file.id);
 
       // 2. Download encrypted payload bytes
       const fileResp = await fetch(ticket.url);

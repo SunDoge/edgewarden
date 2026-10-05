@@ -468,6 +468,11 @@ try {
   sendIds.add(textSend.id);
   const textSendUrl = textSend.accessUrl ?? textSend.url;
   assert(textSendUrl, "Text Send did not return an access URL");
+  await bw(["receive", textSendUrl], {
+    quiet: true,
+    appDataDirectory: verificationDirectory,
+    expectFailure: true,
+  });
   const receivedText = await bw(
     ["receive", textSendUrl, "--passwordenv", "BW_SEND_PASSWORD"],
     { quiet: true, appDataDirectory: verificationDirectory },
@@ -496,6 +501,8 @@ try {
       "--file",
       "--name",
       "Edgewarden CLI file send",
+      "--password",
+      "edgewarden-send-password",
       "--fullObject",
     ],
     { session },
@@ -510,7 +517,22 @@ try {
   await bw(["receive", fileSendUrl, "--output", receivedFilePath], {
     quiet: true,
     appDataDirectory: verificationDirectory,
+    expectFailure: true,
   });
+  await bw(
+    [
+      "receive",
+      fileSendUrl,
+      "--passwordenv",
+      "BW_SEND_PASSWORD",
+      "--output",
+      receivedFilePath,
+    ],
+    {
+      quiet: true,
+      appDataDirectory: verificationDirectory,
+    },
+  );
   assert(
     Buffer.from(await readFile(receivedFilePath)).equals(
       Buffer.from(sendFileBytes),

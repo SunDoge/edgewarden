@@ -28,6 +28,7 @@
     type TransferDocument,
   } from "$lib/services/vault-transfer";
   import { syncVaultData, vault } from "$lib/stores/vault.svelte";
+  import { encryptPasswordProtectedExport } from "$lib/services/bitwarden-encrypted-export";
 
   let errorMsg = $state("");
   let successMsg = $state("");
@@ -36,7 +37,9 @@
   let importProgressLabel = $state("");
   let files = $state<FileList | undefined>();
   let importFormat = $state<"json" | "csv">("json");
-  let exportFormat = $state<"json" | "csv">("json");
+  let exportFormat = $state<"encrypted_json" | "json" | "csv">("encrypted_json");
+  let exportPassword = $state("");
+  let exportPasswordConfirm = $state("");
   let pendingImport = $state<TransferDocument | null>(null);
   let deduplicationReview = $state<{
     original: TransferDocument;
@@ -48,25 +51,34 @@
   const MAX_IMPORT_BYTES = 32 * 1024 * 1024;
 
   // Client-side export function
-  function handleExport() {
+  async function handleExport() {
     errorMsg = "";
     successMsg = "";
 
     try {
       const exportData = buildPlainExportDocument(vault.folders, vault.ciphers);
+      const plainJson = buildBitwardenJson(exportData);
       const content =
-        exportFormat === "csv" ? buildBitwardenCsv(exportData) : buildBitwardenJson(exportData);
+        exportFormat === "csv"
+          ? buildBitwardenCsv(exportData)
+          : exportFormat === "encrypted_json"
+            ? await encryptPasswordProtectedExport(plainJson, exportPassword)
+            : plainJson;
       const blob = new Blob([content], {
         type: exportFormat === "csv" ? "text/csv;charset=utf-8" : "application/json",
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `edgewarden-export-${new Date().toISOString().slice(0, 10)}.${exportFormat}`;
+      const extension = exportFormat === "csv" ? "csv" : "json";
+      a.download = `edgewarden-export-${new Date().toISOString().slice(0, 10)}.${extension}`;
       a.click();
       URL.revokeObjectURL(url);
 
-      successMsg = "导出成功！明文备份文件已下载。请妥善保存该文件。";
+      successMsg =
+        exportFormat === "encrypted_json"
+          ? "导出成功！已下载 Bitwarden 兼容的密码保护备份。请妥善保管导出密码。"
+          : "导出成功！明文备份文件已下载。请妥善保存该文件。";
     } catch (caught) {
       errorMsg = `导出失败: ${errorDetail(caught)}`;
     }
@@ -380,27 +392,63 @@
             ><Field.Label>导出格式</Field.Label><Select.Root
               type="single"
               value={exportFormat}
-              onValueChange={(value) => (exportFormat = value as "json" | "csv")}
+              onValueChange={(value) => (exportFormat = value as "encrypted_json" | "json" | "csv")}
               ><Select.Trigger class="w-full"
-                >{exportFormat === "json"
-                  ? "Bitwarden JSON（完整）"
-                  : "Bitwarden CSV（登录与笔记）"}</Select.Trigger
+                >{exportFormat === "encrypted_json"
+                  ? "Bitwarden 加密 JSON（密码保护）"
+                  : exportFormat === "json"
+                    ? "Bitwarden JSON（明文完整）"
+                    : "Bitwarden CSV（明文登录与笔记）"}</Select.Trigger
               ><Select.Content
                 ><Select.Group
-                  ><Select.Item value="json">Bitwarden JSON（完整）</Select.Item><Select.Item
-                    value="csv">Bitwarden CSV（登录与笔记）</Select.Item
+                  ><Select.Item value="encrypted_json"
+                    >Bitwarden 加密 JSON（密码保护，推荐）</Select.Item
+                  ><Select.Item value="json">Bitwarden JSON（明文完整）</Select.Item><Select.Item
+                    value="csv">Bitwarden CSV（明文登录与笔记）</Select.Item
                   ></Select.Group
                 ></Select.Content
               ></Select.Root
             ></Field.Field
           >
-          <Alert.Root
-            ><ShieldAlert /><Alert.Title>安全警告</Alert.Title><Alert.Description
-              >导出的备份文件包含明文用户名、密码、笔记以及支付卡片。请勿发送给他人，用完后立即删除或存放于安全位置。</Alert.Description
-            ></Alert.Root
-          >
+          {#if exportFormat === "encrypted_json"}
+            <Field.Field>
+              <Field.Label for="export-password">导出密码</Field.Label>
+              <Input
+                id="export-password"
+                type="password"
+                autocomplete="new-password"
+                bind:value={exportPassword}
+                placeholder="用于恢复此备份"
+              />
+              <Field.Description>密码只在浏览器内用于加密，服务端无法找回。</Field.Description>
+            </Field.Field>
+            <Field.Field>
+              <Field.Label for="export-password-confirm">确认导出密码</Field.Label>
+              <Input
+                id="export-password-confirm"
+                type="password"
+                autocomplete="new-password"
+                bind:value={exportPasswordConfirm}
+              />
+              {#if exportPasswordConfirm && exportPassword !== exportPasswordConfirm}
+                <Field.Error>两次输入的密码不一致。</Field.Error>
+              {/if}
+            </Field.Field>
+          {:else}
+            <Alert.Root
+              ><ShieldAlert /><Alert.Title>安全警告</Alert.Title><Alert.Description
+                >导出的备份文件包含明文用户名、密码、笔记以及支付卡片。请勿发送给他人，用完后立即删除或存放于安全位置。</Alert.Description
+              ></Alert.Root
+            >
+          {/if}
           <Separator />
-          <Button variant="destructive" class="w-full" onclick={() => (exportConfirmOpen = true)}>
+          <Button
+            variant={exportFormat === "encrypted_json" ? "default" : "destructive"}
+            class="w-full"
+            disabled={exportFormat === "encrypted_json" &&
+              (!exportPassword || exportPassword !== exportPasswordConfirm)}
+            onclick={() => (exportConfirmOpen = true)}
+          >
             <Download data-icon="inline-start" />
             导出数据
           </Button>
@@ -413,13 +461,21 @@
 <AlertDialog.Root bind:open={exportConfirmOpen}>
   <AlertDialog.Content>
     <AlertDialog.Header
-      ><AlertDialog.Title>确认导出明文保险库</AlertDialog.Title><AlertDialog.Description
-        >导出的文件不会加密，任何获得该文件的人都能读取其中的密码。请确认你能安全保存并在使用后删除它。</AlertDialog.Description
+      ><AlertDialog.Title
+        >{exportFormat === "encrypted_json"
+          ? "确认导出加密保险库"
+          : "确认导出明文保险库"}</AlertDialog.Title
+      ><AlertDialog.Description
+        >{exportFormat === "encrypted_json"
+          ? "该文件只能使用刚才设置的密码恢复。Edgewarden 无法找回遗失的导出密码。"
+          : "导出的文件不会加密，任何获得该文件的人都能读取其中的密码。请确认你能安全保存并在使用后删除它。"}</AlertDialog.Description
       ></AlertDialog.Header
     >
     <AlertDialog.Footer
       ><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action
-        class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+        class={exportFormat === "encrypted_json"
+          ? ""
+          : "bg-destructive text-destructive-foreground hover:bg-destructive/90"}
         onclick={handleExport}>确认导出</AlertDialog.Action
       ></AlertDialog.Footer
     >

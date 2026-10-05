@@ -136,7 +136,7 @@ export function registerInfrastructureScenarios(
   });
 
   test("rejects oversized JSON bodies before parsing", async () => {
-    const response = await request("/api/accounts/register", {
+    const response = await request("/api/edgewarden/accounts/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "x".repeat(10 * 1024 * 1024 + 1),

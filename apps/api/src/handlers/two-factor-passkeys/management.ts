@@ -1,26 +1,33 @@
 import { vValidator } from "@hono/valibot-validator";
+import type { Context } from "hono";
 import {
-  generateAuthenticationOptions,
   generateRegistrationOptions,
-  verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
-import type { D1Dialect } from "../../services/db/d1-dialect";
 import { sql } from "kysely";
 import { factory } from "../../http/factory";
+import type { HonoEnv } from "../../env";
 import {
-  PasskeySecretSchema,
+  TwoFactorPasskeyChallengeSchema,
+  TwoFactorPasskeyDeleteAllSchema,
   TwoFactorPasskeyDeleteSchema,
   TwoFactorPasskeyRegistrationSchema,
 } from "../../schemas/passkeys";
+import { SecretVerificationSchema } from "../../schemas/two-factor";
 import {
   auditEventInsertQuery,
   auditRequestMetadata,
 } from "../../services/audit";
-import { invalidateUserCache, verifyPassword } from "../../services/auth";
+import { invalidateUserCache } from "../../services/auth";
 import { encryptCredential } from "../../services/credential-protection";
 import {
+  webAuthnDetails,
+  webAuthnMutationResponse,
+  webAuthnReadResponse,
+} from "../../services/two-factor-presentation";
+import {
   conditionalRefreshTokenDeletionQuery,
+  conditionalTwoFactorCredentialDeletionQuery,
   conditionalTwoFactorPasskeyClaimQuery,
   conditionalUserRevisionQuery,
   conditionalWebauthnChallengeConsumptionQuery,
@@ -33,14 +40,15 @@ import {
   createAccountPasskeyToken,
   getAccountPasskeyRpConfig,
   normalizeAccountPasskeyName,
-  normalizeAuthenticationResponse,
   normalizeRegistrationResponse,
   normalizeTransports,
-  parseTransports,
-  toSimpleWebAuthnCredential,
   userIdToWebAuthnUserId,
   verifyAccountPasskeyToken,
 } from "../../utils/account-passkeys";
+import {
+  createTwoFactorProviderToken,
+  verifyTwoFactorProviderToken,
+} from "../../utils/jwt";
 import { bytesToBase64Url } from "../../utils/passkey";
 import { errorResponse, jsonResponse } from "../../utils/response";
 import { now } from "../../utils/time";
@@ -49,22 +57,46 @@ import {
   challengeHash,
   MAX_TWO_FACTOR_PASSKEYS,
   recoveryCode,
-  settings,
   verifySecret,
 } from "./shared";
 
+const WEBAUTHN_PROVIDER = 7;
+
+async function hasValidUserVerificationToken(
+  c: Context<HonoEnv>,
+  token: string,
+): Promise<boolean> {
+  const claims = await verifyTwoFactorProviderToken(token, c.env.JWT_SECRET);
+  const user = c.get("user");
+  return Boolean(
+    claims &&
+      claims.sub === user.id &&
+      claims.provider === WEBAUTHN_PROVIDER &&
+      claims.sstamp === user.security_stamp,
+  );
+}
+
 // Registration and deletion bind credential changes, recovery material, revision writes, and audit records in guarded D1 batches.
 export const getTwoFactorPasskeys = factory.createHandlers(
-  vValidator("json", PasskeySecretSchema),
+  vValidator("json", SecretVerificationSchema),
   async (c) => {
     if (!(await verifySecret(c.get("user"), c.req.valid("json"))))
       return errorResponse("Master password verification failed", 400);
+    const user = c.get("user");
     return jsonResponse(
-      settings(
-        await webauthnDb.listAccountPasskeyCredentialsByUserId(
-          c.get("db"),
-          c.get("user").id,
-          "twoFactor",
+      webAuthnReadResponse(
+        webAuthnDetails(
+          await webauthnDb.listAccountPasskeyCredentialsByUserId(
+            c.get("db"),
+            user.id,
+            "twoFactor",
+          ),
+        ),
+        await createTwoFactorProviderToken(
+          user.id,
+          WEBAUTHN_PROVIDER,
+          user.security_stamp,
+          c.env.JWT_SECRET,
         ),
       ),
     );
@@ -72,12 +104,17 @@ export const getTwoFactorPasskeys = factory.createHandlers(
 );
 
 export const getTwoFactorPasskeyChallenge = factory.createHandlers(
-  vValidator("json", PasskeySecretSchema),
+  vValidator("json", TwoFactorPasskeyChallengeSchema),
   async (c) => {
     const user = c.get("user");
     const db = c.get("db");
-    if (!(await verifySecret(user, c.req.valid("json"))))
-      return errorResponse("Master password verification failed", 400);
+    if (
+      !(await hasValidUserVerificationToken(
+        c,
+        c.req.valid("json").userVerificationToken,
+      ))
+    )
+      return errorResponse("User verification failed.", 400);
     const existing = await webauthnDb.listAccountPasskeyCredentialsByUserId(
       db,
       user.id,
@@ -89,7 +126,7 @@ export const getTwoFactorPasskeyChallenge = factory.createHandlers(
     const options = await generateRegistrationOptions({
       rpID: rpId,
       rpName,
-      userID: userIdToWebAuthnUserId(user.id) as any,
+      userID: userIdToWebAuthnUserId(user.id),
       userName: user.email,
       userDisplayName: user.name || user.email,
       attestationType: "none",
@@ -133,8 +170,8 @@ export const createTwoFactorPasskey = factory.createHandlers(
     const user = c.get("user");
     const db = c.get("db");
     const body = c.req.valid("json");
-    if (!(await verifySecret(user, body)))
-      return errorResponse("Master password verification failed", 400);
+    if (!(await hasValidUserVerificationToken(c, body.userVerificationToken)))
+      return errorResponse("User verification failed.", 400);
     const payload = await verifyAccountPasskeyToken(
       c.env.JWT_SECRET,
       body.token,
@@ -154,6 +191,14 @@ export const createTwoFactorPasskey = factory.createHandlers(
       )) >= MAX_TWO_FACTOR_PASSKEYS
     )
       return errorResponse("Maximum two-factor passkey count reached", 400);
+    if (
+      await webauthnDb.getTwoFactorCredentialByProviderKeyId(
+        db,
+        user.id,
+        body.id,
+      )
+    )
+      return errorResponse("Two-factor passkey key ID is already in use", 409);
     const response = normalizeRegistrationResponse(body.deviceResponse);
     if (!response)
       return errorResponse("Invalid passkey registration response", 400);
@@ -206,6 +251,7 @@ export const createTwoFactorPasskey = factory.createHandlers(
       encrypted_public_key: null,
       encrypted_private_key: null,
       supports_prf: 0,
+      provider_key_id: body.id,
       mutation_token: crypto.randomUUID(),
       created_at: ts,
       updated_at: ts,
@@ -270,12 +316,15 @@ export const createTwoFactorPasskey = factory.createHandlers(
       return errorResponse("Passkey challenge could not be consumed", 500);
     invalidateUserCache(user.id);
     return jsonResponse(
-      settings(
-        await webauthnDb.listAccountPasskeyCredentialsByUserId(
-          db,
-          user.id,
-          "twoFactor",
+      webAuthnMutationResponse(
+        webAuthnDetails(
+          await webauthnDb.listAccountPasskeyCredentialsByUserId(
+            db,
+            user.id,
+            "twoFactor",
+          ),
         ),
+        "update",
       ),
     );
   },
@@ -286,24 +335,33 @@ export const deleteTwoFactorPasskey = factory.createHandlers(
   async (c) => {
     const user = c.get("user");
     const body = c.req.valid("json");
-    if (!(await verifySecret(user, body)))
-      return errorResponse("Master password verification failed", 400);
+    if (!(await hasValidUserVerificationToken(c, body.userVerificationToken)))
+      return errorResponse("User verification failed.", 400);
     const db = c.get("db");
-    const existing = await db
-      .selectFrom("webauthn_credentials")
-      .select("id")
-      .where("id", "=", body.id)
-      .where("user_id", "=", user.id)
-      .where("purpose", "=", "twoFactor")
-      .executeTakeFirst();
+    const existing = await webauthnDb.getTwoFactorCredentialByProviderKeyId(
+      db,
+      user.id,
+      body.id,
+    );
     if (!existing) return errorResponse("Two-factor passkey not found", 404);
+    if (
+      (await webauthnDb.countAccountPasskeyCredentialsByUserId(
+        db,
+        user.id,
+        "twoFactor",
+      )) <= 1
+    )
+      return errorResponse(
+        "Use the delete-all endpoint to remove the final two-factor passkey",
+        400,
+      );
     const ts = now();
     const securityStamp = crypto.randomUUID();
     const [claimed, deleted] = await c.get("dbDialect").batch([
       conditionalWebauthnCredentialDeletionClaimQuery(
         db,
         user.id,
-        body.id,
+        existing.id,
         "twoFactor",
         user.security_stamp,
         securityStamp,
@@ -312,7 +370,7 @@ export const deleteTwoFactorPasskey = factory.createHandlers(
       conditionalWebauthnCredentialDeletionQuery(
         db,
         user.id,
-        body.id,
+        existing.id,
         "twoFactor",
         securityStamp,
       ),
@@ -325,7 +383,7 @@ export const deleteTwoFactorPasskey = factory.createHandlers(
           action: "account.two_factor.passkey.delete",
           category: "auth",
           targetType: "twoFactorPasskey",
-          targetId: body.id,
+          targetId: existing.id,
           metadata: auditRequestMetadata(c.req.raw),
         },
         sql<boolean>`EXISTS (
@@ -341,13 +399,63 @@ export const deleteTwoFactorPasskey = factory.createHandlers(
       return errorResponse("Passkey deletion could not be persisted", 500);
     invalidateUserCache(user.id);
     return jsonResponse(
-      settings(
-        await webauthnDb.listAccountPasskeyCredentialsByUserId(
-          db,
-          user.id,
-          "twoFactor",
+      webAuthnMutationResponse(
+        webAuthnDetails(
+          await webauthnDb.listAccountPasskeyCredentialsByUserId(
+            db,
+            user.id,
+            "twoFactor",
+          ),
         ),
+        "delete",
       ),
     );
+  },
+);
+
+export const deleteAllTwoFactorPasskeys = factory.createHandlers(
+  vValidator("json", TwoFactorPasskeyDeleteAllSchema),
+  async (c) => {
+    const user = c.get("user");
+    if (
+      !(await hasValidUserVerificationToken(
+        c,
+        c.req.valid("json").userVerificationToken,
+      ))
+    )
+      return errorResponse("User verification failed.", 400);
+    const db = c.get("db");
+    const ts = now();
+    const securityStamp = crypto.randomUUID();
+    const [claimed] = await c.get("dbDialect").batch([
+      db
+        .updateTable("users")
+        .set({ security_stamp: securityStamp, updated_at: ts })
+        .where("id", "=", user.id)
+        .where("security_stamp", "=", user.security_stamp),
+      conditionalTwoFactorCredentialDeletionQuery(db, user.id, securityStamp),
+      conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+      conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
+      auditEventInsertQuery(
+        db,
+        {
+          actorUserId: user.id,
+          action: "account.two_factor.passkey.delete_all",
+          category: "auth",
+          targetType: "user",
+          targetId: user.id,
+          metadata: auditRequestMetadata(c.req.raw),
+        },
+        sql<boolean>`EXISTS (
+					SELECT 1 FROM users
+					WHERE id = ${user.id} AND security_stamp = ${securityStamp}
+				)`,
+        ts,
+      ),
+    ]);
+    if (claimed.numAffectedRows !== 1n)
+      return errorResponse("Passkey settings changed by another request", 409);
+    invalidateUserCache(user.id);
+    return new Response(null, { status: 204 });
   },
 );

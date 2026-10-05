@@ -2,28 +2,20 @@ import { vValidator } from "@hono/valibot-validator";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { CreateFileSendSchema } from "../schemas/sends";
-import { discardUnpublishedBlob } from "../services/blob-gc";
 import {
-  createSendFileUploadObjectKey,
   getBlobStorageMaxBytes,
   getSendFileObjectKey,
-  putBlobObject,
 } from "../services/blob-store";
 import { executeBatch, revisionQuery } from "../services/db/batch";
-import { publishSendFileObject } from "../services/sends/file-storage";
 import { getSafeSendJwtSecret } from "../services/sends/jwt-secret";
 import { setSendPassword } from "../services/sends/password";
 import {
   parseDateSeconds,
   parseInteger,
-  parseStoredSendData,
   sendToResponse,
   serializeSendEmails,
 } from "../services/sends/presentation";
-import {
-  buildDirectUploadUrl,
-  parseDirectUploadPayload,
-} from "../utils/direct-upload";
+import { buildDirectUploadUrl } from "../utils/direct-upload";
 import { createSendFileUploadToken } from "../utils/jwt";
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
@@ -172,49 +164,4 @@ export const getSendFileUpload = factory.createHandlers(async (c) => {
     ),
     sendResponse: sendToResponse(send),
   });
-});
-
-export const uploadSendFile = factory.createHandlers(async (c) => {
-  const user = c.get("user");
-  const send = c.get("send");
-  const fileId = c.get("sendFileId");
-  const maxFileSize = getBlobStorageMaxBytes(
-    c.env,
-    LIMITS.send.maxFileSizeBytes,
-  );
-  const sendData = parseStoredSendData(send);
-
-  const upload = await parseDirectUploadPayload(c.req.raw, {
-    expectedSize: parseInteger(sendData.size),
-    expectedFileName: String(sendData.fileName || ""),
-    maxFileSize,
-    tooLargeMessage: "Send storage limit exceeded with this file",
-  });
-  if (upload instanceof Response) return upload;
-
-  const candidateKey = createSendFileUploadObjectKey(send.id, fileId);
-  try {
-    await putBlobObject(c.env, candidateKey, upload.body, {
-      size: upload.size,
-      contentType: upload.contentType,
-      customMetadata: { sendId: send.id, fileId },
-    });
-    const publication = await publishSendFileObject(c.env.DB, {
-      sendId: send.id,
-      userId: user.id,
-      fileId,
-      storageKey: candidateKey,
-      expectedStorageKey: send.storage_key,
-    });
-    if (publication !== "published") {
-      await discardUnpublishedBlob(c.env, candidateKey);
-      return publication === "conflict"
-        ? errorResponse("Send file changed during upload.", 409)
-        : errorResponse("Send not found. Unable to save the file.", 404);
-    }
-  } catch (error) {
-    await discardUnpublishedBlob(c.env, candidateKey).catch(() => undefined);
-    throw error;
-  }
-  return new Response(null, { status: 201 });
 });

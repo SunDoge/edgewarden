@@ -8,6 +8,7 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import {
     createTwoFactorPasskeyApi,
+    deleteAllTwoFactorPasskeysApi,
     deleteTwoFactorPasskeyApi,
     getTwoFactorPasskeyChallengeApi,
     getTwoFactorPasskeysApi,
@@ -21,11 +22,13 @@
     kdfIterations,
     onMessage,
     onError,
+    onSessionRevoked,
   }: {
     email: string;
     kdfIterations: number;
     onMessage: (message: string) => void;
     onError: (error: unknown) => void;
+    onSessionRevoked: (reason: string) => void | Promise<void>;
   } = $props();
 
   let open = $state(false);
@@ -34,6 +37,7 @@
   let name = $state("");
   let credentials = $state<TwoFactorPasskey[]>([]);
   let deleteId = $state<string | null>(null);
+  let userVerificationToken = $state("");
 
   async function passwordHash(): Promise<string> {
     const key = await deriveMasterKey(password, email, kdfIterations);
@@ -45,7 +49,8 @@
     busy = "load";
     try {
       const result = await getTwoFactorPasskeysApi(await passwordHash());
-      credentials = result.keys ?? result.Keys ?? [];
+      credentials = result.webAuthn.keys ?? [];
+      userVerificationToken = result.userVerificationToken;
     } catch (error) {
       onError(error);
     } finally {
@@ -54,21 +59,26 @@
   }
 
   async function add() {
-    if (!password) return;
+    if (!userVerificationToken) return;
     busy = "create";
     try {
-      const masterPasswordHash = await passwordHash();
       const credential = await createTwoFactorPasskeyCredential(
-        await getTwoFactorPasskeyChallengeApi(masterPasswordHash),
+        await getTwoFactorPasskeyChallengeApi(userVerificationToken),
       );
-      const result = await createTwoFactorPasskeyApi({
-        masterPasswordHash,
+      const usedIds = new Set(credentials.map((item) => item.id));
+      const id = Array.from({ length: 5 }, (_, index) => index).find(
+        (candidate) => !usedIds.has(candidate),
+      );
+      if (id === undefined) throw new Error("最多只能添加 5 把两步验证安全密钥");
+      await createTwoFactorPasskeyApi({
+        id,
+        userVerificationToken,
         name: name.trim() || "安全密钥",
         ...credential,
       });
-      credentials = result.keys ?? result.Keys ?? [];
       name = "";
       onMessage("两步验证安全密钥已添加");
+      await onSessionRevoked("two-factor-updated");
     } catch (error) {
       onError(error);
     } finally {
@@ -76,17 +86,18 @@
     }
   }
 
-  async function remove(id: string) {
-    if (!password) return;
+  async function remove(id: number) {
+    if (!userVerificationToken) return;
     deleteId = null;
     busy = `delete-${id}`;
     try {
-      const result = await deleteTwoFactorPasskeyApi({
-        id,
-        masterPasswordHash: await passwordHash(),
-      });
-      credentials = result.keys ?? result.Keys ?? [];
+      if (credentials.length === 1) {
+        await deleteAllTwoFactorPasskeysApi(userVerificationToken);
+      } else {
+        await deleteTwoFactorPasskeyApi({ id, userVerificationToken });
+      }
       onMessage("两步验证安全密钥已删除");
+      await onSessionRevoked("two-factor-updated");
     } catch (error) {
       onError(error);
     } finally {
@@ -108,7 +119,16 @@
   >
 </Card.Root>
 
-<Dialog.Root bind:open
+<Dialog.Root
+  {open}
+  onOpenChange={(value) => {
+    open = value;
+    if (!value) {
+      password = "";
+      userVerificationToken = "";
+      credentials = [];
+    }
+  }}
   ><Dialog.Content
     ><Dialog.Header
       ><Dialog.Title>两步验证安全密钥</Dialog.Title><Dialog.Description
@@ -148,7 +168,7 @@
     ><Dialog.Footer
       ><Button variant="outline" onclick={() => (open = false)}>关闭</Button><Button
         onclick={add}
-        disabled={!password || busy === "create"}
+        disabled={!userVerificationToken || busy === "create"}
         ><Fingerprint data-icon="inline-start" />添加安全密钥</Button
       ></Dialog.Footer
     ></Dialog.Content
@@ -168,7 +188,7 @@
     ><AlertDialog.Footer
       ><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action
         class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-        onclick={() => deleteId && remove(deleteId)}>确认删除</AlertDialog.Action
+        onclick={() => deleteId && remove(Number(deleteId))}>确认删除</AlertDialog.Action
       ></AlertDialog.Footer
     ></AlertDialog.Content
   ></AlertDialog.Root

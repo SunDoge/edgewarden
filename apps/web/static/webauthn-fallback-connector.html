@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Edgewarden WebAuthn Connector</title>
+    <link rel="stylesheet" href="/webauthn-fallback-connector.css" />
+    <script src="/webauthn-fallback-connector.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">◆</div>
+      <h1>Verify your identity</h1>
+      <p>Use your security key or passkey to finish signing in.</p>
+      <div id="message" role="alert" aria-live="polite" hidden></div>
+      <label
+        ><input id="remember" type="checkbox" /> Don't ask again on this device for 30 days</label
+      >
+      <button id="webauthn-button" type="button">Read security key</button>
+    </main>
+  </body>
+</html>

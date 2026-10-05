@@ -1,7 +1,20 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { authRequestToResponse } from "../apps/api/src/services/auth-requests/presentation.ts";
 import { organizationAdminToResponse } from "../apps/api/src/services/organizations/admin-presentation.ts";
 import { profileOrganizationToResponse } from "../apps/api/src/services/organizations/profile-presentation.ts";
+import {
+  authenticatorDetails,
+  authenticatorReadResponse,
+  authenticatorUpdateResponse,
+  twoFactorRecoveryResponse,
+  webAuthnDetails,
+  webAuthnMutationResponse,
+  webAuthnReadResponse,
+  yubiKeyDetails,
+  yubiKeyReadResponse,
+  yubiKeyUpdateResponse,
+} from "../apps/api/src/services/two-factor-presentation.ts";
 
 interface CSharpModel {
   base: string | null;
@@ -123,6 +136,27 @@ if (!existsSync(resolve(serverDirectory, "src"))) {
 }
 
 const models = readModels(serverDirectory);
+const authRequest = authRequestToResponse(
+  {
+    id: "auth-request-id",
+    request_device_identifier: "device-id",
+    request_device_type: 1,
+    request_ip_address: "203.0.113.1",
+    request_country_name: null,
+    public_key: "public-key",
+    key: null,
+    master_password_hash: null,
+    approved: null,
+    creation_date: 1_700_000_000,
+    response_date: null,
+  },
+  "vault.example.com",
+);
+checkModel(models, "AuthRequestResponseModel", authRequest);
+checkModel(models, "PendingAuthRequestResponseModel", {
+  ...authRequest,
+  requestDeviceId: null,
+});
 const profileOrganization = profileOrganizationToResponse(
   {
     member_id: "member-id",
@@ -146,3 +180,76 @@ const organizationAdmin = organizationAdminToResponse({
 });
 checkModel(models, "OrganizationResponseModel", organizationAdmin);
 checkModel(models, "PlanResponseModel", organizationAdmin.plan);
+
+const authenticator = authenticatorDetails("JBSWY3DPEHPK3PXP", true);
+checkModel(models, "TwoFactorAuthenticatorDetails", authenticator);
+checkModel(
+  models,
+  "TwoFactorAuthenticatorResponseModel",
+  authenticatorReadResponse(authenticator, "verification-token"),
+);
+checkModel(
+  models,
+  "TwoFactorAuthenticatorUpdateResponseModel",
+  authenticatorUpdateResponse(authenticator, "RECOVERY-CODE"),
+);
+checkModel(
+  models,
+  "TwoFactorRecoverResponseModel",
+  twoFactorRecoveryResponse("RECOVERY-CODE"),
+);
+
+const webAuthn = webAuthnDetails([
+  {
+    aa_guid: null,
+    counter: 0,
+    created_at: 1_700_000_000,
+    credential_id: "credential-id",
+    encrypted_private_key: null,
+    encrypted_public_key: null,
+    encrypted_user_key: null,
+    id: "internal-id",
+    mutation_token: null,
+    name: "Security key",
+    provider_key_id: 0,
+    public_key: "public-key",
+    purpose: "twoFactor",
+    supports_prf: 0,
+    transports: null,
+    type: "public-key",
+    updated_at: 1_700_000_000,
+    user_id: "user-id",
+  },
+]);
+checkModel(models, "TwoFactorWebAuthnDetails", webAuthn);
+checkModel(
+  models,
+  "TwoFactorWebAuthnResponseModel",
+  webAuthnReadResponse(webAuthn, "verification-token"),
+);
+checkModel(
+  models,
+  "TwoFactorWebAuthnUpdateResponseModel",
+  webAuthnMutationResponse(webAuthn, "update"),
+);
+checkModel(
+  models,
+  "TwoFactorWebAuthnDeleteResponseModel",
+  webAuthnMutationResponse(webAuthn, "delete"),
+);
+
+const yubiKey = yubiKeyDetails(["ccccccbcgujh"], true, {
+  configured: true,
+  canManageConfig: true,
+});
+checkModel(models, "TwoFactorYubiKeyDetails", yubiKey);
+checkModel(
+  models,
+  "TwoFactorYubiKeyResponseModel",
+  yubiKeyReadResponse(yubiKey, "verification-token"),
+);
+checkModel(
+  models,
+  "TwoFactorYubiKeyUpdateResponseModel",
+  yubiKeyUpdateResponse(yubiKey),
+);

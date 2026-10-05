@@ -8,7 +8,6 @@ import {
   activeSendRevisionQuery,
   executeBatch,
   revisionQuery,
-  sendRevisionQuery,
   unclaimedSendRevisionQuery,
 } from "../services/db/batch";
 import { textColumnInJson } from "../services/db/json-array";
@@ -331,11 +330,8 @@ export const removeSendAuth = removeSendAuthentication;
 export {
   createFileSend,
   getSendFileUpload,
-  uploadSendFile,
 } from "./sends-file";
 export {
-  accessPublicSend,
-  accessPublicSendFile,
   accessSendFileWithToken,
   accessSendWithToken,
   downloadSendFile,
