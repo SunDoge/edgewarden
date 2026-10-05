@@ -50,6 +50,12 @@ Both workflows run for pull requests into `dev` and `main`, pushes to those bran
 
 ## Dependency updates
 
+Security dependency fixes made on `main` must also be backported to `dev`, including both `pnpm-workspace.yaml` and `pnpm-lock.yaml`, before refreshing Dependabot PRs. Re-running an old PR does not bring in those fixes.
+
+SvelteKit 3 and Vitest 5 updates are temporarily excluded pending explicit migrations: Kit 3 removes the existing `$lib` alias behavior and changes generated configuration, while Vitest 5 fails to start the current Cloudflare worker test pool. Remove each exclusion after its migration passes the full CI suite.
+
+The sole reviewed audit exception is `GHSA-vfj7-8cjw-p6xm` (braces stack exhaustion). It is reachable through the development-only `kysely-codegen -> micromatch -> braces` dependency chain. Our codegen script supplies no include/exclude glob patterns or untrusted input, and this dependency is not deployed. Keep auditing development dependencies; remove the exception when a fix is available, and reassess it if codegen inputs or the dependency path change.
+
 Dependabot checks the pnpm workspace and GitHub Actions every Monday at 05:00 and 05:10 Asia/Shanghai respectively. Version-update pull requests target `dev`, with up to five open PRs per ecosystem. Minor and patch updates are grouped separately for production dependencies, development dependencies, and Actions; major updates remain individual PRs. Commits use Conventional Commits prefixes (`chore` or `ci`) with dependency scopes, matching cog's format.
 
 Merge `.github/dependabot.yml` into the default branch to activate it. Dependabot security updates apply to the default branch independently of the `dev` version-update configuration; enable Dependabot alerts and security updates in the repository settings. The manually downloaded Gitleaks binary and its checksum still require manual updates.
