@@ -54,7 +54,7 @@
     "@wordlist/english-eff": "1.0.1",
     "dexie": "^4.4.6",
     "hash-wasm": "^4.12.0",
-    "hono": "^4.13.8",
+    "hono": "^4.13.12",
     "minisearch": "^7.2.0",
     "otpauth": "^9.5.2",
     "papaparse": "^5.7.0",
