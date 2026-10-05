@@ -1,8 +1,10 @@
 import { createMiddleware } from "hono/factory";
 import type { HonoEnv } from "../env";
+import { getAuthRequestById } from "../services/db/auth-requests";
 import { getRevisionValue } from "../services/db/revisions";
 import {
   logPushRelayFailure,
+  publishPushAuthRequestResponse,
   publishPushVaultChange,
 } from "../services/push-relay";
 import { publishMutationVaultChange } from "../services/realtime";
@@ -38,18 +40,39 @@ export const realtimeMutationMiddleware = createMiddleware<HonoEnv>(
     const organizationId =
       c.get("cipher")?.org_id ?? c.req.param("orgId") ?? null;
     const revisionDate = Math.floor(Date.now() / 1000);
+    const originalAuthRequest = AUTH_REQUEST_PATH.test(c.req.path)
+      ? c.get("authRequest")
+      : null;
+    const decidedAuthRequest = originalAuthRequest
+      ? await getAuthRequestById(c.get("db"), originalAuthRequest.id)
+      : null;
+    // A rejection is intentionally silent so a forged request cannot discover
+    // that the account owner acted on it. Requesting clients can still poll.
+    const push =
+      decidedAuthRequest?.approved === 1
+        ? publishPushAuthRequestResponse(
+            c.env,
+            userId,
+            decidedAuthRequest.id,
+            decidedAuthRequest.response_device_identifier,
+          )
+        : originalAuthRequest
+          ? Promise.resolve(false)
+          : publishPushVaultChange(
+              c.env,
+              userId,
+              organizationId,
+              c.req.header("X-Device-Identifier") ?? null,
+              revisionDate,
+            );
     c.executionCtx.waitUntil(
       Promise.all([
         publishMutationVaultChange(c.env, userId, organizationId).catch(
           (error) => logPushRelayFailure("realtime.publish.failed", error),
         ),
-        publishPushVaultChange(
-          c.env,
-          userId,
-          organizationId,
-          c.req.header("X-Device-Identifier") ?? null,
-          revisionDate,
-        ).catch((error) => logPushRelayFailure("push.publish.failed", error)),
+        push.catch((error) =>
+          logPushRelayFailure("push.publish.failed", error),
+        ),
       ]),
     );
   },

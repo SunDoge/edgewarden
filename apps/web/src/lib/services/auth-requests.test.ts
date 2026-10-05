@@ -74,6 +74,7 @@ describe("auth request response normalization", () => {
 
     expect(request.requestDeviceTypeValue).toBe(1);
     expect(request.requestDeviceType).toBe("iOS");
+    expect(request.approved).toBeNull();
   });
 
   it("never produces NaN for malformed or legacy device types", () => {
@@ -84,5 +85,12 @@ describe("auth request response normalization", () => {
     expect(malformed.requestDeviceType).toBe("iOS");
     expect(legacy.requestDeviceTypeValue).toBe(6);
     expect(legacy.requestDeviceType).toBe("Device type 6");
+  });
+
+  it("reads the canonical requestApproved response field", () => {
+    expect(normalizeAuthRequest({ requestApproved: true }).approved).toBe(true);
+    expect(normalizeAuthRequest({ requestApproved: false }).approved).toBe(
+      false,
+    );
   });
 });

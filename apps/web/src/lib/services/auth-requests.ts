@@ -5,6 +5,7 @@ import {
   hkdfExpand,
   toBufferSource,
 } from "./crypto";
+import { getOrCreateDeviceIdentifier } from "./client-device";
 
 export interface AuthRequest {
   id: string;
@@ -56,7 +57,12 @@ export function normalizeAuthRequest(
     publicKey: String(raw.publicKey ?? ""),
     creationDate: String(raw.creationDate ?? ""),
     isExpired: Boolean(raw.isExpired),
-    approved: typeof raw.approved === "boolean" ? raw.approved : null,
+    approved:
+      typeof raw.requestApproved === "boolean"
+        ? raw.requestApproved
+        : typeof raw.approved === "boolean"
+          ? raw.approved
+          : null,
   };
 }
 
@@ -130,7 +136,12 @@ export async function respondToAuthRequestApi(
   rpcVoid(
     await rpc.api["auth-requests"][":id"].$put({
       param: { id },
-      json: { approved, key: approved ? key : null, masterPasswordHash: null },
+      json: {
+        requestApproved: approved,
+        deviceIdentifier: getOrCreateDeviceIdentifier(),
+        key: approved ? key : null,
+        masterPasswordHash: null,
+      },
     }),
   );
 }

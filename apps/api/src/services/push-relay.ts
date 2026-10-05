@@ -225,6 +225,31 @@ export async function publishPushVaultChange(
   );
 }
 
+/** Notifies the requesting native client that its passwordless login was approved. */
+export async function publishPushAuthRequestResponse(
+  env: WorkerBindings,
+  userId: string,
+  authRequestId: string,
+  responseDeviceIdentifier: string | null,
+  options?: { fetcher?: typeof fetch; cache?: Cache | null },
+): Promise<boolean> {
+  return relayRequest(
+    env,
+    "/push/send",
+    {
+      userId,
+      organizationId: null,
+      deviceId: null,
+      identifier: responseDeviceIdentifier,
+      type: 16,
+      payload: { userId, id: authRequestId },
+      clientType: null,
+      installationId: null,
+    },
+    options,
+  );
+}
+
 export async function pushDeviceRegistrationFromDatabase(
   env: WorkerBindings,
   userId: string,

@@ -884,6 +884,56 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
         .then((row) => row?.approved),
       0,
     );
+
+    const approvalCode = "approved-auth-request-secret";
+    const approvalCreation = await request("/api/auth-requests", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: EMAIL,
+        deviceIdentifier: "approved-auth-request-device",
+        deviceType: 1,
+        accessCode: approvalCode,
+        publicKey: "approved-auth-request-public-key",
+      }),
+    });
+    assert.equal(
+      approvalCreation.status,
+      200,
+      await approvalCreation.clone().text(),
+    );
+    const approval = await approvalCreation.json<{ id: string }>();
+    const approved = await request(`/api/auth-requests/${approval.id}`, {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${context.accessToken}`,
+        "content-type": "application/json",
+        "x-device-identifier": "api-test-device",
+      },
+      body: JSON.stringify({
+        requestApproved: true,
+        deviceIdentifier: "api-test-device",
+        key: "encrypted-vault-key",
+        masterPasswordHash: null,
+      }),
+    });
+    assert.equal(approved.status, 200, await approved.clone().text());
+    const polled = await request(
+      `/api/auth-requests/${approval.id}/response?code=${encodeURIComponent(approvalCode)}`,
+    );
+    assert.equal(polled.status, 200, await polled.clone().text());
+    assert.partialDeepStrictEqual(
+      await polled.json<{
+        requestApproved: boolean;
+        key: string | null;
+        masterPasswordHash: string | null;
+      }>(),
+      {
+        requestApproved: true,
+        key: "encrypted-vault-key",
+        masterPasswordHash: null,
+      },
+    );
   });
 
   test("fails closed on malformed local account invariants", async () => {

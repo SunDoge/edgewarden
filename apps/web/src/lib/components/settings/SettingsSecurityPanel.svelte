@@ -12,6 +12,7 @@
   let {
     profile,
     totpEnabled,
+    twoFactorEnabled,
     isAdmin,
     recoveryCode,
     busy,
@@ -29,6 +30,7 @@
       twoFactorEnabled: boolean;
     };
     totpEnabled: boolean;
+    twoFactorEnabled: boolean;
     isAdmin: boolean;
     recoveryCode: string;
     busy: string;
@@ -79,9 +81,13 @@
             variant="outline"
             onclick={onShowRecoveryCode}
             disabled={busy === "recovery"}>查看恢复代码</Button
-          ><Button variant="destructive" onclick={onDisableTwoFactor}>关闭两步验证</Button
+          ><Button variant="destructive" onclick={onDisableTwoFactor}>关闭全部两步验证</Button
           >{:else}<Button onclick={onBeginTotp} disabled={busy === "totp"}
             ><ShieldCheck data-icon="inline-start" />设置身份验证器</Button
+          >{/if}
+        {#if twoFactorEnabled && !totpEnabled}<Button
+            variant="destructive"
+            onclick={onDisableTwoFactor}>关闭全部两步验证</Button
           >{/if}
       </div>
     </Card.Content>

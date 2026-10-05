@@ -227,7 +227,8 @@
       const hash = await deriveMasterPasswordHash(key, masterPassword);
       await disableTwoFactorApi(hash);
       totpEnabled = false;
-      profile.twoFactorEnabled = otherTwoFactorEnabled;
+      otherTwoFactorEnabled = false;
+      profile.twoFactorEnabled = false;
       disableOpen = false;
       masterPassword = "";
       recoveryCode = "";
@@ -320,6 +321,7 @@
         ><SettingsSecurityPanel
           {profile}
           {totpEnabled}
+          twoFactorEnabled={totpEnabled || otherTwoFactorEnabled}
           isAdmin={vault.profile?.role === "admin"}
           {recoveryCode}
           {busy}

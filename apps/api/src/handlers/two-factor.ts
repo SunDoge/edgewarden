@@ -256,7 +256,67 @@ function disableAuthenticatorHandler(providerResponse: boolean) {
 }
 
 export const disableAuthenticator = disableAuthenticatorHandler(false);
-export const disableTwoFactor = disableAuthenticatorHandler(true);
+
+/** Disables every login second factor; provider-specific endpoints remain available for selective removal. */
+export const disableTwoFactor = factory.createHandlers(
+  vValidator("json", DisableTotpSchema),
+  async (c) => {
+    const user = c.get("user");
+    const { masterPasswordHash } = c.req.valid("json");
+    if (
+      !(await verifyPassword(
+        masterPasswordHash,
+        user.master_password_hash,
+        user.email,
+      ))
+    )
+      return errorResponse("Password is incorrect.", 400);
+
+    const db = c.get("db");
+    const ts = now();
+    const securityStamp = crypto.randomUUID();
+    const [updated] = await c.get("dbDialect").batch([
+      db
+        .updateTable("users")
+        .set({
+          totp_secret: null,
+          totp_recovery_code: null,
+          yubikey_config: serializeYubikeyConfig({ keys: [], nfc: false }),
+          security_stamp: securityStamp,
+          updated_at: ts,
+        })
+        .where("id", "=", user.id)
+        .where("security_stamp", "=", user.security_stamp),
+      conditionalRefreshTokenDeletionQuery(db, user.id, securityStamp),
+      conditionalTwoFactorCredentialDeletionQuery(db, user.id, securityStamp),
+      conditionalUserRevisionQuery(db, user.id, securityStamp, ts),
+      auditEventInsertQuery(
+        db,
+        {
+          actorUserId: user.id,
+          action: "account.two_factor.disable_all",
+          category: "auth",
+          level: "warning",
+          targetType: "user",
+          targetId: user.id,
+          metadata: auditRequestMetadata(c.req.raw),
+        },
+        sql<boolean>`EXISTS (
+					SELECT 1 FROM users
+					WHERE id = ${user.id} AND security_stamp = ${securityStamp}
+				)`,
+        ts,
+      ),
+    ]);
+    if (updated.numAffectedRows !== 1n)
+      return errorResponse(
+        "Two-step verification changed; reload and try again.",
+        409,
+      );
+    invalidateUserCache(user.id);
+    return c.json({ enabled: false, type: 0, object: "twoFactorProvider" });
+  },
+);
 
 export const getRecoveryCode = factory.createHandlers(async (c) => {
   const encrypted = c.get("user").totp_recovery_code;

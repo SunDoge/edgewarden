@@ -496,10 +496,32 @@ export function registerAccountSecurityScenarios(
     });
     assert.equal(login.status, 200, await login.clone().text());
     const token = (await login.json<{ access_token: string }>()).access_token;
-    await context.database
-      .prepare("UPDATE users SET totp_secret = ? WHERE id = ?")
-      .bind(encryptedSecret, user.id)
-      .run();
+    const securityKeyId = crypto.randomUUID();
+    const timestamp = Math.floor(Date.now() / 1000);
+    await context.database.batch([
+      context.database
+        .prepare(
+          "UPDATE users SET totp_secret = ?, yubikey_config = ? WHERE id = ?",
+        )
+        .bind(
+          encryptedSecret,
+          JSON.stringify({ keys: ["ccccccbcgujh"], nfc: false }),
+          user.id,
+        ),
+      context.database
+        .prepare(
+          "INSERT INTO webauthn_credentials (id,user_id,name,public_key,credential_id,counter,type,transports,supports_prf,created_at,updated_at,purpose) VALUES (?,?,?,?,?,0,'public-key','[]',0,?,?, 'twoFactor')",
+        )
+        .bind(
+          securityKeyId,
+          user.id,
+          "disable-all test key",
+          "AQID",
+          `disable-all-${securityKeyId}`,
+          timestamp,
+          timestamp,
+        ),
+    ]);
     invalidateUserCache(user.id);
 
     const headers = {
@@ -520,14 +542,28 @@ export function registerAccountSecurityScenarios(
     });
     assert.equal(disabled.status, 200, await disabled.clone().text());
     const stored = await context.database
-      .prepare("SELECT totp_secret, totp_recovery_code FROM users WHERE id = ?")
+      .prepare(
+        "SELECT totp_secret, totp_recovery_code, yubikey_config FROM users WHERE id = ?",
+      )
       .bind(user.id)
       .first<{
         totp_secret: string | null;
         totp_recovery_code: string | null;
+        yubikey_config: string | null;
       }>();
     assert.equal(stored?.totp_secret, null);
     assert.equal(stored?.totp_recovery_code, null);
+    assert.deepEqual(JSON.parse(stored?.yubikey_config ?? "{}"), {
+      keys: [],
+      nfc: false,
+    });
+    const remainingSecurityKeys = await context.database
+      .prepare(
+        "SELECT COUNT(*) AS count FROM webauthn_credentials WHERE user_id = ? AND purpose = 'twoFactor'",
+      )
+      .bind(user.id)
+      .first<{ count: number }>();
+    assert.equal(remainingSecurityKeys?.count, 0);
     assert.equal(
       (
         await request("/api/accounts/profile", {
