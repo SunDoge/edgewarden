@@ -12,6 +12,12 @@ updates:
       timezone: Asia/Shanghai
     open-pull-requests-limit: 5
     ignore:
+      # Kit 3 removes $lib and changes generated configuration; migrate separately.
+      - dependency-name: "@sveltejs/kit"
+        versions: ["3.x"]
+      # Vitest 5 currently fails to start our Cloudflare worker test pool.
+      - dependency-name: vitest
+        versions: ["5.x"]
       # Keep TypeScript 6 until the Svelte/tooling ecosystem supports 7 directly.
       - dependency-name: typescript
         versions: ["7.x"]

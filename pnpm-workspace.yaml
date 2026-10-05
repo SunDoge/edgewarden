@@ -3,10 +3,20 @@ packages:
   - "packages/*"
 
 overrides:
+  # Backport the scoped security fixes already verified on main.
+  "undici@>=7.0.0 <7.29.1": 7.29.1
+  "devalue@>=5.1.0 <5.9.3": 5.9.3
   # GHSA-rgj7-g3m4-5g8c: remove once Miniflare requires sharp >=0.35.4.
   "miniflare>sharp@<0.35.4": 0.35.4
   # GHSA-pxg6-pf52-xh8x: remove once SvelteKit requires cookie >=0.7.0.
   "@sveltejs/kit>cookie@<0.7.0": 0.7.2
+
+auditConfig:
+  ignoreGhsas:
+    # Reviewed 2026-10-06: no patched release. Only used by local codegen via
+    # kysely-codegen -> micromatch -> braces, not the deployed Worker.
+    # Remove when a patched release or codegen replacement becomes available.
+    - GHSA-vfj7-8cjw-p6xm
 
 allowBuilds:
   "@tailwindcss/oxide": true
