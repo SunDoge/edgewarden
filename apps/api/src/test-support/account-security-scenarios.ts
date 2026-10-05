@@ -257,7 +257,7 @@ export function registerAccountSecurityScenarios(
       TwoFactorProviders2: Record<string, unknown>;
     }>();
     assert.deepEqual(nativeChallenge.TwoFactorProviders, ["0"]);
-    assert.deepEqual(nativeChallenge.TwoFactorProviders2["0"], {});
+    assert.equal(nativeChallenge.TwoFactorProviders2["0"], null);
     await context.database
       .prepare("UPDATE users SET totp_secret = NULL WHERE id = ?")
       .bind(user.id)

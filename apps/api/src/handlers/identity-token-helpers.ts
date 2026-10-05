@@ -51,8 +51,11 @@ export async function twoFactorRequiredResponse(
     webAuthn && (!options.nativeClient || providers.length === 0),
   );
   if (exposeWebAuthn) providers.push(String(TWO_FACTOR_WEBAUTHN));
-  const providers2: Record<string, Record<string, unknown>> = {};
-  for (const provider of providers) providers2[provider] = {};
+  const providers2: Record<string, Record<string, unknown> | null> = {};
+  // Bitwarden represents providers without challenge metadata (including
+  // authenticator-app TOTP) as null. Native clients use the key's presence to
+  // discover the method, so retain the key without inventing an empty model.
+  for (const provider of providers) providers2[provider] = null;
   if (webAuthn && exposeWebAuthn)
     providers2[String(TWO_FACTOR_WEBAUTHN)] = {
       Email: null,
