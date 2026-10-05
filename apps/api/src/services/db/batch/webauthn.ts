@@ -1,4 +1,4 @@
-import { type CompiledQuery, type Insertable, type Kysely, sql } from "kysely";
+import { type Insertable, type Kysely, sql } from "kysely";
 import type { DB, WebauthnCredentials } from "../../../types/db";
 import { now } from "../../../utils/time";
 
@@ -199,7 +199,8 @@ export function conditionalWebauthnCredentialInsertQuery(
 		INSERT INTO webauthn_credentials (
 		  id, user_id, purpose, name, public_key, credential_id, counter,
 		  type, aa_guid, transports, encrypted_user_key, encrypted_public_key,
-		  encrypted_private_key, supports_prf, mutation_token, created_at, updated_at
+		  encrypted_private_key, supports_prf, provider_key_id, mutation_token,
+		  created_at, updated_at
 		)
 		SELECT
 		  ${credential.id}, ${credential.user_id}, ${credential.purpose},
@@ -207,7 +208,8 @@ export function conditionalWebauthnCredentialInsertQuery(
 		  ${credential.counter}, ${credential.type}, ${credential.aa_guid},
 		  ${credential.transports}, ${credential.encrypted_user_key},
 		  ${credential.encrypted_public_key}, ${credential.encrypted_private_key},
-		  ${credential.supports_prf}, ${credential.mutation_token},
+		  ${credential.supports_prf}, ${credential.provider_key_id ?? null},
+		  ${credential.mutation_token},
 		  ${credential.created_at},
 		  ${credential.updated_at}
 		FROM users

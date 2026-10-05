@@ -10,7 +10,8 @@ export type JwtPurpose =
   | "send-file-upload"
   | "send-access"
   | "account-passkey"
-  | "two-factor-authenticator";
+  | "two-factor-authenticator"
+  | "two-factor-provider";
 
 export async function deriveJwtPurposeSecret(
   secret: string,
@@ -96,6 +97,14 @@ const TwoFactorAuthenticatorClaimsSchema = v.object({
   key: v.pipe(v.string(), v.minLength(1)),
   sstamp: v.pipe(v.string(), v.minLength(1)),
   typ: v.literal("two_factor_authenticator"),
+  exp: v.number(),
+});
+
+const TwoFactorProviderClaimsSchema = v.object({
+  sub: v.pipe(v.string(), v.minLength(1)),
+  provider: v.pipe(v.number(), v.integer()),
+  sstamp: v.pipe(v.string(), v.minLength(1)),
+  typ: v.literal("two_factor_provider"),
   exp: v.number(),
 });
 
@@ -192,6 +201,35 @@ export async function verifyTwoFactorAuthenticatorToken(
     token,
     await deriveJwtPurposeSecret(secret, "two-factor-authenticator"),
     TwoFactorAuthenticatorClaimsSchema,
+  );
+}
+
+export async function createTwoFactorProviderToken(
+  userId: string,
+  provider: number,
+  securityStamp: string,
+  secret: string,
+): Promise<string> {
+  return sign(
+    {
+      sub: userId,
+      provider,
+      sstamp: securityStamp,
+      typ: "two_factor_provider",
+      exp: Math.floor(Date.now() / 1000) + 600,
+    },
+    await deriveJwtPurposeSecret(secret, "two-factor-provider"),
+  );
+}
+
+export async function verifyTwoFactorProviderToken(
+  token: string,
+  secret: string,
+) {
+  return verifyJwtClaims(
+    token,
+    await deriveJwtPurposeSecret(secret, "two-factor-provider"),
+    TwoFactorProviderClaimsSchema,
   );
 }
 

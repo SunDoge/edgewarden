@@ -13,6 +13,9 @@
     totpOpen = $bindable(),
     totpKey,
     totpToken = $bindable(),
+    verificationOpen = $bindable(),
+    verificationPassword = $bindable(),
+    verificationAction,
     recoveryOpen = $bindable(),
     recoveryCode,
     recoveryConfirmed = $bindable(),
@@ -26,6 +29,9 @@
     onCopy,
     onDeleteAccount,
     onEnableTotp,
+    onCancelTotp,
+    onVerifySensitiveAction,
+    onFinishRecoverySetup,
     onDisableTotp,
     onChangePassword,
   }: {
@@ -34,6 +40,9 @@
     totpOpen: boolean;
     totpKey: string;
     totpToken: string;
+    verificationOpen: boolean;
+    verificationPassword: string;
+    verificationAction: "totp" | "recovery" | "api-key-reveal" | "api-key-rotate";
     recoveryOpen: boolean;
     recoveryCode: string;
     recoveryConfirmed: boolean;
@@ -47,6 +56,9 @@
     onCopy: (value: string) => void;
     onDeleteAccount: () => void;
     onEnableTotp: () => void;
+    onCancelTotp: () => void;
+    onVerifySensitiveAction: () => void;
+    onFinishRecoverySetup: () => void;
     onDisableTotp: () => void;
     onChangePassword: () => void;
   } = $props();
@@ -93,7 +105,51 @@
   ></Dialog.Root
 >
 
-<Dialog.Root bind:open={totpOpen}
+<Dialog.Root
+  open={verificationOpen}
+  onOpenChange={(open) => {
+    verificationOpen = open;
+    if (!open) verificationPassword = "";
+  }}
+>
+  <Dialog.Content>
+    <Dialog.Header>
+      <Dialog.Title>验证主密码</Dialog.Title>
+      <Dialog.Description>
+        {verificationAction === "totp"
+          ? "设置身份验证器前，需要重新验证你的身份。"
+          : verificationAction === "recovery"
+            ? "恢复代码属于敏感凭据，查看前需要重新验证你的身份。"
+            : verificationAction === "api-key-reveal"
+              ? "API Key 属于账户凭据，查看前需要重新验证你的身份。"
+              : "轮换 API Key 会让旧密钥立即失效，请重新验证你的身份。"}
+      </Dialog.Description>
+    </Dialog.Header>
+    <Field.Field>
+      <Field.Label for="two-factor-verification-password">当前主密码</Field.Label>
+      <Input
+        id="two-factor-verification-password"
+        type="password"
+        bind:value={verificationPassword}
+        autocomplete="current-password"
+      />
+    </Field.Field>
+    <Dialog.Footer>
+      <Button variant="outline" onclick={() => (verificationOpen = false)}>取消</Button>
+      <Button
+        onclick={onVerifySensitiveAction}
+        disabled={!verificationPassword || busy === "verification"}>继续</Button
+      >
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root
+  open={totpOpen}
+  onOpenChange={(open) => {
+    totpOpen = open;
+    if (!open) onCancelTotp();
+  }}
   ><Dialog.Content
     ><Dialog.Header
       ><Dialog.Title>设置身份验证器</Dialog.Title><Dialog.Description
@@ -112,7 +168,6 @@
         </div></Field.Field
       ><Field.Field
         ><Field.Label for="totp-token">验证码</Field.Label><Input
-          id="totp-token"
           bind:value={totpToken}
           inputmode="numeric"
           maxlength={6}
@@ -172,7 +227,7 @@
       <Button variant="outline" onclick={downloadRecoveryCode}>
         <Download data-icon="inline-start" />下载
       </Button>
-      <Button onclick={() => (recoveryOpen = false)} disabled={!recoveryConfirmed}>完成</Button>
+      <Button onclick={onFinishRecoverySetup} disabled={!recoveryConfirmed}>保存并重新登录</Button>
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>

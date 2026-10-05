@@ -68,7 +68,7 @@ export async function logout(): Promise<void> {
  * 1. Pre-login: Fetch KDF configuration for the given email
  */
 export async function prelogin(email: string): Promise<PreloginResponse> {
-  const response = await rpc.identity.accounts.prelogin.$post({
+  const response = await rpc.identity.accounts.prelogin.password.$post({
     json: { email },
   });
   return rpcJson(response) as Promise<PreloginResponse>;
@@ -377,5 +377,5 @@ export async function register(
     },
   };
 
-  rpcVoid(await rpc.api.accounts.register.$post({ json: payload }));
+  rpcVoid(await rpc.api.edgewarden.accounts.register.$post({ json: payload }));
 }

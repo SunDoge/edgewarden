@@ -1,10 +1,11 @@
-import type { D1Dialect } from "./db/d1-dialect";
 import { type Kysely, type Selectable, sql } from "kysely";
 import { LIMITS } from "../config";
 import type { DB, Users } from "../types/db";
 import { createRefreshToken, hashRefreshToken } from "../utils/jwt";
 import { now } from "../utils/time";
 import { generateAccessToken } from "./auth";
+import { AUTH_REQUEST_TTL_SECONDS } from "./db/auth-requests";
+import type { D1Dialect } from "./db/d1-dialect";
 import * as devicesDb from "./db/devices";
 
 export interface LoginDeviceInfo {
@@ -202,17 +203,37 @@ export function authRequestConsumptionClaimQuery(
 		    consumption_token = ${args.request.token}
 		WHERE id = ${args.request.id}
 		  AND user_id = ${args.userId}
+		  AND type = 0
 		  AND approved = 1
+		  AND response_date IS NOT NULL
 		  AND authentication_date IS NULL
 		  AND consumption_token IS NULL
+		  AND creation_date >= ${args.timestamp - AUTH_REQUEST_TTL_SECONDS}
 		  AND EXISTS (
 		    SELECT 1 FROM users current_user
-		    WHERE ${sessionEligibility(
-          args.userId,
-          args.expectedSecurityStamp,
-          args.deviceSession,
-        )}
+		    WHERE ${userEligibility(args.userId, args.expectedSecurityStamp)}
 		  )
+		  AND ${
+        args.deviceSession
+          ? sql<boolean>`(
+		      NOT EXISTS (
+		        SELECT 1 FROM devices claim_device
+		        WHERE claim_device.user_id = ${args.userId}
+		          AND claim_device.device_identifier = ${args.deviceSession.identifier}
+		      )
+		      OR EXISTS (
+		        SELECT 1 FROM devices claim_device
+		        WHERE claim_device.user_id = ${args.userId}
+		          AND claim_device.device_identifier = ${args.deviceSession.identifier}
+		          AND claim_device.banned = 0
+		          AND (
+		            claim_device.session_stamp IS NULL
+		            OR claim_device.session_stamp = ${args.deviceSession.sessionStamp}
+		          )
+		      )
+		    )`
+          : sql<boolean>`TRUE`
+      }
 	`.compile(db);
 }
 

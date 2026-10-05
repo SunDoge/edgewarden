@@ -111,7 +111,7 @@ export async function deleteCiphersApi(ids: string[]): Promise<void> {
 }
 
 export async function restoreCiphersApi(ids: string[]): Promise<void> {
-  rpcVoid(await rpc.api.ciphers.restore.$post({ json: { ids } }));
+  rpcVoid(await rpc.api.ciphers.restore.$put({ json: { ids } }));
 }
 
 export async function archiveCiphersApi(ids: string[]): Promise<void> {
@@ -131,7 +131,7 @@ export async function moveCiphersApi(
 }
 
 export async function hardDeleteCiphersApi(ids: string[]): Promise<void> {
-  rpcVoid(await rpc.api.ciphers["delete-permanent"].$post({ json: { ids } }));
+  rpcVoid(await rpc.api.ciphers.$delete({ json: { ids } }));
 }
 
 export async function createAttachmentApi(

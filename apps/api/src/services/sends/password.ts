@@ -1,5 +1,10 @@
 import { decodeBase64Url, encodeBase64Url } from "../../utils/base64-url";
 
+const SEND_PASSWORD_ALGORITHM = "pbkdf2-sha256";
+const SEND_PASSWORD_ITERATIONS = 100_000;
+const SEND_PASSWORD_SALT_BYTES = 64;
+const SEND_PASSWORD_HASH_BYTES = 32;
+
 export interface SendPasswordFields {
   password_hash?: string | null;
   password_salt?: string | null;
@@ -36,29 +41,27 @@ async function deriveSendPasswordHash(
   );
 }
 
-export function verifySendPasswordHashB64(
-  send: SendPasswordFields,
-  passwordHashB64: string,
-): boolean {
-  if (!send.password_hash || !passwordHashB64) return false;
-  const expected = decodeBase64Url(send.password_hash);
-  const provided = decodeBase64Url(passwordHashB64);
-  return !!expected && !!provided && constantTimeEqual(expected, provided);
-}
-
 export async function verifySendPassword(
   send: SendPasswordFields,
   password: string,
 ): Promise<boolean> {
-  if (!send.password_hash) return false;
-  if (!send.password_salt || !send.password_iterations) {
-    return verifySendPasswordHashB64(send, password);
-  }
+  if (
+    send.auth_type !== 1 ||
+    !send.password_hash ||
+    !send.password_salt ||
+    send.password_algorithm !== SEND_PASSWORD_ALGORITHM ||
+    send.password_iterations !== SEND_PASSWORD_ITERATIONS
+  )
+    return false;
   const salt = decodeBase64Url(send.password_salt);
   const expected = decodeBase64Url(send.password_hash);
-  if (!salt || !expected) return false;
+  if (
+    salt?.length !== SEND_PASSWORD_SALT_BYTES ||
+    expected?.length !== SEND_PASSWORD_HASH_BYTES
+  )
+    return false;
   return constantTimeEqual(
-    await deriveSendPasswordHash(password, salt, send.password_iterations),
+    await deriveSendPasswordHash(password, salt, SEND_PASSWORD_ITERATIONS),
     expected,
   );
 }
@@ -75,11 +78,15 @@ export async function setSendPassword(
     if (send.auth_type === 1) send.auth_type = 2;
     return;
   }
-  const salt = crypto.getRandomValues(new Uint8Array(64));
-  const hash = await deriveSendPasswordHash(password, salt, 100000);
+  const salt = crypto.getRandomValues(new Uint8Array(SEND_PASSWORD_SALT_BYTES));
+  const hash = await deriveSendPasswordHash(
+    password,
+    salt,
+    SEND_PASSWORD_ITERATIONS,
+  );
   send.password_salt = encodeBase64Url(salt);
   send.password_hash = encodeBase64Url(hash);
-  send.password_iterations = 100000;
-  send.password_algorithm = "pbkdf2-sha256";
+  send.password_iterations = SEND_PASSWORD_ITERATIONS;
+  send.password_algorithm = SEND_PASSWORD_ALGORITHM;
   send.auth_type = 1;
 }

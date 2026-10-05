@@ -10,6 +10,8 @@ pnpm --filter @edgewarden/api test
 pnpm --filter @edgewarden/web test
 pnpm test:compat:bw:local        # isolated local Worker + disposable account
 pnpm test:compat:bw              # official Bitwarden CLI smoke test
+pnpm check:compat:models         # current native-client response contracts
+pnpm check:compat:routes         # current upstream route coverage
 pnpm test:integration:cloudflare # deployed Worker smoke test
 ```
 
@@ -75,7 +77,22 @@ The API harness uses real Miniflare D1 and KV implementations while keeping R2, 
 
 Use the deployed Cloudflare smoke test for binding and deployment integration. Use the Bitwarden CLI smoke test for protocol compatibility. Neither replaces unit and integration tests because they require external state and are slower to diagnose.
 
-`test:compat:bw:local` creates a temporary Wrangler persistence directory, applies every migration, generates independent temporary secrets and configuration, starts an HTTPS development Worker using a temporary certificate trusted explicitly by Node and the CLI, registers a disposable account with its temporary `BOOTSTRAP_SECRET`, runs the same extended official CLI compatibility suite, and removes the temporary state. It never modifies the normal `.wrangler/state` database. The suite exercises all personal item types, lifecycle transitions, two-way sync, attachments, Sends, and lock/unlock behavior.
+The route coverage report excludes upstream actions marked `[Obsolete]` by
+default and fails when Edgewarden implements an obsolete-only alias or a known
+legacy route already removed from upstream. We support the current Bitwarden
+contract instead of carrying legacy method and path variants. Pass
+`--include-obsolete` directly to
+`scripts/check-bitwarden-route-coverage.ts` when inspecting upstream history,
+and use `--details`, `--json`, or `--source Vault` to narrow the report.
+
+The scanner covers both API and Identity controllers. A compatibility exception
+must be listed explicitly with evidence that a current official client still
+uses it. At present this applies only to password prelogin: upstream promises no
+EOL for the obsolete route and Bitwarden iOS 2026.9 still calls it. The gate
+also verifies that every denied legacy route has its current replacement and
+that every compatibility exception remains marked obsolete upstream.
+
+`test:compat:bw:local` creates a temporary Wrangler persistence directory, applies every migration, generates independent temporary secrets and configuration, selects unused service and inspector ports, starts an HTTPS development Worker using a temporary certificate trusted explicitly by Node and the CLI, registers a disposable account with its temporary `BOOTSTRAP_SECRET`, runs the same extended official CLI compatibility suite, and removes the temporary state even when interrupted. It never modifies the normal `.wrangler/state` database. The suite exercises all personal item types, lifecycle transitions, two-way sync, attachments, password-protected text and file Sends (including rejection without a password), and lock/unlock behavior.
 
 ## What to add with a change
 

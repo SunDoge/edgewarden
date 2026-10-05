@@ -12,6 +12,10 @@ After the first real deployment, never rewrite an applied migration. Add a new n
 
 Migrations run before the new Worker becomes active, so every migration must remain compatible with the currently deployed Worker. Use expand/backfill/contract across releases instead of dropping or renaming a live column in one release. `pnpm check` enforces ordered migration filenames and rejects common destructive SQL operations. Wrangler rolls back the failing migration itself and D1 Time Travel remains available for operator recovery, but neither replaces an application backup before a risky upgrade.
 
+### Send protocol correction
+
+The current web vault uses Bitwarden's 16-byte Send URL secret, derives the encryption and MAC keys with HKDF-SHA256, and derives password verifiers with PBKDF2-SHA256 in the browser. Development builds from before this correction created non-standard 64-byte Send links and sent the access password directly to Edgewarden. Those old Sends are intentionally not supported: delete and recreate them after deploying this version. Vault items, attachments, folders, and organization data are unaffected.
+
 ## Backup and restore
 
 R2 is the preferred blob backend. KV is a fallback with a 25 MiB per-object limit. Instance backups use a strict table allowlist and include users, encrypted vault data, organizations/collections, Sends, WebAuthn encrypted material, audit logs, and optionally encrypted attachment blobs. They intentionally exclude JWT/data-encryption/bootstrap secrets, API keys, refresh tokens, device sessions, login-attempt records, and transient locks.
@@ -88,7 +92,7 @@ Every Cron invocation emits a structured `scheduled.completed` log containing du
 - Backup settings cannot decrypt: confirm the original `DATA_ENCRYPTION_SECRET` is configured.
 - Cron reports `backup.scheduled.error`: do not ignore it as “no backup configured”; open the backup center and reactivate or repair the encrypted destination settings.
 - Attachments return 404 after switching storage: R2 and KV objects are not migrated automatically; switch back or restore a backup into the selected backend.
-- Official client rejects login: run `pnpm test:compat:bw`, then inspect `/api/config`, `/identity/accounts/prelogin`, and the audit log.
+- Official client rejects login: run `pnpm test:compat:bw`, then inspect `/api/config`, `/identity/accounts/prelogin/password` (or the documented current-client compatibility exception), and the audit log.
 - Domain recommendations are stale: run `pnpm domains:sync`; the scheduled workflow normally updates the generated upstream file weekly.
 - A cipher update returns 409: sync first and reapply the edit; another client saved a newer revision.
 

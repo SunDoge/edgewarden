@@ -23,19 +23,33 @@
 
   let requests = $state<AuthRequest[]>([]);
   let busy = $state("");
+  let refreshing = $state(false);
+  let showingRefresh = $state(false);
+  let refreshToken = 0;
 
-  async function refresh() {
-    busy = "refresh";
+  async function refresh({ silent = false }: { silent?: boolean } = {}) {
+    if (refreshing || busy) return;
+    const token = ++refreshToken;
+    refreshing = true;
+    showingRefresh = !silent;
     try {
-      requests = await listPendingAuthRequestsApi(email);
+      const pending = await listPendingAuthRequestsApi(email);
+      if (token === refreshToken && !busy) requests = pending;
     } catch (error) {
-      onError(error);
+      if (!silent) onError(error);
     } finally {
-      busy = "";
+      if (token === refreshToken) {
+        refreshing = false;
+        showingRefresh = false;
+      }
     }
   }
 
   async function respond(request: AuthRequest, approved: boolean) {
+    // An older refresh must not put this request back after the response succeeds.
+    refreshToken += 1;
+    refreshing = false;
+    showingRefresh = false;
     busy = request.id;
     try {
       let key: string | undefined;
@@ -59,17 +73,30 @@
     }
   }
 
-  onMount(refresh);
+  onMount(() => {
+    void refresh();
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refresh({ silent: true });
+    };
+    const interval = window.setInterval(refreshWhenVisible, 5_000);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  });
 </script>
 
-<Card.Root>
+<Card.Root id="device-login-requests">
   <Card.Header class="flex-row items-start justify-between">
     <div>
       <Card.Title>待审批设备登录</Card.Title>
-      <Card.Description>批准前请在请求设备上核对公钥指纹和设备信息。</Card.Description>
+      <Card.Description>批准前请在请求设备上核对验证短语和设备信息。</Card.Description>
     </div>
-    <Button variant="outline" size="sm" onclick={refresh} disabled={busy === "refresh"}>
-      <RefreshCw class={busy === "refresh" ? "animate-spin" : ""} />刷新
+    <Button variant="outline" size="sm" onclick={() => refresh()} disabled={refreshing || !!busy}>
+      <RefreshCw class={showingRefresh ? "animate-spin" : ""} />刷新
     </Button>
   </Card.Header>
   <Card.Content class="flex flex-col gap-3">
@@ -87,7 +114,10 @@
               ? ` · ${request.requestIpAddress}`
               : ""}
           </div>
-          <code class="mt-2 block break-all text-xs">{request.fingerprint || "指纹不可用"}</code>
+          <div class="mt-2 text-xs text-muted-foreground">验证短语</div>
+          <code class="mt-1 block break-words text-sm font-medium">
+            {request.fingerprintPhrase || "验证短语不可用"}
+          </code>
         </div>
         <div class="flex shrink-0 gap-2">
           <Button size="sm" onclick={() => respond(request, true)} disabled={!!busy}

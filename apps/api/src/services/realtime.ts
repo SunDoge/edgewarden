@@ -6,6 +6,15 @@ export interface VaultChangeMessage {
   userId: string;
 }
 
+export interface AuthRequestMessage {
+  type: "auth-request";
+  authRequestId: string;
+  userId: string;
+  requestDeviceIdentifier: string;
+}
+
+export type RealtimeMessage = VaultChangeMessage | AuthRequestMessage;
+
 export interface RealtimePublishResult {
   delivered: number;
   failed: number;
@@ -17,14 +26,45 @@ export async function publishVaultChange(
   revisionDate = Math.floor(Date.now() / 1000),
 ): Promise<RealtimePublishResult> {
   const recipients = [...new Set(userIds)];
-  const deliveries = await Promise.allSettled(
-    recipients.map(async (userId) => {
-      const message: VaultChangeMessage = {
+  return publishRealtimeMessages(
+    env,
+    recipients.map((userId) => ({
+      recipient: userId,
+      message: {
         type: "vault-revision",
         revisionDate,
         userId,
-      };
-      const response = await env.REALTIME.getByName(userId).fetch(
+      } satisfies VaultChangeMessage,
+    })),
+  );
+}
+
+export async function publishAuthRequestNotification(
+  env: CloudflareBindings,
+  userId: string,
+  authRequestId: string,
+  requestDeviceIdentifier: string,
+): Promise<RealtimePublishResult> {
+  return publishRealtimeMessages(env, [
+    {
+      recipient: userId,
+      message: {
+        type: "auth-request",
+        authRequestId,
+        userId,
+        requestDeviceIdentifier,
+      },
+    },
+  ]);
+}
+
+async function publishRealtimeMessages(
+  env: CloudflareBindings,
+  notifications: Array<{ recipient: string; message: RealtimeMessage }>,
+): Promise<RealtimePublishResult> {
+  const deliveries = await Promise.allSettled(
+    notifications.map(async ({ recipient, message }) => {
+      const response = await env.REALTIME.getByName(recipient).fetch(
         "https://realtime.internal/broadcast",
         {
           method: "POST",
@@ -44,7 +84,7 @@ export async function publishVaultChange(
     console.error(
       JSON.stringify({
         event: "realtime.broadcast.failed",
-        userId: recipients[index],
+        userId: notifications[index]?.recipient,
         error:
           delivery.reason instanceof Error
             ? delivery.reason.message
@@ -52,7 +92,7 @@ export async function publishVaultChange(
       }),
     );
   }
-  return { delivered: recipients.length - failed, failed };
+  return { delivered: notifications.length - failed, failed };
 }
 
 export async function publishMutationVaultChange(

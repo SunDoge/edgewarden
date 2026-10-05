@@ -60,7 +60,7 @@ export async function createBackupRestoreFixture(options: {
       grant_type: "password",
       username: email,
       password: options.masterPasswordHash,
-      deviceIdentifier: `backup-restore-${userId}`,
+      deviceIdentifier: `backup-${userId}`,
       deviceName: "Backup Restore Test",
       deviceType: "0",
     }),

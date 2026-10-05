@@ -4,6 +4,7 @@ import {
   createAttachment,
   deleteAttachment,
   getAttachment,
+  renewAttachmentUpload,
 } from "../../handlers/attachments";
 import {
   archiveCipher,
@@ -38,34 +39,20 @@ export const cipherRoutes = new Hono<HonoEnv>()
   .post("/api/ciphers", ...createCipher)
   .post("/api/ciphers/create", ...createCipherInOrganization)
   .post("/api/ciphers/import", ...importCiphers)
-  .post("/api/ciphers/delete", ...hardDeleteCiphers)
   .put("/api/ciphers/delete", ...deleteCiphers)
   .delete("/api/ciphers", ...hardDeleteCiphers)
-  .post("/api/ciphers/delete-permanent", ...hardDeleteCiphers)
-  .post("/api/ciphers/restore", ...restoreCiphers)
   .put("/api/ciphers/restore", ...restoreCiphers)
   .put("/api/ciphers/move", ...moveCiphers)
-  .post("/api/ciphers/move", ...moveCiphers)
   .put("/api/ciphers/archive", ...archiveCiphers)
-  .post("/api/ciphers/archive", ...archiveCiphers)
   .put("/api/ciphers/unarchive", ...unarchiveCiphers)
-  .post("/api/ciphers/unarchive", ...unarchiveCiphers)
   .post("/api/ciphers/bulk-collections", ...updateCipherCollectionsBulk)
   .put("/api/ciphers/share", ...shareCiphers)
-  .post("/api/ciphers/share", ...shareCiphers)
   .post("/api/ciphers/purge", ...purgeCiphers)
+  .get("/api/ciphers/:id/details", requireCipher, ...getCipher)
   .get("/api/ciphers/:id", requireCipher, ...getCipher)
   .put("/api/ciphers/:id", requireCipher, requireCipherWrite, ...updateCipher)
-  .post("/api/ciphers/:id", requireCipher, requireCipherWrite, ...updateCipher)
   .put("/api/ciphers/:id/partial", requireCipher, ...updateCipherPartial)
-  .post("/api/ciphers/:id/partial", requireCipher, ...updateCipherPartial)
   .put(
-    "/api/ciphers/:id/share",
-    requireCipher,
-    requireCipherWrite,
-    ...shareCipher,
-  )
-  .post(
     "/api/ciphers/:id/share",
     requireCipher,
     requireCipherWrite,
@@ -77,19 +64,7 @@ export const cipherRoutes = new Hono<HonoEnv>()
     requireCipherWrite,
     ...updateCipherCollections,
   )
-  .post(
-    "/api/ciphers/:id/collections",
-    requireCipher,
-    requireCipherWrite,
-    ...updateCipherCollections,
-  )
   .put(
-    "/api/ciphers/:id/collections_v2",
-    requireCipher,
-    requireCipherWrite,
-    ...updateCipherCollectionsV2,
-  )
-  .post(
     "/api/ciphers/:id/collections_v2",
     requireCipher,
     requireCipherWrite,
@@ -107,18 +82,6 @@ export const cipherRoutes = new Hono<HonoEnv>()
     requireCipherWrite,
     ...putDeleteCipher,
   )
-  .post(
-    "/api/ciphers/:id/delete",
-    requireCipher,
-    requireCipherWrite,
-    ...hardDeleteCipher,
-  )
-  .delete(
-    "/api/ciphers/:id/delete",
-    requireCipher,
-    requireCipherWrite,
-    ...hardDeleteCipher,
-  )
   .put(
     "/api/ciphers/:id/restore",
     requireCipher,
@@ -133,19 +96,7 @@ export const cipherArchiveRoutes = new Hono<HonoEnv>()
     requireCipherWrite,
     ...archiveCipher,
   )
-  .post(
-    "/api/ciphers/:id/archive",
-    requireCipher,
-    requireCipherWrite,
-    ...archiveCipher,
-  )
   .put(
-    "/api/ciphers/:id/unarchive",
-    requireCipher,
-    requireCipherWrite,
-    ...unarchiveCipher,
-  )
-  .post(
     "/api/ciphers/:id/unarchive",
     requireCipher,
     requireCipherWrite,
@@ -160,15 +111,15 @@ export const attachmentRoutes = new Hono<HonoEnv>()
     ...createAttachment,
   )
   .get(
+    "/api/ciphers/:id/attachment/:attachmentId/renew",
+    requireCipher,
+    requireCipherWrite,
+    ...renewAttachmentUpload,
+  )
+  .get(
     "/api/ciphers/:id/attachment/:attachmentId",
     requireCipher,
     ...getAttachment,
-  )
-  .post(
-    "/api/ciphers/:id/attachment/:attachmentId/delete",
-    requireCipher,
-    requireCipherWrite,
-    ...deleteAttachment,
   )
   .delete(
     "/api/ciphers/:id/attachment/:attachmentId",

@@ -3,7 +3,12 @@ import type { HonoEnv } from "../env";
 
 type HonoContext = Context<HonoEnv>;
 
-export type IpRateLimitScope = "identity" | "register" | "two-factor";
+export type IpRateLimitScope =
+  | "auth-request"
+  | "identity"
+  | "register"
+  | "send"
+  | "two-factor";
 
 /** IP-level rate limit — for login and other sensitive endpoints */
 export async function checkIpRateLimit(

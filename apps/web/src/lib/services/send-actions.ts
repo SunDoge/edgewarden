@@ -8,6 +8,7 @@ import { encryptBw, encryptBwFileData } from "$lib/services/crypto";
 import type { SendEditorDraft } from "$lib/services/send-editor";
 import {
   createSendKeys,
+  deriveSendPasswordHash,
   encryptSendMetadata,
   wrapSendKey,
   type SendKeys,
@@ -43,7 +44,7 @@ export async function saveOwnedSend({
 }) {
   validateSendDraft(form, isCreating);
   if (isEditing && !selectedSend) throw new Error("找不到要编辑的 Send");
-  const keys: SendKeys = selectedSend?._sendKeys ?? createSendKeys();
+  const keys: SendKeys = selectedSend?._sendKeys ?? (await createSendKeys());
   const encrypted = await encryptSendMetadata(
     {
       name: form.name,
@@ -72,7 +73,7 @@ export async function saveOwnedSend({
   };
   if (form.protectWithPassword && form.password) {
     payload.authType = 1;
-    payload.password = form.password;
+    payload.password = await deriveSendPasswordHash(form.password, keys.raw);
   } else if (!form.protectWithPassword) payload.authType = 2;
 
   if (isCreating && form.type === 0) {

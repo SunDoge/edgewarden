@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { deriveMasterKey } from "$lib/services/crypto";
   import {
     getTurnstileConfigApi,
@@ -21,11 +21,27 @@
   import { Spinner } from "$lib/components/ui/spinner/index.js";
   import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
   import { assertTwoFactorPasskeyCredential } from "$lib/services/passkeys";
-  import { Eye, EyeOff, ShieldAlert, KeyRound, Mail, Fingerprint } from "@lucide/svelte";
+  import {
+    Eye,
+    EyeOff,
+    ShieldAlert,
+    ShieldCheck,
+    KeyRound,
+    Mail,
+    Fingerprint,
+  } from "@lucide/svelte";
   import TurnstileWidget from "$lib/components/turnstile-widget.svelte";
   import { readDevLoginCredentials } from "$lib/services/dev-login";
   import ThemeToggle from "$lib/components/theme-toggle.svelte";
   import { match } from "ts-pattern";
+  import {
+    createDeviceLoginRequest,
+    exchangeApprovedDeviceLogin,
+    pollDeviceLoginRequest,
+    type ApprovedDeviceLogin,
+    type DeviceLoginRequest,
+  } from "$lib/services/auth-requests";
+  import { setMemoryAccessToken } from "$lib/services/rpc";
 
   let email = $state("");
   let password = $state("");
@@ -51,9 +67,16 @@
   let turnstileToken = $state("");
   let turnstileLoading = $state(true);
   let turnstileWidget = $state<{ reset(): void } | null>(null);
+  let deviceLoginRequest = $state<DeviceLoginRequest | null>(null);
+  let approvedDeviceLogin = $state<ApprovedDeviceLogin | null>(null);
+  let deviceLoginGeneration = 0;
 
   onMount(() => {
     void initializeLogin();
+  });
+
+  onDestroy(() => {
+    deviceLoginGeneration += 1;
   });
 
   async function initializeLogin() {
@@ -83,6 +106,10 @@
   }
 
   async function submitPasswordLogin() {
+    if (approvedDeviceLogin) {
+      await completeApprovedDeviceLogin();
+      return;
+    }
     if (!email || !password) {
       error = "请输入电子邮件和主密码。";
       return;
@@ -92,6 +119,7 @@
       return;
     }
 
+    cancelDeviceLogin();
     loading = true;
     error = "";
 
@@ -120,12 +148,54 @@
     }
   }
 
+  async function completeApprovedDeviceLogin() {
+    if (!approvedDeviceLogin || !twoFactorToken.trim()) {
+      error = "请输入两步验证码或恢复代码。";
+      return;
+    }
+    loading = true;
+    error = "";
+    const generation = deviceLoginGeneration;
+    try {
+      const result = await exchangeApprovedDeviceLogin(approvedDeviceLogin, {
+        token: twoFactorToken,
+        provider: twoFactorProvider,
+      });
+      if (generation !== deviceLoginGeneration) return;
+      setMemoryAccessToken(result.accessToken);
+      setSymmetricKeys(result.encKey, result.macKey);
+      approvedDeviceLogin = null;
+      await prepareVaultNavigation();
+      await goto("/vault");
+    } catch (caught) {
+      if (generation === deviceLoginGeneration)
+        error = errorMessage(caught, "两步验证失败，请重试。");
+    } finally {
+      if (generation === deviceLoginGeneration) loading = false;
+    }
+  }
+
   async function completeTwoFactorPasskey() {
     if (!twoFactorPasskeyChallenge) return;
     loading = true;
     error = "";
+    const generation = deviceLoginGeneration;
     try {
       const assertion = await assertTwoFactorPasskeyCredential(twoFactorPasskeyChallenge);
+      if (generation !== deviceLoginGeneration) return;
+      if (approvedDeviceLogin) {
+        const result = await exchangeApprovedDeviceLogin(approvedDeviceLogin, {
+          provider: "7",
+          token: JSON.stringify(assertion),
+        });
+        if (generation !== deviceLoginGeneration) return;
+        setMemoryAccessToken(result.accessToken);
+        setSymmetricKeys(result.encKey, result.macKey);
+        approvedDeviceLogin = null;
+        await prepareVaultNavigation();
+        await goto("/vault");
+        return;
+      }
       const { masterKey } = await login(
         email,
         password,
@@ -136,14 +206,17 @@
       await prepareVaultNavigation();
       await goto("/vault");
     } catch (value) {
-      error = value instanceof Error ? value.message : "安全密钥验证失败";
-      if (turnstileEnabled) turnstileWidget?.reset();
+      if (generation === deviceLoginGeneration) {
+        error = value instanceof Error ? value.message : "安全密钥验证失败";
+        if (turnstileEnabled) turnstileWidget?.reset();
+      }
     } finally {
-      loading = false;
+      if (generation === deviceLoginGeneration) loading = false;
     }
   }
 
   async function handlePasskeyLogin() {
+    cancelDeviceLogin();
     loading = true;
     error = "";
     try {
@@ -177,6 +250,80 @@
       error = err instanceof Error ? err.message : "主密码不正确";
     } finally {
       loading = false;
+    }
+  }
+
+  async function startDeviceLogin() {
+    if (deviceLoginRequest) return;
+    if (!email.trim()) {
+      error = "请先输入电子邮件地址。";
+      return;
+    }
+    loading = true;
+    error = "";
+    const generation = ++deviceLoginGeneration;
+    try {
+      const request = await createDeviceLoginRequest(email);
+      if (generation !== deviceLoginGeneration) return;
+      deviceLoginRequest = request;
+      loading = false;
+      while (generation === deviceLoginGeneration && deviceLoginRequest?.id === request.id) {
+        await new Promise((resolve) => setTimeout(resolve, 4_000));
+        if (generation !== deviceLoginGeneration || deviceLoginRequest?.id !== request.id) break;
+        const result = await pollDeviceLoginRequest(request);
+        if (generation !== deviceLoginGeneration) return;
+        if (result === "pending") continue;
+        if (result === "declined") {
+          deviceLoginRequest = null;
+          error = "设备登录请求已被拒绝。";
+          return;
+        }
+        try {
+          const exchanged = await exchangeApprovedDeviceLogin(result);
+          if (generation !== deviceLoginGeneration) return;
+          setMemoryAccessToken(exchanged.accessToken);
+          setSymmetricKeys(exchanged.encKey, exchanged.macKey);
+          deviceLoginRequest = null;
+          await prepareVaultNavigation();
+          await goto("/vault");
+          return;
+        } catch (caught) {
+          if (!isTwoFactorRequiredError(caught)) throw caught;
+          approvedDeviceLogin = result;
+          deviceLoginRequest = null;
+          twoFactorRequired = true;
+          twoFactorPasskeyChallenge = twoFactorPasskeyChallengeFromError(caught);
+          availableTwoFactorProviders = twoFactorProvidersFromError(caught);
+          if (
+            !availableTwoFactorProviders.includes("0") &&
+            availableTwoFactorProviders.includes("3")
+          )
+            twoFactorProvider = "3";
+          error = "设备已批准，请完成账户的两步验证。";
+          return;
+        }
+      }
+    } catch (caught) {
+      if (generation === deviceLoginGeneration) {
+        deviceLoginRequest = null;
+        error = errorMessage(caught, "设备批准登录失败，请重新发起请求。");
+      }
+    } finally {
+      if (generation === deviceLoginGeneration) loading = false;
+    }
+  }
+
+  function cancelDeviceLogin() {
+    const wasApproved = approvedDeviceLogin !== null;
+    deviceLoginGeneration += 1;
+    deviceLoginRequest = null;
+    approvedDeviceLogin = null;
+    if (wasApproved) {
+      twoFactorRequired = false;
+      twoFactorToken = "";
+      twoFactorPasskeyChallenge = null;
+      availableTwoFactorProviders = [];
+      error = "";
     }
   }
 </script>
@@ -228,6 +375,11 @@
           </Field.Field>
 
           {#if twoFactorRequired}
+            {#if approvedDeviceLogin}
+              <Field.Description>
+                已由另一台设备批准。账户的两步验证仍需单独完成，成功前批准请求不会被消费。
+              </Field.Description>
+            {/if}
             <Field.Field
               ><Field.Label for="two-factor-token"
                 >{match(twoFactorProvider)
@@ -266,41 +418,52 @@
                 disabled={loading || (turnstileEnabled && !turnstileToken)}
                 ><Fingerprint data-icon="inline-start" />使用安全密钥验证</Button
               >{/if}
-          {/if}
-
-          <Field.Field>
-            <Field.Label for="password">主密码</Field.Label>
-            <div class="relative">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                <KeyRound class="size-4" />
-              </span>
-              <Input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                placeholder="••••••••••••"
-                bind:value={password}
-                disabled={loading}
-                class="pl-10 pr-10"
-                required
-              />
+            {#if approvedDeviceLogin}
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-xs"
-                class="absolute right-1 top-1/2 -translate-y-1/2"
-                onclick={() => (showPassword = !showPassword)}
-                aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                class="w-full"
+                onclick={cancelDeviceLogin}
+                disabled={loading}>取消设备登录</Button
               >
-                {#if showPassword}
-                  <EyeOff data-icon />
-                {:else}
-                  <Eye data-icon />
-                {/if}
-              </Button>
-            </div>
-          </Field.Field>
+            {/if}
+          {/if}
 
-          {#if turnstileEnabled && turnstileSiteKey}
+          {#if !approvedDeviceLogin}
+            <Field.Field>
+              <Field.Label for="password">主密码</Field.Label>
+              <div class="relative">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  <KeyRound class="size-4" />
+                </span>
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••••••"
+                  bind:value={password}
+                  disabled={loading}
+                  class="pl-10 pr-10"
+                  required
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  class="absolute right-1 top-1/2 -translate-y-1/2"
+                  onclick={() => (showPassword = !showPassword)}
+                  aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                >
+                  {#if showPassword}
+                    <EyeOff data-icon />
+                  {:else}
+                    <Eye data-icon />
+                  {/if}
+                </Button>
+              </div>
+            </Field.Field>
+          {/if}
+
+          {#if turnstileEnabled && turnstileSiteKey && !approvedDeviceLogin}
             <TurnstileWidget
               bind:this={turnstileWidget}
               siteKey={turnstileSiteKey}
@@ -316,13 +479,15 @@
           <Button
             type="submit"
             class="w-full mt-2"
-            disabled={loading || turnstileLoading || (turnstileEnabled && !turnstileToken)}
+            disabled={loading ||
+              turnstileLoading ||
+              (!approvedDeviceLogin && turnstileEnabled && !turnstileToken)}
           >
             {#if loading}
               <Spinner data-icon="inline-start" />
               正在进行安全解密...
             {:else}
-              解锁密码库
+              {approvedDeviceLogin ? "完成两步验证" : "解锁密码库"}
             {/if}
           </Button>
         </Field.Group>
@@ -338,6 +503,30 @@
         onclick={handlePasskeyLogin}
         disabled={loading}><Fingerprint data-icon="inline-start" />使用通行密钥登录</Button
       >
+      <Button
+        type="button"
+        variant="outline"
+        class="mt-2 w-full"
+        onclick={startDeviceLogin}
+        disabled={loading || !!deviceLoginRequest || !!approvedDeviceLogin || !email.trim()}
+        ><ShieldCheck data-icon="inline-start" />使用设备批准登录</Button
+      >
+
+      {#if deviceLoginRequest}
+        <div class="mt-4 rounded-md border p-4 text-center">
+          <p class="text-sm font-medium">在已登录的设备上批准此请求</p>
+          <p class="mt-1 text-xs text-muted-foreground">请确认两台设备显示相同的验证短语：</p>
+          <code class="mt-3 block break-words text-sm font-semibold">
+            {deviceLoginRequest.fingerprintPhrase}
+          </code>
+          <div class="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+            <Spinner class="size-3.5" />等待批准，最长 15 分钟
+          </div>
+          <Button class="mt-3" type="button" size="sm" variant="ghost" onclick={cancelDeviceLogin}
+            >取消</Button
+          >
+        </div>
+      {/if}
 
       {#if passkeyUnlock}
         <form

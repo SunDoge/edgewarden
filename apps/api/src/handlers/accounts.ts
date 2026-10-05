@@ -339,73 +339,99 @@ export const requestPasswordHint = factory.createHandlers(async () => {
   return new Response(null, { status: 200 });
 });
 
-// GET /api/accounts/api-key
-// POST /api/accounts/rotate-api-key
-export const getApiKey = factory.createHandlers(async (c) => {
-  const user = c.get("user");
-  const db = c.get("db");
-  let key: string;
-  if (user.api_key_encrypted) {
-    try {
-      key = await decryptCredential(
-        user.api_key_encrypted,
-        c.env.DATA_ENCRYPTION_SECRET,
-        "api-key",
-      );
-    } catch {
-      return errorResponse("Stored API key cannot be decrypted", 500);
-    }
-  } else {
-    const candidate = crypto.randomUUID().replace(/-/g, "");
-    const [hash, encrypted] = await Promise.all([
-      hashCredential(candidate),
-      encryptCredential(candidate, c.env.DATA_ENCRYPTION_SECRET, "api-key"),
-    ]);
-    const created = await db
-      .updateTable("users")
-      .set({
-        api_key_hash: hash,
-        api_key_encrypted: encrypted,
-        updated_at: now(),
-      })
-      .where("id", "=", user.id)
-      .where("api_key_encrypted", "is", null)
-      .executeTakeFirst();
-    if (created.numUpdatedRows === 1n) {
-      key = candidate;
-      invalidateUserCache(user.id);
-    } else {
-      const winner = await db
-        .selectFrom("users")
-        .select("api_key_encrypted")
-        .where("id", "=", user.id)
-        .executeTakeFirst();
-      if (!winner?.api_key_encrypted)
-        return errorResponse("API key creation conflicted", 409);
+// API keys are account credentials. Match the current Bitwarden contract and
+// require fresh master-password verification before revealing or rotating one.
+export const getApiKey = factory.createHandlers(
+  vValidator("json", VerifyPasswordSchema),
+  async (c) => {
+    const user = c.get("user");
+    const { masterPasswordHash } = c.req.valid("json");
+    if (
+      !(await verifyPassword(
+        masterPasswordHash,
+        user.master_password_hash,
+        user.email,
+      ))
+    )
+      return errorResponse("Invalid password.", 400);
+
+    const db = c.get("db");
+    let key: string;
+    if (user.api_key_encrypted) {
       try {
         key = await decryptCredential(
-          winner.api_key_encrypted,
+          user.api_key_encrypted,
           c.env.DATA_ENCRYPTION_SECRET,
           "api-key",
         );
       } catch {
         return errorResponse("Stored API key cannot be decrypted", 500);
       }
+    } else {
+      const candidate = crypto.randomUUID().replace(/-/g, "");
+      const [hash, encrypted] = await Promise.all([
+        hashCredential(candidate),
+        encryptCredential(candidate, c.env.DATA_ENCRYPTION_SECRET, "api-key"),
+      ]);
+      const created = await db
+        .updateTable("users")
+        .set({
+          api_key_hash: hash,
+          api_key_encrypted: encrypted,
+          updated_at: now(),
+        })
+        .where("id", "=", user.id)
+        .where("api_key_encrypted", "is", null)
+        .executeTakeFirst();
+      if (created.numUpdatedRows === 1n) {
+        key = candidate;
+        invalidateUserCache(user.id);
+      } else {
+        const winner = await db
+          .selectFrom("users")
+          .select("api_key_encrypted")
+          .where("id", "=", user.id)
+          .executeTakeFirst();
+        if (!winner?.api_key_encrypted)
+          return errorResponse("API key creation conflicted", 409);
+        try {
+          key = await decryptCredential(
+            winner.api_key_encrypted,
+            c.env.DATA_ENCRYPTION_SECRET,
+            "api-key",
+          );
+        } catch {
+          return errorResponse("Stored API key cannot be decrypted", 500);
+        }
+      }
     }
-  }
-  return c.json({ apiKey: key, object: "apiKey" });
-});
+    return c.json({ apiKey: key, object: "apiKey" });
+  },
+);
 
-export const rotateApiKey = factory.createHandlers(async (c) => {
-  const user = c.get("user");
-  const key = await rotateUserApiKey(
-    c.get("db"),
-    user.id,
-    user.api_key_encrypted,
-    c.env.DATA_ENCRYPTION_SECRET,
-  );
-  if (!key)
-    return errorResponse("API key was rotated by another request.", 409);
-  invalidateUserCache(user.id);
-  return c.json({ apiKey: key, object: "apiKey" });
-});
+export const rotateApiKey = factory.createHandlers(
+  vValidator("json", VerifyPasswordSchema),
+  async (c) => {
+    const user = c.get("user");
+    const { masterPasswordHash } = c.req.valid("json");
+    if (
+      !(await verifyPassword(
+        masterPasswordHash,
+        user.master_password_hash,
+        user.email,
+      ))
+    )
+      return errorResponse("Invalid password.", 400);
+
+    const key = await rotateUserApiKey(
+      c.get("db"),
+      user.id,
+      user.api_key_encrypted,
+      c.env.DATA_ENCRYPTION_SECRET,
+    );
+    if (!key)
+      return errorResponse("API key was rotated by another request.", 409);
+    invalidateUserCache(user.id);
+    return c.json({ apiKey: key, object: "apiKey" });
+  },
+);

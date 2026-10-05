@@ -1,5 +1,14 @@
 import * as v from "valibot";
 
+const deviceTypeFormValue = v.pipe(
+  v.string(),
+  v.regex(/^(?:0|[1-9]\d{0,2})$/, "Device type must be an integer"),
+  v.check(
+    (value) => Number(value) <= 255,
+    "Device type must fit the Bitwarden byte enum",
+  ),
+);
+
 export const PreloginSchema = v.object({
   email: v.pipe(v.string(), v.email()),
 });
@@ -12,8 +21,8 @@ export const TokenFormSchema = v.object({
     "send_access",
     "webauthn",
   ]),
-  username: v.optional(v.string()),
-  password: v.optional(v.string()),
+  username: v.optional(v.pipe(v.string(), v.maxLength(254))),
+  password: v.optional(v.pipe(v.string(), v.maxLength(4096))),
   captchaResponse: v.optional(v.pipe(v.string(), v.maxLength(2048))),
   CaptchaResponse: v.optional(v.pipe(v.string(), v.maxLength(2048))),
   refresh_token: v.optional(v.string()),
@@ -25,17 +34,17 @@ export const TokenFormSchema = v.object({
   twoFactorRemember: v.optional(v.string()),
   TwoFactorRemember: v.optional(v.string()),
   // Device fields
-  deviceIdentifier: v.optional(v.string()),
-  DeviceIdentifier: v.optional(v.string()),
-  deviceName: v.optional(v.string()),
-  DeviceName: v.optional(v.string()),
-  deviceType: v.optional(v.string()),
-  DeviceType: v.optional(v.string()),
+  deviceIdentifier: v.optional(v.pipe(v.string(), v.maxLength(50))),
+  DeviceIdentifier: v.optional(v.pipe(v.string(), v.maxLength(50))),
+  deviceName: v.optional(v.pipe(v.string(), v.maxLength(128))),
+  DeviceName: v.optional(v.pipe(v.string(), v.maxLength(128))),
+  deviceType: v.optional(deviceTypeFormValue),
+  DeviceType: v.optional(deviceTypeFormValue),
   devicePushToken: v.optional(v.pipe(v.string(), v.maxLength(4096))),
   DevicePushToken: v.optional(v.pipe(v.string(), v.maxLength(4096))),
   // Auth request
-  authRequest: v.optional(v.string()),
-  AuthRequest: v.optional(v.string()),
+  authRequest: v.optional(v.pipe(v.string(), v.maxLength(36))),
+  AuthRequest: v.optional(v.pipe(v.string(), v.maxLength(36))),
   // Client creds
   client_id: v.optional(v.string()),
   client_secret: v.optional(v.string()),

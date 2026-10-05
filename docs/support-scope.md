@@ -62,8 +62,8 @@ Core scope includes:
 - Account registration, password login, logout, token refresh, API keys,
   password changes, account deletion, and session revocation.
 - Official-client sync, account revision tracking, conflict detection, and
-  background sync notifications when the optional Bitwarden Push Relay is
-  configured.
+  background sync and device-login approval notifications when the optional
+  Bitwarden Push Relay is configured.
 - All personal cipher types accepted by current clients, including login,
   secure note, card, identity, SSH key, bank account, driver license, and
   passport items.

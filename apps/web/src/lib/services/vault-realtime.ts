@@ -1,6 +1,7 @@
 export interface VaultRealtimeClientOptions {
   getTicket: () => Promise<string>;
   onRevision: (revision: number) => Promise<void> | void;
+  onAuthRequest?: (authRequestId: string) => Promise<void> | void;
   origin?: string;
   createSocket?: (url: string) => WebSocket;
   reconnectDelayMs?: number;
@@ -9,6 +10,7 @@ export interface VaultRealtimeClientOptions {
 export class VaultRealtimeClient {
   readonly #getTicket: () => Promise<string>;
   readonly #onRevision: (revision: number) => Promise<void> | void;
+  readonly #onAuthRequest: (authRequestId: string) => Promise<void> | void;
   readonly #origin: string;
   readonly #createSocket: (url: string) => WebSocket;
   readonly #reconnectDelayMs: number;
@@ -20,6 +22,7 @@ export class VaultRealtimeClient {
   constructor(options: VaultRealtimeClientOptions) {
     this.#getTicket = options.getTicket;
     this.#onRevision = options.onRevision;
+    this.#onAuthRequest = options.onAuthRequest ?? (() => undefined);
     this.#origin = options.origin ?? window.location.origin;
     this.#createSocket = options.createSocket ?? ((url) => new WebSocket(url));
     this.#reconnectDelayMs = options.reconnectDelayMs ?? 5_000;
@@ -51,11 +54,20 @@ export class VaultRealtimeClient {
       const socket = this.#createSocket(url.toString());
       this.#socket = socket;
       socket.addEventListener("message", (event) => {
-        const message = safeParseJsonWithSchema(
-          String(event.data),
+        const raw = String(event.data);
+        const revision = safeParseJsonWithSchema(
+          raw,
           VaultRevisionMessageSchema,
         );
-        if (message) void this.#onRevision(message.revisionDate);
+        if (revision) {
+          void this.#onRevision(revision.revisionDate);
+          return;
+        }
+        const authRequest = safeParseJsonWithSchema(
+          raw,
+          AuthRequestMessageSchema,
+        );
+        if (authRequest) void this.#onAuthRequest(authRequest.authRequestId);
       });
       socket.addEventListener("close", () => {
         if (this.#socket === socket) this.#socket = null;
@@ -83,4 +95,11 @@ import * as v from "valibot";
 const VaultRevisionMessageSchema = v.object({
   type: v.literal("vault-revision"),
   revisionDate: v.pipe(v.number(), v.finite()),
+});
+
+const AuthRequestMessageSchema = v.object({
+  type: v.literal("auth-request"),
+  authRequestId: v.pipe(v.string(), v.nonEmpty()),
+  userId: v.pipe(v.string(), v.nonEmpty()),
+  requestDeviceIdentifier: v.pipe(v.string(), v.nonEmpty()),
 });

@@ -48,7 +48,10 @@ import {
 } from "../services/db/config";
 import * as devicesDb from "../services/db/devices";
 import * as sendsDb from "../services/db/sends";
-import { issueIdentitySession } from "../services/identity-session";
+import {
+  authRequestConsumptionClaimQuery,
+  issueIdentitySession,
+} from "../services/identity-session";
 import { runMaintenance } from "../services/maintenance";
 import { publishSendFileObject } from "../services/sends/file-storage";
 import { hashRefreshToken } from "../utils/jwt";
@@ -769,6 +772,7 @@ export function registerDatabaseMaintenanceScenarios(
           encrypted_public_key: null,
           encrypted_private_key: null,
           supports_prf: 0,
+          provider_key_id: attempt,
           mutation_token: crypto.randomUUID(),
           created_at: timestamp,
           updated_at: timestamp,
@@ -1208,6 +1212,166 @@ export function registerDatabaseMaintenanceScenarios(
     }
   });
 
+  test("does not consume an auth request that expires before the final session claim", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .selectAll()
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const requestId = crypto.randomUUID();
+    const timestamp = Math.floor(Date.now() / 1000);
+    const consumptionToken = crypto.randomUUID();
+    try {
+      const refreshTokensBefore = await db
+        .selectFrom("refresh_tokens")
+        .select(({ fn }) => fn.countAll<number>().as("count"))
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      await db
+        .insertInto("auth_requests")
+        .values({
+          id: requestId,
+          user_id: user.id,
+          organization_id: null,
+          type: 0,
+          request_device_identifier: "expired-auth-request",
+          request_device_type: 0,
+          request_ip_address: null,
+          request_country_name: null,
+          response_device_identifier: "approving-device",
+          access_code_hash: "hash",
+          public_key: "public-key",
+          key: "encrypted-key",
+          master_password_hash: null,
+          approved: 1,
+          creation_date:
+            timestamp - authRequestsDb.AUTH_REQUEST_TTL_SECONDS - 1,
+          response_date: timestamp - 1,
+          authentication_date: null,
+          consumption_token: null,
+        })
+        .execute();
+
+      const session = await issueIdentitySession({
+        db,
+        dialect,
+        user,
+        device: { identifier: "", name: "", type: 0 },
+        jwtSecret: context.bindings.JWT_SECRET,
+        authRequest: { id: requestId, token: consumptionToken },
+      });
+      assert.equal(session, null);
+
+      const stored = await authRequestsDb.getAuthRequestById(db, requestId);
+      assert.ok(stored);
+      assert.equal(stored.authentication_date, null);
+      assert.equal(stored.consumption_token, null);
+      const refreshTokensAfter = await db
+        .selectFrom("refresh_tokens")
+        .select(({ fn }) => fn.countAll<number>().as("count"))
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow();
+      assert.equal(
+        Number(refreshTokensAfter.count),
+        Number(refreshTokensBefore.count),
+      );
+    } finally {
+      await db
+        .deleteFrom("auth_requests")
+        .where("id", "=", requestId)
+        .execute();
+      await db.destroy();
+    }
+  });
+
+  test("leaves an approved auth request unconsumed after a concurrent device-session conflict", async () => {
+    const { db, dialect } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .selectAll()
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const requestId = crypto.randomUUID();
+    const deviceIdentifier = `claim-conflict-${crypto.randomUUID()}`;
+    const currentDeviceStamp = crypto.randomUUID();
+    const staleDeviceStamp = crypto.randomUUID();
+    const timestamp = Math.floor(Date.now() / 1000);
+    try {
+      await db
+        .insertInto("auth_requests")
+        .values({
+          id: requestId,
+          user_id: user.id,
+          organization_id: null,
+          type: 0,
+          request_device_identifier: deviceIdentifier,
+          request_device_type: 0,
+          request_ip_address: null,
+          request_country_name: null,
+          response_device_identifier: "approving-device",
+          access_code_hash: "hash",
+          public_key: "public-key",
+          key: "encrypted-key",
+          master_password_hash: null,
+          approved: 1,
+          creation_date: timestamp,
+          response_date: timestamp,
+          authentication_date: null,
+          consumption_token: null,
+        })
+        .execute();
+      await devicesDb.upsertDevice(
+        db,
+        user.id,
+        deviceIdentifier,
+        "Concurrent device",
+        0,
+        currentDeviceStamp,
+      );
+
+      const staleClaim = await dialect.batch([
+        authRequestConsumptionClaimQuery(db, {
+          request: { id: requestId, token: "stale-claim" },
+          userId: user.id,
+          expectedSecurityStamp: user.security_stamp,
+          deviceSession: {
+            identifier: deviceIdentifier,
+            sessionStamp: staleDeviceStamp,
+          },
+          timestamp,
+        }),
+      ]);
+      assert.equal(staleClaim[0].numAffectedRows, 0n);
+      assert.equal(
+        (await authRequestsDb.getAuthRequestById(db, requestId))
+          ?.consumption_token,
+        null,
+      );
+
+      const currentClaim = await dialect.batch([
+        authRequestConsumptionClaimQuery(db, {
+          request: { id: requestId, token: "current-claim" },
+          userId: user.id,
+          expectedSecurityStamp: user.security_stamp,
+          deviceSession: {
+            identifier: deviceIdentifier,
+            sessionStamp: currentDeviceStamp,
+          },
+          timestamp,
+        }),
+      ]);
+      assert.equal(currentClaim[0].numAffectedRows, 1n);
+    } finally {
+      await devicesDb.deleteDevice(db, user.id, deviceIdentifier);
+      await db
+        .deleteFrom("auth_requests")
+        .where("id", "=", requestId)
+        .execute();
+      await db.destroy();
+    }
+  });
+
   test("decides a pending auth request only once", async () => {
     const { db } = await createDatabase(context.database);
     const user = await db
@@ -1261,6 +1425,148 @@ export function registerDatabaseMaintenanceScenarios(
       await db
         .deleteFrom("auth_requests")
         .where("id", "=", requestId)
+        .execute();
+      await db.destroy();
+    }
+  });
+
+  test("only approves the latest same-device request but can reject an older one", async () => {
+    const { db } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const olderId = crypto.randomUUID();
+    const newerId = crypto.randomUUID();
+    const deviceIdentifier = `latest-request-${crypto.randomUUID()}`;
+    try {
+      for (const id of [olderId, newerId]) {
+        await authRequestsDb.createAuthRequest(db, {
+          id,
+          userId: user.id,
+          type: 0,
+          requestDeviceIdentifier: deviceIdentifier,
+          requestDeviceType: 0,
+          requestIpAddress: null,
+          accessCodeHash: "hash",
+          publicKey: "public-key",
+        });
+      }
+
+      // Reproduce the normal same-second case explicitly. SQLite rowid records
+      // insertion order even though the public protocol timestamp is identical.
+      const creationDate = Math.floor(Date.now() / 1000);
+      await db
+        .updateTable("auth_requests")
+        .set({ creation_date: creationDate })
+        .where("id", "in", [olderId, newerId])
+        .execute();
+
+      const pending = await authRequestsDb.getPendingAuthRequestsByUserId(
+        db,
+        user.id,
+      );
+      const sameDevice = pending.filter(
+        (request) => request.request_device_identifier === deviceIdentifier,
+      );
+      assert.deepEqual(
+        sameDevice.map((request) => request.id),
+        [newerId],
+      );
+
+      assert.equal(
+        await authRequestsDb.approveAuthRequest(
+          db,
+          olderId,
+          true,
+          "approver",
+          "encrypted-key",
+          null,
+        ),
+        false,
+      );
+      assert.equal(
+        await authRequestsDb.approveAuthRequest(
+          db,
+          olderId,
+          false,
+          "approver",
+          null,
+          null,
+        ),
+        true,
+      );
+      assert.equal(
+        await authRequestsDb.approveAuthRequest(
+          db,
+          newerId,
+          true,
+          "approver",
+          "encrypted-key",
+          null,
+        ),
+        true,
+      );
+    } finally {
+      await db
+        .deleteFrom("auth_requests")
+        .where("id", "in", [olderId, newerId])
+        .execute();
+      await db.destroy();
+    }
+  });
+
+  test("maintenance deletes device approval requests only after their 15-minute lifetime", async () => {
+    const { db } = await createDatabase(context.database);
+    const user = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", EMAIL)
+      .executeTakeFirstOrThrow();
+    const expiredId = crypto.randomUUID();
+    const boundaryId = crypto.randomUUID();
+    const timestamp = Math.floor(Date.now() / 1000);
+    try {
+      for (const id of [expiredId, boundaryId]) {
+        await authRequestsDb.createAuthRequest(db, {
+          id,
+          userId: user.id,
+          type: 0,
+          requestDeviceIdentifier: `maintenance-${id}`,
+          requestDeviceType: 0,
+          requestIpAddress: null,
+          accessCodeHash: "hash",
+          publicKey: "public-key",
+        });
+      }
+      await db
+        .updateTable("auth_requests")
+        .set({
+          creation_date:
+            timestamp - authRequestsDb.AUTH_REQUEST_TTL_SECONDS - 1,
+        })
+        .where("id", "=", expiredId)
+        .execute();
+      await db
+        .updateTable("auth_requests")
+        .set({
+          creation_date: timestamp - authRequestsDb.AUTH_REQUEST_TTL_SECONDS,
+        })
+        .where("id", "=", boundaryId)
+        .execute();
+
+      await runMaintenance(db, context.bindings, timestamp);
+
+      assert.equal(
+        await authRequestsDb.getAuthRequestById(db, expiredId),
+        null,
+      );
+      assert.ok(await authRequestsDb.getAuthRequestById(db, boundaryId));
+    } finally {
+      await db
+        .deleteFrom("auth_requests")
+        .where("id", "in", [expiredId, boundaryId])
         .execute();
       await db.destroy();
     }
@@ -1836,6 +2142,7 @@ export function registerDatabaseMaintenanceScenarios(
       .executeTakeFirstOrThrow();
     const cipherId = crypto.randomUUID();
     const attachmentId = crypto.randomUUID();
+    const pendingAttachmentId = crypto.randomUUID();
     const sendId = crypto.randomUUID();
     const fileId = crypto.randomUUID();
     const refreshToken = `expired-${crypto.randomUUID()}`;
@@ -1909,6 +2216,18 @@ export function registerDatabaseMaintenanceScenarios(
         })
         .execute();
       await db
+        .insertInto("attachment_uploads")
+        .values({
+          id: pendingAttachmentId,
+          cipher_id: cipherId,
+          file_name: "pending-encrypted-name",
+          size: 3,
+          key: "pending-encrypted-key",
+          created_at: timestamp - 2,
+          expires_at: timestamp - 1,
+        })
+        .execute();
+      await db
         .insertInto("sends")
         .values({
           id: sendId,
@@ -1944,6 +2263,7 @@ export function registerDatabaseMaintenanceScenarios(
       const result = await runMaintenance(db, context.bindings, timestamp);
       assert.ok(result.refreshTokens >= 1);
       assert.ok(result.webauthnChallenges >= 2);
+      assert.ok(result.attachmentUploads >= 1);
       assert.equal(result.purgedCiphers, 0);
       assert.equal(result.purgedSends, 0);
       assert.equal(
@@ -1958,6 +2278,14 @@ export function registerDatabaseMaintenanceScenarios(
           .where("challenge_hash", "in", [expiredChallenge, usedChallenge])
           .execute(),
         [],
+      );
+      assert.equal(
+        await db
+          .selectFrom("attachment_uploads")
+          .select("id")
+          .where("id", "=", pendingAttachmentId)
+          .executeTakeFirst(),
+        undefined,
       );
       assert.equal(
         await db

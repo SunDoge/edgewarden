@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { WorkerBindings } from "../worker-bindings";
 import {
   getPushRelayStatus,
+  publishPushAuthRequest,
   publishPushAuthRequestResponse,
   publishPushVaultChange,
   registerPushDevice,
@@ -164,6 +165,42 @@ describe("Bitwarden push relay", () => {
         deviceId: null,
         identifier: "approving-device",
         type: 16,
+        payload: { userId: "user-id", id: "request-id" },
+        clientType: null,
+        installationId: null,
+      },
+    ]);
+  });
+
+  it("sends the Bitwarden new auth-request payload to other devices", async () => {
+    const bodies: unknown[] = [];
+    const fetcher = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith("/connect/token"))
+          return Response.json({ access_token: "token", expires_in: 600 });
+        bodies.push(JSON.parse(String(init?.body)));
+        return new Response(null, { status: 200 });
+      },
+    ) as typeof fetch;
+
+    await publishPushAuthRequest(
+      bindings({
+        PUSH_INSTALLATION_ID: "id",
+        PUSH_INSTALLATION_KEY: "key",
+      }),
+      "user-id",
+      "request-id",
+      "requesting-device",
+      { fetcher, cache: null },
+    );
+
+    expect(bodies).toEqual([
+      {
+        userId: "user-id",
+        organizationId: null,
+        deviceId: null,
+        identifier: "requesting-device",
+        type: 15,
         payload: { userId: "user-id", id: "request-id" },
         clientType: null,
         installationId: null,

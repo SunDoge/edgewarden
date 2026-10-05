@@ -8,8 +8,8 @@ import {
 } from "./backup/operation-lease";
 import { type BlobGcResult, drainBlobGcQueue } from "./blob-gc";
 import { createBlobStore } from "./blob-store";
+import { AUTH_REQUEST_TTL_SECONDS } from "./db/auth-requests";
 
-const AUTH_REQUEST_RETENTION_SECONDS = 24 * 60 * 60;
 const LOGIN_ATTEMPT_RETENTION_SECONDS = 24 * 60 * 60;
 
 export interface MaintenanceResult {
@@ -17,6 +17,7 @@ export interface MaintenanceResult {
   deviceTrustTokens: number;
   webauthnChallenges: number;
   attachmentDownloadTokens: number;
+  attachmentUploads: number;
   authRequests: number;
   loginAttempts: number;
   expiredInvites: number;
@@ -79,10 +80,16 @@ export async function runMaintenance(
       .where("expires_at", "<=", timestamp)
       .executeTakeFirst(),
   );
+  const attachmentUploads = affectedRows(
+    await db
+      .deleteFrom("attachment_uploads")
+      .where("expires_at", "<=", timestamp)
+      .executeTakeFirst(),
+  );
   const authRequests = affectedRows(
     await db
       .deleteFrom("auth_requests")
-      .where("creation_date", "<=", timestamp - AUTH_REQUEST_RETENTION_SECONDS)
+      .where("creation_date", "<", timestamp - AUTH_REQUEST_TTL_SECONDS)
       .executeTakeFirst(),
   );
   const loginAttempts = affectedRows(
@@ -110,6 +117,7 @@ export async function runMaintenance(
     deviceTrustTokens,
     webauthnChallenges,
     attachmentDownloadTokens,
+    attachmentUploads,
     authRequests,
     loginAttempts,
     expiredInvites,

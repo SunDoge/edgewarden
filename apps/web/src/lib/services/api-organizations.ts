@@ -46,7 +46,7 @@ export async function deleteOrganizationApi(
 
 export async function getOrganizationInviteeApi(orgId: string, email: string) {
   return (await rpcJson(
-    await rpc.api.organizations[":orgId"].invitee.$get({
+    await rpc.api.edgewarden.organizations[":orgId"].invitee.$get({
       param: { orgId },
       query: { email },
     }),
@@ -55,7 +55,9 @@ export async function getOrganizationInviteeApi(orgId: string, email: string) {
 
 export async function listOrganizationMembersApi(orgId: string) {
   return (await rpcJson(
-    await rpc.api.organizations[":orgId"].members.$get({ param: { orgId } }),
+    await rpc.api.edgewarden.organizations[":orgId"].members.$get({
+      param: { orgId },
+    }),
   )) as ApiList<OrganizationMember>;
 }
 
@@ -74,7 +76,7 @@ export async function inviteOrganizationMemberApi(
   },
 ) {
   return rpcJson(
-    await rpc.api.organizations[":orgId"].members.$post({
+    await rpc.api.edgewarden.organizations[":orgId"].members.$post({
       param: { orgId },
       json: payload,
     }),
@@ -95,7 +97,7 @@ export async function updateOrganizationMemberApi(
   },
 ) {
   return rpcJson(
-    await rpc.api.organizations[":orgId"].members[":memberId"].$put({
+    await rpc.api.edgewarden.organizations[":orgId"].members[":memberId"].$put({
       param: { orgId, memberId },
       json: payload,
     }),
@@ -107,7 +109,9 @@ export async function removeOrganizationMemberApi(
   memberId: string,
 ): Promise<void> {
   rpcVoid(
-    await rpc.api.organizations[":orgId"].members[":memberId"].$delete({
+    await rpc.api.edgewarden.organizations[":orgId"].members[
+      ":memberId"
+    ].$delete({
       param: { orgId, memberId },
     }),
   );

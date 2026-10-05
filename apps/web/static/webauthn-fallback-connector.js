@@ -14,20 +14,29 @@
 
   function decodeBase64Utf8(value) {
     const binary = atob(value.replace(/ /g, "+"));
-    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const bytes = Uint8Array.from(binary, (character) =>
+      character.charCodeAt(0),
+    );
     return new TextDecoder().decode(bytes);
   }
 
   function base64UrlToBytes(value) {
     const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized + "=".repeat((4 - (normalized.length % 4 || 4)) % 4);
-    return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+    const padded =
+      normalized + "=".repeat((4 - (normalized.length % 4 || 4)) % 4);
+    return Uint8Array.from(atob(padded), (character) =>
+      character.charCodeAt(0),
+    );
   }
 
   function bytesToBase64Url(value) {
     let binary = "";
-    for (const byte of new Uint8Array(value)) binary += String.fromCharCode(byte);
-    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+    for (const byte of new Uint8Array(value))
+      binary += String.fromCharCode(byte);
+    return btoa(binary)
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/g, "");
   }
 
   // Bitwarden clients have used both a direct PublicKeyCredentialRequestOptions
@@ -43,7 +52,11 @@
       value?.options ??
       value?.data ??
       value;
-    if (!options || typeof options !== "object" || typeof options.challenge !== "string") {
+    if (
+      !options ||
+      typeof options !== "object" ||
+      typeof options.challenge !== "string"
+    ) {
       throw new Error("Invalid WebAuthn challenge data.");
     }
     options.challenge = base64UrlToBytes(options.challenge);
@@ -67,7 +80,9 @@
         authenticatorData: bytesToBase64Url(response.authenticatorData),
         clientDataJson: bytesToBase64Url(response.clientDataJSON),
         signature: bytesToBase64Url(response.signature),
-        ...(response.userHandle ? { userHandle: bytesToBase64Url(response.userHandle) } : {}),
+        ...(response.userHandle
+          ? { userHandle: bytesToBase64Url(response.userHandle) }
+          : {}),
       },
     });
   }
@@ -79,10 +94,13 @@
     }
     button.disabled = true;
     button.textContent = decodeURIComponent(
-      params.get("btnAwaitingInteractionText") || "Awaiting security key interaction...",
+      params.get("btnAwaitingInteractionText") ||
+        "Awaiting security key interaction...",
     );
     try {
-      const credential = await navigator.credentials.get({ publicKey: parseRequestOptions() });
+      const credential = await navigator.credentials.get({
+        publicKey: parseRequestOptions(),
+      });
       if (!credential) throw new Error("No credential was returned.");
       window.postMessage(
         {
@@ -97,10 +115,14 @@
     } catch (error) {
       showMessage(error);
       button.disabled = false;
-      button.textContent = decodeURIComponent(params.get("btnText") || "Read security key");
+      button.textContent = decodeURIComponent(
+        params.get("btnText") || "Read security key",
+      );
     }
   }
 
-  button.textContent = decodeURIComponent(params.get("btnText") || "Read security key");
+  button.textContent = decodeURIComponent(
+    params.get("btnText") || "Read security key",
+  );
   button.addEventListener("click", authenticate);
 })();

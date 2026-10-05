@@ -161,8 +161,10 @@ export function getAccountPasskeyRpConfig(
   return { rpId, rpName, origins: Array.from(origins) };
 }
 
-export function userIdToWebAuthnUserId(userId: string): Uint8Array {
-  return new TextEncoder().encode(userId);
+export function userIdToWebAuthnUserId(
+  userId: string,
+): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(new TextEncoder().encode(userId));
 }
 
 export function userHandleToUserId(

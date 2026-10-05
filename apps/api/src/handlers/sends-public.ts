@@ -1,7 +1,5 @@
-import { vValidator } from "@hono/valibot-validator";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
-import { SendAccessSchema } from "../schemas/sends";
 import { discardUnpublishedBlob } from "../services/blob-gc";
 import {
   createSendFileUploadObjectKey,
@@ -14,11 +12,6 @@ import * as sendsDb from "../services/db/sends";
 import { publishSendFileObject } from "../services/sends/file-storage";
 import { getSafeSendJwtSecret } from "../services/sends/jwt-secret";
 import {
-  verifySendPassword,
-  verifySendPasswordHashB64,
-} from "../services/sends/password";
-import {
-  fromAccessId,
   getCreatorIdentifier,
   isSendAvailable,
   parseInteger,
@@ -47,59 +40,6 @@ async function sendFileExists(
   await object.body?.cancel().catch(() => undefined);
   return object.size === expectedSize;
 }
-
-export const accessPublicSend = factory.createHandlers(
-  vValidator("json", SendAccessSchema),
-  async (c) => {
-    const db = c.get("db");
-    const idOrAccessId = c.req.param("idOrAccessId") ?? "";
-    const sendId = fromAccessId(idOrAccessId) || idOrAccessId;
-
-    const send = await sendsDb.getSendById(db, sendId);
-    if (!send || !isSendAvailable(send)) {
-      return errorResponse(
-        "Send does not exist or is no longer available",
-        404,
-      );
-    }
-
-    const body = c.req.valid("json");
-    if (send.password_hash) {
-      const password = body.password ?? body.Password;
-      const passwordHashB64 =
-        body.passwordHash ?? body.PasswordHash ?? body.password_hash_b64;
-
-      let ok = false;
-      if (password) {
-        ok = await verifySendPassword(send, password);
-      } else if (passwordHashB64) {
-        ok = verifySendPasswordHashB64(send, passwordHashB64);
-      }
-
-      if (!ok) {
-        return errorResponse("Invalid password", 401);
-      }
-    }
-
-    if (send.type === 0) {
-      if (!(await sendsDb.consumeAccess(db, send.id)))
-        return errorResponse(
-          "Send does not exist or is no longer available",
-          404,
-        );
-    }
-
-    const creatorIdentifier = await getCreatorIdentifier(db, send);
-    const consumed =
-      send.type === 0 ? await sendsDb.getSendById(db, send.id) : send;
-    if (!consumed)
-      return errorResponse(
-        "Send does not exist or is no longer available",
-        404,
-      );
-    return c.json(sendToAccessResponse(consumed, creatorIdentifier));
-  },
-);
 
 export const accessSendWithToken = factory.createHandlers(async (c) => {
   const db = c.get("db");
@@ -184,79 +124,6 @@ export const accessSendFileWithToken = factory.createHandlers(async (c) => {
   });
 });
 
-export const accessPublicSendFile = factory.createHandlers(
-  vValidator("json", SendAccessSchema),
-  async (c) => {
-    const db = c.get("db");
-    const secret = getSafeSendJwtSecret(c.env);
-    if (!secret) return errorResponse("Server configuration error", 500);
-
-    const idOrAccessId = c.req.param("idOrAccessId") ?? "";
-    const sendId = fromAccessId(idOrAccessId) || idOrAccessId;
-
-    const send = await sendsDb.getSendById(db, sendId);
-    if (!send || !isSendAvailable(send) || send.type !== 1) {
-      return errorResponse(
-        "Send does not exist or is no longer available",
-        404,
-      );
-    }
-
-    const fileId = c.req.param("fileId");
-    const fileData = parseStoredSendData(send);
-    if (String(fileData.id || "") !== fileId) {
-      return errorResponse("Send file does not match send data.", 400);
-    }
-
-    const body = c.req.valid("json");
-    if (send.password_hash) {
-      const password = body.password ?? body.Password;
-      const passwordHashB64 =
-        body.passwordHash ?? body.PasswordHash ?? body.password_hash_b64;
-
-      let ok = false;
-      if (password) {
-        ok = await verifySendPassword(send, password);
-      } else if (passwordHashB64) {
-        ok = verifySendPasswordHashB64(send, passwordHashB64);
-      }
-
-      if (!ok) {
-        return errorResponse("Invalid password", 401);
-      }
-    }
-
-    if (
-      !(await sendFileExists(
-        c.env,
-        getStoredSendFileObjectKey(send, fileId),
-        parseInteger(fileData.size),
-      ))
-    )
-      return errorResponse("Send file not found", 404);
-    if (!(await sendsDb.consumeAccess(db, send.id)))
-      return errorResponse(
-        "Send does not exist or is no longer available",
-        404,
-      );
-
-    const downloadToken = await createSendFileDownloadToken(
-      send.id,
-      fileId,
-      getStoredSendFileObjectKey(send, fileId),
-      secret,
-    );
-    const url = new URL(c.req.url);
-    const downloadUrl = `${url.origin}/api/sends/${send.id}/${fileId}?t=${downloadToken}`;
-
-    return c.json({
-      object: "send-fileDownload",
-      id: fileId,
-      url: downloadUrl,
-    });
-  },
-);
-
 export const downloadSendFile = factory.createHandlers(async (c) => {
   const secret = getSafeSendJwtSecret(c.env);
   if (!secret) return errorResponse("Server configuration error", 500);
@@ -267,8 +134,7 @@ export const downloadSendFile = factory.createHandlers(async (c) => {
   const claims = await verifySendFileDownloadToken(token, secret);
   if (!claims) return errorResponse("Invalid or expired token", 401);
 
-  const idOrAccessId = c.req.param("idOrAccessId") ?? "";
-  const sendId = fromAccessId(idOrAccessId) || idOrAccessId;
+  const sendId = c.req.param("idOrAccessId") ?? "";
   const fileId = c.req.param("fileId");
 
   if (claims.sendId !== sendId || claims.fileId !== fileId) {

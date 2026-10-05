@@ -5,27 +5,52 @@ import {
   decodeSendShareKey,
   decryptOwnedSend,
   decryptPublicSend,
+  deriveSendPasswordHash,
   encodeSendShareKey,
   encryptSendMetadata,
   wrapSendKey,
 } from "./send-crypto";
 
 describe("Send client-side encryption", () => {
-  it("round-trips an exact 64-byte URL-fragment key", () => {
-    const keys = createSendKeys();
-    expect(decodeSendShareKey(encodeSendShareKey(keys.raw)).raw).toEqual(
-      keys.raw,
+  it("matches an independently generated HKDF-SHA256 protocol vector", async () => {
+    const raw = Uint8Array.from({ length: 16 }, (_, index) => index);
+    const keys = await decodeSendShareKey(encodeSendShareKey(raw));
+    const hex = (value: Uint8Array) =>
+      Array.from(value, (byte) => byte.toString(16).padStart(2, "0")).join("");
+
+    expect(hex(keys.enc)).toBe(
+      "063a955a1c01b4e1aacb7cd359c919b2cb61041c0c05c94c0eb76fb9a9e144b3",
     );
-    expect(() =>
+    expect(hex(keys.mac)).toBe(
+      "fbeca074de1437a1a2330ad2833138abf3be2561a3a30ae1f33e15e1a2f7ca04",
+    );
+  });
+
+  it("matches an independently generated Send password PBKDF2 vector", async () => {
+    const raw = Uint8Array.from({ length: 16 }, (_, index) => index);
+    await expect(
+      deriveSendPasswordHash("correct horse battery staple", raw),
+    ).resolves.toBe("SdScJfWXhGIJ8Nkud3CrZOHHXpS0zmxQkmXuZxddKh4=");
+  });
+
+  it("derives and round-trips the official 16-byte URL-fragment key", async () => {
+    const keys = await createSendKeys();
+    expect(keys.raw).toHaveLength(16);
+    expect(keys.enc).toHaveLength(32);
+    expect(keys.mac).toHaveLength(32);
+    expect(
+      (await decodeSendShareKey(encodeSendShareKey(keys.raw))).raw,
+    ).toEqual(keys.raw);
+    await expect(
       decodeSendShareKey(encodeSendShareKey(keys.raw.slice(1))),
-    ).toThrow(/长度/);
-    expect(() => decodeSendShareKey("bad$key")).toThrow(/格式/);
+    ).rejects.toThrow(/长度/);
+    await expect(decodeSendShareKey("bad$key")).rejects.toThrow(/格式/);
   });
 
   it("keeps names, notes and text encrypted in server payloads", async () => {
     const userEnc = crypto.getRandomValues(new Uint8Array(32));
     const userMac = crypto.getRandomValues(new Uint8Array(32));
-    const keys = createSendKeys();
+    const keys = await createSendKeys();
     const metadata = await encryptSendMetadata(
       { name: "Payroll", notes: "private note", text: "salary secret" },
       keys,
@@ -59,7 +84,7 @@ describe("Send client-side encryption", () => {
   });
 
   it("encrypts file names with the Send key", async () => {
-    const keys = createSendKeys();
+    const keys = await createSendKeys();
     const encrypted = await encryptSendMetadata({ name: "Transfer" }, keys);
     const fileName = await (await import("./crypto")).encryptBw(
       new TextEncoder().encode("tax.pdf"),

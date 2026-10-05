@@ -50,4 +50,25 @@ describe("SignalR wire protocol", () => {
     expect(length).toBe(bytes.length - prefixLength);
     expect(bytes[prefixLength]).toBe(0x96);
   });
+
+  it("encodes Bitwarden auth-request notifications with the requesting context", () => {
+    const payload = { UserId: "user-id", Id: "request-id" };
+    const json = encodeSignalRInvocation(
+      "json",
+      15,
+      payload,
+      "requesting-device",
+    );
+    expect(JSON.parse(String(json).slice(0, -1))).toMatchObject({
+      type: 1,
+      target: "ReceiveMessage",
+      arguments: [
+        {
+          ContextId: "requesting-device",
+          Type: 15,
+          Payload: payload,
+        },
+      ],
+    });
+  });
 });

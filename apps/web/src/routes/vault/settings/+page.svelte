@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import {
     deleteAccountApi,
     disableTwoFactorApi,
@@ -54,6 +55,12 @@
   let totpOpen = $state(false);
   let totpKey = $state("");
   let totpToken = $state("");
+  let totpVerificationToken = $state("");
+  let verificationOpen = $state(false);
+  let verificationPassword = $state("");
+  let verificationAction = $state<"totp" | "recovery" | "api-key-reveal" | "api-key-rotate">(
+    "totp",
+  );
   let disableOpen = $state(false);
   let masterPassword = $state("");
   let recoveryCode = $state("");
@@ -131,30 +138,6 @@
     }
   }
 
-  async function revealApiKey() {
-    busy = "api-key";
-    try {
-      apiKey = (await fetchApiKeyApi()).apiKey;
-    } catch (e) {
-      fail(e);
-    } finally {
-      busy = "";
-    }
-  }
-
-  async function rotateApiKey() {
-    rotateApiKeyOpen = false;
-    busy = "api-key";
-    try {
-      apiKey = (await rotateApiKeyApi()).apiKey;
-      message = "API Key 已轮换";
-    } catch (e) {
-      fail(e);
-    } finally {
-      busy = "";
-    }
-  }
-
   async function copy(value: string) {
     await navigator.clipboard.writeText(value);
     message = "已复制到剪贴板";
@@ -175,13 +158,41 @@
     }
   }
 
-  async function beginTotp() {
-    busy = "totp";
+  function requestSensitiveAction(
+    action: "totp" | "recovery" | "api-key-reveal" | "api-key-rotate",
+  ) {
+    verificationAction = action;
+    verificationPassword = "";
+    verificationOpen = true;
+  }
+
+  function resetTotpSetup() {
+    totpKey = "";
+    totpToken = "";
+    totpVerificationToken = "";
+  }
+
+  async function verifySensitiveAction() {
+    if (!verificationPassword) return;
+    busy = "verification";
     try {
-      const result = await getAuthenticatorApi();
-      totpKey = result.key;
-      totpToken = "";
-      totpOpen = true;
+      const hash = await passwordHash(verificationPassword);
+      if (verificationAction === "totp") {
+        const result = await getAuthenticatorApi(hash);
+        totpKey = result.authenticator.key;
+        totpVerificationToken = result.userVerificationToken;
+        totpToken = "";
+        totpOpen = true;
+      } else if (verificationAction === "recovery") {
+        recoveryCode = (await fetchRecoveryCodeApi(hash)).code ?? "";
+      } else if (verificationAction === "api-key-reveal") {
+        apiKey = (await fetchApiKeyApi(hash)).apiKey;
+      } else {
+        apiKey = (await rotateApiKeyApi(hash)).apiKey;
+        message = "API Key 已轮换";
+      }
+      verificationOpen = false;
+      verificationPassword = "";
     } catch (e) {
       fail(e);
     } finally {
@@ -193,13 +204,18 @@
     if (!profile) return;
     busy = "totp-enable";
     try {
-      const result = await enableAuthenticatorApi(totpKey, totpToken.replace(/\s/g, ""));
+      const result = await enableAuthenticatorApi(
+        totpKey,
+        totpToken.replace(/\s/g, ""),
+        totpVerificationToken,
+      );
       profile.twoFactorEnabled = true;
       totpEnabled = true;
       totpOpen = false;
       recoveryCode = result.recoveryCode;
       recoveryConfirmed = false;
       recoveryOpen = true;
+      totpVerificationToken = "";
       message = "身份验证器已启用，请先保存恢复代码";
     } catch (e) {
       fail(e);
@@ -208,15 +224,10 @@
     }
   }
 
-  async function showRecoveryCode() {
-    busy = "recovery";
-    try {
-      recoveryCode = (await fetchRecoveryCodeApi()).code ?? "";
-    } catch (e) {
-      fail(e);
-    } finally {
-      busy = "";
-    }
+  async function finishRecoverySetup() {
+    recoveryOpen = false;
+    await logout();
+    await goto("/login?reason=two-factor-enabled");
   }
 
   async function disableTotp() {
@@ -292,7 +303,10 @@
       <LoaderCircle class="animate-spin" />正在加载账户设置…
     </div>
   {:else if profile}
-    <Tabs.Root value="general" class="flex flex-col gap-6">
+    <Tabs.Root
+      value={page.url.searchParams.get("tab") === "security" ? "security" : "general"}
+      class="flex flex-col gap-6"
+    >
       <Tabs.List class="grid h-auto w-full grid-cols-2 sm:grid-cols-4"
         ><Tabs.Trigger value="general">常规</Tabs.Trigger><Tabs.Trigger value="security"
           >安全</Tabs.Trigger
@@ -313,7 +327,7 @@
           onSavePreferences={saveLocalPreferences}
           onSaveProfile={saveProfile}
           onCopy={copy}
-          onRevealApiKey={revealApiKey}
+          onRevealApiKey={() => requestSensitiveAction("api-key-reveal")}
           onRotateApiKey={() => (rotateApiKeyOpen = true)}
         /></Tabs.Content
       >
@@ -327,14 +341,18 @@
           {busy}
           onCopy={copy}
           onChangePassword={() => (passwordOpen = true)}
-          onShowRecoveryCode={showRecoveryCode}
+          onShowRecoveryCode={() => requestSensitiveAction("recovery")}
           onDisableTwoFactor={() => (disableOpen = true)}
-          onBeginTotp={beginTotp}
+          onBeginTotp={() => requestSensitiveAction("totp")}
           onMessage={(value) => {
             message = value;
             error = "";
           }}
           onError={fail}
+          onSessionRevoked={async (reason) => {
+            await logout();
+            await goto(`/login?reason=${reason}`);
+          }}
         /></Tabs.Content
       >
       <Tabs.Content value="devices"
@@ -375,6 +393,9 @@
   bind:totpOpen
   {totpKey}
   bind:totpToken
+  bind:verificationOpen
+  bind:verificationPassword
+  {verificationAction}
   bind:recoveryOpen
   {recoveryCode}
   bind:recoveryConfirmed
@@ -388,6 +409,9 @@
   onCopy={copy}
   onDeleteAccount={removeAccount}
   onEnableTotp={enableTotp}
+  onCancelTotp={resetTotpSetup}
+  onVerifySensitiveAction={verifySensitiveAction}
+  onFinishRecoverySetup={finishRecoverySetup}
   onDisableTotp={disableTotp}
   onChangePassword={changeMasterPassword}
 />
@@ -399,8 +423,11 @@
         >旧 API Key 会立即失效，所有使用旧密钥的客户端都需要重新配置。</AlertDialog.Description
       ></AlertDialog.Header
     ><AlertDialog.Footer
-      ><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action onclick={rotateApiKey}
-        >确认轮换</AlertDialog.Action
+      ><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action
+        onclick={() => {
+          rotateApiKeyOpen = false;
+          requestSensitiveAction("api-key-rotate");
+        }}>确认轮换</AlertDialog.Action
       ></AlertDialog.Footer
     ></AlertDialog.Content
   ></AlertDialog.Root

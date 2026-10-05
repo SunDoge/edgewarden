@@ -170,14 +170,16 @@ export function registerAdminOrganizationScenarios(
       .prepare("SELECT value FROM config WHERE key = 'registration.policy.v1'")
       .first<{ value: string }>();
     await context.database
-      .prepare(`
+      .prepare(
+        `
 				CREATE TRIGGER test_fail_atomic_registration_policy_audit
 				BEFORE INSERT ON audit_logs
 				WHEN NEW.action = 'admin.registration.settings'
 				BEGIN
 					SELECT RAISE(ABORT, 'simulated audit outage');
 				END
-			`)
+			`,
+      )
       .run();
     try {
       const failedPolicy = await request("/api/admin/registration", {
@@ -260,7 +262,7 @@ export function registerAdminOrganizationScenarios(
         invitationsAllowed: false,
       }),
     });
-    const disabledInvite = await request("/api/accounts/register", {
+    const disabledInvite = await request("/api/edgewarden/accounts/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -291,7 +293,7 @@ export function registerAdminOrganizationScenarios(
       kdfIterations: 600_000,
       inviteCode: invite.code,
     });
-    const wrongEmail = await request("/api/accounts/register", {
+    const wrongEmail = await request("/api/edgewarden/accounts/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(invitedPayload("invite-race@example.com")),
@@ -302,12 +304,12 @@ export function registerAdminOrganizationScenarios(
       "Invite does not match this email address",
     );
     const competingRegistrations = await Promise.all([
-      request("/api/accounts/register", {
+      request("/api/edgewarden/accounts/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(invitedPayload("invited-api-test@example.com")),
       }),
-      request("/api/accounts/register", {
+      request("/api/edgewarden/accounts/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(invitedPayload("INVITED-API-TEST@EXAMPLE.COM")),
@@ -344,7 +346,7 @@ export function registerAdminOrganizationScenarios(
       1,
     );
 
-    const replayInvite = await request("/api/accounts/register", {
+    const replayInvite = await request("/api/edgewarden/accounts/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -384,14 +386,16 @@ export function registerAdminOrganizationScenarios(
         }),
       });
     await context.database
-      .prepare(`
+      .prepare(
+        `
 				CREATE TRIGGER test_fail_atomic_admin_status_audit
 				BEFORE INSERT ON audit_logs
 				WHEN NEW.action = 'admin.user.status'
 				BEGIN
 					SELECT RAISE(ABORT, 'simulated audit outage');
 				END
-			`)
+			`,
+      )
       .run();
     try {
       const failedBan = await banRequest();
@@ -690,7 +694,7 @@ export function registerAdminOrganizationScenarios(
 
   test("admits only one concurrent organization member invitation", async () => {
     const targetEmail = `concurrent-invite-${crypto.randomUUID()}@example.com`;
-    const registered = await request("/api/accounts/register", {
+    const registered = await request("/api/edgewarden/accounts/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -764,7 +768,7 @@ export function registerAdminOrganizationScenarios(
       .first<{ revision_date: number }>();
     assert.ok(ownerRevision && targetRevision);
     const invite = () =>
-      request(`/api/organizations/${orgId}/members`, {
+      request(`/api/edgewarden/organizations/${orgId}/members`, {
         method: "POST",
         headers: {
           authorization: `Bearer ${context.accessToken}`,
@@ -972,16 +976,6 @@ export function registerAdminOrganizationScenarios(
       },
     );
     assert.deepEqual(
-      await request(`/api/organizations/${orgId}/keys`, {
-        headers: { authorization: `Bearer ${context.accessToken}` },
-      }).then((response) => response.json()),
-      {
-        publicKey: "public",
-        privateKey: null,
-        object: "organizationPublicKey",
-      },
-    );
-    assert.deepEqual(
       await request(`/api/users/${restrictedUser.id}/public-key`, {
         headers: { authorization: `Bearer ${context.accessToken}` },
       }).then((response) => response.json()),
@@ -1021,7 +1015,7 @@ export function registerAdminOrganizationScenarios(
     assert.equal(
       (
         await request(`/api/organizations/${orgId}`, {
-          method: "POST",
+          method: "PUT",
           headers: {
             authorization: `Bearer ${context.accessToken}`,
             "content-type": "application/json",
@@ -1115,7 +1109,7 @@ export function registerAdminOrganizationScenarios(
     const readOnlyMemberPartial = await request(
       `/api/ciphers/${personalCipher.id}/partial`,
       {
-        method: "POST",
+        method: "PUT",
         headers: {
           authorization: `Bearer ${context.memberAccessToken}`,
           "content-type": "application/json",
@@ -1156,7 +1150,7 @@ export function registerAdminOrganizationScenarios(
     assert.equal(
       (
         await request(`/api/ciphers/${personalCipher.id}/collections`, {
-          method: "POST",
+          method: "PUT",
           headers: {
             authorization: `Bearer ${context.accessToken}`,
             "content-type": "application/json",
@@ -1458,7 +1452,11 @@ export function registerAdminOrganizationScenarios(
     }>();
     assert.deepEqual(
       restrictedSyncBody.profile.organizations.map(
-        ({ status, type, enabled }) => ({ status, type, enabled }),
+        ({ status, type, enabled }) => ({
+          status,
+          type,
+          enabled,
+        }),
       ),
       [{ status: 2, type: 2, enabled: true }],
     );
@@ -1591,7 +1589,7 @@ export function registerAdminOrganizationScenarios(
     assert.ok(beforeCollectionRevision);
     const updateCollection = (index: number) =>
       request(`/api/organizations/${orgId}/collections/${collectionId}`, {
-        method: "POST",
+        method: "PUT",
         headers: {
           authorization: `Bearer ${context.memberAccessToken}`,
           "content-type": "application/json",
@@ -1637,20 +1635,23 @@ export function registerAdminOrganizationScenarios(
         .bind(collectionId)
         .first(),
     );
-    const escalation = await request(`/api/organizations/${orgId}/members`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${context.memberAccessToken}`,
-        "content-type": "application/json",
+    const escalation = await request(
+      `/api/edgewarden/organizations/${orgId}/members`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${context.memberAccessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          email: "nobody@example.com",
+          role: "admin",
+          accessAll: true,
+          collections: [],
+          key: "encrypted-key",
+        }),
       },
-      body: JSON.stringify({
-        email: "nobody@example.com",
-        role: "admin",
-        accessAll: true,
-        collections: [],
-        key: "encrypted-key",
-      }),
-    });
+    );
     assert.equal(escalation.status, 403);
 
     await context.database
@@ -1676,9 +1677,38 @@ export function registerAdminOrganizationScenarios(
 
     // Instance backups must preserve the complete organization graph while
     // excluding machine credentials such as API keys.
+    const rejectedApiKey = await request("/api/accounts/api-key", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${context.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ masterPasswordHash: "wrong-password" }),
+    });
+    assert.equal(rejectedApiKey.status, 400);
+    const originalApiKeyResponse = await request("/api/accounts/api-key", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${context.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
+    });
+    assert.equal(
+      originalApiKeyResponse.status,
+      200,
+      await originalApiKeyResponse.clone().text(),
+    );
+    const originalApiKey = (
+      await originalApiKeyResponse.json<{ apiKey: string }>()
+    ).apiKey;
     const apiKeyResponse = await request("/api/accounts/rotate-api-key", {
       method: "POST",
-      headers: { authorization: `Bearer ${context.accessToken}` },
+      headers: {
+        authorization: `Bearer ${context.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ masterPasswordHash: MASTER_PASSWORD_HASH }),
     });
     assert.equal(
       apiKeyResponse.status,
@@ -1686,6 +1716,7 @@ export function registerAdminOrganizationScenarios(
       await apiKeyResponse.clone().text(),
     );
     const apiKey = (await apiKeyResponse.json<{ apiKey: string }>()).apiKey;
+    assert.notEqual(apiKey, originalApiKey);
     const persistedApiKey = await context.database
       .prepare("SELECT api_key_hash, api_key_encrypted FROM users WHERE id = ?")
       .bind(owner.id)
@@ -1749,24 +1780,27 @@ export function registerAdminOrganizationScenarios(
       .first<{ revision_date: number }>();
     assert.ok(beforeMemberRevision);
     const updateMemberPermissions = (index: number) =>
-      request(`/api/organizations/${orgId}/members/${restrictedMemberId}`, {
-        method: "PUT",
-        headers: {
-          authorization: `Bearer ${context.accessToken}`,
-          "content-type": "application/json",
+      request(
+        `/api/edgewarden/organizations/${orgId}/members/${restrictedMemberId}`,
+        {
+          method: "PUT",
+          headers: {
+            authorization: `Bearer ${context.accessToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            role: "member",
+            accessAll: false,
+            collections: [
+              {
+                id: collectionId,
+                readOnly: true,
+                hidePasswords: index % 2 === 0,
+              },
+            ],
+          }),
         },
-        body: JSON.stringify({
-          role: "member",
-          accessAll: false,
-          collections: [
-            {
-              id: collectionId,
-              readOnly: true,
-              hidePasswords: index % 2 === 0,
-            },
-          ],
-        }),
-      });
+      );
     const memberUpdates = await Promise.all(
       Array.from({ length: 8 }, (_, index) => updateMemberPermissions(index)),
     );
@@ -1798,7 +1832,7 @@ export function registerAdminOrganizationScenarios(
     );
 
     const removed = await request(
-      `/api/organizations/${orgId}/members/${restrictedMemberId}`,
+      `/api/edgewarden/organizations/${orgId}/members/${restrictedMemberId}`,
       {
         method: "DELETE",
         headers: { authorization: `Bearer ${context.accessToken}` },

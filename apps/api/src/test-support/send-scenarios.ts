@@ -15,6 +15,29 @@ export interface SendScenarioContext {
 export function registerSendScenarios(context: SendScenarioContext): void {
   const request = context.request;
   const MASTER_PASSWORD_HASH = context.masterPasswordHash;
+  const issueSendAccessToken = async (
+    sendId: string,
+    passwordHash?: string,
+  ): Promise<string> => {
+    const response = await request("/identity/connect/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "send_access",
+        client_id: "send",
+        scope: "api.send.access",
+        send_id: sendId,
+        ...(passwordHash ? { password_hash_b64: passwordHash } : {}),
+      }),
+    });
+    assert.equal(response.status, 200, await response.clone().text());
+    return (await response.json<{ access_token: string }>()).access_token;
+  };
+  const accessSend = (token: string) =>
+    request("/api/sends/access", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
   test("validates and creates a text Send with an atomic revision update", async () => {
     const auth = { authorization: `Bearer ${context.accessToken}` };
     const invalid = await request("/api/sends", {
@@ -75,13 +98,8 @@ export function registerSendScenarios(context: SendScenarioContext): void {
     });
     assert.equal(missing.status, 404);
 
-    const accessed = await request(
-      `/api/sends/access/${context.sendAccessId}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
-      },
+    const accessed = await accessSend(
+      await issueSendAccessToken(context.sendAccessId),
     );
     assert.equal(accessed.status, 200, await accessed.clone().text());
     const body = await accessed.json<{
@@ -171,12 +189,8 @@ export function registerSendScenarios(context: SendScenarioContext): void {
     });
     assert.equal(created.status, 200, await created.clone().text());
     const send = await created.json<{ id: string; accessId: string }>();
-    const access = () =>
-      request(`/api/sends/access/${send.accessId}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
-      });
+    const accessToken = await issueSendAccessToken(send.accessId);
+    const access = () => accessSend(accessToken);
     const responses = await Promise.all([access(), access()]);
     assert.deepEqual(
       responses.map((response) => response.status).sort(),
@@ -232,13 +246,15 @@ export function registerSendScenarios(context: SendScenarioContext): void {
       });
     assert.equal((await upload(firstBytes)).status, 201);
 
+    const sendAccessToken = await issueSendAccessToken(
+      metadata.sendResponse.accessId,
+    );
     const issueDownload = async () => {
       const response = await request(
-        `/api/sends/${metadata.sendResponse.accessId}/access/file/${metadata.sendResponse.file.id}`,
+        `/api/sends/access/file/${metadata.sendResponse.file.id}`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({}),
+          headers: { authorization: `Bearer ${sendAccessToken}` },
         },
       );
       assert.equal(response.status, 200, await response.clone().text());
@@ -296,13 +312,8 @@ export function registerSendScenarios(context: SendScenarioContext): void {
       "updated-encrypted-text",
     );
 
-    const accessed = await request(
-      `/api/sends/access/${context.sendAccessId}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
-      },
+    const accessed = await accessSend(
+      await issueSendAccessToken(context.sendAccessId),
     );
     assert.equal(accessed.status, 200);
     assert.equal(
@@ -557,7 +568,7 @@ export function registerSendScenarios(context: SendScenarioContext): void {
       context.memberAccessToken,
       "encrypted-other-send",
     );
-    const deleted = await request("/api/sends/delete", {
+    const deleted = await request("/api/edgewarden/sends/delete", {
       method: "POST",
       headers: {
         authorization: `Bearer ${context.accessToken}`,

@@ -118,7 +118,7 @@ export const moveCiphers = factory.createHandlers(
   },
 );
 
-// POST /api/ciphers/delete-permanent (bulk hard delete)
+// DELETE /api/ciphers (bulk hard delete)
 export const hardDeleteCiphers = factory.createHandlers(
   vValidator("json", BulkIdsSchema),
   async (c) => {
@@ -272,7 +272,7 @@ export const unarchiveCiphers = factory.createHandlers(
   },
 );
 
-// POST /api/ciphers/restore (bulk restore)
+// PUT /api/ciphers/restore (bulk restore)
 export const restoreCiphers = factory.createHandlers(
   vValidator("json", BulkIdsSchema),
   async (c) => {

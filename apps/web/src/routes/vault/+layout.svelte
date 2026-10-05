@@ -17,11 +17,13 @@
   import { restoreWebSession } from "$lib/services/rpc";
   import VaultAppNavigation from "$lib/components/vault/VaultAppNavigation.svelte";
   import VaultHeader from "$lib/components/vault/VaultHeader.svelte";
+  import AuthRequestBanner from "$lib/components/vault/AuthRequestBanner.svelte";
 
   let { children } = $props();
   let ready = $state(false);
   let preferencesVersion = $state(0);
   let mobileNavigationOpen = $state(false);
+  let authRequestRefreshVersion = $state(0);
 
   async function handleLogout() {
     await logout();
@@ -69,13 +71,18 @@
     const watcher = new VaultRevisionWatcher({
       readRevision: fetchRevisionDateApi,
       onRevision: async () => {
+        authRequestRefreshVersion += 1;
         if (!vault.isSyncing && vault.isUnlocked) await syncVaultData();
       },
     });
     const realtime = new VaultRealtimeClient({
       getTicket: async () => (await createRealtimeTicketApi()).token,
       onRevision: async () => {
+        authRequestRefreshVersion += 1;
         if (!vault.isSyncing && vault.isUnlocked) await syncVaultData();
+      },
+      onAuthRequest: () => {
+        authRequestRefreshVersion += 1;
       },
     });
     const refreshWhenVisible = () => {
@@ -133,6 +140,10 @@
   {:else}
     <div class="flex h-screen flex-col overflow-hidden bg-muted/30">
       <VaultHeader onOpenNavigation={() => (mobileNavigationOpen = true)} onLogout={handleLogout} />
+      <AuthRequestBanner
+        email={vault.profile?.email ?? ""}
+        refreshVersion={authRequestRefreshVersion}
+      />
       <div class="relative flex min-h-0 flex-1 overflow-hidden">
         <VaultAppNavigation bind:mobileOpen={mobileNavigationOpen} />
         <div class="min-w-0 flex-1 overflow-auto">{@render children()}</div>

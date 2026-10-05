@@ -46,6 +46,6 @@ export async function deleteFolderApi(id: string): Promise<void> {
 }
 
 export async function deleteFoldersApi(ids: string[]): Promise<void> {
-  rpcVoid(await rpc.api.folders.delete.$post({ json: { ids } }));
+  rpcVoid(await rpc.api.folders.$delete({ json: { ids } }));
 }
 import type { FolderResponse } from "@edgewarden/shared";

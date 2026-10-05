@@ -27,7 +27,6 @@ import {
 export const organizationBaseRoutes = new Hono<HonoEnv>()
   .get("/api/organizations", ...listOrganizations)
   .get("/api/organizations/:orgId/public-key", ...getOrganizationPublicKey)
-  .get("/api/organizations/:orgId/keys", ...getOrganizationPublicKey)
   .post("/api/organizations", ...createOrganization)
   .get("/api/organizations/:orgId", requireOrgMember, ...getOrganization)
   .put(
@@ -36,20 +35,8 @@ export const organizationBaseRoutes = new Hono<HonoEnv>()
     requireOrgOwner,
     ...updateOrganization,
   )
-  .post(
-    "/api/organizations/:orgId",
-    requireOrgMember,
-    requireOrgOwner,
-    ...updateOrganization,
-  )
   .delete(
     "/api/organizations/:orgId",
-    requireOrgMember,
-    requireOrgOwner,
-    ...deleteOrganization,
-  )
-  .post(
-    "/api/organizations/:orgId/delete",
     requireOrgMember,
     requireOrgOwner,
     ...deleteOrganization,
@@ -57,31 +44,31 @@ export const organizationBaseRoutes = new Hono<HonoEnv>()
 
 export const organizationMemberRoutes = new Hono<HonoEnv>()
   .get(
-    "/api/organizations/:orgId/invitee",
+    "/api/edgewarden/organizations/:orgId/invitee",
     requireOrgMember,
     requireOrgManager,
     ...getInviteePublicKey,
   )
   .get(
-    "/api/organizations/:orgId/members",
+    "/api/edgewarden/organizations/:orgId/members",
     requireOrgMember,
     requireOrgManager,
     ...listOrganizationMembers,
   )
   .post(
-    "/api/organizations/:orgId/members",
+    "/api/edgewarden/organizations/:orgId/members",
     requireOrgMember,
     requireOrgManager,
     ...inviteOrganizationMember,
   )
   .put(
-    "/api/organizations/:orgId/members/:memberId",
+    "/api/edgewarden/organizations/:orgId/members/:memberId",
     requireOrgMember,
     requireOrgManager,
     ...updateOrganizationMember,
   )
   .delete(
-    "/api/organizations/:orgId/members/:memberId",
+    "/api/edgewarden/organizations/:orgId/members/:memberId",
     requireOrgMember,
     requireOrgManager,
     ...removeOrganizationMember,
@@ -106,22 +93,8 @@ export const organizationCollectionRoutes = new Hono<HonoEnv>()
     requireCollection,
     ...updateCollection,
   )
-  .post(
-    "/api/organizations/:orgId/collections/:collectionId",
-    requireOrgMember,
-    requireOrgManager,
-    requireCollection,
-    ...updateCollection,
-  )
   .delete(
     "/api/organizations/:orgId/collections/:collectionId",
-    requireOrgMember,
-    requireOrgManager,
-    requireCollection,
-    ...deleteCollection,
-  )
-  .post(
-    "/api/organizations/:orgId/collections/:collectionId/delete",
     requireOrgMember,
     requireOrgManager,
     requireCollection,

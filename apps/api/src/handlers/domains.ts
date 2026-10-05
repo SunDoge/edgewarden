@@ -54,7 +54,7 @@ export const getDomains = factory.createHandlers(async (c) => {
   );
 });
 
-// PUT/POST /api/settings/domains
+// PUT /api/settings/domains
 const updateDomainsHandler = async (
   c: Context<HonoEnv>,
   payload: InferOutput<typeof DomainSettingsSchema>,

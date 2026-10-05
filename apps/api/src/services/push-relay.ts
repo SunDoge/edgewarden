@@ -225,6 +225,31 @@ export async function publishPushVaultChange(
   );
 }
 
+/** Notifies the user's other native clients that a passwordless login needs review. */
+export async function publishPushAuthRequest(
+  env: WorkerBindings,
+  userId: string,
+  authRequestId: string,
+  requestDeviceIdentifier: string,
+  options?: { fetcher?: typeof fetch; cache?: Cache | null },
+): Promise<boolean> {
+  return relayRequest(
+    env,
+    "/push/send",
+    {
+      userId,
+      organizationId: null,
+      deviceId: null,
+      identifier: requestDeviceIdentifier,
+      type: 15,
+      payload: { userId, id: authRequestId },
+      clientType: null,
+      installationId: null,
+    },
+    options,
+  );
+}
+
 /** Notifies the requesting native client that its passwordless login was approved. */
 export async function publishPushAuthRequestResponse(
   env: WorkerBindings,

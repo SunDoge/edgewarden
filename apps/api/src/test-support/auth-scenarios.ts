@@ -26,7 +26,7 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
   const MASTER_PASSWORD_HASH = context.masterPasswordHash;
   const ADMIN_PASSWORD = context.adminPassword;
   test("rejects invalid registration payloads through Valibot", async () => {
-    const response = await request("/api/accounts/register", {
+    const response = await request("/api/edgewarden/accounts/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email: "not-an-email" }),
@@ -49,7 +49,7 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
     assert.equal(JSON.stringify(configBody).includes(ADMIN_PASSWORD), false);
 
     for (const adminPassword of [undefined, "incorrect-password"]) {
-      const response = await request("/api/accounts/register", {
+      const response = await request("/api/edgewarden/accounts/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -66,7 +66,7 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
   });
 
   test("registers, logs in and returns the generated KDF settings", async () => {
-    const registration = await request("/api/accounts/register", {
+    const registration = await request("/api/edgewarden/accounts/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -198,7 +198,7 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
   });
 
   test("registers a non-admin account for authorization tests", async () => {
-    const registration = await request("/api/accounts/register", {
+    const registration = await request("/api/edgewarden/accounts/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -234,7 +234,7 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
     (context.bindings as unknown as Record<string, unknown>).SIGNUPS_ALLOWED =
       "false";
     try {
-      const response = await request("/api/accounts/register", {
+      const response = await request("/api/edgewarden/accounts/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -309,7 +309,7 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
   });
 
   test("keeps concurrent first logins for one device valid", async () => {
-    const deviceIdentifier = `concurrent-device-${crypto.randomUUID()}`;
+    const deviceIdentifier = `concurrent-${crypto.randomUUID()}`;
     const login = () =>
       request("/identity/connect/token", {
         method: "POST",
@@ -424,7 +424,7 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
     const refreshToken = (await login.json<{ refresh_token: string }>())
       .refresh_token;
     const revoke = () =>
-      request("/identity/connect/revoke", {
+      request("/identity/connect/revocation", {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ token: refreshToken }),
@@ -577,7 +577,7 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
       kdfIterations: 600_000,
     };
     try {
-      const missing = await request("/api/accounts/register", {
+      const missing = await request("/api/edgewarden/accounts/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
@@ -586,7 +586,7 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
 
       globalThis.fetch = async () =>
         Response.json({ success: true, action: "login" });
-      const wrongAction = await request("/api/accounts/register", {
+      const wrongAction = await request("/api/edgewarden/accounts/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...payload, captchaResponse: "login-token" }),
@@ -595,7 +595,7 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
 
       globalThis.fetch = async () =>
         Response.json({ success: true, action: "register" });
-      const accepted = await request("/api/accounts/register", {
+      const accepted = await request("/api/edgewarden/accounts/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...payload, captchaResponse: "register-token" }),

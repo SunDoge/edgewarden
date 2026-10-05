@@ -1,5 +1,6 @@
 import { execFileSync, spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { getCACertificates, setDefaultCACertificates } from "node:tls";
@@ -17,22 +18,117 @@ const persistencePath = await mkdtemp(
 );
 const email = `bw-compat-${crypto.randomUUID()}@example.com`;
 const password = `BwCompat-${crypto.randomUUID()}-aA1!`;
-const server = "https://127.0.0.1:8787";
 
-async function command(args: string[]): Promise<void> {
-  await new Promise<void>((resolveCommand, reject) => {
-    const child = spawn("pnpm", args, { cwd: root, stdio: "inherit" });
-    child.once("error", reject);
-    child.once("exit", (code) => {
-      if (code === 0) resolveCommand();
-      else reject(new Error(`pnpm ${args.join(" ")} exited with ${code}`));
+async function availablePort(): Promise<number> {
+  return new Promise((resolvePort, reject) => {
+    const socket = createServer();
+    socket.unref();
+    socket.once("error", reject);
+    socket.listen(0, "127.0.0.1", () => {
+      const address = socket.address();
+      if (!address || typeof address === "string") {
+        socket.close();
+        reject(new Error("Could not allocate a local compatibility-test port"));
+        return;
+      }
+      socket.close((error) => {
+        if (error) reject(error);
+        else resolvePort(address.port);
+      });
     });
   });
 }
 
-async function waitForServer(): Promise<void> {
+const port = await availablePort();
+let inspectorPort = await availablePort();
+while (inspectorPort === port) inspectorPort = await availablePort();
+const server = `https://127.0.0.1:${port}`;
+
+async function command(
+  args: string[],
+  options: {
+    completionPattern?: RegExp;
+    timeoutMs?: number;
+  } = {},
+): Promise<void> {
+  await new Promise<void>((resolveCommand, reject) => {
+    const child = spawn("pnpm", args, {
+      cwd: root,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, CI: "true" },
+      detached: process.platform !== "win32",
+    });
+    let settled = false;
+    let completionObserved = false;
+    let outputTail = "";
+    let completionTimer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      stopChildProcessGroup(child);
+      reject(new Error(`pnpm ${args.join(" ")} timed out`));
+    }, options.timeoutMs ?? 60_000);
+
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (completionTimer) clearTimeout(completionTimer);
+      if (error) reject(error);
+      else resolveCommand();
+    };
+    const forward = (target: NodeJS.WriteStream, chunk: Buffer) => {
+      target.write(chunk);
+      if (!options.completionPattern || completionObserved) return;
+      outputTail = `${outputTail}${chunk.toString("utf8")}`.slice(-8_192);
+      if (!options.completionPattern.test(outputTail)) return;
+      completionObserved = true;
+      // Wrangler 4.139 can retain local Miniflare handles after reporting a
+      // completed D1 migration. Give it a moment to exit normally, then stop
+      // only this detached command group; the success marker is emitted after
+      // D1 has committed every statement.
+      completionTimer = setTimeout(() => {
+        if (settled) return;
+        stopChildProcessGroup(child);
+      }, 1_000);
+    };
+    child.stdout.on("data", (chunk: Buffer) => forward(process.stdout, chunk));
+    child.stderr.on("data", (chunk: Buffer) => forward(process.stderr, chunk));
+    child.once("error", (error) => finish(error));
+    child.once("exit", (code) => {
+      if (code === 0 || completionObserved) finish();
+      else finish(new Error(`pnpm ${args.join(" ")} exited with ${code}`));
+    });
+  });
+}
+
+function stopChildProcessGroup(child: ReturnType<typeof spawn>): void {
+  if (!child.pid) return;
+  try {
+    if (process.platform === "win32") child.kill("SIGTERM");
+    else process.kill(-child.pid, "SIGTERM");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+      console.error(
+        "Failed to stop compatibility command process group",
+        error,
+      );
+    }
+  }
+}
+
+async function waitForServer(
+  child: ReturnType<typeof spawn>,
+  startupError: () => unknown,
+): Promise<void> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 120; attempt += 1) {
+    if (startupError()) throw startupError();
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(
+        `Local compatibility Worker exited before becoming ready (${child.exitCode ?? child.signalCode})`,
+      );
+    }
     try {
       const response = await fetch(`${server}/api/config`, {
         signal: AbortSignal.timeout(1_000),
@@ -81,7 +177,7 @@ async function register(adminPassword: string): Promise<void> {
     symmetricKey.slice(0, 32),
     symmetricKey.slice(32),
   );
-  const response = await fetch(`${server}/api/accounts/register`, {
+  const response = await fetch(`${server}/api/edgewarden/accounts/register`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -154,20 +250,66 @@ await writeFile(
 );
 
 let worker: ReturnType<typeof spawn> | undefined;
+let cleanupPromise: Promise<void> | undefined;
+
+function cleanup(): Promise<void> {
+  cleanupPromise ??= (async () => {
+    if (worker) {
+      const child = worker;
+      if (child.pid && process.platform !== "win32") {
+        try {
+          process.kill(-child.pid, "SIGTERM");
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+            console.error(
+              "Failed to stop the compatibility Worker process group",
+              error,
+            );
+            process.exitCode = 1;
+            child.kill("SIGTERM");
+          }
+        }
+      } else {
+        child.kill("SIGTERM");
+      }
+      await new Promise<void>((resolveExit) => {
+        if (child.exitCode !== null || child.signalCode !== null) resolveExit();
+        else child.once("exit", () => resolveExit());
+      });
+    }
+    await rm(persistencePath, { recursive: true, force: true });
+  })();
+  return cleanupPromise;
+}
+
+let handlingSignal = false;
+function handleSignal(exitCode: number): void {
+  if (handlingSignal) return;
+  handlingSignal = true;
+  void cleanup().finally(() => process.exit(exitCode));
+}
+process.once("SIGINT", () => handleSignal(130));
+process.once("SIGTERM", () => handleSignal(143));
+
 try {
-  await command([
-    "exec",
-    "wrangler",
-    "d1",
-    "migrations",
-    "apply",
-    "DB",
-    "--config",
-    configPath,
-    "--local",
-    "--persist-to",
-    persistencePath,
-  ]);
+  await command(
+    [
+      "exec",
+      "wrangler",
+      "d1",
+      "migrations",
+      "apply",
+      "DB",
+      "--config",
+      configPath,
+      "--local",
+      "--persist-to",
+      persistencePath,
+    ],
+    {
+      completionPattern: /commands executed successfully\./,
+    },
+  );
 
   worker = spawn(
     "pnpm",
@@ -179,7 +321,9 @@ try {
       "--config",
       configPath,
       "--port",
-      "8787",
+      String(port),
+      "--inspector-port",
+      String(inspectorPort),
       "--local-protocol",
       "https",
       "--https-cert-path",
@@ -196,35 +340,16 @@ try {
     },
   );
 
-  await waitForServer();
+  let workerStartupError: unknown;
+  worker.once("error", (error) => {
+    workerStartupError = error;
+  });
+  await waitForServer(worker, () => workerStartupError);
   await register(bootstrapSecret);
   process.env.BW_SERVER = server;
   process.env.BW_EMAIL = email;
   process.env.BW_PASSWORD = password;
   await import("./bw-compat-smoke.ts");
 } finally {
-  if (worker) {
-    const child = worker;
-    if (child.pid && process.platform !== "win32") {
-      try {
-        process.kill(-child.pid, "SIGTERM");
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
-          console.error(
-            "Failed to stop the compatibility Worker process group",
-            error,
-          );
-          process.exitCode = 1;
-          child.kill("SIGTERM");
-        }
-      }
-    } else {
-      child.kill("SIGTERM");
-    }
-    await new Promise<void>((resolveExit) => {
-      if (child.exitCode !== null || child.signalCode !== null) resolveExit();
-      else child.once("exit", () => resolveExit());
-    });
-  }
-  await rm(persistencePath, { recursive: true, force: true });
+  await cleanup();
 }

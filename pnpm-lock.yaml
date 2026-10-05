@@ -97,6 +97,9 @@ importers:
       '@edgewarden/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@wordlist/english-eff':
+        specifier: 1.0.1
+        version: 1.0.1
       dexie:
         specifier: ^4.4.6
         version: 4.4.6
@@ -1546,6 +1549,10 @@ packages:
 
   '@vitest/utils@4.1.11':
     resolution: {integrity: sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==}
+
+  '@wordlist/english-eff@1.0.1':
+    resolution: {integrity: sha512-ZgmJbl6qe7clQPy/dHqLDn2QJWIdMDI4m63iBzqOKckqtNKfq79rPqNk+nH3+ow6rij84soMN+DDPaUjVvAtQA==}
+    engines: {node: '>=18'}
 
   acorn@8.18.0:
     resolution: {integrity: sha512-lGq+9yr1/GuAWaVYIHRjvvySG5/4VfKIvC8EWxStPdcDh/Ka7FG3twP6v4d5BkravUilhIAsG4Qj83t02LWUPQ==}
@@ -3788,6 +3795,8 @@ snapshots:
       '@vitest/pretty-format': 4.1.11
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
+
+  '@wordlist/english-eff@1.0.1': {}
 
   acorn@8.18.0: {}
 

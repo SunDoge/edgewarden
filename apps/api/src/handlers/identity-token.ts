@@ -1,7 +1,10 @@
 import { getCookie } from "hono/cookie";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
-import { checkIpRateLimit } from "../middleware/rate-limit";
+import {
+  checkIpRateLimit,
+  type IpRateLimitScope,
+} from "../middleware/rate-limit";
 import { auditRequestMetadata, safeWriteAuditEvent } from "../services/audit";
 import { authenticateApiKey } from "../services/identity-api-key";
 import { refreshIdentitySession } from "../services/identity-refresh";
@@ -46,8 +49,11 @@ function sendAccessError(
   );
 }
 
-export function shouldRateLimitIdentityGrant(grantType: string): boolean {
-  return grantType !== "refresh_token";
+export function identityGrantRateLimitScope(
+  grantType: string,
+): IpRateLimitScope | null {
+  if (grantType === "refresh_token") return null;
+  return grantType === "send_access" ? "send" : "identity";
 }
 
 // POST /identity/connect/token
@@ -60,10 +66,8 @@ export const connectToken = factory.createHandlers(async (c) => {
   // Match Vaultwarden: refresh tokens are high-entropy, rotating credentials,
   // not password guesses. Counting routine refreshes against the login bucket
   // can lock every client behind one NAT out of sync.
-  if (
-    shouldRateLimitIdentityGrant(grantType) &&
-    !(await checkIpRateLimit(c, "identity"))
-  ) {
+  const rateLimitScope = identityGrantRateLimitScope(grantType);
+  if (rateLimitScope && !(await checkIpRateLimit(c, rateLimitScope))) {
     return identityErrorResponse(
       "Too many requests. Try again later.",
       "TooManyRequests",

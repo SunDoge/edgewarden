@@ -1,78 +1,95 @@
-import { rpc, rpcJson } from "./rpc";
+import { rpc, rpcJson, rpcVoid } from "./rpc";
 import type {
-  TwoFactorPasskeySettings,
+  TwoFactorPasskeyMutation,
+  TwoFactorPasskeyVerification,
   YubicoConfigResult,
-  YubikeySettingsResult,
+  YubikeySettingsMutation,
+  YubikeySettingsVerification,
 } from "./two-factor-types";
 
 export async function getTwoFactorPasskeysApi(
   masterPasswordHash: string,
-): Promise<TwoFactorPasskeySettings> {
+): Promise<TwoFactorPasskeyVerification> {
   return (await rpcJson(
     await rpc.api["two-factor"]["get-webauthn"].$post({
       json: { masterPasswordHash },
     }),
-  )) as TwoFactorPasskeySettings;
+  )) as TwoFactorPasskeyVerification;
 }
 
 export async function getTwoFactorPasskeyChallengeApi(
-  masterPasswordHash: string,
+  userVerificationToken: string,
 ): Promise<{ options: unknown; token: string }> {
   return rpcJson(
     await rpc.api["two-factor"]["get-webauthn-challenge"].$post({
-      json: { masterPasswordHash },
+      json: { userVerificationToken },
     }),
   ) as Promise<{ options: unknown; token: string }>;
 }
 
 export async function createTwoFactorPasskeyApi(payload: {
-  masterPasswordHash: string;
+  id: number;
+  userVerificationToken: string;
   name: string;
   token: string;
   deviceResponse: unknown;
-}): Promise<TwoFactorPasskeySettings> {
+}): Promise<TwoFactorPasskeyMutation> {
   return (await rpcJson(
     await rpc.api["two-factor"].webauthn.$put({ json: payload }),
-  )) as TwoFactorPasskeySettings;
+  )) as TwoFactorPasskeyMutation;
 }
 
 export async function deleteTwoFactorPasskeyApi(payload: {
-  masterPasswordHash: string;
-  id: string;
-}): Promise<TwoFactorPasskeySettings> {
+  userVerificationToken: string;
+  id: number;
+}): Promise<TwoFactorPasskeyMutation> {
   return (await rpcJson(
     await rpc.api["two-factor"].webauthn.$delete({ json: payload }),
-  )) as TwoFactorPasskeySettings;
+  )) as TwoFactorPasskeyMutation;
+}
+
+export async function deleteAllTwoFactorPasskeysApi(
+  userVerificationToken: string,
+): Promise<void> {
+  rpcVoid(
+    await rpc.api["two-factor"].webauthn.all.$delete({
+      json: { userVerificationToken },
+    }),
+  );
 }
 
 export async function getYubikeySettingsApi(
   masterPasswordHash: string,
-): Promise<YubikeySettingsResult> {
+): Promise<YubikeySettingsVerification> {
   return (await rpcJson(
-    await rpc.api["yubico-enrollment"].settings.$post({
+    await rpc.api["two-factor"]["get-yubikey"].$post({
       json: { masterPasswordHash },
     }),
-  )) as YubikeySettingsResult;
+  )) as YubikeySettingsVerification;
 }
 
 export async function saveYubikeysApi(payload: {
-  masterPasswordHash: string;
-  otps: string[];
+  key1?: string;
+  key2?: string;
+  key3?: string;
+  key4?: string;
+  key5?: string;
   nfc: boolean;
-}): Promise<YubikeySettingsResult> {
+  userVerificationToken: string;
+}): Promise<YubikeySettingsMutation> {
   return (await rpcJson(
-    await rpc.api["yubico-enrollment"].save.$post({ json: payload }),
-  )) as YubikeySettingsResult;
+    await rpc.api["two-factor"].yubikey.$put({ json: payload }),
+  )) as YubikeySettingsMutation;
 }
 
 export async function disableYubikeysApi(
-  masterPasswordHash: string,
-): Promise<YubikeySettingsResult> {
-  return (await rpcJson(
-    await rpc.api["yubico-control"].disable.$post({
-      json: { masterPasswordHash },
+  userVerificationToken: string,
+): Promise<void> {
+  rpcVoid(
+    await rpc.api["two-factor"].yubikey.$delete({
+      json: { userVerificationToken },
     }),
-  )) as YubikeySettingsResult;
+  );
 }
 
 export async function saveYubicoConfigApi(payload: {

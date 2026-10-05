@@ -1,6 +1,53 @@
-import { type CompiledQuery, type Insertable, type Kysely, sql } from "kysely";
-import type { DB, WebauthnCredentials } from "../../../types/db";
+import { type Kysely, sql } from "kysely";
+import type { DB } from "../../../types/db";
 import { now } from "../../../utils/time";
+
+export function publishPendingAttachmentQuery(
+  db: Kysely<DB>,
+  args: {
+    attachmentId: string;
+    cipherId: string;
+    fileName: string;
+    key: string;
+    fileSize: number;
+    sizeName: string;
+    storageKey: string;
+    timestamp: number;
+    authorizationTime: number;
+  },
+) {
+  return sql`
+		INSERT OR IGNORE INTO attachments (
+			id, cipher_id, file_name, size, size_name, key, storage_key, created_at
+		)
+		SELECT
+			upload.id, upload.cipher_id, upload.file_name, upload.size,
+			${args.sizeName}, upload.key, ${args.storageKey}, ${args.timestamp}
+		FROM attachment_uploads upload
+		WHERE upload.id = ${args.attachmentId}
+		  AND upload.cipher_id = ${args.cipherId}
+		  AND upload.file_name = ${args.fileName}
+		  AND upload.key = ${args.key}
+		  AND upload.size = ${args.fileSize}
+		  AND upload.expires_at > ${args.authorizationTime}
+	`.compile(db);
+}
+
+export function completePendingAttachmentUploadQuery(
+  db: Kysely<DB>,
+  attachmentId: string,
+  storageKey: string,
+) {
+  return sql`
+		DELETE FROM attachment_uploads
+		WHERE id = ${attachmentId}
+		  AND EXISTS (
+			SELECT 1 FROM attachments published
+			WHERE published.id = attachment_uploads.id
+			  AND published.storage_key = ${storageKey}
+		  )
+	`.compile(db);
+}
 
 // Attachment metadata and cipher revisions must be committed together so clients never observe a stale attachment list.
 export function attachmentCipherUpdateQuery(

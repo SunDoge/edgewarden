@@ -46,7 +46,9 @@ describe("Hono RPC client", () => {
     });
 
     await expect(
-      client.identity.accounts.prelogin.$post({ json: { email: "invalid" } }),
+      client.identity.accounts.prelogin.password.$post({
+        json: { email: "invalid" },
+      }),
     ).rejects.toEqual(
       expect.objectContaining({
         name: "ApiError",
@@ -62,7 +64,7 @@ describe("Hono RPC client", () => {
       fetch: vi.fn(async () => new Response(null, { status: 204 })),
     });
 
-    const response = await client.api.accounts.register.$post({
+    const response = await client.api.edgewarden.accounts.register.$post({
       json: {
         email: "first@example.com",
         masterPasswordHash: "hash",

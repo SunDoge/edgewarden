@@ -40,7 +40,6 @@ export const getPasskeyAssertionOptions = factory.createHandlers(
 
 export { connectToken } from "./identity-token";
 // POST /identity/connect/revocation
-// POST /identity/connect/revoke
 export const revokeToken = factory.createHandlers(async (c) => {
   const db = c.get("db");
   const token =

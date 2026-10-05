@@ -23,6 +23,7 @@ export const LIMITS = {
   },
   attachment: {
     maxFileSizeBytes: 100 * 1024 * 1024,
+    pendingUploadTtlSeconds: 24 * 60 * 60,
   },
   cipher: {
     trashRetentionSeconds: 30 * 24 * 60 * 60,

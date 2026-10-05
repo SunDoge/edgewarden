@@ -23,6 +23,7 @@
     onBeginTotp,
     onMessage,
     onError,
+    onSessionRevoked,
   }: {
     profile: {
       email: string;
@@ -41,6 +42,7 @@
     onBeginTotp: () => void | Promise<void>;
     onMessage: (value: string) => void;
     onError: (value: unknown) => void;
+    onSessionRevoked: (reason: string) => void | Promise<void>;
   } = $props();
 </script>
 
@@ -98,6 +100,7 @@
     kdfIterations={profile.kdfIterations}
     {onMessage}
     {onError}
+    {onSessionRevoked}
   />
   <YubikeySettings
     email={profile.email}
@@ -105,6 +108,7 @@
     {isAdmin}
     {onMessage}
     {onError}
+    {onSessionRevoked}
   />
   <AccountPasskeys
     email={profile.email}

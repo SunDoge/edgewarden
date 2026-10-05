@@ -1,5 +1,7 @@
 import { bytesToBase64Url } from "../../utils/passkey";
 import { verifyPassword } from "../../services/auth";
+import type { Selectable } from "kysely";
+import type { Users } from "../../types/db";
 
 // Challenges are stored as SHA-256 hashes so the replay guard does not retain the bearer challenge itself.
 export const MAX_TWO_FACTOR_PASSKEYS = 5;
@@ -12,31 +14,13 @@ export function recoveryCode(): string {
 }
 
 export async function verifySecret(
-  user: any,
-  body: Record<string, any>,
+  user: Selectable<Users>,
+  body: { masterPasswordHash: string },
 ): Promise<boolean> {
-  const secret = String(
-    body.masterPasswordHash ??
-      body.master_password_hash ??
-      body.secret ??
-      body.password ??
-      "",
-  ).trim();
+  const secret = body.masterPasswordHash.trim();
   return (
     !!secret && verifyPassword(secret, user.master_password_hash, user.email)
   );
-}
-
-export function settings(credentials: any[]) {
-  return {
-    enabled: credentials.length > 0,
-    keys: credentials.map((credential) => ({
-      id: credential.id,
-      name: credential.name,
-      migrated: false,
-    })),
-    object: "twoFactorWebAuthn",
-  };
 }
 
 export async function challengeHash(challenge: string): Promise<string> {
