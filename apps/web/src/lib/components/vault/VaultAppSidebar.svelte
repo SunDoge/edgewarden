@@ -14,11 +14,24 @@
     WandSparkles,
   } from "@lucide/svelte";
   import { navigating, page } from "$app/state";
+  import { onMount } from "svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
+  import { loadAppVersion, type AppVersionInfo } from "$lib/services/app-version";
   import { vault } from "$lib/stores/vault.svelte";
+  import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 
   let { onNavigate }: { onNavigate?: () => void } = $props();
+  let appVersion = $state<AppVersionInfo>({
+    edgewarden: EDGEWARDEN_VERSION,
+    bitwardenCompatibility: null,
+  });
+
+  onMount(() => {
+    void loadAppVersion().then((version) => {
+      appVersion = version;
+    });
+  });
 
   const tools = [
     { href: "/vault", label: "我的保险库", icon: Lock },
@@ -48,7 +61,7 @@
   class="flex h-full w-64 shrink-0 flex-col overflow-y-auto border-r bg-background p-4"
   data-sveltekit-preload-code="eager"
 >
-  <nav class="flex flex-col gap-1.5" aria-label="应用导航">
+  <nav class="flex flex-1 flex-col gap-1.5" aria-label="应用导航">
     <p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
       保险库与工具
     </p>
@@ -86,4 +99,13 @@
       {/each}
     {/if}
   </nav>
+  <div class="mt-4" aria-label="版本信息">
+    <Separator class="mb-3" />
+    <p class="px-3 text-xs text-muted-foreground">Edgewarden v{appVersion.edgewarden}</p>
+    {#if appVersion.bitwardenCompatibility}
+      <p class="mt-1 px-3 text-xs text-muted-foreground">
+        Bitwarden API {appVersion.bitwardenCompatibility}
+      </p>
+    {/if}
+  </div>
 </aside>

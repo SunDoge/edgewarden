@@ -9,7 +9,6 @@
   import { NetworkStatusMonitor, type NetworkStatus } from "$lib/services/network-status";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Wifi, WifiOff } from "@lucide/svelte";
-  import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
   import { m } from "$lib/paraglide/messages.js";
   import { syncDocumentLocale } from "$lib/i18n/format";
   import { Toaster } from "$lib/components/ui/sonner/index.js";
@@ -99,5 +98,4 @@
         class="size-3"
       />{networkStatus === "checking" ? m.network_checking() : m.network_online()}{/if}
   </Badge>
-  <span class="sr-only">Edgewarden {EDGEWARDEN_VERSION}</span>
 </div>
