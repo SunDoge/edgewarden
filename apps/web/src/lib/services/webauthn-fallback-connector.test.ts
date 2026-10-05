@@ -91,6 +91,8 @@ describe("WebAuthn fallback connector", () => {
         .spyOn(window, "postMessage")
         .mockImplementation(() => undefined);
 
+      // The test intentionally executes the repository-owned production artifact in jsdom.
+      // biome-ignore lint/security/noGlobalEval: this is trusted local test data, not user input.
       window.eval(connectorScript);
       (document.getElementById("remember") as HTMLInputElement).checked = true;
       (document.getElementById("webauthn-button") as HTMLButtonElement).click();
@@ -136,6 +138,8 @@ describe("WebAuthn fallback connector", () => {
       value: { get },
     });
 
+    // The test intentionally executes the repository-owned production artifact in jsdom.
+    // biome-ignore lint/security/noGlobalEval: this is trusted local test data, not user input.
     window.eval(connectorScript);
     (document.getElementById("webauthn-button") as HTMLButtonElement).click();
 
