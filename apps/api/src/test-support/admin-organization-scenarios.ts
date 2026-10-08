@@ -241,10 +241,10 @@ export function registerAdminOrganizationScenarios(
     }>();
     assert.equal(invite.status, "active");
     assert.equal(invite.email, "invited-api-test@example.com");
-    assert.match(
-      invite.inviteLink,
-      new RegExp(`/register\\?invite=${invite.code}$`),
-    );
+    const inviteUrl = new URL(invite.inviteLink);
+    assert.equal(inviteUrl.pathname, "/register");
+    assert.equal(inviteUrl.searchParams.get("invite"), invite.code);
+    assert.equal(inviteUrl.searchParams.get("email"), invite.email);
     const storedInvite = await context.database
       .prepare("SELECT code, code_encrypted FROM invites WHERE code = ?")
       .bind(await hashCredential(invite.code))

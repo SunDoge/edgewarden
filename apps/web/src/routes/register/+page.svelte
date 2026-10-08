@@ -34,7 +34,10 @@
   let turnstileWidget = $state<{ reset(): void } | null>(null);
 
   onMount(async () => {
-    inviteCode = new URLSearchParams(location.search).get("invite")?.trim() ?? "";
+    const params = new URLSearchParams(location.search);
+    inviteCode = params.get("invite")?.trim() ?? "";
+    // Prefill once; query parameters never authorize use of an invitation.
+    if (inviteCode && !email) email = params.get("email")?.trim() ?? "";
     try {
       const config = await getRegistrationConfigApi();
       signupsAllowed = config.signupsAllowed;
