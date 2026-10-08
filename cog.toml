@@ -1,9 +1,5 @@
-tag_prefix = "v"
-disable_changelog = true
-pre_bump_hooks = ["npm version {{version}} --no-git-tag-version --allow-same-version --ignore-scripts"]
-from_latest_tag = false
-ignore_merge_commits = true
-ignore_fixup_commits = false
+# Release Please owns versioning. Cog only validates commit messages.
+# Do not run cog bump: its defaults can still create release tags.
 
 [git_hooks.commit-msg]
 script = """#!/bin/sh
