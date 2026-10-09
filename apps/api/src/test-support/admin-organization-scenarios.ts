@@ -1531,6 +1531,41 @@ export function registerAdminOrganizationScenarios(
       new Set([collectionId, secondCollectionId, inaccessibleCollectionId]),
       "updating through a writable collection preserves inaccessible assignments",
     );
+    // Official clients omit collectionIds during ordinary edits. Even an
+    // explicit empty list must not remove the member's access to this item.
+    for (const collectionIds of [undefined, [], [otherCollectionId]]) {
+      const edited = await request(`/api/ciphers/${cipher.id}`, {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${context.memberAccessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          ...payload,
+          name: "native-member-edited-name",
+          collectionIds,
+        }),
+      });
+      assert.equal(edited.status, 200, await edited.clone().text());
+      assert.equal(
+        (await edited.json<{ name: string }>()).name,
+        "native-member-edited-name",
+      );
+      const links = await context.database
+        .prepare(
+          "SELECT collection_id FROM cipher_collections WHERE cipher_id = ?",
+        )
+        .bind(cipher.id)
+        .all<{ collection_id: string }>();
+      assert.deepEqual(
+        new Set(links.results.map((row) => row.collection_id)),
+        new Set([collectionId, secondCollectionId, inaccessibleCollectionId]),
+      );
+      const readable = await request(`/api/ciphers/${cipher.id}`, {
+        headers: { authorization: `Bearer ${context.memberAccessToken}` },
+      });
+      assert.equal(readable.status, 200);
+    }
     await context.database.batch([
       context.database
         .prepare(
