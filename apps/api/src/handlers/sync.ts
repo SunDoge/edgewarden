@@ -329,6 +329,7 @@ async function buildSyncPayload(c: Context<HonoEnv>, excludeDomains: boolean) {
     // Legacy aliases are retained for older self-hosted clients. The official
     // SyncResponseModel contract below is the camelCase `userDecryption` field.
     UserDecryption: {
+      UserKeyId: user.user_key_id,
       MasterPasswordUnlock: userDecryptionOptions.MasterPasswordUnlock,
       TrustedDeviceOption: null,
       KeyConnectorOption: null,

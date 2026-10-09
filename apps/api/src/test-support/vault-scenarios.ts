@@ -41,6 +41,132 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
   const request = context.request;
   const EMAIL = context.email;
   const MASTER_PASSWORD_HASH = context.masterPasswordHash;
+  test("backfills user key ids once and preserves them when rewrapping the user key", async () => {
+    const path = "/api/accounts/key-management/user-key-id";
+    const email = `key-id-${crypto.randomUUID()}@example.com`;
+    const registration = await request("/api/edgewarden/accounts/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email,
+        masterPasswordHash: MASTER_PASSWORD_HASH,
+        key: "encrypted-user-key",
+        kdf: 0,
+        kdfIterations: 600_000,
+      }),
+    });
+    assert.equal(registration.status, 204, await registration.clone().text());
+    const login = async (password = MASTER_PASSWORD_HASH) => {
+      const response = await request("/identity/connect/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "password",
+          username: email,
+          password,
+        }),
+      });
+      assert.equal(response.status, 200, await response.clone().text());
+      return response.json<{
+        access_token: string;
+        UserDecryptionOptions: {
+          MasterPasswordUnlock: { ContainedKeyId: string | null };
+        };
+      }>();
+    };
+    let token = (await login()).access_token;
+    const post = (body: unknown, accessToken: string | null = token) =>
+      request(path, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+    const sync = async (accessToken = token) => {
+      const response = await request("/api/sync", {
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      assert.equal(response.status, 200);
+      return response.json<{
+        userDecryption: {
+          userKeyId: string | null;
+          masterPasswordUnlock: { containedKeyId: string | null };
+        };
+        UserDecryption: { UserKeyId: string | null };
+      }>();
+    };
+    assert.equal((await sync()).userDecryption.userKeyId, null);
+    const id = "0123456789abcdef0123456789abcdef";
+    assert.equal((await post({ userKeyId: id }, null)).status, 401);
+    for (const body of [
+      {},
+      { userKeyId: null },
+      { userKeyId: 123 },
+      ...[
+        "",
+        "a".repeat(31),
+        "a".repeat(33),
+        "A".repeat(32),
+        "g".repeat(32),
+      ].map((userKeyId) => ({ userKeyId })),
+    ]) {
+      assert.equal((await post(body)).status, 400);
+    }
+    // Exercise the wire casing used by native clients as well as concurrent
+    // devices. Exactly one backfill may win, even if auth cached a NULL id.
+    const results = await Promise.all([
+      post({ UserKeyId: id }),
+      post({ userKeyId: "f".repeat(32) }),
+    ]);
+    assert.deepEqual(results.map((r) => r.status).sort(), [204, 400]);
+    const recorded = results[0].status === 204 ? id : "f".repeat(32);
+    const accepted = results.find((r) => r.status === 204);
+    assert.ok(accepted);
+    assert.equal(await accepted.text(), "");
+    const synced = await sync();
+    assert.equal(synced.userDecryption.userKeyId, recorded);
+    assert.equal(
+      synced.userDecryption.masterPasswordUnlock.containedKeyId,
+      recorded,
+    );
+    assert.equal(synced.UserDecryption.UserKeyId, recorded);
+    assert.equal(
+      (await sync(context.memberAccessToken)).userDecryption.userKeyId,
+      null,
+    );
+    for (const body of [
+      { userKeyId: recorded },
+      { userKeyId: "b".repeat(32) },
+      { UserKeyId: recorded },
+    ]) {
+      const duplicate = await post(body);
+      assert.equal(duplicate.status, 400);
+      assert.match(await duplicate.text(), /User key id is already set/);
+    }
+    const changed = await request("/api/accounts/password", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        masterPasswordHash: MASTER_PASSWORD_HASH,
+        newMasterPasswordHash: "new-client-password-hash",
+        key: "rewrapped-same-user-key",
+      }),
+    });
+    assert.equal(changed.status, 200, await changed.clone().text());
+    const loggedIn = await login("new-client-password-hash");
+    token = loggedIn.access_token;
+    assert.equal(
+      loggedIn.UserDecryptionOptions.MasterPasswordUnlock.ContainedKeyId,
+      recorded,
+    );
+    assert.equal((await sync()).userDecryption.userKeyId, recorded);
+  });
+
   test("preserves login websites and checksums through create, edit, and sync", async () => {
     const client = context.rpc;
     const payload = {

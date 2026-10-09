@@ -19,6 +19,7 @@ import {
   requestPasswordHint,
   rotateApiKey,
   setKeys,
+  setUserKeyId,
   setVerifyDevices,
   updateProfile,
   verifyAccountPassword,
@@ -150,6 +151,7 @@ const accountRoutes = new Hono<HonoEnv>()
   .put("/api/accounts/profile", ...updateProfile)
   .get("/api/accounts/keys", ...getKeys)
   .post("/api/accounts/keys", ...setKeys)
+  .post("/api/accounts/key-management/user-key-id", ...setUserKeyId)
   .post("/api/accounts/password", ...changePassword)
   .post("/api/accounts/verify-password", ...verifyAccountPassword)
   .put("/api/accounts/verify-devices", ...setVerifyDevices)
