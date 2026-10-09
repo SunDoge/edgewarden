@@ -14,6 +14,7 @@ type UserLike = Pick<
   | "master_password_salt"
   | "signed_public_key"
   | "security_state"
+  | "user_key_id"
 >;
 
 export function buildAccountKeys(
@@ -51,6 +52,7 @@ export function buildUserDecryptionOptions(
       },
       MasterKeyEncryptedUserKey: user.key,
       MasterKeyWrappedUserKey: user.key,
+      ContainedKeyId: user.user_key_id,
       Salt: user.master_password_salt ?? user.email.toLowerCase(),
       Object: "masterPasswordUnlock",
     },
@@ -66,6 +68,7 @@ export function buildUserDecryptionCompat(
   webAuthnPrfOptions: readonly unknown[] = [],
 ): Record<string, unknown> {
   return {
+    userKeyId: user.user_key_id,
     masterPasswordUnlock: {
       kdf: {
         kdfType: user.kdf_type,
@@ -75,6 +78,7 @@ export function buildUserDecryptionCompat(
       },
       masterKeyWrappedUserKey: user.key,
       masterKeyEncryptedUserKey: user.key,
+      containedKeyId: user.user_key_id,
       salt: user.master_password_salt ?? user.email.toLowerCase(),
     },
     ...(webAuthnPrfOptions.length ? { webAuthnPrfOptions } : {}),

@@ -3,6 +3,7 @@ import { factory } from "../http/factory";
 import {
   ChangePasswordSchema,
   SetKeysSchema,
+  SetUserKeyIdSchema,
   SetVerifyDevicesSchema,
   UpdateProfileSchema,
   VerifyPasswordSchema,
@@ -194,6 +195,28 @@ export const updateProfile = factory.createHandlers(
   },
 );
 
+// Backfill only: changing an existing id belongs to a full user-key rotation.
+export const setUserKeyId = factory.createHandlers(
+  vValidator("json", SetUserKeyIdSchema),
+  async (c) => {
+    const user = c.get("user");
+    const { userKeyId } = c.req.valid("json");
+    // Test NULL in the write itself; cached users and concurrent devices must
+    // never overwrite a previously recorded key id.
+    const changed = await c
+      .get("db")
+      .updateTable("users")
+      .set({ user_key_id: userKeyId })
+      .where("id", "=", user.id)
+      .where("user_key_id", "is", null)
+      .executeTakeFirst();
+    if (changed.numUpdatedRows !== 1n)
+      return errorResponse("User key id is already set.", 400);
+    invalidateUserCache(user.id);
+    return c.body(null, 204);
+  },
+);
+
 // POST /api/accounts/keys
 export const setKeys = factory.createHandlers(
   vValidator("json", SetKeysSchema),
@@ -259,6 +282,7 @@ export const changePassword = factory.createHandlers(
           master_password_hint:
             body.masterPasswordHint ?? user.master_password_hint,
           key: body.key,
+          // A password change rewraps the same user key; keep user_key_id.
           security_stamp: newStamp,
           updated_at: ts,
         })
