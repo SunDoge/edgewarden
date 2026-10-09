@@ -4,6 +4,9 @@
   "main": "apps/api/src/index.ts",
   "compatibility_date": "2026-08-11",
   "compatibility_flags": ["nodejs_compat"],
+  "placement": {
+    "mode": "smart"
+  },
   "dev": {
     "port": 8787,
     "inspector_port": 9229

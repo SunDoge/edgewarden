@@ -52,6 +52,10 @@ async function inviteResponse(
     dataEncryptionSecret,
     "invite-code",
   );
+  const inviteLink = new URL("/register", request.url);
+  inviteLink.searchParams.set("invite", code);
+  // Convenience only: registration still verifies the invite's stored email.
+  if (invite.email) inviteLink.searchParams.set("email", invite.email);
   return {
     code,
     email: invite.email,
@@ -61,7 +65,7 @@ async function inviteResponse(
     createdAt: toIso(invite.created_at),
     updatedAt: toIso(invite.updated_at),
     expiresAt: toIso(invite.expires_at),
-    inviteLink: `${new URL(request.url).origin}/register?invite=${encodeURIComponent(code)}`,
+    inviteLink: inviteLink.toString(),
     object: "invite",
   };
 }

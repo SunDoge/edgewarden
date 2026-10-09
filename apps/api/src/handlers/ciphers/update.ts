@@ -8,11 +8,9 @@ import { redactedValidationHook } from "../../middleware/validation";
 import { CipherSchema, CipherShareSchema } from "../../schemas/ciphers";
 import {
   conditionalCipherRevisionQuery,
-  getCipherCollectionIds,
   getCipherPermissions,
   getVisibleCipherCollectionIds,
   organizationCipherViewStateQuery,
-  resolveOrganizationCipherCollectionsForUpdate,
   validateOrganizationCollections,
 } from "../../services/ciphers/access";
 import {
@@ -65,7 +63,7 @@ const updateCipherFromBody = async (c: Context<HonoEnv>, body: CipherInput) => {
     !sharingPersonalCipher
   )
     return errorResponse("Cipher ownership cannot be changed", 400);
-  let collectionIds = body.collectionIds ?? [];
+  const collectionIds = body.collectionIds ?? [];
   if (!requestedOrganizationId && collectionIds.length)
     return errorResponse("Personal ciphers cannot use collections", 400);
   if (
@@ -86,23 +84,6 @@ const updateCipherFromBody = async (c: Context<HonoEnv>, body: CipherInput) => {
         access.error,
         access.error.includes("not found") ? 404 : 403,
       );
-  } else if (cipher.org_id) {
-    const member = c.get("orgMember");
-    if (!member) return errorResponse("Organization not found", 404);
-    const currentCollectionIds = await getCipherCollectionIds(db, cipher.id);
-    const access = await resolveOrganizationCipherCollectionsForUpdate(
-      db,
-      member,
-      cipher.org_id,
-      currentCollectionIds,
-      collectionIds,
-    );
-    if ("error" in access)
-      return errorResponse(
-        access.error,
-        access.error.includes("not found") ? 404 : 403,
-      );
-    collectionIds = access.collectionIds;
   }
   if (body.lastKnownRevisionDate) {
     const expectedRevision = Math.floor(
@@ -162,11 +143,10 @@ const updateCipherFromBody = async (c: Context<HonoEnv>, body: CipherInput) => {
           }),
         ]
       : []),
-    db
-      .deleteFrom("cipher_collections")
-      .where("cipher_id", "=", cipher.id)
-      .where(({ exists }) => exists(committedCipher)),
-    ...collectionIds.map((collectionId) =>
+    // Native item edits do not carry collection assignments. Only initial
+    // sharing creates links here; dedicated collection endpoints change them.
+    // Leaving links untouched also avoids overwriting concurrent assignments.
+    ...(sharingPersonalCipher ? collectionIds : []).map((collectionId) =>
       db
         .insertInto("cipher_collections")
         .columns(["cipher_id", "collection_id", "org_id"])
