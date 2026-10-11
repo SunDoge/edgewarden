@@ -12,7 +12,10 @@ import {
   hkdfExpand,
 } from "../apps/web/src/lib/services/crypto.ts";
 
+import { DEMO_EMAIL, DEMO_PASSWORD } from "../apps/api/src/demo/policy.ts";
+
 const root = resolve(import.meta.dirname, "..");
+const demo = process.argv.includes("--demo");
 const persistencePath = await mkdtemp(
   join(tmpdir(), "edgewarden-compat-state-"),
 );
@@ -200,7 +203,10 @@ async function register(adminPassword: string): Promise<void> {
 
 // Keep test bindings and secrets independent of the developer's .dev.vars.
 const config = JSON.parse(
-  await readFile(resolve(root, "wrangler.jsonc"), "utf8"),
+  await readFile(
+    resolve(root, demo ? "wrangler.demo.jsonc" : "wrangler.jsonc"),
+    "utf8",
+  ),
 );
 config.main = resolve(root, config.main);
 config.assets.directory = resolve(root, config.assets.directory);
@@ -345,11 +351,12 @@ try {
     workerStartupError = error;
   });
   await waitForServer(worker, () => workerStartupError);
-  await register(bootstrapSecret);
+  if (!demo) await register(bootstrapSecret);
   process.env.BW_SERVER = server;
-  process.env.BW_EMAIL = email;
-  process.env.BW_PASSWORD = password;
-  await import("./bw-compat-smoke.ts");
+  process.env.BW_EMAIL = demo ? DEMO_EMAIL : email;
+  process.env.BW_PASSWORD = demo ? DEMO_PASSWORD : password;
+  if (demo) await import("./bw-demo-smoke.ts");
+  else await import("./bw-compat-smoke.ts");
 } finally {
   await cleanup();
 }

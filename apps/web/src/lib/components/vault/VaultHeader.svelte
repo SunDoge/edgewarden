@@ -16,6 +16,7 @@
   import { formatTime } from "$lib/i18n/format";
   import { m } from "$lib/paraglide/messages.js";
   import { syncVaultData, vault } from "$lib/stores/vault.svelte";
+  import LanguageSwitcher from "$lib/components/LanguageSwitcher.svelte";
   import ThemeToggle from "$lib/components/theme-toggle.svelte";
 
   let {
@@ -27,15 +28,15 @@
   } = $props();
 
   let syncStatus = $derived.by(() => {
-    if (vault.isSyncing) return "正在同步…";
-    if (vault.status === "error") return "同步失败";
+    if (vault.isSyncing) return m.vault_syncing();
+    if (vault.status === "error") return m.vault_sync_failed();
     if (vault.isOffline)
       return vault.syncedAt
         ? m.vault_cached_at({ time: formatTime(vault.syncedAt) })
         : m.vault_offline_cache();
     return vault.syncedAt
       ? m.vault_synced_at({ time: formatTime(vault.syncedAt) })
-      : "等待首次同步";
+      : m.vault_sync_pending();
   });
 </script>
 
@@ -78,7 +79,7 @@
       aria-label={m.vault_sync()}
       >{#if vault.isSyncing}<Spinner />{:else}<RefreshCw />{/if}</Button
     >
-    <ThemeToggle />
+    <LanguageSwitcher /><ThemeToggle />
     <Button
       variant="ghost"
       size="sm"
@@ -94,13 +95,13 @@
             variant="ghost"
             size="icon"
             class="sm:hidden"
-            aria-label="更多操作"><MoreVertical /></Button
+            aria-label={m.vault_more_actions()}><MoreVertical /></Button
           >{/snippet}
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end">
         <DropdownMenu.Group>
           <DropdownMenu.Item onclick={() => syncVaultData()} disabled={vault.isSyncing}
-            ><RefreshCw />立即同步</DropdownMenu.Item
+            ><RefreshCw />{m.vault_sync_now()}</DropdownMenu.Item
           >
           <DropdownMenu.Item onclick={onLogout} variant="destructive"
             ><LogOut />{m.vault_lock_and_logout()}</DropdownMenu.Item

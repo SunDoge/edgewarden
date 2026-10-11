@@ -84,6 +84,10 @@ Normally `pnpm deploy` is sufficient. It stops before publishing if resource ini
 
 ## Development and operations
 
+Want to offer a read-only trial server with public synthetic data for potential users and
+contributors? See [Public Demo deployment](docs/demo.md). It uses a separate
+Worker, D1 database, and R2 bucket; never point it at production storage.
+
 ```sh
 pnpm check
 pnpm test

@@ -1,6 +1,7 @@
 import { safeParseJsonWithSchema } from "@edgewarden/shared";
 import type { CompiledQuery, Kysely } from "kysely";
 import * as v from "valibot";
+import { isDemoRuntime } from "../demo/policy";
 import type { DB } from "../types/db";
 import type { WorkerBindings } from "../worker-bindings";
 import { getConfigValue, setConfigValueQuery } from "./db/config";
@@ -38,6 +39,8 @@ export async function loadRegistrationPolicy(
   db: Kysely<DB>,
   env: WorkerBindings,
 ): Promise<RegistrationPolicy> {
+  if (isDemoRuntime(env))
+    return { signupsAllowed: false, invitationsAllowed: false };
   const fallback = defaultRegistrationPolicy(env);
   const value = await getConfigValue(db, REGISTRATION_CONFIG_KEY);
   if (!value) return fallback;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import {
     Building2,
     Database,
@@ -33,23 +34,23 @@
     });
   });
 
-  const tools = [
-    { href: "/vault", label: "我的保险库", icon: Lock },
-    { href: "/vault/totp", label: "验证码", icon: KeyRound },
-    { href: "/vault/password-health", label: "密码健康", icon: ShieldAlert },
-    { href: "/vault/domains", label: "域名等效规则", icon: Globe },
-    { href: "/vault/sends", label: "Send 传输中心", icon: Share2 },
-    { href: "/vault/import-export", label: "导入与导出", icon: Upload },
-    { href: "/vault/organizations", label: "组织共享", icon: Building2 },
-    { href: "/vault/settings", label: "账户与安全", icon: Settings },
-    { href: "/vault/generator", label: "密码生成器", icon: WandSparkles },
-  ];
+  const tools = $derived([
+    { href: "/vault", label: m.nav_vault(), icon: Lock },
+    { href: "/vault/totp", label: m.nav_totp(), icon: KeyRound },
+    { href: "/vault/password-health", label: m.nav_health(), icon: ShieldAlert },
+    { href: "/vault/domains", label: m.nav_domains(), icon: Globe },
+    { href: "/vault/sends", label: m.nav_sends(), icon: Share2 },
+    { href: "/vault/import-export", label: m.nav_import_export(), icon: Upload },
+    { href: "/vault/organizations", label: m.nav_organizations(), icon: Building2 },
+    { href: "/vault/settings", label: m.nav_settings(), icon: Settings },
+    { href: "/vault/generator", label: m.nav_generator(), icon: WandSparkles },
+  ]);
 
-  const adminTools = [
-    { href: "/vault/admin", label: "用户与邀请", icon: UserRoundCog },
-    { href: "/vault/logs", label: "审计日志", icon: ScrollText },
-    { href: "/vault/backups", label: "云备份中心", icon: Database },
-  ];
+  const adminTools = $derived([
+    { href: "/vault/admin", label: m.nav_users(), icon: UserRoundCog },
+    { href: "/vault/logs", label: m.nav_logs(), icon: ScrollText },
+    { href: "/vault/backups", label: m.nav_backups(), icon: Database },
+  ]);
 
   function isActive(href: string) {
     const pathname = navigating.to?.url.pathname ?? page.url.pathname;
@@ -61,9 +62,9 @@
   class="flex h-full w-64 shrink-0 flex-col overflow-y-auto border-r bg-background p-4"
   data-sveltekit-preload-code="eager"
 >
-  <nav class="flex flex-1 flex-col gap-1.5" aria-label="应用导航">
+  <nav class="flex flex-1 flex-col gap-1.5" aria-label={m.nav_label()}>
     <p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-      保险库与工具
+      {m.nav_tools()}
     </p>
     {#each tools as item (item.href)}
       <Button
@@ -82,7 +83,7 @@
     {#if vault.profile?.role === "admin"}
       <Separator class="my-2" />
       <p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        管理
+        {m.nav_admin()}
       </p>
       {#each adminTools as item (item.href)}
         <Button
@@ -99,7 +100,7 @@
       {/each}
     {/if}
   </nav>
-  <div class="mt-4" aria-label="版本信息">
+  <div class="mt-4" aria-label={m.nav_version()}>
     <Separator class="mb-3" />
     <p class="px-3 text-xs text-muted-foreground">Edgewarden v{appVersion.edgewarden}</p>
     {#if appVersion.bitwardenCompatibility}

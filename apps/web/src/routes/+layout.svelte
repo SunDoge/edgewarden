@@ -1,6 +1,8 @@
 <script lang="ts">
   import "./layout.css";
+  import "$lib/i18n/locale.svelte";
   import { onMount } from "svelte";
+  import DemoNotice from "$lib/components/DemoNotice.svelte";
   import {
     applyThemePreference,
     clientPreferencesStorageKey,
@@ -91,6 +93,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 </svelte:head>
 {@render children()}
+<DemoNotice />
 <Toaster richColors position="top-center" />
 <div class="fixed bottom-3 right-3 z-50" aria-live="polite">
   <Badge variant={networkStatus === "offline" ? "destructive" : "outline"}>
