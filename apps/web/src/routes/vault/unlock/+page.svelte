@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { isLoggedIn } from "$lib/services/api-auth";
   import { errorMessage } from "$lib/services/error-message";
+  import { prefillDemoLogin } from "$lib/services/demo-login";
   import { loadVaultSnapshot } from "$lib/services/vault-db";
   import { vault, unlock } from "$lib/stores/vault.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -20,8 +21,9 @@
   let loading = $state(false);
   let error = $state("");
   let hasCache = $state(false);
+  let passwordTouched = false;
 
-  onMount(async () => {
+  onMount(() => {
     if (!isLoggedIn()) {
       goto("/login");
       return;
@@ -31,13 +33,28 @@
       return;
     }
 
-    // Pre-fill email from the cached profile so the user knows whose vault this is
-    const cached = await loadVaultSnapshot();
-    if (cached) {
-      email = cached.profile.email;
-      hasCache = true;
-    }
+    const controller = new AbortController();
+    void initializeUnlock(controller.signal);
+    return () => controller.abort();
   });
+
+  async function initializeUnlock(signal: AbortSignal) {
+    // The cached profile identifies whose vault is being unlocked. Never apply
+    // public Demo credentials to another account, including stale local caches.
+    const cached = await loadVaultSnapshot();
+    if (signal.aborted || !cached) return;
+    email = cached.profile.email;
+    hasCache = true;
+    await prefillDemoLogin(
+      () => !passwordTouched && !password && !loading,
+      (credentials) => {
+        if (email.trim().toLowerCase() === credentials.email.trim().toLowerCase()) {
+          password = credentials.password;
+        }
+      },
+      signal,
+    );
+  }
 
   async function handleUnlock(e: SubmitEvent) {
     e.preventDefault();
@@ -94,7 +111,7 @@
           >
         {/if}
 
-        <form onsubmit={handleUnlock}>
+        <form onsubmit={handleUnlock} oninput={() => (passwordTouched = true)}>
           <Field.Group>
             <Field.Field>
               <Field.Label for="password">主密码</Field.Label>

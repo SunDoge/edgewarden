@@ -13,9 +13,11 @@
     "db:migrate:remote:kv": "pnpm --filter @edgewarden/api run db:apply:remote:kv",
     "deploy": "node scripts/deploy.ts",
     "deploy:kv": "node scripts/deploy.ts --kv",
+    "deploy:demo": "node scripts/deploy.ts --demo",
     "test": "pnpm --filter @edgewarden/api run test && pnpm --filter @edgewarden/web run test",
     "test:compat:bw": "node scripts/bw-compat-smoke.ts",
     "test:compat:bw:local": "node scripts/bw-compat-local.ts",
+    "test:compat:bw:demo": "node scripts/bw-compat-local.ts --demo",
     "check:compat:models": "node scripts/check-bitwarden-model-contracts.ts && pnpm --filter @edgewarden/api exec vitest run src/handlers/mobile-compat.test.ts src/services/sends/presentation.test.ts",
     "check:compat:routes": "node scripts/check-bitwarden-route-coverage.ts --fail-on-obsolete --fail-on-legacy",
     "test:integration:cloudflare": "node scripts/cloudflare-integration-smoke.ts",
@@ -50,7 +52,7 @@
     "@biomejs/biome": "2.5.15",
     "prettier": "^3.9.9",
     "prettier-plugin-svelte": "^4.1.1",
-    "wrangler": "^4.147.0"
+    "wrangler": "^4.149.0"
   },
   "dependencies": {
     "fflate": "^0.8.3"

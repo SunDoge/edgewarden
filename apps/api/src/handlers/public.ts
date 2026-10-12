@@ -2,6 +2,7 @@ import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 import { vValidator } from "@hono/valibot-validator";
 import { sql } from "kysely";
 import { LIMITS } from "../config";
+import { isDemoRuntime } from "../demo/policy";
 import { factory } from "../http/factory";
 import { checkIpRateLimit } from "../middleware/rate-limit";
 import { RegisterSchema } from "../schemas/accounts";
@@ -51,8 +52,9 @@ export const registerAccount = factory.createHandlers(
     const policy = await loadRegistrationPolicy(db, c.env);
     const userCount = await usersDb.getUserCount(db);
     const bootstrapLock = await getConfigValue(db, BOOTSTRAP_LOCK_KEY);
-    const isBootstrap = userCount === 0 && !bootstrapLock;
-    if (userCount === 0 && bootstrapLock)
+    const demo = isDemoRuntime(c.env);
+    const isBootstrap = !demo && userCount === 0 && !bootstrapLock;
+    if (!demo && userCount === 0 && bootstrapLock)
       return errorResponse("Bootstrap has already been completed", 403);
 
     const inviteCode = body.inviteCode?.trim();
@@ -242,7 +244,8 @@ function configPayload(
       signupsAllowed: registration.signupsAllowed,
       invitationsAllowed: registration.invitationsAllowed,
       bootstrapRequired,
-      adminPasswordConfigured: adminPasswordConfigured(env),
+      adminPasswordConfigured:
+        !isDemoRuntime(env) && adminPasswordConfigured(env),
     },
     object: "config",
   };
@@ -253,7 +256,8 @@ export const getConfig = factory.createHandlers(async (c) => {
   const userCount = await usersDb.getUserCount(db);
   const bootstrapLock = await getConfigValue(db, BOOTSTRAP_LOCK_KEY);
   const registration = await loadRegistrationPolicy(db, c.env);
-  const bootstrapRequired = userCount === 0 && !bootstrapLock;
+  const bootstrapRequired =
+    !isDemoRuntime(c.env) && userCount === 0 && !bootstrapLock;
   return c.json(
     configPayload(
       new URL(c.req.url).origin,

@@ -13,7 +13,7 @@ export default defineConfig(({ command }) => ({
       project: "./project.inlang",
       outdir: "./src/lib/paraglide",
       emitTsDeclarations: true,
-      strategy: ["localStorage", "preferredLanguage", "baseLocale"],
+      strategy: ["localStorage", "baseLocale"],
     }),
     sveltekit({
       serviceWorker: {

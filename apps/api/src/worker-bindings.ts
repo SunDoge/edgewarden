@@ -4,6 +4,8 @@
  * Platform bindings (D1, R2, Durable Objects, rate limits) remain generated in
  * CloudflareBindings and must not be duplicated here.
  */
+import type { DEMO_RUNTIME } from "./demo/policy";
+
 type OptionalWorkerBindings = {
   ADMIN_PASSWORD?: string;
   CORS_ALLOWED_ORIGINS?: string;
@@ -23,7 +25,7 @@ export type WorkerBindings = Omit<
   CloudflareBindings,
   keyof OptionalWorkerBindings
 > &
-  OptionalWorkerBindings;
+  OptionalWorkerBindings & { [DEMO_RUNTIME]?: true };
 
 export const OPTIONAL_WORKER_BINDING_NAMES = [
   "ADMIN_PASSWORD",

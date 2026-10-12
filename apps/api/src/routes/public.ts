@@ -39,6 +39,10 @@ import {
 } from "../middleware/validation";
 
 export const publicRouter = new Hono<HonoEnv>()
+  .get("/api/demo", (c) => {
+    c.header("Cache-Control", "no-store");
+    return c.json({ enabled: false });
+  })
   .post("/notifications/hub/negotiate", ...negotiateRealtime)
   .get("/notifications/hub", ...connectRealtime)
   .get("/api/notifications/hub", ...connectRealtime)

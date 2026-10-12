@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { OPTIONAL_WORKER_BINDING_NAMES } from "../apps/api/src/worker-bindings.ts";
 import {
   createAttachmentDeploymentConfig,
+  assertDemoIsolation,
   type DeploymentConfig,
 } from "./wrangler-config.ts";
 
@@ -51,6 +52,21 @@ function assertPortableD1Bindings(
 }
 
 const r2 = await readConfig("wrangler.jsonc");
+const demo = await readConfig("wrangler.demo.jsonc");
+assertDemoIsolation(demo, r2);
+assertPortableD1Bindings(demo, "wrangler.demo.jsonc");
+for (const key of [
+  "compatibility_date",
+  "compatibility_flags",
+  "assets",
+  "durable_objects",
+  "migrations",
+])
+  assert.deepEqual(
+    demo[key],
+    r2[key],
+    `Demo ${key} must stay aligned with production`,
+  );
 const kv = createAttachmentDeploymentConfig(r2, "kv");
 const deploymentDocumentation = await Promise.all([
   readFile(new URL("../README.md", import.meta.url), "utf8"),

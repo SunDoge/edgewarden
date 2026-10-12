@@ -3,13 +3,19 @@ import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   createAttachmentDeploymentConfig,
+  assertDemoIsolation,
   type DeploymentConfig,
 } from "./wrangler-config.ts";
 
 const useKv = process.argv.includes("--kv");
+const demo = process.argv.includes("--demo");
+if (demo && useKv) throw new Error("Demo supports isolated R2 storage only");
 const healthOrigin = process.env.EDGEWARDEN_HEALTH_URL?.trim();
 const root = resolve(import.meta.dirname, "..");
-const sourceConfigPath = resolve(root, "wrangler.jsonc");
+const sourceConfigPath = resolve(
+  root,
+  demo ? "wrangler.demo.jsonc" : "wrangler.jsonc",
+);
 const temporaryConfigPath = resolve(
   root,
   `.edgewarden-deploy-${process.pid}.jsonc`,
@@ -19,6 +25,11 @@ const sourceConfig = createAttachmentDeploymentConfig(
   JSON.parse(readFileSync(sourceConfigPath, "utf8")) as DeploymentConfig,
   useKv ? "kv" : "r2",
 );
+if (demo)
+  assertDemoIsolation(
+    sourceConfig,
+    JSON.parse(readFileSync(resolve(root, "wrangler.jsonc"), "utf8")),
+  );
 const database = sourceConfig.d1_databases?.find(
   (entry) => entry.binding === "DB",
 );
