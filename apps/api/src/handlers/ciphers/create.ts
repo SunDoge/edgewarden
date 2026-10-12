@@ -118,7 +118,7 @@ export const createCipher = factory.createHandlers(
   (c) => createCipherFromBody(c, c.req.valid("json")),
 );
 
-// POST /api/ciphers/create uses the same wrapper as sharing in native clients.
+// POST /api/ciphers/create supports native wrappers for both personal and org items.
 export const createCipherInOrganization = factory.createHandlers(
   vValidator("json", CipherCreateSchema, redactedValidationHook),
   (c) => {
