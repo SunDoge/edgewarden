@@ -2186,6 +2186,58 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       assert.equal(response.status, 200, await response.clone().text());
       return (await response.json<{ id: string }>()).id;
     };
+    // Android uses the create envelope even for personal items. Empty, null,
+    // and absent collection lists must not invoke organization-sharing rules.
+    for (const casing of ["camel", "pascal"]) {
+      for (const collectionIds of [[], null, undefined]) {
+        const cipher = {
+          type: 1,
+          name: "encrypted-native-personal",
+          organizationId: null,
+          login: { username: "encrypted-user", password: "encrypted-password" },
+        };
+        const response = await request("/api/ciphers/create", {
+          method: "POST",
+          headers: auth,
+          body: JSON.stringify(
+            casing === "camel"
+              ? { cipher, collectionIds }
+              : { Cipher: cipher, CollectionIds: collectionIds },
+          ),
+        });
+        assert.equal(response.status, 200, await response.clone().text());
+        const created = await response.json<{
+          id: string;
+          organizationId: string | null;
+          collectionIds: string[];
+        }>();
+        assert.equal(created.organizationId, null);
+        assert.deepEqual(created.collectionIds, []);
+        const read = await request(`/api/ciphers/${created.id}`, {
+          headers: auth,
+        });
+        assert.equal(read.status, 200);
+        assert.equal((await read.json<{ name: string }>()).name, cipher.name);
+        await request(`/api/ciphers/${created.id}`, {
+          method: "DELETE",
+          headers: auth,
+        });
+      }
+    }
+    for (const cipher of [
+      { type: 1, name: "encrypted-personal", organizationId: null },
+      { type: 1, name: "encrypted-org", organizationId: crypto.randomUUID() },
+    ]) {
+      const response = await request("/api/ciphers/create", {
+        method: "POST",
+        headers: auth,
+        body: JSON.stringify({
+          Cipher: cipher,
+          CollectionIds: [crypto.randomUUID()],
+        }),
+      });
+      assert.equal(response.status, cipher.organizationId ? 404 : 400);
+    }
     const rejectedSecret = "must-not-be-reflected";
     const rejected = await request("/api/ciphers", {
       method: "POST",

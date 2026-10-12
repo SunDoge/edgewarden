@@ -106,9 +106,36 @@ export const CipherShareSchema = v.pipe(
   ),
 );
 
-// `/ciphers/create` is wrapped by native clients but older clients send the
-// cipher directly. Both forms are part of the deployed Bitwarden contract.
-export const CipherCreateSchema = v.union([CipherShareSchema, CipherSchema]);
+// Native clients also wrap personal creates: unlike sharing, creation does not
+// require an organization or collections. Ownership and write permissions remain
+// enforced by createCipherFromBody; do not weaken CipherShareSchema to allow this.
+const CreateCollectionIdsSchema = v.nullish(
+  v.array(v.pipe(v.string(), v.uuid())),
+  [],
+);
+const CipherCreateEnvelopeSchema = v.pipe(
+  v.union([
+    v.object({
+      cipher: CipherSchema,
+      collectionIds: CreateCollectionIdsSchema,
+    }),
+    v.object({
+      Cipher: CipherSchema,
+      CollectionIds: CreateCollectionIdsSchema,
+    }),
+  ]),
+  v.transform((body) =>
+    "cipher" in body
+      ? body
+      : { cipher: body.Cipher, collectionIds: body.CollectionIds },
+  ),
+);
+
+// Retain direct cipher bodies used by web/CLI callers of this endpoint.
+export const CipherCreateSchema = v.union([
+  CipherCreateEnvelopeSchema,
+  CipherSchema,
+]);
 
 export const CipherPartialSchema = v.object({
   folderId: v.optional(v.nullable(v.pipe(v.string(), v.uuid()))),
