@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0](https://github.com/SunDoge/edgewarden/compare/v0.2.0...v0.3.0) (2026-10-12)
+
+
+### Features
+
+* add read-only demo and English-Chinese localization ([f6b2d47](https://github.com/SunDoge/edgewarden/commit/f6b2d473ab4cc1b71b18c758d36a66a70512bcf4))
+* add read-only demo and English-Chinese localization ([f81e97a](https://github.com/SunDoge/edgewarden/commit/f81e97a8a29358016cf66561e77df61fb6541581))
+
+
+### Bug Fixes
+
+* **web:** prefill demo password when unlocking vault ([0467ded](https://github.com/SunDoge/edgewarden/commit/0467ded50c11cae036608b0f3f1d58e472f76b6a))
+
 ## [0.2.0](https://github.com/SunDoge/edgewarden/compare/v0.1.0...v0.2.0) (2026-10-09)
 
 
