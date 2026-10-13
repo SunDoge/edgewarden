@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/SunDoge/edgewarden/compare/v0.3.0...v0.3.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **api:** accept native personal cipher creation envelopes ([c3c1b06](https://github.com/SunDoge/edgewarden/commit/c3c1b06bfe4cc3ac2da0300a820d520c8c03dba0))
+* **api:** accept native personal cipher creation envelopes ([319e0ce](https://github.com/SunDoge/edgewarden/commit/319e0ceb18df39ee6bb9ac8dd8c3ed5d0e78050b))
+
 ## [0.3.0](https://github.com/SunDoge/edgewarden/compare/v0.2.0...v0.3.0) (2026-10-12)
 
 
