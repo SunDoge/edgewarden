@@ -86,7 +86,13 @@ async function updateCollections(
   if (updated.numAffectedRows !== 1n)
     return errorResponse("Cipher changed during collection update", 409);
   const response = await loadCipherResponse(c, cipher.id);
-  if (!response) return errorResponse("Cipher changed while updating", 409);
+  if (!response) {
+    // The committed update removed the member's last visible collection link.
+    // Follow the official v2 contract and report success with the
+    // "unavailable" marker instead of a conflict the client would retry
+    // against state that already changed.
+    return c.json({ unavailable: true, cipher: null });
+  }
   return v2
     ? c.json({ unavailable: false, cipher: response })
     : c.json(response);

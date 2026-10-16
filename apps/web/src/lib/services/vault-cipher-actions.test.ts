@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   unarchiveOne: vi.fn(),
   unarchiveMany: vi.fn(),
   update: vi.fn(),
+  updateCollections: vi.fn(),
 }));
 const cipher = vi.hoisted(() => ({
   buildPayload: vi.fn(),
@@ -36,6 +37,7 @@ vi.mock("./api-vault", () => ({
   unarchiveCipherApi: api.unarchiveOne,
   unarchiveCiphersApi: api.unarchiveMany,
   updateCipherApi: api.update,
+  updateCipherCollectionsApi: api.updateCollections,
 }));
 
 vi.mock("./cipher-crypto", () => ({ encryptCipher: cipher.encrypt }));
@@ -125,6 +127,54 @@ describe("vault cipher actions", () => {
     ).resolves.toBe(acknowledgement);
     expect(api.create).toHaveBeenCalledWith(encrypted);
   });
+
+  it.each([
+    ["changed collections", ["collection-b"], 1],
+    ["unchanged collections", ["collection-a"], 0],
+  ])(
+    "edits an organization cipher with %s through the collections endpoint",
+    async (_label, collectionIds, expectedCollectionCalls) => {
+      const encrypted = { type: 1, name: "encrypted" };
+      const acknowledgement = {
+        id: "cipher-1",
+        revisionDate: "2026-08-13T01:00:00.000Z",
+      };
+      cipher.buildPayload.mockReturnValue({ type: 1, name: "plain" });
+      cipher.encrypt.mockResolvedValue(encrypted);
+      api.update.mockResolvedValue(acknowledgement);
+
+      await expect(
+        saveVaultCipher({
+          editor: {
+            type: 1,
+            name: "plain",
+            organizationId: "org-1",
+            collectionIds,
+          } as never,
+          selectedItem: {
+            id: "cipher-1",
+            organizationId: "org-1",
+            collectionIds: ["collection-a"],
+          } as never,
+          isCreating: false,
+          isEditing: true,
+          resolveOwnerKey: () => ({
+            encKey: new Uint8Array(32),
+            macKey: new Uint8Array(32),
+          }),
+        }),
+      ).resolves.toBe(acknowledgement);
+      expect(api.update).toHaveBeenCalledWith("cipher-1", encrypted);
+      expect(api.updateCollections).toHaveBeenCalledTimes(
+        expectedCollectionCalls,
+      );
+      if (expectedCollectionCalls)
+        expect(api.updateCollections).toHaveBeenCalledWith(
+          "cipher-1",
+          collectionIds,
+        );
+    },
+  );
 
   it("clones an organization cipher and its attachments into the personal vault", async () => {
     cipher.buildPayload.mockReturnValue({ type: 1, name: "Shared" });

@@ -13,6 +13,7 @@ import {
   unarchiveCipherApi,
   unarchiveCiphersApi,
   updateCipherApi,
+  updateCipherCollectionsApi,
 } from "$lib/services/api-vault";
 import { encryptCipher, rewrapCipherKey } from "$lib/services/cipher-crypto";
 import { buildCipherPayload } from "$lib/services/cipher-draft";
@@ -112,9 +113,37 @@ export async function saveVaultCipher({
     ownerKey.macKey,
   );
   if (isCreating) return createCipherApi(encryptedPayload);
-  if (isEditing && selectedItem)
-    return updateCipherApi(selectedItem.id, encryptedPayload);
+  if (isEditing && selectedItem) {
+    const saved = await updateCipherApi(selectedItem.id, encryptedPayload);
+    // The update endpoint leaves organization collection links untouched, so
+    // assignment edits go through the dedicated collections endpoint. The
+    // inline collectionIds above only apply when sharing moves the item into
+    // an organization.
+    if (
+      !ownershipChanged &&
+      selectedItem.organizationId &&
+      !sameCollectionIds(
+        selectedItem.collectionIds ?? [],
+        editor.collectionIds,
+      )
+    ) {
+      await updateCipherCollectionsApi(
+        selectedItem.id,
+        editor.collectionIds,
+      );
+    }
+    return saved;
+  }
   throw new Error(m.ui_no_vault_items_to_save());
+}
+
+function sameCollectionIds(
+  current: readonly string[],
+  next: readonly string[],
+) {
+  return (
+    current.length === next.length && current.every((id) => next.includes(id))
+  );
 }
 
 export async function cloneVaultCipherToPersonal(

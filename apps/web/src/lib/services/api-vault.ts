@@ -85,6 +85,25 @@ export async function updateCipherApi(
 }
 
 /**
+ * 8b. Update an organization item's collection assignments.
+ *
+ * The cipher update endpoint deliberately leaves collection links untouched
+ * (native edits do not carry them), so assignment edits go through this
+ * dedicated endpoint.
+ */
+export async function updateCipherCollectionsApi(
+  id: string,
+  collectionIds: string[],
+): Promise<void> {
+  rpcVoid(
+    await rpc.api.ciphers[":id"].collections.$put({
+      param: { id },
+      json: { collectionIds },
+    }),
+  );
+}
+
+/**
  * 9. Delete a vault item (cipher)
  */
 export async function deleteCipherApi(id: string): Promise<void> {
