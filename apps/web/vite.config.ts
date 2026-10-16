@@ -6,7 +6,7 @@ import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { defineConfig } from "vitest/config";
 import { svelteTesting } from "@testing-library/svelte/vite";
 
-export default defineConfig(({ command }) => ({
+export default defineConfig({
   plugins: [
     tailwindcss(),
     paraglideVitePlugin({
@@ -16,11 +16,6 @@ export default defineConfig(({ command }) => ({
       strategy: ["localStorage", "baseLocale"],
     }),
     sveltekit({
-      serviceWorker: {
-        // A cache-first service worker and Vite's mutable module graph cannot
-        // safely control the same origin during development.
-        register: command !== "serve",
-      },
       csp: {
         mode: "hash",
         directives: {
@@ -75,4 +70,4 @@ export default defineConfig(({ command }) => ({
   test: {
     include: ["src/**/*.{test,spec}.{js,ts}"],
   },
-}));
+});

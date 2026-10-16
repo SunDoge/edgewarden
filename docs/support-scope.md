@@ -88,6 +88,9 @@ Core scope includes:
   Account-restricted exports remain bound to their original account by design.
 - Edgewarden Web offline unlock and cache, followed by server reconciliation
   and stale-edit protection when connectivity returns.
+  This uses the local encrypted vault cache in an already loaded web app.
+  The web app does not provide a PWA or service worker; opening or reloading
+  the page while offline is not guaranteed.
 
 “Complete personal support” applies to password-manager functionality. It does
 not include every separate Bitwarden product or paid service attached to an

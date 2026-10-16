@@ -19,23 +19,6 @@
   let networkStatus = $state<NetworkStatus>("checking");
 
   onMount(() => {
-    if (import.meta.env.DEV) {
-      void navigator.serviceWorker
-        ?.getRegistrations()
-        .then((registrations) =>
-          Promise.all(registrations.map((registration) => registration.unregister())),
-        );
-      void caches
-        ?.keys()
-        .then((keys) =>
-          Promise.all(
-            keys
-              .filter((key) => key.startsWith("edgewarden-shell-"))
-              .map((key) => caches.delete(key)),
-          ),
-        );
-    }
-
     syncDocumentLocale();
 
     const media = matchMedia("(prefers-color-scheme: dark)");
@@ -87,10 +70,7 @@
 
 <svelte:head>
   <link rel="icon" href="/edgewarden-icon.svg" type="image/svg+xml" />
-  <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#0f172a" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 </svelte:head>
 {@render children()}
 <DemoNotice />
