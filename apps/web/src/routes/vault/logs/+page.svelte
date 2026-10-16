@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { formatDateTime } from "$lib/i18n/format";
+  import * as m from "$lib/paraglide/messages.js";
+
   import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, ShieldAlert } from "@lucide/svelte";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
@@ -84,18 +87,18 @@
   });
 </script>
 
-<svelte:head><title>审计日志 - Edgewarden</title></svelte:head>
+<svelte:head><title>{m.ui_audit_log_edgewarden()}</title></svelte:head>
 
 <VaultPageShell
-  title="审计日志"
-  description="登录、安全与管理操作记录；元数据会在服务端去除密钥和密码。"
+  title={m.nav_logs()}
+  description={m.ui_login_security_and_administrative_events_keys_and_passwords_are_removed_from_met()}
   width="full"
 >
   {#snippet actions()}<Button variant="outline" onclick={() => load()} disabled={busy}
-      ><RefreshCw data-icon="inline-start" />刷新</Button
+      ><RefreshCw data-icon="inline-start" />{m.ui_refresh()}</Button
     >{/snippet}
   {#if error}<Alert.Root variant="destructive"
-      ><ShieldAlert /><Alert.Title>日志操作失败</Alert.Title><Alert.Description
+      ><ShieldAlert /><Alert.Title>{m.ui_audit_log_action_failed()}</Alert.Title><Alert.Description
         >{error}</Alert.Description
       ></Alert.Root
     >{/if}
@@ -107,18 +110,19 @@
     }}
   >
     <Field.Field class="min-w-0 flex-1 sm:col-span-2"
-      ><Field.Label for="log-query">搜索</Field.Label><Input
+      ><Field.Label for="log-query">{m.ui_search()}</Field.Label><Input
         id="log-query"
         bind:value={query}
-        placeholder="操作、邮箱或元数据"
+        placeholder={m.ui_action_email_or_metadata()}
       /></Field.Field
     ><Field.Field
-      ><Field.Label>类别</Field.Label><Select.Root type="single" bind:value={category}
+      ><Field.Label>{m.ui_category()}</Field.Label><Select.Root type="single" bind:value={category}
         ><Select.Trigger class="w-full lg:w-36"
-          >{category === "all" ? "全部" : category}</Select.Trigger
+          >{category === "all" ? m.ui_all() : category}</Select.Trigger
         ><Select.Content
           ><Select.Group
-            ><Select.Item value="all">全部</Select.Item><Select.Item value="auth">auth</Select.Item
+            ><Select.Item value="all">{m.ui_all()}</Select.Item><Select.Item value="auth"
+              >auth</Select.Item
             ><Select.Item value="vault">vault</Select.Item><Select.Item value="admin"
               >admin</Select.Item
             ><Select.Item value="system">system</Select.Item><Select.Item value="org"
@@ -128,34 +132,35 @@
         ></Select.Root
       ></Field.Field
     ><Field.Field
-      ><Field.Label>级别</Field.Label><Select.Root type="single" bind:value={level}
-        ><Select.Trigger class="w-full lg:w-36">{level === "all" ? "全部" : level}</Select.Trigger
+      ><Field.Label>{m.ui_level()}</Field.Label><Select.Root type="single" bind:value={level}
+        ><Select.Trigger class="w-full lg:w-36"
+          >{level === "all" ? m.ui_all() : level}</Select.Trigger
         ><Select.Content
           ><Select.Group
-            ><Select.Item value="all">全部</Select.Item><Select.Item value="info">info</Select.Item
+            ><Select.Item value="all">{m.ui_all()}</Select.Item><Select.Item value="info"
+              >info</Select.Item
             ><Select.Item value="warning">warning</Select.Item><Select.Item value="error"
               >error</Select.Item
             ></Select.Group
           ></Select.Content
         ></Select.Root
       ></Field.Field
-    ><Button type="submit" disabled={busy}>查询</Button>
+    ><Button type="submit" disabled={busy}>{m.ui_search_2()}</Button>
   </form>
   <section class="min-w-0 rounded-lg border bg-card">
     <div class="overflow-x-auto">
       <Table.Root
-        ><Table.Caption>共 {total} 条记录</Table.Caption><Table.Header
+        ><Table.Caption>{m.ui_records_value({ value0: total })}</Table.Caption><Table.Header
           ><Table.Row
-            ><Table.Head>时间</Table.Head><Table.Head>级别</Table.Head><Table.Head
-              >类别 / 操作</Table.Head
-            ><Table.Head>操作者</Table.Head><Table.Head>目标</Table.Head><Table.Head
-              >元数据</Table.Head
+            ><Table.Head>{m.ui_time()}</Table.Head><Table.Head>{m.ui_level()}</Table.Head
+            ><Table.Head>{m.ui_category_action()}</Table.Head><Table.Head>{m.ui_actor()}</Table.Head
+            ><Table.Head>{m.ui_target()}</Table.Head><Table.Head>{m.ui_metadata()}</Table.Head
             ></Table.Row
           ></Table.Header
         ><Table.Body
           >{#each logs as log (log.id)}<Table.Row
               ><Table.Cell class="whitespace-nowrap text-xs"
-                >{new Date(log.createdAt).toLocaleString("zh-CN")}</Table.Cell
+                >{formatDateTime(log.createdAt)}</Table.Cell
               ><Table.Cell
                 ><Badge variant={log.level === "error" ? "destructive" : "outline"}
                   >{log.level}</Badge
@@ -163,7 +168,7 @@
               ><Table.Cell
                 ><p class="text-xs text-muted-foreground">{log.category}</p>
                 <p class="font-medium">{log.action}</p></Table.Cell
-              ><Table.Cell>{log.actorEmail || "系统"}</Table.Cell><Table.Cell
+              ><Table.Cell>{log.actorEmail || m.ui_system()}</Table.Cell><Table.Cell
                 >{[log.targetType, log.targetId].filter(Boolean).join(": ") || "—"}</Table.Cell
               ><Table.Cell
                 ><code class="break-all text-xs">{JSON.stringify(log.metadata)}</code></Table.Cell
@@ -173,7 +178,7 @@
       >
     </div>
     {#if !logs.length && !busy}<p class="p-8 text-center text-sm text-muted-foreground">
-        没有符合条件的日志。
+        {m.ui_no_matching_log_entries()}
       </p>{/if}
     <footer class="flex flex-wrap items-center justify-end gap-2 border-t p-3">
       <Button
@@ -183,7 +188,7 @@
         onclick={() => {
           offset = Math.max(0, offset - limit);
           void load();
-        }}><ChevronLeft data-icon="inline-start" />上一页</Button
+        }}><ChevronLeft data-icon="inline-start" />{m.ui_previous()}</Button
       ><span class="text-xs text-muted-foreground"
         >{total ? `${offset + 1}–${Math.min(total, offset + limit)} / ${total}` : "0 / 0"}</span
       ><Button
@@ -193,35 +198,40 @@
         onclick={() => {
           offset += limit;
           void load();
-        }}>下一页<ChevronRight data-icon="inline-end" /></Button
+        }}>{m.ui_next()}<ChevronRight data-icon="inline-end" /></Button
       >
     </footer>
   </section>
   <section class="rounded-lg border bg-card p-4">
     <Field.Group
       ><Field.Field
-        ><Field.Label>保留策略</Field.Label><Field.Description
-          >默认永久保留且不提供一键清空。仅在隐私政策或 D1 容量要求下显式设置有限保留。</Field.Description
+        ><Field.Label>{m.ui_retention_policy()}</Field.Label><Field.Description
+          >{m.ui_logs_are_kept_indefinitely_by_default_with_no_clear_all_action_set_a_retention_l()}</Field.Description
         ><Select.Root type="single" bind:value={retentionMode}
-          ><Select.Trigger>{retentionMode === "days" ? "按时间" : "按最大条数"}</Select.Trigger
+          ><Select.Trigger
+            >{retentionMode === "days" ? m.ui_by_age() : m.ui_by_record_count()}</Select.Trigger
           ><Select.Content
-            ><Select.Item value="days">按时间</Select.Item><Select.Item value="entries"
-              >按最大条数</Select.Item
+            ><Select.Item value="days">{m.ui_by_age()}</Select.Item><Select.Item value="entries"
+              >{m.ui_by_record_count()}</Select.Item
             ></Select.Content
           ></Select.Root
         ></Field.Field
       >{#if retentionMode === "days"}<Field.Field
-          ><Field.Label>保留天数</Field.Label><Select.Root type="single" bind:value={retentionDays}
+          ><Field.Label>{m.ui_days_to_keep()}</Field.Label><Select.Root
+            type="single"
+            bind:value={retentionDays}
             ><Select.Trigger
-              >{retentionDays === "0" ? "永久" : `${retentionDays} 天`}</Select.Trigger
+              >{retentionDays === "0"
+                ? m.ui_forever()
+                : m.ui_value_days({ value0: retentionDays })}</Select.Trigger
             ><Select.Content
               >{#each ["0", "7", "30", "90", "180", "365"] as days}<Select.Item value={days}
-                  >{days === "0" ? "永久" : `${days} 天`}</Select.Item
+                  >{days === "0" ? m.ui_forever() : m.ui_value_days({ value0: days })}</Select.Item
                 >{/each}</Select.Content
             ></Select.Root
           ></Field.Field
         >{:else}<Field.Field
-          ><Field.Label for="max-log-entries">最多条数</Field.Label><Input
+          ><Field.Label for="max-log-entries">{m.ui_maximum_records()}</Field.Label><Input
             id="max-log-entries"
             type="number"
             min={100}
@@ -229,7 +239,8 @@
             bind:value={maxEntries}
           /></Field.Field
         >{/if}<Field.Field orientation="horizontal"
-        ><Button onclick={saveSettings} disabled={busy}>保存保留策略</Button></Field.Field
+        ><Button onclick={saveSettings} disabled={busy}>{m.ui_save_retention_policy()}</Button
+        ></Field.Field
       ></Field.Group
     >
   </section>

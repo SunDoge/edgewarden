@@ -90,7 +90,11 @@ not guarantee a free public service under arbitrary traffic.
   lock/unlock and write-rejection checks. Requires `bw` on PATH.
 - The fixture generator is `scripts/generate-demo-fixture.ts`; its JSON output
   contains only public synthetic data. Regeneration is an intentional fixture
-  change, not part of deployment. Existing seeded vaults are never overwritten.
+  change, not part of deployment. A one-time English sample update also upgrades
+  existing demos on their next allowed API request. It only accepts the known
+  public fixture, preserves account keys, item IDs and sessions, and advances the
+  sync revision. Unexpected sample content aborts the whole update; it never
+  resets or adopts a personal vault. Existing clients see English after syncing.
 
 The Web Vault reuses existing shadcn components; this mode adds no theme.
 Mobile-client compatibility still needs device testing before launch.

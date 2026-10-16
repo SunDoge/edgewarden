@@ -90,7 +90,7 @@ describe("vault cipher actions", () => {
       applyVaultBulkAction("delete", [
         { id: "organization-1", organizationId: "org-1", readOnly: true },
       ]),
-    ).rejects.toThrow("选择中包含只读组织条目");
+    ).rejects.toThrow("The selection includes read-only organization items");
 
     expect(api.deleteMany).not.toHaveBeenCalled();
     expect(api.deleteOne).not.toHaveBeenCalled();

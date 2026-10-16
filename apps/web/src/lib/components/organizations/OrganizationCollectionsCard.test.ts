@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import { changeLocale } from "$lib/i18n/locale.svelte";
 import { renderComponent, screen } from "$lib/../test/component";
 import OrganizationCollectionsCard from "./OrganizationCollectionsCard.svelte";
 
 describe("OrganizationCollectionsCard", () => {
+  beforeEach(() => changeLocale("en"));
   test("enables collection creation after the user enters a name", async () => {
     const onadd = vi.fn();
     const { user } = renderComponent(OrganizationCollectionsCard, {
@@ -16,11 +18,11 @@ describe("OrganizationCollectionsCard", () => {
       onremove: vi.fn(),
     });
 
-    const addButton = screen.getByRole("button", { name: "添加集合" });
+    const addButton = screen.getByRole("button", { name: "Add collection" });
     expect(addButton).toBeDisabled();
 
     await user.type(
-      screen.getByRole("textbox", { name: "新集合名称" }),
+      screen.getByRole("textbox", { name: "New collection name" }),
       "共享",
     );
     expect(addButton).toBeEnabled();
@@ -42,7 +44,9 @@ describe("OrganizationCollectionsCard", () => {
       });
 
       expect(screen.getByText("共享")).toBeVisible();
-      expect(screen.queryByRole("button", { name: /重命名集合/ })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: /Rename collection/ }),
+      ).toBeNull();
     },
   );
 });

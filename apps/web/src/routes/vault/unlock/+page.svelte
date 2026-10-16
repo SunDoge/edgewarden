@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
   import { isLoggedIn } from "$lib/services/api-auth";
@@ -67,7 +69,7 @@
       await unlock(password);
       goto("/vault");
     } catch (caught) {
-      error = errorMessage(caught, "解锁失败，请检查主密码是否正确。");
+      error = errorMessage(caught, m.ui_unlock_failed_check_your_master_password());
     } finally {
       loading = false;
     }
@@ -75,7 +77,7 @@
 </script>
 
 <svelte:head>
-  <title>解锁保险库 - Edgewarden</title>
+  <title>{m.ui_unlock_vault_edgewarden()}</title>
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center bg-muted/30 p-4">
@@ -88,7 +90,7 @@
       >
         <ShieldCheck class="size-8" />
       </div>
-      <Card.Title class="text-2xl">解锁您的保险库</Card.Title>
+      <Card.Title class="text-2xl">{m.ui_unlock_your_vault()}</Card.Title>
       {#if email}
         <Card.Description>{email}</Card.Description>
       {/if}
@@ -97,16 +99,17 @@
       {#if !hasCache}
         <!-- No cache: must be online to unlock -->
         <Alert.Root
-          ><WifiOff /><Alert.Title>需要联网登录</Alert.Title><Alert.Description
-            >首次使用请先联网登录，之后才可离线解锁。</Alert.Description
+          ><WifiOff /><Alert.Title>{m.ui_online_login_required()}</Alert.Title><Alert.Description
+            >{m.ui_log_in_online_once_before_using_offline_unlock()}</Alert.Description
           ></Alert.Root
         >
-        <Button class="w-full" onclick={() => goto("/login")}>返回登录</Button>
+        <Button class="w-full" onclick={() => goto("/login")}>{m.ui_back_to_login()}</Button>
       {:else}
         <!-- Unlock form -->
         {#if error}
           <Alert.Root variant="destructive"
-            ><Alert.Title>解锁失败</Alert.Title><Alert.Description>{error}</Alert.Description
+            ><Alert.Title>{m.ui_unlock_failed()}</Alert.Title><Alert.Description
+              >{error}</Alert.Description
             ></Alert.Root
           >
         {/if}
@@ -114,7 +117,7 @@
         <form onsubmit={handleUnlock} oninput={() => (passwordTouched = true)}>
           <Field.Group>
             <Field.Field>
-              <Field.Label for="password">主密码</Field.Label>
+              <Field.Label for="password">{m.login_master_password()}</Field.Label>
               <div class="relative">
                 <span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                   <KeyRound class="size-4" />
@@ -122,7 +125,7 @@
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="输入您的主密码"
+                  placeholder={m.ui_enter_your_master_password()}
                   bind:value={password}
                   disabled={loading}
                   class="pl-10 pr-10"
@@ -135,7 +138,7 @@
                   size="icon-xs"
                   class="absolute right-1 top-1/2 -translate-y-1/2"
                   onclick={() => (showPassword = !showPassword)}
-                  aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                  aria-label={showPassword ? m.login_hide_password() : m.login_show_password()}
                 >
                   {#if showPassword}
                     <EyeOff class="size-4" />
@@ -148,19 +151,17 @@
 
             <Button type="submit" class="w-full" disabled={loading || !password}>
               {#if loading}
-                <Spinner data-icon="inline-start" />
-                正在解锁...
-              {:else}
-                解锁保险库
-              {/if}
+                <Spinner
+                  data-icon="inline-start"
+                />{m.ui_unlocking()}{:else}{m.login_unlock_vault()}{/if}
             </Button>
           </Field.Group>
         </form>
 
         <div class="text-center">
-          <a href="/login" class="text-sm text-muted-foreground hover:text-primary hover:underline">
-            使用其他账号登录
-          </a>
+          <a href="/login" class="text-sm text-muted-foreground hover:text-primary hover:underline"
+            >{m.ui_log_in_with_another_account()}</a
+          >
         </div>
       {/if}
     </Card.Content>

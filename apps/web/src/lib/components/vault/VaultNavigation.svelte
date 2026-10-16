@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import VaultSidebar from "./VaultSidebar.svelte";
   import * as Sheet from "$lib/components/ui/sheet/index.js";
   import type { VaultCategory } from "$lib/services/vault-filter";
@@ -41,8 +43,8 @@
 <Sheet.Root bind:open={mobileOpen}>
   <Sheet.Content side="left" class="w-72 gap-0 p-0 md:hidden" showCloseButton={false}>
     <Sheet.Header class="sr-only">
-      <Sheet.Title>保险库导航</Sheet.Title>
-      <Sheet.Description>筛选密码、管理文件夹并打开工具。</Sheet.Description>
+      <Sheet.Title>{m.ui_vault_navigation()}</Sheet.Title>
+      <Sheet.Description>{m.ui_filter_items_manage_folders_and_open_tools()}</Sheet.Description>
     </Sheet.Header>
     <VaultSidebar
       bind:activeCategory

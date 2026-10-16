@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import type {
   CipherResponse,
   CustomEquivalentDomain,
@@ -157,7 +158,7 @@ export async function uploadAttachmentApi(
   });
   if (!response.ok)
     throw new ApiError(
-      `附件上传失败 (${response.status})`,
+      m.ui_attachment_upload_failed_value({ value0: response.status }),
       response.status,
       await response.text().catch(() => null),
     );
@@ -172,7 +173,9 @@ export async function downloadAttachmentApi(
   ].$get({ param: { id: cipherId, attachmentId } });
   if (!metadataResponse.ok)
     throw new ApiError(
-      `附件下载失败 (${metadataResponse.status})`,
+      m.ui_attachment_download_failed_value({
+        value0: metadataResponse.status,
+      }),
       metadataResponse.status,
       await metadataResponse.text().catch(() => null),
     );
@@ -180,7 +183,7 @@ export async function downloadAttachmentApi(
   const response = await fetch(metadata.url);
   if (!response.ok)
     throw new ApiError(
-      `附件下载失败 (${response.status})`,
+      m.ui_attachment_download_failed_value({ value0: response.status }),
       response.status,
       await response.text().catch(() => null),
     );

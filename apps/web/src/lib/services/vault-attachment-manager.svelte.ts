@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import { toast } from "svelte-sonner";
 import { deleteAttachmentApi } from "./api-vault";
 import {
@@ -40,7 +41,7 @@ export function createVaultAttachmentManager(options: {
           ? { encKey: vault.symEncKey, macKey: vault.symMacKey }
           : null;
       if (!ownerKey) {
-        toast.error("密钥未就绪，请重新解锁保险库");
+        toast.error(m.ui_keys_are_not_ready_unlock_your_vault_again());
         return;
       }
       busy = "upload";
@@ -48,7 +49,11 @@ export function createVaultAttachmentManager(options: {
         await uploadVaultAttachment(cipher, file, ownerKey);
         await refresh(cipher.id);
       } catch (caught) {
-        toast.error(`附件上传失败：${errorDetail(caught)}`);
+        toast.error(
+          m.ui_unable_to_upload_attachment_value({
+            value0: errorDetail(caught),
+          }),
+        );
       } finally {
         busy = null;
       }
@@ -70,7 +75,11 @@ export function createVaultAttachmentManager(options: {
         anchor.click();
         setTimeout(() => URL.revokeObjectURL(url), 0);
       } catch (caught) {
-        toast.error(`附件下载失败：${errorDetail(caught)}`);
+        toast.error(
+          m.ui_unable_to_download_attachment_value({
+            value0: errorDetail(caught),
+          }),
+        );
       } finally {
         busy = null;
       }
@@ -78,7 +87,7 @@ export function createVaultAttachmentManager(options: {
     requestDelete(attachment: VaultAttachment) {
       const cipher = options.selected();
       if (cipher?.readOnly) {
-        toast.error("该组织条目为只读");
+        toast.error(m.ui_this_organization_item_is_read_only());
         return;
       }
       if (cipher) options.confirmDelete(attachment);
@@ -91,7 +100,11 @@ export function createVaultAttachmentManager(options: {
         await deleteAttachmentApi(cipher.id, attachment.id);
         await refresh(cipher.id);
       } catch (caught) {
-        toast.error(`附件删除失败：${errorDetail(caught)}`);
+        toast.error(
+          m.ui_unable_to_delete_attachment_value({
+            value0: errorDetail(caught),
+          }),
+        );
       } finally {
         busy = null;
       }

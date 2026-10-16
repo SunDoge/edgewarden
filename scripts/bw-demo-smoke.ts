@@ -59,7 +59,7 @@ try {
     [1, 2, 3, 4],
   );
   assert.equal(
-    items.find((item) => item.name === "示例网站")?.login?.password,
+    items.find((item) => item.name === "Example website")?.login?.password,
     "Not-A-Real-Password!",
   );
   assert.equal(
@@ -69,13 +69,13 @@ try {
   const sends = JSON.parse(await bw(["send", "list"]));
   assert.equal(
     sends[0]?.text?.text,
-    "欢迎试用 Edgewarden。所有内容均为虚构示例。",
+    "Welcome to Edgewarden. All content is fictional sample data.",
   );
   const sendUrl = sends[0]?.accessUrl ?? sends[0]?.url;
   assert.equal(typeof sendUrl, "string");
   assert.equal(await bw(["receive", sendUrl]), sends[0].text.text);
   console.log("[bw demo] 确认新增、编辑、删除均被只读边界拒绝");
-  const item = items.find((item) => item.name === "示例网站")!;
+  const item = items.find((item) => item.name === "Example website")!;
   for (const args of [
     ["create", "folder", encode({ name: "must-not-be-created" })],
     ["edit", "item", item.id, encode({ ...item, name: "must-not-change" })],

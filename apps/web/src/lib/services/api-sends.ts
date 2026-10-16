@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import type { InferRequestType } from "hono/client";
 import { ApiError, rpc, rpcJson, rpcVoid } from "./rpc";
 import type {
@@ -97,7 +98,7 @@ export async function accessSendPublicApi(
   if (!tokenResponse.ok || !tokenPayload?.access_token) {
     const passwordFailure = Boolean(tokenPayload?.send_access_error_type);
     throw new ApiError(
-      tokenPayload?.error_description || "无法验证 Send 访问权限",
+      tokenPayload?.error_description || m.ui_unable_to_verify_send_access(),
       passwordFailure ? 401 : tokenResponse.status,
       tokenPayload,
     );
@@ -108,7 +109,7 @@ export async function accessSendPublicApi(
     headers: { authorization: `Bearer ${tokenPayload.access_token}` },
   });
   if (!response.ok) {
-    throw new ApiError("无法读取 Send", response.status, null);
+    throw new ApiError(m.ui_unable_to_read_send(), response.status, null);
   }
   return {
     send: (await response.json()) as PublicSend,
@@ -125,7 +126,11 @@ export async function requestSendFileDownloadApi(
     headers: { authorization: `Bearer ${accessToken}` },
   });
   if (!response.ok) {
-    throw new ApiError("无法获取文件下载地址", response.status, null);
+    throw new ApiError(
+      m.ui_unable_to_retrieve_file_download_url(),
+      response.status,
+      null,
+    );
   }
   return response.json() as Promise<{ url: string }>;
 }

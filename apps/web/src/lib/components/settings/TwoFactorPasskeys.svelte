@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { Fingerprint, Trash2 } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
@@ -69,15 +71,16 @@
       const id = Array.from({ length: 5 }, (_, index) => index).find(
         (candidate) => !usedIds.has(candidate),
       );
-      if (id === undefined) throw new Error("最多只能添加 5 把两步验证安全密钥");
+      if (id === undefined)
+        throw new Error(m.ui_you_can_add_up_to_5_two_step_login_security_keys());
       await createTwoFactorPasskeyApi({
         id,
         userVerificationToken,
-        name: name.trim() || "安全密钥",
+        name: name.trim() || m.ui_security_key(),
         ...credential,
       });
       name = "";
-      onMessage("两步验证安全密钥已添加");
+      onMessage(m.ui_two_step_login_security_key_added());
       await onSessionRevoked("two-factor-updated");
     } catch (error) {
       onError(error);
@@ -96,7 +99,7 @@
       } else {
         await deleteTwoFactorPasskeyApi({ id, userVerificationToken });
       }
-      onMessage("两步验证安全密钥已删除");
+      onMessage(m.ui_two_step_login_security_key_deleted());
       await onSessionRevoked("two-factor-updated");
     } catch (error) {
       onError(error);
@@ -108,13 +111,13 @@
 
 <Card.Root>
   <Card.Header
-    ><Card.Title>两步验证安全密钥</Card.Title><Card.Description
-      >这些凭据只作为第二因素，不能单独登录或解锁保险库。</Card.Description
+    ><Card.Title>{m.ui_two_step_login_security_keys()}</Card.Title><Card.Description
+      >{m.ui_these_credentials_are_second_factors_only_they_cannot_log_in_or_unlock_your_vaul()}</Card.Description
     ></Card.Header
   >
   <Card.Content
     ><Button variant="outline" onclick={() => (open = true)}
-      ><Fingerprint data-icon="inline-start" />管理安全密钥</Button
+      ><Fingerprint data-icon="inline-start" />{m.ui_manage_security_keys()}</Button
     ></Card.Content
   >
 </Card.Root>
@@ -131,12 +134,14 @@
   }}
   ><Dialog.Content
     ><Dialog.Header
-      ><Dialog.Title>两步验证安全密钥</Dialog.Title><Dialog.Description
-        >先用主密码验证身份，再添加或删除安全密钥。</Dialog.Description
+      ><Dialog.Title>{m.ui_two_step_login_security_keys()}</Dialog.Title><Dialog.Description
+        >{m.ui_verify_your_master_password_before_adding_or_deleting_security_keys()}</Dialog.Description
       ></Dialog.Header
     ><Field.Group
       ><Field.Field
-        ><Field.Label for="two-factor-passkey-password">当前主密码</Field.Label><Input
+        ><Field.Label for="two-factor-passkey-password"
+          >{m.ui_current_master_password()}</Field.Label
+        ><Input
           id="two-factor-passkey-password"
           type="password"
           bind:value={password}
@@ -144,32 +149,33 @@
         /></Field.Field
       ><Field.Field orientation="horizontal"
         ><Button variant="outline" onclick={load} disabled={!password || busy === "load"}
-          >读取设置</Button
+          >{m.ui_load_settings()}</Button
         ></Field.Field
       >{#if credentials.length}<div class="flex flex-col gap-2">
           {#each credentials as credential (credential.id)}<div
               class="flex items-center justify-between rounded-md border p-3"
             >
-              <span>{credential.name || "安全密钥"}</span><Button
+              <span>{credential.name || m.ui_security_key()}</span><Button
                 variant="ghost"
                 size="icon-sm"
                 onclick={() => (deleteId = String(credential.id))}
                 disabled={busy === `delete-${credential.id}`}
-                aria-label="删除安全密钥"><Trash2 data-icon /></Button
+                aria-label={m.ui_delete_security_key()}><Trash2 data-icon /></Button
               >
             </div>{/each}
         </div>{/if}<Field.Field
-        ><Field.Label for="two-factor-passkey-name">新安全密钥名称</Field.Label><Input
+        ><Field.Label for="two-factor-passkey-name">{m.ui_new_security_key_name()}</Field.Label
+        ><Input
           id="two-factor-passkey-name"
           bind:value={name}
-          placeholder="例如：USB 安全密钥"
+          placeholder={m.ui_for_example_usb_security_key()}
         /></Field.Field
       ></Field.Group
     ><Dialog.Footer
-      ><Button variant="outline" onclick={() => (open = false)}>关闭</Button><Button
+      ><Button variant="outline" onclick={() => (open = false)}>{m.ui_close()}</Button><Button
         onclick={add}
         disabled={!userVerificationToken || busy === "create"}
-        ><Fingerprint data-icon="inline-start" />添加安全密钥</Button
+        ><Fingerprint data-icon="inline-start" />{m.ui_add_security_key()}</Button
       ></Dialog.Footer
     ></Dialog.Content
   ></Dialog.Root
@@ -182,13 +188,14 @@
   }}
   ><AlertDialog.Content
     ><AlertDialog.Header
-      ><AlertDialog.Title>删除安全密钥</AlertDialog.Title><AlertDialog.Description
-        >删除后，这把安全密钥将不能再用于两步验证。</AlertDialog.Description
+      ><AlertDialog.Title>{m.ui_delete_security_key()}</AlertDialog.Title><AlertDialog.Description
+        >{m.ui_this_security_key_will_no_longer_work_for_two_step_login_after_deletion()}</AlertDialog.Description
       ></AlertDialog.Header
     ><AlertDialog.Footer
-      ><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action
+      ><AlertDialog.Cancel>{m.login_cancel()}</AlertDialog.Cancel><AlertDialog.Action
         class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-        onclick={() => deleteId && remove(Number(deleteId))}>确认删除</AlertDialog.Action
+        onclick={() => deleteId && remove(Number(deleteId))}
+        >{m.ui_confirm_deletion()}</AlertDialog.Action
       ></AlertDialog.Footer
     ></AlertDialog.Content
   ></AlertDialog.Root

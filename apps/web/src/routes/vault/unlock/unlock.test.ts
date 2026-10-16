@@ -41,10 +41,10 @@ afterEach(() => vi.unstubAllGlobals());
 
 test("prefills the matching Demo vault but waits for explicit unlock", async () => {
   const { user } = renderComponent(UnlockPage, {});
-  const input = await screen.findByLabelText("主密码");
+  const input = await screen.findByLabelText("Master password");
   await waitFor(() => expect(input).toHaveValue(demo.password));
   expect(mocks.unlock).not.toHaveBeenCalled();
-  await user.click(screen.getByRole("button", { name: "解锁保险库" }));
+  await user.click(screen.getByRole("button", { name: "Unlock vault" }));
   await waitFor(() => expect(mocks.unlock).toHaveBeenCalledWith(demo.password));
 });
 
@@ -60,7 +60,7 @@ test.each(["production", "other-account", "offline"])(
     if (scenario === "offline")
       vi.mocked(fetch).mockRejectedValue(new Error("offline"));
     renderComponent(UnlockPage, {});
-    const input = await screen.findByLabelText("主密码");
+    const input = await screen.findByLabelText("Master password");
     await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     expect(input).toHaveValue("");
     expect(mocks.unlock).not.toHaveBeenCalled();
@@ -76,7 +76,7 @@ test("a late Demo response does not overwrite user input", async () => {
       }),
   );
   const { user } = renderComponent(UnlockPage, {});
-  const input = await screen.findByLabelText("主密码");
+  const input = await screen.findByLabelText("Master password");
   await user.type(input, "my-input");
   resolve(Response.json(demo));
   await waitFor(() => expect(input).toHaveValue("my-input"));

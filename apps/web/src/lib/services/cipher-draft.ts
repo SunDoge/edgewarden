@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import { CipherType, parseJsonWithSchema } from "@edgewarden/shared";
 import { match } from "ts-pattern";
 import * as v from "valibot";
@@ -37,7 +38,7 @@ export function buildCipherPayload(
   editing: boolean,
   now = new Date(),
 ): CipherDraftPayload {
-  if (!draft.name.trim()) throw new Error("名称不能为空");
+  if (!draft.name.trim()) throw new Error(m.ui_name_is_required());
   const payload: CipherDraftPayload = {
     type: draft.type,
     name: draft.name.trim(),
@@ -102,7 +103,7 @@ export function buildCipherPayload(
           v.record(v.string(), v.unknown()),
         );
       } catch {
-        throw new Error("类型数据必须是有效的 JSON");
+        throw new Error(m.ui_type_specific_data_must_be_valid_json());
       }
       const key = match(type)
         .with(CipherType.SshKey, () => "sshKey" as const)

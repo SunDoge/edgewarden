@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import {
   createFileSendApi,
   createSendApi,
@@ -17,15 +18,17 @@ import {
 import type { SendMutationPayload } from "$lib/services/send-types";
 
 export function validateSendDraft(form: SendEditorDraft, isCreating: boolean) {
-  if (!form.name.trim()) throw new Error("名称不能为空！");
+  if (!form.name.trim()) throw new Error(m.ui_name_is_required_2());
   if (form.type === 0 && !form.textContent.trim()) {
-    throw new Error("文本内容不能为空！");
+    throw new Error(m.ui_text_content_is_required());
   }
   if (form.type === 1 && !form.file && isCreating) {
-    throw new Error("请选择要上传的文件！");
+    throw new Error(m.ui_select_a_file_to_upload());
   }
   if (isCreating && form.protectWithPassword && !form.password) {
-    throw new Error("启用密码保护时必须输入访问密码！");
+    throw new Error(
+      m.ui_enter_an_access_password_when_password_protection_is_enabled(),
+    );
   }
 }
 
@@ -43,7 +46,8 @@ export async function saveOwnedSend({
   vaultKeys: { encKey: Uint8Array; macKey: Uint8Array };
 }) {
   validateSendDraft(form, isCreating);
-  if (isEditing && !selectedSend) throw new Error("找不到要编辑的 Send");
+  if (isEditing && !selectedSend)
+    throw new Error(m.ui_the_send_to_edit_could_not_be_found());
   const keys: SendKeys = selectedSend?._sendKeys ?? (await createSendKeys());
   const encrypted = await encryptSendMetadata(
     {
@@ -117,6 +121,8 @@ async function createAndUploadFileSend(
     headers: { "Content-Type": "application/octet-stream" },
   });
   if (!uploadResponse.ok) {
-    throw new Error(`文件 payload 上传失败: ${uploadResponse.status}`);
+    throw new Error(
+      m.ui_file_upload_failed_value({ value0: uploadResponse.status }),
+    );
   }
 }

@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import {
   KdfType,
   type PreloginResponse,
@@ -158,7 +159,8 @@ export async function getTurnstileConfigApi(): Promise<{
   const response = await fetch("/api/config", {
     headers: { accept: "application/json" },
   });
-  if (!response.ok) throw new Error("无法加载人机验证配置");
+  if (!response.ok)
+    throw new Error(m.ui_unable_to_load_human_verification_settings());
   const config = (await response.json()) as {
     turnstile?: { enabled?: boolean; siteKey?: string | null };
   };
@@ -181,7 +183,8 @@ export async function getRegistrationConfigApi(): Promise<RegistrationConfig> {
   const response = await fetch("/api/config", {
     headers: { accept: "application/json" },
   });
-  if (!response.ok) throw new Error("无法加载注册配置");
+  if (!response.ok)
+    throw new Error(m.ui_unable_to_load_registration_settings_2());
   const config = (await response.json()) as {
     registration?: Partial<RegistrationConfig>;
     turnstile?: { enabled?: boolean; siteKey?: string | null };
@@ -268,7 +271,8 @@ export async function loginWithPasskeyApi(): Promise<{
     },
   });
   const token = (await rpcJson(response)) as unknown as PasskeyLoginToken;
-  if (!token.access_token) throw new Error("通行密钥登录未返回访问令牌");
+  if (!token.access_token)
+    throw new Error(m.ui_passkey_login_did_not_return_an_access_token());
   const decryption =
     token.UserDecryptionOptions ?? token.userDecryptionOptions ?? {};
   const prfOption =

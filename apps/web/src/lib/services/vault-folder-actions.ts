@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import {
   createFolderApi,
   deleteFolderApi,
@@ -24,11 +25,12 @@ export async function saveVaultFolder({
 }) {
   const normalizedName = name.trim();
   if (!normalizedName) return;
-  if (!encKey || !macKey) throw new Error("密钥未就绪，请重新解锁保险库");
+  if (!encKey || !macKey)
+    throw new Error(m.ui_keys_are_not_ready_unlock_your_vault_again());
   const encryptedName = await encryptStr(normalizedName, encKey, macKey);
   if (mode === "create") await createFolderApi({ name: encryptedName });
   else if (folderId) await updateFolderApi(folderId, { name: encryptedName });
-  else throw new Error("找不到要重命名的文件夹");
+  else throw new Error(m.ui_the_folder_to_rename_could_not_be_found());
 }
 
 export async function removeVaultFolder(folderId: string) {

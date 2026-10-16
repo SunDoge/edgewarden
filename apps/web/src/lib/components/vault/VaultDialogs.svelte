@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
@@ -58,18 +60,23 @@
 <AlertDialog.Root bind:open={deleteOpen}>
   <AlertDialog.Content>
     <AlertDialog.Header
-      ><AlertDialog.Title>确认删除</AlertDialog.Title><AlertDialog.Description
+      ><AlertDialog.Title>{m.ui_confirm_deletion()}</AlertDialog.Title><AlertDialog.Description
         >{selectedItemDeleted
-          ? `确定要永久删除“${selectedItemName}”吗？此操作无法撤销。`
-          : `确定要将“${selectedItemName}”移到回收站吗？`}</AlertDialog.Description
+          ? m.ui_permanently_delete_value_this_cannot_be_undone({ value0: selectedItemName ?? "" })
+          : m.ui_move_value_to_the_trash({
+              value0: selectedItemName ?? "",
+            })}</AlertDialog.Description
       ></AlertDialog.Header
     >
     <AlertDialog.Footer
-      ><AlertDialog.Cancel disabled={deleteLoading}>取消</AlertDialog.Cancel><AlertDialog.Action
+      ><AlertDialog.Cancel disabled={deleteLoading}>{m.login_cancel()}</AlertDialog.Cancel
+      ><AlertDialog.Action
         onclick={onDeleteItem}
         disabled={deleteLoading}
         class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-        >{selectedItemDeleted ? "永久删除" : "移到回收站"}</AlertDialog.Action
+        >{selectedItemDeleted
+          ? m.ui_delete_permanently()
+          : m.ui_move_to_trash()}</AlertDialog.Action
       ></AlertDialog.Footer
     >
   </AlertDialog.Content>
@@ -78,16 +85,19 @@
 <AlertDialog.Root bind:open={deleteAllFoldersOpen}>
   <AlertDialog.Content>
     <AlertDialog.Header
-      ><AlertDialog.Title>删除全部文件夹</AlertDialog.Title><AlertDialog.Description
-        >将删除全部 {folders.length} 个文件夹。保险库项目不会被删除，而会移至“无文件夹”。此操作不可撤销。</AlertDialog.Description
+      ><AlertDialog.Title>{m.ui_delete_all_folders()}</AlertDialog.Title><AlertDialog.Description
+        >{m.ui_delete_all_value_folders_vault_items_will_not_be_deleted_they_will_move_to_no_fo({
+          value0: folders.length,
+        })}</AlertDialog.Description
       ></AlertDialog.Header
     >
     <AlertDialog.Footer
-      ><AlertDialog.Cancel disabled={folderLoading}>取消</AlertDialog.Cancel><AlertDialog.Action
+      ><AlertDialog.Cancel disabled={folderLoading}>{m.login_cancel()}</AlertDialog.Cancel
+      ><AlertDialog.Action
         onclick={onDeleteAllFolders}
         disabled={folderLoading}
         class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-        >确认删除全部</AlertDialog.Action
+        >{m.ui_delete_all()}</AlertDialog.Action
       ></AlertDialog.Footer
     >
   </AlertDialog.Content>
@@ -96,8 +106,8 @@
 <Dialog.Root bind:open={moveOpen}>
   <Dialog.Content
     ><Dialog.Header
-      ><Dialog.Title>移动所选条目</Dialog.Title><Dialog.Description
-        >选择目标文件夹；选择“无文件夹”会移出当前文件夹。</Dialog.Description
+      ><Dialog.Title>{m.ui_move_selected_items()}</Dialog.Title><Dialog.Description
+        >{m.ui_choose_a_destination_select_no_folder_to_remove_items_from_their_current_folder()}</Dialog.Description
       ></Dialog.Header
     ><Select.Root
       type="single"
@@ -105,20 +115,20 @@
       onValueChange={(value) => (moveFolderId = value === "__none" ? null : value)}
       ><Select.Trigger class="w-full"
         >{moveFolderId
-          ? (folders.find((folder) => folder.id === moveFolderId)?.name ?? "选择文件夹")
-          : "无文件夹"}</Select.Trigger
+          ? (folders.find((folder) => folder.id === moveFolderId)?.name ?? m.ui_select_folder())
+          : m.ui_no_folder()}</Select.Trigger
       ><Select.Content
         ><Select.Group
-          ><Select.Item value="__none">无文件夹</Select.Item
+          ><Select.Item value="__none">{m.ui_no_folder()}</Select.Item
           >{#each folders as folder (folder.id)}<Select.Item value={folder.id}
               >{folder.name}</Select.Item
             >{/each}</Select.Group
         ></Select.Content
       ></Select.Root
     ><Dialog.Footer
-      ><Button variant="outline" onclick={() => (moveOpen = false)}>取消</Button><Button
-        onclick={onMoveItems}
-        disabled={deleteLoading}>移动 {selectedCount} 项</Button
+      ><Button variant="outline" onclick={() => (moveOpen = false)}>{m.login_cancel()}</Button
+      ><Button onclick={onMoveItems} disabled={deleteLoading}
+        >{m.ui_move_value_items({ value0: selectedCount })}</Button
       ></Dialog.Footer
     ></Dialog.Content
   >
@@ -128,12 +138,13 @@
   <AlertDialog.Content>
     <AlertDialog.Header
       ><AlertDialog.Title
-        >{folderMode === "create" ? "新建文件夹" : "重命名文件夹"}</AlertDialog.Title
-      ><AlertDialog.Description>请输入文件夹的名称：</AlertDialog.Description></AlertDialog.Header
+        >{folderMode === "create" ? m.ui_new_folder() : m.ui_rename_folder()}</AlertDialog.Title
+      ><AlertDialog.Description>{m.ui_enter_a_folder_name()}</AlertDialog.Description
+      ></AlertDialog.Header
     >
     <div class="py-4">
       <Input
-        placeholder="文件夹名称"
+        placeholder={m.ui_folder_name()}
         bind:value={folderName}
         onkeydown={(event) => {
           if (event.key === "Enter") {
@@ -145,9 +156,9 @@
       />
     </div>
     <AlertDialog.Footer
-      ><AlertDialog.Cancel disabled={folderLoading}>取消</AlertDialog.Cancel><AlertDialog.Action
-        onclick={onSaveFolder}
-        disabled={folderLoading || !folderName.trim()}>保存</AlertDialog.Action
+      ><AlertDialog.Cancel disabled={folderLoading}>{m.login_cancel()}</AlertDialog.Cancel
+      ><AlertDialog.Action onclick={onSaveFolder} disabled={folderLoading || !folderName.trim()}
+        >{m.ui_save()}</AlertDialog.Action
       ></AlertDialog.Footer
     >
   </AlertDialog.Content>
@@ -156,18 +167,20 @@
 <AlertDialog.Root bind:open={deleteFolderOpen}>
   <AlertDialog.Content>
     <AlertDialog.Header
-      ><AlertDialog.Title>确认删除文件夹</AlertDialog.Title><AlertDialog.Description
-        >确定要删除文件夹「{targetFolderName}」吗？<span class="mt-2 block text-xs text-destructive"
-          >此操作仅删除文件夹本身，文件夹内的密码项将移至未分类。</span
+      ><AlertDialog.Title>{m.ui_delete_folder()}</AlertDialog.Title><AlertDialog.Description
+        >{m.ui_delete_folder_value({ value0: targetFolderName ?? "" })}<span
+          class="mt-2 block text-xs text-destructive"
+          >{m.ui_only_the_folder_will_be_deleted_its_items_will_move_to_no_folder()}</span
         ></AlertDialog.Description
       ></AlertDialog.Header
     >
     <AlertDialog.Footer
-      ><AlertDialog.Cancel disabled={folderLoading}>取消</AlertDialog.Cancel><AlertDialog.Action
+      ><AlertDialog.Cancel disabled={folderLoading}>{m.login_cancel()}</AlertDialog.Cancel
+      ><AlertDialog.Action
         onclick={onDeleteFolder}
         disabled={folderLoading}
         class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-        >确认删除</AlertDialog.Action
+        >{m.ui_confirm_deletion()}</AlertDialog.Action
       ></AlertDialog.Footer
     >
   </AlertDialog.Content>

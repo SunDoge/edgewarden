@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { AlertCircle, ArrowLeft, Check, Database, Lock, Settings2 } from "@lucide/svelte";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
@@ -75,7 +77,7 @@
         selectedDestId = null;
       }
     } catch (caught) {
-      error = errorMessage(caught, "无法加载备份配置，请刷新页面重试。");
+      error = errorMessage(caught, m.ui_unable_to_load_backup_settings_refresh_and_try_again());
     } finally {
       loading = false;
     }
@@ -93,7 +95,7 @@
     const newId = `backup-${Date.now().toString(36)}`;
     const newDest: BackupDestinationRecord = {
       id: newId,
-      name: "新建备份目的地",
+      name: m.ui_new_backup_destination(),
       type: "r2",
       includeAttachments: false,
       destination: { rootPath: "backups" },
@@ -137,10 +139,10 @@
 
       const res = await updateBackupSettingsApi(settings);
       settings = res;
-      showSuccess("备份设置保存成功！");
+      showSuccess(m.ui_backup_settings_saved());
       selectDestination(selectedDestId);
     } catch (caught) {
-      error = errorMessage(caught, "保存备份配置失败，请检查参数。");
+      error = errorMessage(caught, m.ui_unable_to_save_backup_settings_check_the_configuration());
     } finally {
       saving = false;
     }
@@ -154,10 +156,13 @@
     try {
       const res = await runBackupApi(selectedDestId);
       settings = res.settings;
-      showSuccess(`备份执行成功！已上传文件: ${res.result.fileName}`);
+      showSuccess(m.ui_backup_completed_uploaded_value({ value0: res.result.fileName }));
       selectDestination(selectedDestId);
     } catch (caught) {
-      error = errorMessage(caught, "立即执行备份失败，请检查您的存储配置和连通性。");
+      error = errorMessage(
+        caught,
+        m.ui_backup_failed_check_your_storage_configuration_and_connection(),
+      );
     } finally {
       running = false;
     }
@@ -172,14 +177,14 @@
       settings.destinations = settings.destinations.filter((d) => d.id !== selectedDestId);
       const res = await updateBackupSettingsApi(settings);
       settings = res;
-      showSuccess("删除成功！");
+      showSuccess(m.ui_deleted_successfully());
       if (settings.destinations.length > 0) {
         selectDestination(settings.destinations[0].id);
       } else {
         selectedDestId = null;
       }
     } catch (caught) {
-      error = errorMessage(caught, "删除备份目的地失败。");
+      error = errorMessage(caught, m.ui_unable_to_delete_backup_destination());
     } finally {
       saving = false;
     }
@@ -197,15 +202,15 @@
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      showSuccess("本地备份已成功生成并下载。");
+      showSuccess(m.ui_local_backup_created_and_downloaded());
     } catch (caught) {
-      error = errorMessage(caught, "生成本地备份失败。");
+      error = errorMessage(caught, m.ui_unable_to_create_local_backup());
     }
   }
 
   function requestLocalImport() {
     if (!localFile) {
-      error = "请先选择备份 ZIP 文件。";
+      error = m.ui_select_a_backup_zip_file_first();
       return;
     }
     restoreConfirmation = "";
@@ -220,14 +225,14 @@
     try {
       await importBackupLocalApi(localFile, replaceExisting, allowChecksumMismatch);
       if (replaceExisting) {
-        showSuccess("系统恢复成功，请重新登录账户。");
+        showSuccess(m.ui_restore_completed_please_log_in_again());
         goto("/login");
       } else {
-        showSuccess("备份导入成功，已导入所有非冲突数据。");
+        showSuccess(m.ui_backup_imported_all_non_conflicting_data_has_been_added());
         localFile = undefined;
       }
     } catch (caught) {
-      error = errorMessage(caught, "本地备份导入失败。");
+      error = errorMessage(caught, m.ui_unable_to_import_local_backup());
     } finally {
       restoring = false;
     }
@@ -243,17 +248,17 @@
 </script>
 
 <svelte:head>
-  <title>云备份中心 - Edgewarden</title>
+  <title>{m.ui_backups_edgewarden()}</title>
 </svelte:head>
 
 <VaultPageShell
-  title="云备份中心"
-  description="配置与管理整个密码库实例的安全备份，可导出为标准的端到端加密备份包。"
+  title={m.nav_backups()}
+  description={m.ui_manage_encrypted_backups_of_your_entire_instance()}
 >
   <!-- Alerts -->
   {#if error}
     <Alert.Root variant="destructive"
-      ><AlertCircle /><Alert.Title>操作失败</Alert.Title><Alert.Description
+      ><AlertCircle /><Alert.Title>{m.ui_action_failed()}</Alert.Title><Alert.Description
         >{error}</Alert.Description
       ></Alert.Root
     >
@@ -261,7 +266,7 @@
 
   {#if successMsg}
     <Alert.Root
-      ><Check /><Alert.Title>操作成功</Alert.Title><Alert.Description
+      ><Check /><Alert.Title>{m.ui_action_completed()}</Alert.Title><Alert.Description
         >{successMsg}</Alert.Description
       ></Alert.Root
     >
@@ -271,19 +276,21 @@
   {#if vault.profile?.role !== "admin"}
     <Empty.Root class="mx-auto my-12 max-w-md"
       ><Empty.Header
-        ><Empty.Media variant="icon"><Lock /></Empty.Media><Empty.Title>仅限管理员访问</Empty.Title
+        ><Empty.Media variant="icon"><Lock /></Empty.Media><Empty.Title
+          >{m.ui_administrator_access_required()}</Empty.Title
         ><Empty.Description
-          >云备份中心是系统级管理面板，只有系统管理员能够配置和触发全量数据库备份。</Empty.Description
+          >{m.ui_only_instance_administrators_can_configure_and_run_full_database_backups()}</Empty.Description
         ></Empty.Header
       ><Empty.Content
-        ><Button variant="outline" onclick={() => goto("/vault")}>返回保险库</Button></Empty.Content
+        ><Button variant="outline" onclick={() => goto("/vault")}>{m.ui_back_to_vault()}</Button
+        ></Empty.Content
       ></Empty.Root
     >
   {:else if loading}
     <Empty.Root class="flex-1"
       ><Empty.Header
         ><Empty.Media><Spinner class="size-8" /></Empty.Media><Empty.Title
-          >正在载入备份配置</Empty.Title
+          >{m.ui_loading_backup_settings()}</Empty.Title
         ></Empty.Header
       ></Empty.Root
     >
@@ -313,8 +320,9 @@
           <Empty.Root
             ><Empty.Header
               ><Empty.Media variant="icon"><Settings2 /></Empty.Media><Empty.Title
-                >请选择备份目的地</Empty.Title
-              ><Empty.Description>在左侧选择已有目的地，或添加一个新目的地。</Empty.Description
+                >{m.ui_select_a_backup_destination()}</Empty.Title
+              ><Empty.Description
+                >{m.ui_choose_an_existing_destination_on_the_left_or_add_a_new_one()}</Empty.Description
               ></Empty.Header
             ></Empty.Root
           >
@@ -349,13 +357,14 @@
 <AlertDialog.Root bind:open={deleteConfirmOpen}>
   <AlertDialog.Content
     ><AlertDialog.Header
-      ><AlertDialog.Title>删除备份目的地</AlertDialog.Title><AlertDialog.Description
-        >配置将被删除，但已经存在的远程备份文件不会被删除。</AlertDialog.Description
+      ><AlertDialog.Title>{m.ui_delete_backup_destination()}</AlertDialog.Title
+      ><AlertDialog.Description
+        >{m.ui_the_configuration_will_be_deleted_existing_remote_backup_files_will_remain()}</AlertDialog.Description
       ></AlertDialog.Header
     ><AlertDialog.Footer
-      ><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action
+      ><AlertDialog.Cancel>{m.login_cancel()}</AlertDialog.Cancel><AlertDialog.Action
         class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-        onclick={deleteDestination}>确认删除</AlertDialog.Action
+        onclick={deleteDestination}>{m.ui_confirm_deletion()}</AlertDialog.Action
       ></AlertDialog.Footer
     ></AlertDialog.Content
   >
@@ -364,13 +373,16 @@
 <AlertDialog.Root bind:open={restoreConfirmOpen}>
   <AlertDialog.Content
     ><AlertDialog.Header
-      ><AlertDialog.Title>确认恢复备份</AlertDialog.Title><AlertDialog.Description
-        >{replaceExisting
-          ? "替换模式会覆盖系统中的账户与加密数据。"
-          : "合并模式会导入备份中的非冲突数据。"} 请输入 REVERT 继续。</AlertDialog.Description
+      ><AlertDialog.Title>{m.ui_confirm_backup_restore()}</AlertDialog.Title
+      ><AlertDialog.Description
+        >{m.ui_value_type_revert_to_continue({
+          value0: replaceExisting
+            ? m.ui_replace_mode_overwrites_accounts_and_encrypted_data_in_this_instance()
+            : m.ui_merge_mode_imports_non_conflicting_data_from_the_backup(),
+        })}</AlertDialog.Description
       ></AlertDialog.Header
     ><Field.Field data-invalid={restoreConfirmation.length > 0 && restoreConfirmation !== "REVERT"}
-      ><Field.Label for="restore-confirmation">确认文本</Field.Label><Input
+      ><Field.Label for="restore-confirmation">{m.ui_confirmation_text()}</Field.Label><Input
         id="restore-confirmation"
         bind:value={restoreConfirmation}
         autocomplete="off"
@@ -378,9 +390,9 @@
         placeholder="REVERT"
       /></Field.Field
     ><AlertDialog.Footer
-      ><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action
+      ><AlertDialog.Cancel>{m.login_cancel()}</AlertDialog.Cancel><AlertDialog.Action
         disabled={restoreConfirmation !== "REVERT"}
-        onclick={handleLocalImport}>恢复备份</AlertDialog.Action
+        onclick={handleLocalImport}>{m.ui_restore_backup()}</AlertDialog.Action
       ></AlertDialog.Footer
     ></AlertDialog.Content
   >

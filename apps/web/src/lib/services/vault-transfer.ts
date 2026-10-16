@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import {
   type CipherImportInput,
   type CipherResponse,
@@ -241,9 +242,11 @@ export function parseVaultImport(
   const source = Array.isArray(raw) ? { items: raw } : raw;
   if (source.encrypted === true) {
     if (isPasswordProtectedExport(source))
-      throw new Error("请输入加密导出密码后再导入");
+      throw new Error(
+        m.ui_enter_the_encrypted_export_password_before_importing(),
+      );
     throw new Error(
-      "账户限制型加密 JSON 只能导回原 Bitwarden 账户；请使用密码保护型加密导出",
+      m.ui_account_restricted_json_can_only_be_imported_into_the_original_bitwarden_account(),
     );
   }
   const folders = Array.isArray(source.folders)
@@ -258,7 +261,7 @@ export function parseVaultImport(
       ? source.ciphers
       : [];
   if (!folders.length && !items.length)
-    throw new Error("导入文件中没有保险库数据");
+    throw new Error(m.ui_the_import_file_contains_no_vault_data());
   return {
     folders,
     items: items.map((item, index: number) => ({
@@ -304,7 +307,7 @@ export async function parseVaultImportFile(
   }
   if (!isPasswordProtectedExport(source)) {
     throw new Error(
-      "账户限制型加密 JSON 不能跨服务器导入；请从 Bitwarden 导出密码保护型加密 JSON",
+      m.ui_account_restricted_json_cannot_be_imported_across_servers_export_password_protec(),
     );
   }
   return parseVaultImport(

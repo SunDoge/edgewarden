@@ -31,7 +31,7 @@ describe("vault item display helpers", () => {
   });
 
   it("provides a stable fallback type label", () => {
-    expect(cipherTypeName(CipherType.Passport)).toBe("护照");
-    expect(cipherTypeName(999)).toBe("保险库项");
+    expect(cipherTypeName(CipherType.Passport)).toBe("Passport");
+    expect(cipherTypeName(999)).toBe("Vault item");
   });
 });

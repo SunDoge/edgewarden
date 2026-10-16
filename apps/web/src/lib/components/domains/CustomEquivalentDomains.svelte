@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import type { CustomEquivalentDomain } from "@edgewarden/shared";
   import { Edit, Globe, Plus, Trash2 } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -67,11 +69,11 @@
     if (isNew) newRuleInvalidIndexes = normalized.invalidIndexes;
     else editingInvalidIndexes = normalized.invalidIndexes;
     if (normalized.invalidIndexes.size) {
-      onError("部分域名格式不正确，请修改标记的内容。");
+      onError(m.ui_some_domains_are_invalid_correct_the_highlighted_entries());
       return null;
     }
     if (!normalized.valid) {
-      onError("每条规则必须包含至少 2 个有效的等效域名。");
+      onError(m.ui_each_rule_must_contain_at_least_2_valid_domains());
       return null;
     }
     return normalized.domains;
@@ -84,7 +86,7 @@
     rules = [{ id: createEquivalentDomainRuleId(), domains, excluded: false }, ...rules];
     newRuleDomains = null;
     newRuleInvalidIndexes = new Set();
-    onSuccess("已添加临时规则，请记得点击右上角“保存并应用”。");
+    onSuccess(m.ui_rule_added_locally_select_save_and_apply_to_save_your_changes());
   }
 
   function confirmEdit() {
@@ -94,7 +96,7 @@
     editingRuleId = null;
     editingDomains = ["", ""];
     editingInvalidIndexes = new Set();
-    onSuccess("已更新临时规则，请记得点击右上角“保存并应用”。");
+    onSuccess(m.ui_rule_updated_locally_select_save_and_apply_to_save_your_changes());
   }
 
   function toggleRule(index: number) {
@@ -105,17 +107,17 @@
 
   function deleteRule(index: number) {
     rules = rules.filter((_, ruleIndex) => ruleIndex !== index);
-    onSuccess("已删除规则，请记得点击右上角“保存并应用”。");
+    onSuccess(m.ui_rule_removed_locally_select_save_and_apply_to_save_your_changes());
   }
 </script>
 
 <Card.Root class="min-h-[500px] min-w-0">
   <Card.Header>
-    <Card.Title>自定义规则</Card.Title>
-    <Card.Description>创建专属您的等效域名绑定。</Card.Description>
+    <Card.Title>{m.ui_custom_rules()}</Card.Title>
+    <Card.Description>{m.ui_define_your_own_groups_of_equivalent_domains()}</Card.Description>
     <Card.Action
       ><Button size="sm" onclick={startAdd} disabled={newRuleDomains !== null}
-        ><Plus data-icon="inline-start" />新增规则</Button
+        ><Plus data-icon="inline-start" />{m.ui_add_rule()}</Button
       ></Card.Action
     >
   </Card.Header>
@@ -127,34 +129,38 @@
       <div class="flex flex-col gap-3 rounded-lg border border-dashed p-4">
         <div class="flex items-center justify-between gap-3">
           <p class="flex items-center gap-2 text-sm font-medium">
-            <Globe />{isNew ? "新建域名等效规则" : "编辑等效规则"}
+            <Globe />{isNew
+              ? m.ui_new_equivalent_domain_rule()
+              : m.ui_edit_equivalent_domain_rule()}
           </p>
           <div class="flex gap-2">
-            <Button size="sm" variant="ghost" onclick={() => cancelEditor(isNew)}>取消</Button
-            ><Button size="sm" onclick={isNew ? confirmNew : confirmEdit}>确认</Button>
+            <Button size="sm" variant="ghost" onclick={() => cancelEditor(isNew)}
+              >{m.login_cancel()}</Button
+            ><Button size="sm" onclick={isNew ? confirmNew : confirmEdit}>{m.ui_confirm()}</Button>
           </div>
         </div>
         <Field.Group
           >{#each currentFields as _, index}<Field.Field data-invalid={currentInvalids.has(index)}
               ><div class="flex gap-2">
                 <Input
-                  placeholder="例如: google.com"
+                  placeholder={m.ui_for_example_google_com()}
                   bind:value={currentFields[index]}
                   aria-invalid={currentInvalids.has(index)}
-                  aria-label={`等效域名 ${index + 1}`}
+                  aria-label={m.ui_equivalent_domain_value({ value0: index + 1 })}
                 />{#if currentFields.length > 2}<Button
                     variant="ghost"
                     size="icon"
                     onclick={() => removeDomain(isNew, index)}
-                    aria-label="移除域名"><Trash2 /></Button
+                    aria-label={m.ui_remove_domain()}><Trash2 /></Button
                   >{/if}
               </div>
-              {#if currentInvalids.has(index)}<Field.Error>请输入有效域名。</Field.Error
+              {#if currentInvalids.has(index)}<Field.Error
+                  >{m.ui_enter_a_valid_domain_2()}</Field.Error
                 >{/if}</Field.Field
             >{/each}</Field.Group
         >
         <Button variant="outline" size="sm" onclick={() => addDomain(isNew)} class="w-full"
-          ><Plus data-icon="inline-start" />添加等效域名</Button
+          ><Plus data-icon="inline-start" />{m.ui_add_equivalent_domain()}</Button
         >
       </div>
     {/if}
@@ -171,7 +177,7 @@
             <Checkbox
               checked={!rule.excluded}
               onCheckedChange={() => toggleRule(index)}
-              aria-label={rule.excluded ? "启用规则" : "禁用规则"}
+              aria-label={rule.excluded ? m.ui_enable_rule() : m.ui_disable_rule()}
             />
             <div class="flex min-w-0 flex-1 flex-wrap gap-1.5">
               {#each rule.domains as domain}<code
@@ -185,12 +191,12 @@
               variant="ghost"
               size="icon"
               onclick={() => startEdit(rule)}
-              aria-label="编辑规则"><Edit /></Button
+              aria-label={m.ui_edit_rule()}><Edit /></Button
             ><Button
               variant="ghost"
               size="icon"
               onclick={() => deleteRule(index)}
-              aria-label="删除规则"><Trash2 /></Button
+              aria-label={m.ui_delete_rule()}><Trash2 /></Button
             >
           </div>
         </div>
@@ -198,8 +204,10 @@
         <Empty.Root class="h-full border border-dashed"
           ><Empty.Header
             ><Empty.Media variant="icon"><Globe /></Empty.Media><Empty.Title
-              >暂无自定义等效规则</Empty.Title
-            ><Empty.Description>点击“新增规则”定义一组等效域名。</Empty.Description></Empty.Header
+              >{m.ui_no_custom_rules_yet()}</Empty.Title
+            ><Empty.Description
+              >{m.ui_select_add_rule_to_define_a_group_of_equivalent_domains()}</Empty.Description
+            ></Empty.Header
           ></Empty.Root
         >
       {/each}

@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import type { VaultEditorForm } from "$lib/services/vault-editor";
 import {
   archiveCipherApi,
@@ -78,16 +79,20 @@ export async function saveVaultCipher({
     isEditing,
   );
   if (editor.organizationId && !editor.collectionIds.length) {
-    throw new Error("组织条目至少需要选择一个集合");
+    throw new Error(
+      m.ui_select_at_least_one_collection_for_an_organization_item(),
+    );
   }
   const ownerKey = resolveOwnerKey(editor.organizationId);
-  if (!ownerKey) throw new Error("密钥未就绪，请重新解锁保险库");
+  if (!ownerKey)
+    throw new Error(m.ui_keys_are_not_ready_unlock_your_vault_again());
   const ownershipChanged =
     Boolean(selectedItem) &&
     (selectedItem?.organizationId ?? null) !== editor.organizationId;
   if (ownershipChanged && selectedItem?.key) {
     const sourceOwnerKey = resolveOwnerKey(selectedItem.organizationId);
-    if (!sourceOwnerKey) throw new Error("原所有者密钥不可用");
+    if (!sourceOwnerKey)
+      throw new Error(m.ui_the_original_owner_s_key_is_unavailable());
     payload.key = await rewrapCipherKey(
       selectedItem.key,
       sourceOwnerKey.encKey,
@@ -109,7 +114,7 @@ export async function saveVaultCipher({
   if (isCreating) return createCipherApi(encryptedPayload);
   if (isEditing && selectedItem)
     return updateCipherApi(selectedItem.id, encryptedPayload);
-  throw new Error("没有可保存的保险库条目");
+  throw new Error(m.ui_no_vault_items_to_save());
 }
 
 export async function cloneVaultCipherToPersonal(
@@ -183,9 +188,10 @@ export async function updateEncryptedVaultCipher(
   changes: Record<string, unknown>,
   resolveOwnerKey: CipherOwnerKeyResolver,
 ) {
-  if (item.readOnly) throw new Error("该组织条目为只读");
+  if (item.readOnly)
+    throw new Error(m.ui_this_organization_item_is_read_only());
   const ownerKey = resolveOwnerKey(item.organizationId);
-  if (!ownerKey) throw new Error("保险库密钥不可用");
+  if (!ownerKey) throw new Error(m.ui_vault_key_is_unavailable());
   const encrypted = await encryptCipher(
     { ...item, ...changes },
     ownerKey.encKey,
@@ -215,7 +221,7 @@ export async function applyVaultBulkAction(
   items: VaultActionItem[],
 ) {
   if (items.some((item) => item.readOnly)) {
-    throw new Error("选择中包含只读组织条目");
+    throw new Error(m.ui_the_selection_includes_read_only_organization_items());
   }
   const personalIds = items
     .filter((item) => !item.organizationId)

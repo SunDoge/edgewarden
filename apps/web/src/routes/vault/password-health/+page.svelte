@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { onMount } from "svelte";
   import { match } from "ts-pattern";
   import { goto } from "$app/navigation";
@@ -76,26 +78,27 @@
   }
 </script>
 
-<svelte:head><title>密码健康 - Edgewarden</title></svelte:head>
+<svelte:head><title>{m.ui_password_health_edgewarden()}</title></svelte:head>
 
 <VaultPageShell
-  title="密码健康"
-  description="只向 Have I Been Pwned 发送 SHA-1 摘要前 5 位；密码和完整摘要不会离开浏览器。"
+  title={m.nav_health()}
+  description={m.ui_only_the_first_5_characters_of_each_sha_1_hash_are_sent_to_have_i_been_pwned_pas()}
   width="default"
 >
   {#snippet actions()}<Button onclick={scan} disabled={scanning || vault.isSyncing}
       >{#if scanning}<Spinner data-icon="inline-start" />{:else}<ShieldAlert
           data-icon="inline-start"
-        />{/if}{report ? "重新检查" : "开始检查"}</Button
+        />{/if}{report ? m.ui_check_again() : m.ui_start_check()}</Button
     >{/snippet}
   {#if scanError}<Alert.Root variant="destructive"
-      ><Alert.Title>检查失败</Alert.Title><Alert.Description>{scanError}</Alert.Description
+      ><Alert.Title>{m.ui_check_failed()}</Alert.Title><Alert.Description
+        >{scanError}</Alert.Description
       ></Alert.Root
     >{/if}
   {#if scanning}<Card.Root
       ><Card.Content class="flex flex-col gap-2 pt-6"
         ><div class="flex justify-between text-sm text-muted-foreground">
-          <span>正在检查密码</span><span>{progress.checked} / {progress.total}</span>
+          <span>{m.ui_checking_passwords()}</span><span>{progress.checked} / {progress.total}</span>
         </div>
         <Progress value={progress.checked} max={Math.max(progress.total, 1)} /></Card.Content
       ></Card.Root
@@ -112,22 +115,22 @@
     >
       <ToggleGroup.Item value="exposed" class="h-auto flex-col items-start p-4"
         ><span class="text-2xl font-semibold text-destructive">{report.exposedCount}</span><span
-          class="text-xs text-muted-foreground">已泄露</span
+          class="text-xs text-muted-foreground">{m.ui_exposed()}</span
         ></ToggleGroup.Item
       >
       <ToggleGroup.Item value="reused" class="h-auto flex-col items-start p-4"
         ><span class="text-2xl font-semibold">{report.reusedCount}</span><span
-          class="text-xs text-muted-foreground">重复使用</span
+          class="text-xs text-muted-foreground">{m.ui_reused()}</span
         ></ToggleGroup.Item
       >
       <ToggleGroup.Item value="weak" class="h-auto flex-col items-start p-4"
         ><span class="text-2xl font-semibold">{report.weakCount}</span><span
-          class="text-xs text-muted-foreground">弱密码</span
+          class="text-xs text-muted-foreground">{m.ui_weak_passwords()}</span
         ></ToggleGroup.Item
       >
       <ToggleGroup.Item value="all" class="h-auto flex-col items-start p-4"
         ><span class="text-2xl font-semibold">{report.eligibleCount}</span><span
-          class="text-xs text-muted-foreground">已检查</span
+          class="text-xs text-muted-foreground">{m.ui_checked()}</span
         ></ToggleGroup.Item
       >
     </ToggleGroup.Root>
@@ -141,8 +144,9 @@
               class="h-auto min-w-0 flex-1 justify-start p-1 text-left"
               onclick={() => goto(`/vault?cipher=${encodeURIComponent(risk.cipherId)}`)}
               ><span class="min-w-0"
-                ><span class="block truncate font-semibold">{cipher?.name ?? "未知条目"}</span><span
-                  class="block truncate text-xs text-muted-foreground"
+                ><span class="block truncate font-semibold"
+                  >{cipher?.name ?? m.ui_unknown_item()}</span
+                ><span class="block truncate text-xs text-muted-foreground"
                   >{cipher?.login?.username ?? ""}</span
                 ><span class="mt-1 block truncate font-mono text-xs"
                   >{revealed.has(risk.cipherId) ? cipher?.login?.password : "••••••••••••"}</span
@@ -152,37 +156,40 @@
               variant="ghost"
               size="icon-sm"
               onclick={() => toggleReveal(risk.cipherId)}
-              aria-label="显示或隐藏密码"
+              aria-label={m.ui_show_or_hide_password()}
               >{#if revealed.has(risk.cipherId)}<EyeOff data-icon />{:else}<Eye
                   data-icon
                 />{/if}</Button
             >
             <div class="flex w-full flex-wrap gap-1 sm:w-auto sm:justify-end">
-              {#if risk.exposedCount === null}<Badge variant="outline">查询不可用</Badge
+              {#if risk.exposedCount === null}<Badge variant="outline"
+                  >{m.ui_lookup_unavailable()}</Badge
                 >{:else if risk.exposedCount > 0}<Badge variant="destructive"
-                  >泄露 {risk.exposedCount} 次</Badge
+                  >{m.ui_exposures_value({ value0: risk.exposedCount })}</Badge
                 >{/if}{#if risk.reusedCount > 1}<Badge variant="secondary"
-                  >重复 {risk.reusedCount} 项</Badge
-                >{/if}{#if risk.weak}<Badge variant="secondary">弱密码</Badge>{/if}
+                  >{m.ui_used_in_value_items({ value0: risk.reusedCount })}</Badge
+                >{/if}{#if risk.weak}<Badge variant="secondary">{m.ui_weak_passwords()}</Badge>{/if}
             </div></Card.Content
           ></Card.Root
         >{/each}{#if !filteredItems.length}<Empty.Root
           ><Empty.Header
             ><Empty.Media variant="icon"><CheckCircle2 /></Empty.Media><Empty.Title
-              >未发现密码风险</Empty.Title
-            ><Empty.Description>当前筛选条件下没有需要处理的条目。</Empty.Description></Empty.Header
+              >{m.ui_no_password_risks_found()}</Empty.Title
+            ><Empty.Description
+              >{m.ui_no_items_need_attention_with_the_current_filters()}</Empty.Description
+            ></Empty.Header
           ></Empty.Root
         >{/if}
     </div>
   {:else if !scanning}<Empty.Root
       ><Empty.Header
         ><Empty.Media variant="icon"><AlertTriangle /></Empty.Media><Empty.Title
-          >检查密码健康</Empty.Title
+          >{m.ui_check_password_health()}</Empty.Title
         ><Empty.Description
-          >检查会在浏览器中计算摘要，并使用 k-anonymity 查询泄露次数。</Empty.Description
+          >{m.ui_hashes_are_calculated_in_your_browser_exposure_counts_are_looked_up_using_k_anon()}</Empty.Description
         ></Empty.Header
       ><Empty.Content
-        ><Button onclick={scan}><ShieldAlert data-icon="inline-start" />开始检查</Button
+        ><Button onclick={scan}><ShieldAlert data-icon="inline-start" />{m.ui_start_check()}</Button
         ></Empty.Content
       ></Empty.Root
     >{/if}

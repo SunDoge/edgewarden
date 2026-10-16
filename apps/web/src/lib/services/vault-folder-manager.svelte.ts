@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import { toast } from "svelte-sonner";
 import {
   removeAllVaultFolders,
@@ -89,7 +90,9 @@ export function createVaultFolderManager(activeFolder: {
         await syncVaultData();
         dialogOpen = false;
       } catch (caught) {
-        toast.error(`操作文件夹失败: ${errorDetail(caught)}`);
+        toast.error(
+          m.ui_folder_action_failed_value({ value0: errorDetail(caught) }),
+        );
       } finally {
         dialogLoading = false;
       }
@@ -103,7 +106,9 @@ export function createVaultFolderManager(activeFolder: {
         await syncVaultData();
         deleteDialogOpen = false;
       } catch (caught) {
-        toast.error(`删除文件夹失败: ${errorDetail(caught)}`);
+        toast.error(
+          m.ui_unable_to_delete_folder_value({ value0: errorDetail(caught) }),
+        );
       } finally {
         deleteLoading = false;
       }
@@ -117,7 +122,11 @@ export function createVaultFolderManager(activeFolder: {
         await syncVaultData();
         deleteAllDialogOpen = false;
       } catch (caught) {
-        toast.error(`删除全部文件夹失败: ${errorDetail(caught)}`);
+        toast.error(
+          m.ui_unable_to_delete_all_folders_value({
+            value0: errorDetail(caught),
+          }),
+        );
       } finally {
         deleteLoading = false;
       }

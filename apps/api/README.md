@@ -1,17 +1,10 @@
-```txt
-npm install
-npm run dev
-```
+# API operations
 
-```txt
-npm run deploy
-```
-
-[For generating/synchronizing types based on your Worker configuration run](https://developers.cloudflare.com/workers/wrangler/commands/#types):
-
-```txt
-npm run cf-typegen
-```
+Start with the root [deployment guide](../../README.md#deploy-to-cloudflare),
+including the [required runtime secrets](../../README.md#required-runtime-secrets)
+and [optional integrations](../../README.md#optional-integrations). Run the
+project's `pnpm build` and `pnpm deploy` from the repository root; the deployment
+script handles database initialization and migrations.
 
 # Registration policy
 
@@ -108,7 +101,9 @@ These settings are intentionally absent from the portable Wrangler configs. Add 
 - `YUBICO_CLIENT_ID` and `YUBICO_SECRET_KEY`: optional Yubico validation credentials. Configure both together as secrets. They override credentials encrypted in D1 through the admin UI.
 - `ADMIN_PASSWORD`: compatibility-only alias for `BOOTSTRAP_SECRET`. New deployments should not set it.
 
-`TURNSTILE_SECRET_KEY` and `YUBICO_SECRET_KEY` are secrets. The other values are non-secret variables unless the deployment has a stricter operational policy.
+Store `TURNSTILE_SECRET_KEY`, `YUBICO_CLIENT_ID`, and `YUBICO_SECRET_KEY` as
+secrets. The CORS and WebAuthn settings are non-secret variables; keep them in
+the deployment's Wrangler configuration to persist them across Git deployments.
 
 # Cryptographic secrets
 

@@ -99,18 +99,18 @@
 
   function duplicateModeLabel(mode: DuplicateMode) {
     return match(mode)
-      .with("exact", () => "完全相同")
-      .with("login-site", () => "网站、账号和密码")
-      .with("login-credentials", () => "账号和密码")
-      .with("password", () => "密码复用")
+      .with("exact", () => m.ui_exact_duplicates())
+      .with("login-site", () => m.ui_website_username_and_password())
+      .with("login-credentials", () => m.ui_username_and_password())
+      .with("password", () => m.ui_reused_passwords())
       .exhaustive();
   }
 
   function sortModeLabel(mode: VaultSort) {
     return match(mode)
-      .with("edited", () => "最近修改")
-      .with("created", () => "最近创建")
-      .with("name", () => "名称")
+      .with("edited", () => m.ui_recently_modified())
+      .with("created", () => m.ui_recently_created())
+      .with("name", () => m.ui_name())
       .exhaustive();
   }
 </script>
@@ -123,42 +123,42 @@
         size="icon"
         class="md:hidden"
         onclick={onOpenFilters}
-        aria-label="打开保险库筛选"><ListFilter data-icon /></Button
+        aria-label={m.ui_open_vault_filters()}><ListFilter data-icon /></Button
       >
       <div class="relative flex-1">
         <Search
           class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
         /><Input
           type="search"
-          placeholder="搜索您的保险库项..."
+          placeholder={m.ui_search_your_vault()}
           class="pl-10"
           bind:value={searchQuery}
         />
       </div>
       {#if activeCategory === "duplicates"}
         <Select.Root type="single" bind:value={duplicateMode}>
-          <Select.Trigger class="w-44" aria-label="重复检测方式"
+          <Select.Trigger class="w-44" aria-label={m.ui_duplicate_detection()}
             >{duplicateModeLabel(duplicateMode)}</Select.Trigger
           >
           <Select.Content
             ><Select.Group
-              ><Select.Item value="exact">完全相同</Select.Item><Select.Item value="login-site"
-                >网站、账号和密码</Select.Item
-              ><Select.Item value="login-credentials">账号和密码</Select.Item><Select.Item
-                value="password">密码复用</Select.Item
-              ></Select.Group
+              ><Select.Item value="exact">{m.ui_exact_duplicates()}</Select.Item><Select.Item
+                value="login-site">{m.ui_website_username_and_password()}</Select.Item
+              ><Select.Item value="login-credentials">{m.ui_username_and_password()}</Select.Item
+              ><Select.Item value="password">{m.ui_reused_passwords()}</Select.Item></Select.Group
             ></Select.Content
           >
         </Select.Root>
       {/if}
       <Select.Root type="single" bind:value={sortMode}>
-        <Select.Trigger class="w-28" aria-label="排序方式">{sortModeLabel(sortMode)}</Select.Trigger
+        <Select.Trigger class="w-28" aria-label={m.ui_sort_by()}
+          >{sortModeLabel(sortMode)}</Select.Trigger
         >
         <Select.Content
           ><Select.Group
-            ><Select.Item value="edited">最近修改</Select.Item><Select.Item value="created"
-              >最近创建</Select.Item
-            ><Select.Item value="name">名称</Select.Item></Select.Group
+            ><Select.Item value="edited">{m.ui_recently_modified()}</Select.Item><Select.Item
+              value="created">{m.ui_recently_created()}</Select.Item
+            ><Select.Item value="name">{m.ui_name()}</Select.Item></Select.Group
           ></Select.Content
         >
       </Select.Root>
@@ -168,39 +168,46 @@
         transition:slide={{ duration: 160 }}
         class="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
       >
-        <span>共 {duplicateGroupCount} 组、{items.length} 项；每组应至少保留一项。</span>
+        <span
+          >{m.ui_groups_value_items_value_keep_at_least_one_item_in_each_group({
+            value0: duplicateGroupCount,
+            value1: items.length,
+          })}</span
+        >
         {#if duplicateMode === "exact"}
           <Button size="sm" variant="outline" onclick={onSelectRedundant}
-            >选择每组除最新外的项目</Button
+            >{m.ui_select_all_but_the_newest_in_each_group()}</Button
           >
         {/if}
       </div>
     {/if}
     {#if selectedCount}
       <div transition:slide={{ duration: 160 }} class="flex flex-wrap items-center gap-2 text-sm">
-        <span>已选择 {selectedCount} 项</span>
+        <span>{m.ui_selected_items_value({ value0: selectedCount })}</span>
         {#if activeCategory === "trash"}
           <Button size="sm" variant="outline" onclick={() => onBulkAction("restore")}
-            ><RotateCcw data-icon="inline-start" />恢复</Button
+            ><RotateCcw data-icon="inline-start" />{m.ui_restore()}</Button
           ><Button size="sm" variant="destructive" onclick={() => onBulkAction("permanent")}
-            ><Trash2 data-icon="inline-start" />永久删除</Button
+            ><Trash2 data-icon="inline-start" />{m.ui_delete_permanently()}</Button
           >
         {:else if activeCategory === "archive"}
           <Button size="sm" variant="outline" onclick={() => onBulkAction("unarchive")}
-            ><ArchiveRestore data-icon="inline-start" />取消归档</Button
+            ><ArchiveRestore data-icon="inline-start" />{m.ui_unarchive()}</Button
           ><Button size="sm" variant="destructive" onclick={() => onBulkAction("delete")}
-            ><Trash2 data-icon="inline-start" />移到回收站</Button
+            ><Trash2 data-icon="inline-start" />{m.ui_move_to_trash()}</Button
           >
         {:else}
           <Button size="sm" variant="outline" onclick={() => onBulkAction("archive")}
-            ><Archive data-icon="inline-start" />归档</Button
+            ><Archive data-icon="inline-start" />{m.ui_archive()}</Button
           ><Button size="sm" variant="outline" onclick={onMove}
-            ><Folder data-icon="inline-start" />移动</Button
+            ><Folder data-icon="inline-start" />{m.ui_move()}</Button
           ><Button size="sm" variant="destructive" onclick={() => onBulkAction("delete")}
-            ><Trash2 data-icon="inline-start" />移到回收站</Button
+            ><Trash2 data-icon="inline-start" />{m.ui_move_to_trash()}</Button
           >
         {/if}
-        <Button size="sm" variant="ghost" onclick={onClearSelection}>取消选择</Button>
+        <Button size="sm" variant="ghost" onclick={onClearSelection}
+          >{m.ui_clear_selection()}</Button
+        >
       </div>
     {/if}
   </div>
@@ -240,8 +247,9 @@
         <Empty.Root
           ><Empty.Header
             ><Empty.Media variant="icon"><Lock /></Empty.Media><Empty.Title
-              >找不到符合要求的条目</Empty.Title
-            ><Empty.Description>调整搜索或筛选条件，或者添加一个新条目。</Empty.Description
+              >{m.ui_no_matching_items()}</Empty.Title
+            ><Empty.Description
+              >{m.ui_change_your_search_or_filters_or_add_a_new_item()}</Empty.Description
             ></Empty.Header
           ></Empty.Root
         >
@@ -254,7 +262,7 @@
             <Checkbox
               checked={!!selectedIds[item.id]}
               onCheckedChange={() => onToggleSelection(item.id)}
-              aria-label={`选择 ${item.name}`}
+              aria-label={m.ui_select_value({ value0: item.name })}
               class="ml-3"
             /><Button
               variant="ghost"

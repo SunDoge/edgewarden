@@ -43,8 +43,8 @@ describe("Send client-side encryption", () => {
     ).toEqual(keys.raw);
     await expect(
       decodeSendShareKey(encodeSendShareKey(keys.raw.slice(1))),
-    ).rejects.toThrow(/长度/);
-    await expect(decodeSendShareKey("bad$key")).rejects.toThrow(/格式/);
+    ).rejects.toThrow(/length/);
+    await expect(decodeSendShareKey("bad$key")).rejects.toThrow(/format/);
   });
 
   it("keeps names, notes and text encrypted in server payloads", async () => {

@@ -19,7 +19,7 @@ describe("SSH key generator", () => {
 
   it("rejects malformed public keys when fingerprinting", async () => {
     await expect(computeSshFingerprint("not-a-key")).rejects.toThrow(
-      "格式无效",
+      "Invalid SSH public key format",
     );
   });
 });

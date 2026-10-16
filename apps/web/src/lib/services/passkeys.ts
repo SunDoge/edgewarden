@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import {
   base64ToBytes,
   bytesToBase64,
@@ -33,7 +34,7 @@ export interface AccountPasskeyPrfKeySet {
 
 export class AccountPasskeyPrfUnavailableError extends Error {
   constructor() {
-    super("这把通行密钥不支持直接解密保险库 (PRF)");
+    super(m.ui_this_passkey_does_not_support_vault_decryption_prf());
     this.name = "AccountPasskeyPrfUnavailableError";
   }
 }
@@ -62,7 +63,7 @@ function cloneCreationOptions(
   options: unknown,
 ): PublicKeyCredentialCreationOptions {
   if (!options || typeof options !== "object") {
-    throw new Error("无效的通行密钥创建选项");
+    throw new Error(m.ui_invalid_passkey_creation_options());
   }
   const source = options as SerializedCreationOptions;
   return {
@@ -85,7 +86,7 @@ function cloneRequestOptions(
   options: unknown,
 ): PublicKeyCredentialRequestOptions {
   if (!options || typeof options !== "object") {
-    throw new Error("无效的通行密钥验证选项");
+    throw new Error(m.ui_invalid_passkey_verification_options());
   }
   const source = options as SerializedRequestOptions;
   return {
@@ -223,7 +224,7 @@ async function getPublicKeyCredentialWithPrf(
     try {
       const credential = await attempts[index]();
       if (!(credential instanceof PublicKeyCredential)) {
-        throw new Error("未选择通行密钥");
+        throw new Error(m.ui_no_passkey_selected());
       }
       lastCredential = credential;
       if (
@@ -241,7 +242,7 @@ async function getPublicKeyCredentialWithPrf(
     }
   }
   if (lastCredential) return lastCredential;
-  throw new Error("未选择通行密钥");
+  throw new Error(m.ui_no_passkey_selected());
 }
 
 function publicKeyCredentialBase(
@@ -259,7 +260,7 @@ function assertionRequest(
   credential: PublicKeyCredential,
 ): Record<string, unknown> {
   if (!(credential.response instanceof AuthenticatorAssertionResponse)) {
-    throw new Error("无效的通行密钥验证响应");
+    throw new Error(m.ui_invalid_passkey_verification_response());
   }
   return {
     ...publicKeyCredentialBase(credential),
@@ -284,7 +285,7 @@ function attestationRequest(
   credential: PublicKeyCredential,
 ): Record<string, unknown> {
   if (!(credential.response instanceof AuthenticatorAttestationResponse)) {
-    throw new Error("无效的通行密钥注册响应");
+    throw new Error(m.ui_invalid_passkey_registration_response());
   }
   const transports =
     typeof credential.response.getTransports === "function"
@@ -309,7 +310,7 @@ export async function assertAccountPasskey(response: {
   token: string;
 }): Promise<AccountPasskeyAssertion> {
   if (!window.PublicKeyCredential || !navigator.credentials) {
-    throw new Error("您的浏览器不支持通行密钥 (WebAuthn)");
+    throw new Error(m.ui_your_browser_does_not_support_passkeys_webauthn());
   }
   const nativeOptions = cloneRequestOptions(response.options);
   const credential = await getPublicKeyCredentialWithPrf(
@@ -330,7 +331,7 @@ export async function createAccountPasskeyCredential(response: {
   token: string;
 }): Promise<PendingAccountPasskeyCredential> {
   if (!window.PublicKeyCredential || !navigator.credentials) {
-    throw new Error("您的浏览器不支持通行密钥 (WebAuthn)");
+    throw new Error(m.ui_your_browser_does_not_support_passkeys_webauthn());
   }
   const nativeOptions = cloneCreationOptions(response.options);
   nativeOptions.extensions = {
@@ -341,7 +342,7 @@ export async function createAccountPasskeyCredential(response: {
     publicKey: nativeOptions,
   });
   if (!(credential instanceof PublicKeyCredential)) {
-    throw new Error("没有创建任何通行密钥");
+    throw new Error(m.ui_no_passkey_was_created());
   }
   const supportsPrf = !!credential.getClientExtensionResults().prf?.enabled;
   return {
@@ -366,12 +367,14 @@ export async function assertTwoFactorPasskeyCredential(response: {
   token: string;
 }): Promise<{ token: string; deviceResponse: Record<string, unknown> }> {
   if (!window.PublicKeyCredential || !navigator.credentials)
-    throw new Error("您的浏览器不支持 WebAuthn 安全密钥");
+    throw new Error(
+      m.ui_your_browser_does_not_support_webauthn_security_keys(),
+    );
   const credential = await navigator.credentials.get({
     publicKey: cloneRequestOptions(response.options),
   });
   if (!(credential instanceof PublicKeyCredential))
-    throw new Error("未选择安全密钥");
+    throw new Error(m.ui_no_security_key_selected());
   return {
     token: response.token,
     deviceResponse: assertionRequest(credential),
@@ -399,7 +402,8 @@ async function prfOutputToKey(prfOutput: ArrayBuffer): Promise<Uint8Array> {
 function parseRsaEncryptedUserKey(value: string): Uint8Array {
   const text = String(value || "").trim();
   const [type, payload] = text.split(".");
-  if (type !== "4" || !payload) throw new Error("不支持的加密用户密钥格式");
+  if (type !== "4" || !payload)
+    throw new Error(m.ui_unsupported_encrypted_user_key_format());
   return base64ToBytes(payload);
 }
 
@@ -410,7 +414,9 @@ export async function buildAccountPasskeyPrfKeySet(
   const rawId = new Uint8Array(pending.deviceResponse.rawId);
   const credentialId = bytesToBase64Url(rawId);
   if (!pending.createOptions?.challenge)
-    throw new Error("通行密钥注册挑战已丢失，请重新创建");
+    throw new Error(
+      m.ui_passkey_registration_challenge_is_missing_start_again(),
+    );
   const assertionOptions: PublicKeyCredentialRequestOptions = {
     challenge: pending.createOptions.challenge,
     rpId: pending.createOptions?.rp?.id,
@@ -495,7 +501,7 @@ export async function unlockVaultKeyWithAccountPasskeyPrf(
   const encryptedUserKey =
     option.EncryptedUserKey || option.encryptedUserKey || "";
   if (!encryptedPrivateKey || !encryptedUserKey) {
-    throw new Error("该通行密钥无法解锁保险库");
+    throw new Error(m.ui_this_passkey_cannot_unlock_your_vault());
   }
   const privateKeyBytes = await decryptBw(
     encryptedPrivateKey,
@@ -516,7 +522,8 @@ export async function unlockVaultKeyWithAccountPasskeyPrf(
       toBufferSource(parseRsaEncryptedUserKey(encryptedUserKey)),
     ),
   );
-  if (userKeyBytes.length < 64) throw new Error("解密保险库密钥失败");
+  if (userKeyBytes.length < 64)
+    throw new Error(m.ui_unable_to_decrypt_vault_key());
   return {
     symEncKey: bytesToBase64(userKeyBytes.slice(0, 32)),
     symMacKey: bytesToBase64(userKeyBytes.slice(32, 64)),

@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { formatDateTime } from "$lib/i18n/format";
+  import * as m from "$lib/paraglide/messages.js";
+
   import { Pencil, Trash2 } from "@lucide/svelte";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -58,7 +61,7 @@
       await renameDeviceApi(editingDevice.id, deviceName.trim());
       editingDevice = null;
       devices = (await fetchDevicesApi()).data;
-      onMessage("设备名称已更新");
+      onMessage(m.ui_device_name_updated());
     } catch (error) {
       onError(error);
     } finally {
@@ -89,7 +92,7 @@
       await deleteDevicesApi(selectedIdList);
       devices = devices.filter((device) => !selectedIds[device.id]);
       selectedIds = {};
-      onMessage("已移除选中设备");
+      onMessage(m.ui_selected_devices_removed());
       if (removesCurrent) await onSessionRevoked("device-removed");
     } catch (error) {
       onError(error);
@@ -130,20 +133,23 @@
 <Card.Root>
   <Card.Header class="flex-col items-start justify-between gap-3 sm:flex-row">
     <div>
-      <Card.Title>设备</Card.Title><Card.Description>查看并撤销已登录设备。</Card.Description>
+      <Card.Title>{m.ui_devices()}</Card.Title><Card.Description
+        >{m.ui_view_and_revoke_logged_in_devices()}</Card.Description
+      >
     </div>
     <div class="flex flex-wrap gap-2">
       {#if selectedIdList.length}<Button
           variant="destructive"
           size="sm"
           onclick={() => (removeTarget = { kind: "selected" })}
-          disabled={busy === "selected-devices"}>移除已选（{selectedIdList.length}）</Button
+          disabled={busy === "selected-devices"}
+          >{m.ui_remove_selected_value({ value0: selectedIdList.length })}</Button
         >{/if}
       <Button
         variant="destructive"
         size="sm"
         onclick={() => (removeAllOpen = true)}
-        disabled={!devices.length || busy === "all-devices"}>移除全部</Button
+        disabled={!devices.length || busy === "all-devices"}>{m.ui_remove_all()}</Button
       >
     </div>
   </Card.Header>
@@ -153,35 +159,34 @@
         ><Table.Row
           ><Table.Head class="w-10"
             ><Checkbox
-              aria-label="选择全部设备"
+              aria-label={m.ui_select_all_devices()}
               checked={devices.length > 0 && selectedIdList.length === devices.length}
               onCheckedChange={toggleAll}
             /></Table.Head
-          ><Table.Head>名称</Table.Head><Table.Head>最近登录</Table.Head><Table.Head
-            >密钥状态</Table.Head
-          ><Table.Head class="text-right">操作</Table.Head></Table.Row
+          ><Table.Head>{m.ui_name()}</Table.Head><Table.Head>{m.ui_last_active()}</Table.Head
+          ><Table.Head>{m.ui_key_status()}</Table.Head><Table.Head class="text-right"
+            >{m.ui_actions()}</Table.Head
+          ></Table.Row
         ></Table.Header
       ><Table.Body>
         {#each devices as device (device.id)}<Table.Row
             ><Table.Cell
               ><Checkbox
-                aria-label={`选择设备 ${device.name}`}
+                aria-label={m.ui_select_device_value({ value0: device.name })}
                 checked={!!selectedIds[device.id]}
                 onCheckedChange={(checked) =>
                   (selectedIds = { ...selectedIds, [device.id]: checked })}
               /></Table.Cell
             ><Table.Cell
               ><div class="font-medium">
-                {device.name}{device.id === getCurrentDeviceIdentifier() ? "（当前）" : ""}
+                {device.name}{device.id === getCurrentDeviceIdentifier() ? m.ui_current() : ""}
               </div>
               <div class="text-xs text-muted-foreground">{device.identifier}</div></Table.Cell
             ><Table.Cell
-              >{device.lastActivityDate
-                ? new Date(device.lastActivityDate).toLocaleString()
-                : "—"}</Table.Cell
+              >{device.lastActivityDate ? formatDateTime(device.lastActivityDate) : "—"}</Table.Cell
             ><Table.Cell
               ><Badge variant="outline"
-                >{device.isTrusted ? "已保存设备密钥" : "未保存设备密钥"}</Badge
+                >{device.isTrusted ? m.ui_device_key_saved() : m.ui_no_device_key_saved()}</Badge
               ></Table.Cell
             ><Table.Cell
               ><div class="flex justify-end gap-1">
@@ -189,19 +194,19 @@
                   variant="ghost"
                   size="icon-sm"
                   onclick={() => startRename(device)}
-                  aria-label="重命名设备"><Pencil data-icon /></Button
+                  aria-label={m.ui_rename_device()}><Pencil data-icon /></Button
                 ><Button
                   variant="ghost"
                   size="icon-sm"
                   onclick={() => (removeTarget = { kind: "single", device })}
                   disabled={busy === `device-${device.id}`}
-                  aria-label="移除设备"><Trash2 data-icon /></Button
+                  aria-label={m.ui_remove_device()}><Trash2 data-icon /></Button
                 >
               </div></Table.Cell
             ></Table.Row
           >{:else}<Table.Row
             ><Table.Cell colspan={5} class="py-8 text-center text-muted-foreground"
-              >暂无设备记录</Table.Cell
+              >{m.ui_no_device_records()}</Table.Cell
             ></Table.Row
           >{/each}
       </Table.Body></Table.Root
@@ -216,18 +221,17 @@
   }}
   ><Dialog.Content
     ><Dialog.Header
-      ><Dialog.Title>重命名设备</Dialog.Title><Dialog.Description
-        >名称用于区分登录设备。</Dialog.Description
+      ><Dialog.Title>{m.ui_rename_device()}</Dialog.Title><Dialog.Description
+        >{m.ui_choose_a_name_to_recognize_this_device()}</Dialog.Description
       ></Dialog.Header
     ><Field.Field
-      ><Field.Label for="device-name">设备名称</Field.Label><Input
+      ><Field.Label for="device-name">{m.ui_device_name()}</Field.Label><Input
         id="device-name"
         bind:value={deviceName}
       /></Field.Field
     ><Dialog.Footer
-      ><Button variant="outline" onclick={() => (editingDevice = null)}>取消</Button><Button
-        onclick={saveDeviceName}
-        disabled={!deviceName.trim()}>保存</Button
+      ><Button variant="outline" onclick={() => (editingDevice = null)}>{m.login_cancel()}</Button
+      ><Button onclick={saveDeviceName} disabled={!deviceName.trim()}>{m.ui_save()}</Button
       ></Dialog.Footer
     ></Dialog.Content
   ></Dialog.Root
@@ -236,21 +240,23 @@
 <Dialog.Root bind:open={removeAllOpen}
   ><Dialog.Content
     ><Dialog.Header
-      ><Dialog.Title>移除全部设备</Dialog.Title><Dialog.Description
-        >所有刷新令牌都会撤销，当前浏览器也会退出。请输入主密码确认。</Dialog.Description
+      ><Dialog.Title>{m.ui_remove_all_devices()}</Dialog.Title><Dialog.Description
+        >{m.ui_all_refresh_tokens_will_be_revoked_and_this_browser_will_log_out_too_enter_your_()}</Dialog.Description
       ></Dialog.Header
     ><Field.Field
-      ><Field.Label for="remove-devices-password">当前主密码</Field.Label><Input
+      ><Field.Label for="remove-devices-password">{m.ui_current_master_password()}</Field.Label
+      ><Input
         id="remove-devices-password"
         type="password"
         bind:value={removeAllPassword}
         autocomplete="current-password"
       /></Field.Field
     ><Dialog.Footer
-      ><Button variant="outline" onclick={() => (removeAllOpen = false)}>取消</Button><Button
+      ><Button variant="outline" onclick={() => (removeAllOpen = false)}>{m.login_cancel()}</Button
+      ><Button
         variant="destructive"
         onclick={removeAllDevices}
-        disabled={!removeAllPassword || busy === "all-devices"}>移除并退出</Button
+        disabled={!removeAllPassword || busy === "all-devices"}>{m.ui_remove_and_log_out()}</Button
       ></Dialog.Footer
     ></Dialog.Content
   ></Dialog.Root
@@ -263,15 +269,17 @@
   }}
   ><AlertDialog.Content
     ><AlertDialog.Header
-      ><AlertDialog.Title>移除设备</AlertDialog.Title><AlertDialog.Description
+      ><AlertDialog.Title>{m.ui_remove_device()}</AlertDialog.Title><AlertDialog.Description
         >{removeTarget?.kind === "single"
-          ? `移除设备“${removeTarget.device.name}”并撤销其会话？`
-          : `移除选中的 ${selectedIdList.length} 台设备并撤销其会话？`}</AlertDialog.Description
+          ? m.ui_remove_device_value_and_revoke_its_sessions({ value0: removeTarget.device.name })
+          : m.ui_remove_value_selected_devices_and_revoke_their_sessions({
+              value0: selectedIdList.length,
+            })}</AlertDialog.Description
       ></AlertDialog.Header
     ><AlertDialog.Footer
-      ><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action
+      ><AlertDialog.Cancel>{m.login_cancel()}</AlertDialog.Cancel><AlertDialog.Action
         class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-        onclick={confirmRemoveDevices}>确认移除</AlertDialog.Action
+        onclick={confirmRemoveDevices}>{m.ui_confirm_removal()}</AlertDialog.Action
       ></AlertDialog.Footer
     ></AlertDialog.Content
   ></AlertDialog.Root

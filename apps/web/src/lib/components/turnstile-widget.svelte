@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { onMount } from "svelte";
 
   type TurnstileApi = {
@@ -66,4 +68,8 @@
   });
 </script>
 
-<div bind:this={container} class="flex min-h-16 justify-center" aria-label="人机验证"></div>
+<div
+  bind:this={container}
+  class="flex min-h-16 justify-center"
+  aria-label={m.ui_human_verification()}
+></div>

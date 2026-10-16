@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import type { AttachmentResponse, CipherResponse } from "@edgewarden/shared";
 import {
   decryptBw,
@@ -22,7 +23,7 @@ async function cipherKeys(
 ): Promise<AttachmentKeys> {
   if (!cipher.key) return { enc: userEnc, mac: userMac };
   const raw = await decryptBw(cipher.key, userEnc, userMac);
-  if (raw.length !== 64) throw new Error("保险库条目密钥长度无效");
+  if (raw.length !== 64) throw new Error(m.ui_invalid_item_key_length());
   return { enc: raw.slice(0, 32), mac: raw.slice(32, 64) };
 }
 
@@ -32,7 +33,8 @@ export async function prepareAttachment(
   userEnc: Uint8Array,
   userMac: Uint8Array,
 ): Promise<PreparedAttachment> {
-  if (!file.name || file.size < 1) throw new Error("附件不能为空");
+  if (!file.name || file.size < 1)
+    throw new Error(m.ui_attachments_cannot_be_empty());
   const itemKeys = await cipherKeys(cipher, userEnc, userMac);
   const raw = crypto.getRandomValues(new Uint8Array(64));
   const keys = { enc: raw.slice(0, 32), mac: raw.slice(32, 64) };
@@ -61,10 +63,11 @@ export async function decryptAttachmentMetadata(
   userEnc: Uint8Array,
   userMac: Uint8Array,
 ): Promise<AttachmentResponse & { _keys: AttachmentKeys }> {
-  if (!attachment.key) throw new Error("附件缺少加密密钥");
+  if (!attachment.key)
+    throw new Error(m.ui_attachment_encryption_key_is_missing());
   const itemKeys = await cipherKeys(cipher, userEnc, userMac);
   const raw = await decryptBw(attachment.key, itemKeys.enc, itemKeys.mac);
-  if (raw.length !== 64) throw new Error("附件密钥长度无效");
+  if (raw.length !== 64) throw new Error(m.ui_invalid_attachment_key_length());
   const keys = { enc: raw.slice(0, 32), mac: raw.slice(32, 64) };
   const fileName = new TextDecoder().decode(
     await decryptBw(attachment.fileName, keys.enc, keys.mac),

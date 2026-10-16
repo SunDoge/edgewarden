@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { ArrowLeft, Lock } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Empty from "$lib/components/ui/empty/index.js";
@@ -76,7 +78,7 @@
     : 'hidden'} absolute inset-0 z-10 w-full flex-col overflow-y-auto border-l bg-background p-4 md:static md:flex md:w-96 md:shrink-0 md:p-6"
 >
   <div class="mb-4 md:hidden">
-    <Button variant="ghost" size="sm" onclick={onBack}><ArrowLeft />返回列表</Button>
+    <Button variant="ghost" size="sm" onclick={onBack}><ArrowLeft />{m.ui_back_to_list()}</Button>
   </div>
   {#key isCreating ? "create" : isEditing ? `edit-${selectedItem?.id ?? "new"}` : (selectedItem?.id ?? (isSyncing ? "syncing" : "empty"))}
     <div class="min-h-0 flex-1" transition:fade={{ duration: 140 }}>
@@ -112,7 +114,7 @@
           {onAttachmentDelete}
         />
       {:else if isSyncing}
-        <div class="flex flex-col gap-6" aria-label="正在加载项目详情">
+        <div class="flex flex-col gap-6" aria-label={m.ui_loading_item_details()}>
           <div class="flex items-center gap-3">
             <Skeleton class="size-12 shrink-0 rounded-2xl" />
             <div class="flex flex-1 flex-col gap-2">
@@ -129,8 +131,8 @@
       {:else}
         <Empty.Root class="h-full"
           ><Empty.Media variant="icon"><Lock /></Empty.Media><Empty.Header
-            ><Empty.Title>选择一个项目查看详情</Empty.Title><Empty.Description
-              >点击列表中任何条目，将在此显示解密数据。</Empty.Description
+            ><Empty.Title>{m.ui_select_an_item_to_view_details()}</Empty.Title><Empty.Description
+              >{m.ui_choose_an_item_from_the_list_to_view_its_decrypted_contents()}</Empty.Description
             ></Empty.Header
           ></Empty.Root
         >

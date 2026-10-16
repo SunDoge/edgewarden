@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -50,22 +52,22 @@
   });
 </script>
 
-<svelte:head><title>验证码 - Edgewarden</title></svelte:head>
+<svelte:head><title>{m.ui_verification_codes_edgewarden()}</title></svelte:head>
 
 <VaultPageShell
-  title="验证码"
-  description="所有验证码均在本机根据保险库中的 TOTP 密钥计算。"
+  title={m.nav_totp()}
+  description={m.ui_codes_are_generated_on_your_device_using_the_totp_keys_in_your_vault()}
   width="default"
 >
   {#if vault.isSyncing && !items.length}<Empty.Root
       ><Empty.Media variant="icon"><Spinner /></Empty.Media><Empty.Header
-        ><Empty.Title>正在载入验证码</Empty.Title></Empty.Header
+        ><Empty.Title>{m.ui_loading_verification_codes()}</Empty.Title></Empty.Header
       ></Empty.Root
     >
   {:else if !items.length}<Empty.Root
       ><Empty.Media variant="icon"><KeyRound /></Empty.Media><Empty.Header
-        ><Empty.Title>没有包含 TOTP 密钥的登录项</Empty.Title><Empty.Description
-          >为登录项目添加 TOTP 密钥后，验证码会显示在这里。</Empty.Description
+        ><Empty.Title>{m.ui_no_logins_with_totp_keys()}</Empty.Title><Empty.Description
+          >{m.ui_add_a_totp_key_to_a_login_item_to_see_its_code_here()}</Empty.Description
         ></Empty.Header
       ></Empty.Root
     >
@@ -75,7 +77,7 @@
         <Card.Root
           ><Card.Header class="pb-3"
             ><Card.Title class="truncate">{item.name}</Card.Title><Card.Description class="truncate"
-              >{item.login?.username || "无用户名"}</Card.Description
+              >{item.login?.username || m.ui_no_username()}</Card.Description
             ></Card.Header
           ><Card.Content
             ><div class="flex items-center justify-between gap-3">
@@ -83,7 +85,9 @@
                 <p class="font-mono text-2xl font-bold tracking-widest">
                   {live ? `${live.code.slice(0, 3)} ${live.code.slice(3)}` : "——— ———"}
                 </p>
-                <p class="text-xs text-muted-foreground">{live ? "动态验证码" : "无法计算"}</p>
+                <p class="text-xs text-muted-foreground">
+                  {live ? m.ui_verification_code() : m.ui_unable_to_generate_code()}
+                </p>
               </div>
               <div class="flex items-center gap-2">
                 {#if live}<TotpCountdown remain={live.remain} period={live.period} />{/if}<Button
@@ -91,7 +95,7 @@
                   size="icon"
                   disabled={!live}
                   onclick={() => live && copyCode(item.id, live.code)}
-                  aria-label={`复制 ${item.name} 的验证码`}
+                  aria-label={m.ui_copy_verification_code_for_value({ value0: item.name })}
                   >{#if copiedId === item.id}<Check />{:else}<Copy />{/if}</Button
                 >
               </div>

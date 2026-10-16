@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { onMount } from "svelte";
   import { match } from "ts-pattern";
   import { goto } from "$app/navigation";
@@ -80,7 +82,9 @@
       sends = decryptedList;
     } catch (error) {
       if (!cached.length)
-        errorMsg = `加载 Send 列表失败：${error instanceof Error ? error.message : String(error)}`;
+        errorMsg = m.ui_unable_to_load_sends_value({
+          value0: error instanceof Error ? error.message : String(error),
+        });
     } finally {
       loading = false;
     }
@@ -147,7 +151,9 @@
       selectedSend = null;
       await loadSends();
     } catch (error) {
-      errorMsg = `保存失败：${error instanceof Error ? error.message : String(error)}`;
+      errorMsg = m.ui_unable_to_save_value({
+        value0: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       loading = false;
     }
@@ -160,7 +166,9 @@
       selectedSend = null;
       await loadSends();
     } catch (error) {
-      errorMsg = `删除失败：${error instanceof Error ? error.message : String(error)}`;
+      errorMsg = m.ui_unable_to_delete_value({
+        value0: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       loading = false;
     }
@@ -175,7 +183,9 @@
       selectedSend = null;
       await loadSends();
     } catch (error) {
-      errorMsg = `批量删除失败：${error instanceof Error ? error.message : String(error)}`;
+      errorMsg = m.ui_unable_to_delete_selected_items_value({
+        value0: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       loading = false;
     }
@@ -215,17 +225,23 @@
 </script>
 
 <svelte:head>
-  <title>Send 传输中心 - Edgewarden</title>
+  <title>{m.ui_send_edgewarden()}</title>
 </svelte:head>
 
 <VaultPageShell
-  title="Send 传输中心"
-  description="创建和管理端到端加密的临时分享。"
+  title={m.nav_sends()}
+  description={m.ui_create_and_manage_end_to_end_encrypted_temporary_shares()}
   width="full"
   fill
 >
   {#snippet actions()}
-    <Button variant="ghost" size="sm" onclick={loadSends} disabled={loading} aria-label="刷新 Send">
+    <Button
+      variant="ghost"
+      size="sm"
+      onclick={loadSends}
+      disabled={loading}
+      aria-label={m.ui_refresh_sends()}
+    >
       {#if loading}<Spinner />{:else}<RefreshCw data-icon />{/if}
     </Button>
   {/snippet}
@@ -239,7 +255,8 @@
     >
       {#if errorMsg}<div class="p-3">
           <Alert.Root variant="destructive"
-            ><Alert.Title>操作失败</Alert.Title><Alert.Description>{errorMsg}</Alert.Description
+            ><Alert.Title>{m.ui_action_failed()}</Alert.Title><Alert.Description
+              >{errorMsg}</Alert.Description
             ></Alert.Root
           >
         </div>{/if}
@@ -248,14 +265,14 @@
           <Search class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="搜索您创建的分享..."
+            placeholder={m.ui_search_your_sends()}
             class="pl-10"
             bind:value={searchQuery}
           />
         </div>
-        <Button class="shrink-0 font-semibold" onclick={startCreate} aria-label="新建 Send">
+        <Button class="shrink-0 font-semibold" onclick={startCreate} aria-label={m.ui_new_send()}>
           <Plus data-icon="inline-start" />
-          <span class="hidden sm:inline">新建 Send</span>
+          <span class="hidden sm:inline">{m.ui_new_send()}</span>
         </Button>
       </div>
       <div class="flex items-center gap-2 border-b px-4 py-2">
@@ -266,7 +283,7 @@
           onValueChange={(value) => {
             if (value) typeFilter = value as typeof typeFilter;
           }}
-          >{#each [["all", "全部"], ["text", "文本"], ["file", "文件"]] as option}<ToggleGroup.Item
+          >{#each [["all", m.ui_all()], ["text", m.ui_text()], ["file", m.ui_file()]] as option}<ToggleGroup.Item
               value={option[0]}>{option[1]}</ToggleGroup.Item
             >{/each}</ToggleGroup.Root
         >
@@ -275,7 +292,9 @@
             size="sm"
             variant="destructive"
             onclick={() => (deleteTarget = { kind: "bulk" })}
-            ><Trash2 data-icon="inline-start" />删除 {selectedIdList.length} 项</Button
+            ><Trash2 data-icon="inline-start" />{m.ui_delete_value_items({
+              value0: selectedIdList.length,
+            })}</Button
           >{/if}
       </div>
 
@@ -284,19 +303,22 @@
           <Empty.Root
             ><Empty.Header
               ><Empty.Media><Spinner class="size-8" /></Empty.Media><Empty.Title
-                >正在加载 Send</Empty.Title
-              ><Empty.Description>正在解密并整理你的安全分享。</Empty.Description></Empty.Header
+                >{m.ui_loading_sends()}</Empty.Title
+              ><Empty.Description>{m.ui_decrypting_your_shared_content()}</Empty.Description
+              ></Empty.Header
             ></Empty.Root
           >
         {:else if filteredSends.length === 0}
           <Empty.Root
             ><Empty.Header
               ><Empty.Media variant="icon"><Share2 /></Empty.Media><Empty.Title
-                >暂无分享文件或文本</Empty.Title
-              ><Empty.Description>创建安全链接，随时随地发送加密文本和文件。</Empty.Description
+                >{m.ui_no_sends_yet()}</Empty.Title
+              ><Empty.Description
+                >{m.ui_create_a_secure_link_to_share_encrypted_text_or_files()}</Empty.Description
               ></Empty.Header
             ><Empty.Content
-              ><Button onclick={startCreate}><Plus data-icon="inline-start" />新建 Send</Button
+              ><Button onclick={startCreate}
+                ><Plus data-icon="inline-start" />{m.ui_new_send()}</Button
               ></Empty.Content
             ></Empty.Root
           >
@@ -320,7 +342,7 @@
                   onclick={(event) => event.stopPropagation()}
                   onCheckedChange={(checked) =>
                     (selectedIds = { ...selectedIds, [send.id]: checked })}
-                  aria-label={`选择 ${send.name}`}
+                  aria-label={m.ui_select_value({ value0: send.name })}
                 />
                 <div
                   class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
@@ -335,11 +357,14 @@
                   <div class="flex items-center gap-1.5">
                     <h4 class="truncate text-sm font-semibold">{send.name}</h4>
                     {#if send.disabled}
-                      <Badge variant="secondary">已禁用</Badge>
+                      <Badge variant="secondary">{m.ui_disabled()}</Badge>
                     {/if}
                   </div>
                   <p class="mt-0.5 truncate text-xs text-muted-foreground">
-                    {send.type === 0 ? "加密文本" : "加密文件"} • 已访问 {send.accessCount} 次
+                    {m.ui_value_access_count_value({
+                      value0: send.type === 0 ? m.ui_encrypted_text() : m.ui_encrypted_file(),
+                      value1: send.accessCount,
+                    })}
                   </p>
                 </div>
               </div>
@@ -353,14 +378,16 @@
                     e.stopPropagation();
                     copyShareLink(send);
                   }}
-                  aria-label={copiedId === send.id ? "链接已复制" : `复制 ${send.name} 的链接`}
+                  aria-label={copiedId === send.id
+                    ? m.ui_link_copied()
+                    : m.ui_copy_link_for_value({ value0: send.name })}
                 >
                   {#if copiedId === send.id}
                     <Check data-icon="inline-start" />
-                    <span class="hidden sm:inline">已复制</span>
+                    <span class="hidden sm:inline">{m.ui_copied()}</span>
                   {:else}
                     <Copy data-icon="inline-start" />
-                    <span class="hidden sm:inline">复制链接</span>
+                    <span class="hidden sm:inline">{m.ui_copy_link()}</span>
                   {/if}
                 </Button>
               </div>
@@ -383,7 +410,7 @@
           onclick={() => {
             if (isCreating || isEditing) cancelEdit();
             else mobileDetailOpen = false;
-          }}><ArrowLeft />返回列表</Button
+          }}><ArrowLeft />{m.ui_back_to_list()}</Button
         >
       </div>
       {#if isCreating || isEditing}
@@ -407,9 +434,9 @@
         <Empty.Root class="h-full"
           ><Empty.Header
             ><Empty.Media variant="icon"><Share2 /></Empty.Media><Empty.Title
-              >选择一个 Send 查看传输详情</Empty.Title
+              >{m.ui_select_a_send_to_view_details()}</Empty.Title
             ><Empty.Description
-              >您创建的任何阅后即焚内容将在此列出，并附带管理统计。</Empty.Description
+              >{m.ui_view_shared_content_access_counts_and_expiration_settings_here()}</Empty.Description
             ></Empty.Header
           ></Empty.Root
         >
@@ -426,15 +453,18 @@
 >
   <AlertDialog.Content
     ><AlertDialog.Header
-      ><AlertDialog.Title>确认删除 Send</AlertDialog.Title><AlertDialog.Description
-        >{deleteTarget?.kind === "bulk"
-          ? `将永久删除选中的 ${selectedIdList.length} 个 Send。`
-          : "此 Send 将被永久删除。"} 此操作无法撤销。</AlertDialog.Description
+      ><AlertDialog.Title>{m.ui_delete_send()}</AlertDialog.Title><AlertDialog.Description
+        >{m.ui_value_this_cannot_be_undone({
+          value0:
+            deleteTarget?.kind === "bulk"
+              ? m.ui_permanently_delete_value_selected_sends({ value0: selectedIdList.length })
+              : m.ui_this_send_will_be_permanently_deleted(),
+        })}</AlertDialog.Description
       ></AlertDialog.Header
     ><AlertDialog.Footer
-      ><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action
+      ><AlertDialog.Cancel>{m.login_cancel()}</AlertDialog.Cancel><AlertDialog.Action
         class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-        onclick={confirmDelete}>确认删除</AlertDialog.Action
+        onclick={confirmDelete}>{m.ui_confirm_deletion()}</AlertDialog.Action
       ></AlertDialog.Footer
     ></AlertDialog.Content
   >

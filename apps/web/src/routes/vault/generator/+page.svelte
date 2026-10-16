@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -94,7 +96,7 @@
         )
         .exhaustive();
     } catch (e) {
-      error = e instanceof Error ? e.message : "生成失败";
+      error = e instanceof Error ? e.message : m.ui_generation_failed();
     } finally {
       generating = false;
     }
@@ -139,34 +141,36 @@
   });
 </script>
 
-<svelte:head><title>密码生成器 · Edgewarden</title></svelte:head>
+<svelte:head><title>{m.ui_password_generator_edgewarden()}</title></svelte:head>
 
 <VaultPageShell
-  title="密码生成器"
-  description="所有内容仅在本机使用加密随机数生成。"
+  title={m.nav_generator()}
+  description={m.ui_generated_entirely_on_your_device_using_cryptographically_secure_randomness()}
   width="compact"
 >
   <Tabs.Root value={preferences.mode} onValueChange={changeMode}>
     <Tabs.List class="grid h-auto grid-cols-2 md:grid-cols-6">
-      <Tabs.Trigger value="password">密码</Tabs.Trigger><Tabs.Trigger value="passphrase"
-        >密码短语</Tabs.Trigger
+      <Tabs.Trigger value="password">{m.ui_password()}</Tabs.Trigger><Tabs.Trigger
+        value="passphrase">{m.ui_passphrase()}</Tabs.Trigger
       ><Tabs.Trigger value="pin">PIN</Tabs.Trigger><Tabs.Trigger value="username"
-        >用户名</Tabs.Trigger
-      ><Tabs.Trigger value="email">邮箱别名</Tabs.Trigger><Tabs.Trigger value="ssh"
-        >SSH 密钥</Tabs.Trigger
+        >{m.ui_username()}</Tabs.Trigger
+      ><Tabs.Trigger value="email">{m.ui_email_alias()}</Tabs.Trigger><Tabs.Trigger value="ssh"
+        >{m.ui_ssh_key()}</Tabs.Trigger
       >
     </Tabs.List>
 
     <Card.Root>
       <Card.Header
-        ><Card.Title>生成结果</Card.Title><Card.Description
-          >{bits ? `估算熵：${bits} bits` : "调整选项后生成"}</Card.Description
+        ><Card.Title>{m.ui_generated_result()}</Card.Title><Card.Description
+          >{bits
+            ? m.ui_estimated_entropy_value_bits({ value0: bits })
+            : m.ui_choose_options_to_generate_a_result()}</Card.Description
         ></Card.Header
       >
       <Card.Content class="flex flex-col gap-3">
         {#if preferences.mode === "ssh" && sshKey}<Field.Group
             ><Field.Field
-              ><Field.Label for="ssh-public">公钥</Field.Label><Textarea
+              ><Field.Label for="ssh-public">{m.ui_public_key()}</Field.Label><Textarea
                 id="ssh-public"
                 value={sshKey.publicKey}
                 readonly
@@ -175,15 +179,15 @@
               />
               <div class="flex gap-2">
                 <Button variant="outline" onclick={() => copy(sshKey?.publicKey)}
-                  ><Copy data-icon="inline-start" />复制公钥</Button
+                  ><Copy data-icon="inline-start" />{m.ui_copy_public_key()}</Button
                 ><Button
                   variant="outline"
                   onclick={() => download("id_edgewarden.pub", `${sshKey?.publicKey}\n`)}
-                  ><Download data-icon="inline-start" />下载</Button
+                  ><Download data-icon="inline-start" />{m.ui_download()}</Button
                 >
               </div></Field.Field
             ><Field.Field
-              ><Field.Label for="ssh-private">私钥</Field.Label><Textarea
+              ><Field.Label for="ssh-private">{m.ui_private_key()}</Field.Label><Textarea
                 id="ssh-private"
                 value={sshKey.privateKey}
                 readonly
@@ -192,15 +196,15 @@
               />
               <div class="flex gap-2">
                 <Button variant="outline" onclick={() => copy(sshKey?.privateKey)}
-                  ><Copy data-icon="inline-start" />复制私钥</Button
+                  ><Copy data-icon="inline-start" />{m.ui_copy_private_key()}</Button
                 ><Button
                   variant="outline"
                   onclick={() => download("id_edgewarden", sshKey?.privateKey ?? "")}
-                  ><Download data-icon="inline-start" />下载</Button
+                  ><Download data-icon="inline-start" />{m.ui_download()}</Button
                 >
               </div></Field.Field
             ><Field.Field
-              ><Field.Label for="ssh-fingerprint">指纹</Field.Label><Input
+              ><Field.Label for="ssh-fingerprint">{m.ui_fingerprint()}</Field.Label><Input
                 id="ssh-fingerprint"
                 value={sshKey.fingerprint}
                 readonly
@@ -212,13 +216,15 @@
               {value}
               readonly
               class="font-mono"
-              placeholder={preferences.mode === "email" ? "请先填写邮箱或域名" : ""}
+              placeholder={preferences.mode === "email"
+                ? m.ui_enter_an_email_address_or_domain_first()
+                : ""}
             /><Button
               variant="outline"
               size="icon"
               onclick={() => copy()}
               disabled={!value}
-              aria-label="复制结果"
+              aria-label={m.ui_copy_result()}
               >{#if copied}<Check />{:else}<Copy />{/if}</Button
             >
           </div>{/if}
@@ -227,18 +233,18 @@
           ><RefreshCw
             class={generating ? "animate-spin" : undefined}
             data-icon="inline-start"
-          />{generating ? "正在生成…" : "重新生成"}</Button
+          />{generating ? m.ui_generating() : m.ui_regenerate()}</Button
         >
       </Card.Content>
     </Card.Root>
 
     <Card.Root>
-      <Card.Header><Card.Title>选项</Card.Title></Card.Header>
+      <Card.Header><Card.Title>{m.ui_options()}</Card.Title></Card.Header>
       <Card.Content>
         <Field.Group>
           {#if preferences.mode === "password"}
             <Field.Field
-              ><Field.Label for="length">长度</Field.Label><Input
+              ><Field.Label for="length">{m.ui_length()}</Field.Label><Input
                 id="length"
                 type="number"
                 min={4}
@@ -246,7 +252,7 @@
                 bind:value={preferences.length}
               /></Field.Field
             >
-            {#each [["大写字母", "uppercase"], ["小写字母", "lowercase"], ["数字", "numbers"], ["特殊字符", "special"], ["避免易混淆字符", "ambiguous"]] as option}
+            {#each [[m.ui_uppercase_letters(), "uppercase"], [m.ui_lowercase_letters(), "lowercase"], [m.ui_numbers(), "numbers"], [m.ui_special_characters(), "special"], [m.ui_avoid_ambiguous_characters(), "ambiguous"]] as option}
               <Field.Field orientation="horizontal"
                 ><Field.Content><Field.Label>{option[0]}</Field.Label></Field.Content><Switch
                   checked={option[1] === "uppercase"
@@ -270,28 +276,28 @@
             {/each}
             <div class="grid grid-cols-2 gap-3">
               {#if preferences.uppercase}<Field.Field
-                  ><Field.Label>最少大写</Field.Label><Input
+                  ><Field.Label>{m.ui_minimum_uppercase()}</Field.Label><Input
                     type="number"
                     min={1}
                     max={9}
                     bind:value={preferences.minUppercase}
                   /></Field.Field
                 >{/if}{#if preferences.lowercase}<Field.Field
-                  ><Field.Label>最少小写</Field.Label><Input
+                  ><Field.Label>{m.ui_minimum_lowercase()}</Field.Label><Input
                     type="number"
                     min={1}
                     max={9}
                     bind:value={preferences.minLowercase}
                   /></Field.Field
                 >{/if}{#if preferences.numbers}<Field.Field
-                  ><Field.Label>最少数字</Field.Label><Input
+                  ><Field.Label>{m.ui_minimum_numbers()}</Field.Label><Input
                     type="number"
                     min={1}
                     max={9}
                     bind:value={preferences.minNumbers}
                   /></Field.Field
                 >{/if}{#if preferences.special}<Field.Field
-                  ><Field.Label>最少特殊字符</Field.Label><Input
+                  ><Field.Label>{m.ui_minimum_special_characters()}</Field.Label><Input
                     type="number"
                     min={1}
                     max={9}
@@ -301,7 +307,7 @@
             </div>
           {:else if preferences.mode === "passphrase" || preferences.mode === "username"}
             <Field.Field
-              ><Field.Label for="words">单词数量</Field.Label><Input
+              ><Field.Label for="words">{m.ui_number_of_words()}</Field.Label><Input
                 id="words"
                 type="number"
                 min={preferences.mode === "username" ? 1 : 3}
@@ -310,36 +316,36 @@
               /></Field.Field
             >
             <Field.Field
-              ><Field.Label for="separator">分隔符</Field.Label><Input
+              ><Field.Label for="separator">{m.ui_separator()}</Field.Label><Input
                 id="separator"
                 maxlength={1}
                 bind:value={preferences.separator}
               /></Field.Field
             >
             <Field.Field orientation="horizontal"
-              ><Field.Content><Field.Label>首字母大写</Field.Label></Field.Content><Switch
-                bind:checked={preferences.capitalize}
-              /></Field.Field
+              ><Field.Content><Field.Label>{m.ui_capitalize_words()}</Field.Label></Field.Content
+              ><Switch bind:checked={preferences.capitalize} /></Field.Field
             >
             <Field.Field orientation="horizontal"
-              ><Field.Content><Field.Label>包含数字</Field.Label></Field.Content><Switch
-                bind:checked={preferences.includeNumber}
-              /></Field.Field
+              ><Field.Content><Field.Label>{m.ui_include_a_number()}</Field.Label></Field.Content
+              ><Switch bind:checked={preferences.includeNumber} /></Field.Field
             >
             <Field.Field orientation="horizontal"
-              ><Field.Content><Field.Label>使用自定义词表</Field.Label></Field.Content><Switch
-                bind:checked={preferences.useCustomWords}
-              /></Field.Field
+              ><Field.Content
+                ><Field.Label>{m.ui_use_a_custom_word_list()}</Field.Label></Field.Content
+              ><Switch bind:checked={preferences.useCustomWords} /></Field.Field
             >
             {#if preferences.useCustomWords}<Field.Field
-                ><Field.Label for="custom-words">自定义单词（空白或逗号分隔）</Field.Label><Textarea
+                ><Field.Label for="custom-words"
+                  >{m.ui_custom_words_separated_by_spaces_or_commas()}</Field.Label
+                ><Textarea
                   id="custom-words"
                   rows={6}
                   bind:value={preferences.customWords}
                 /></Field.Field
               >{/if}
             {#if preferences.mode === "username"}<Field.Field
-                ><Field.Label for="username-prefix">固定词</Field.Label><Input
+                ><Field.Label for="username-prefix">{m.ui_fixed_word()}</Field.Label><Input
                   id="username-prefix"
                   maxlength={128}
                   bind:value={preferences.usernameCustomWord}
@@ -347,7 +353,7 @@
               >{/if}
           {:else if preferences.mode === "pin"}
             <Field.Field
-              ><Field.Label for="pin-length">PIN 长度</Field.Label><Input
+              ><Field.Label for="pin-length">{m.ui_pin_length()}</Field.Label><Input
                 id="pin-length"
                 type="number"
                 min={3}
@@ -357,7 +363,7 @@
             >
           {:else if preferences.mode === "email"}
             <Field.Field
-              ><Field.Label>别名类型</Field.Label><Select.Root
+              ><Field.Label>{m.ui_alias_type()}</Field.Label><Select.Root
                 type="single"
                 value={preferences.aliasMode}
                 onValueChange={(value) =>
@@ -365,25 +371,25 @@
                 ><Select.Trigger class="w-full"
                   >{match(preferences.aliasMode)
                     .with("plus", () => "Plus Addressing")
-                    .with("catchall", () => "Catch-all 域名")
-                    .otherwise(() => "子域名")}</Select.Trigger
+                    .with("catchall", () => m.ui_catch_all_domain())
+                    .otherwise(() => m.ui_subdomain())}</Select.Trigger
                 ><Select.Content
                   ><Select.Group
                     ><Select.Item value="plus">Plus Addressing</Select.Item><Select.Item
-                      value="catchall">Catch-all 域名</Select.Item
-                    ><Select.Item value="subdomain">子域名</Select.Item></Select.Group
+                      value="catchall">{m.ui_catch_all_domain()}</Select.Item
+                    ><Select.Item value="subdomain">{m.ui_subdomain()}</Select.Item></Select.Group
                   ></Select.Content
                 ></Select.Root
               ></Field.Field
             >
             {#if preferences.aliasMode === "catchall"}<Field.Field
-                ><Field.Label for="alias-domain">域名</Field.Label><Input
+                ><Field.Label for="alias-domain">{m.ui_domain()}</Field.Label><Input
                   id="alias-domain"
                   bind:value={preferences.aliasDomain}
                   placeholder="example.com"
                 /></Field.Field
               >{:else}<Field.Field
-                ><Field.Label for="alias-email">邮箱地址</Field.Label><Input
+                ><Field.Label for="alias-email">{m.ui_email_address_2()}</Field.Label><Input
                   id="alias-email"
                   type="email"
                   bind:value={preferences.email}
@@ -392,11 +398,13 @@
               >{/if}
           {:else}
             <Field.Field
-              ><Field.Label>密钥类型</Field.Label><Select.Root
+              ><Field.Label>{m.ui_key_type()}</Field.Label><Select.Root
                 type="single"
                 bind:value={preferences.sshType}
                 ><Select.Trigger
-                  >{preferences.sshType === "ed25519" ? "Ed25519（推荐）" : "RSA"}</Select.Trigger
+                  >{preferences.sshType === "ed25519"
+                    ? m.ui_ed25519_recommended()
+                    : "RSA"}</Select.Trigger
                 ><Select.Content
                   ><Select.Group
                     ><Select.Item value="ed25519">Ed25519</Select.Item><Select.Item value="rsa"
@@ -407,7 +415,7 @@
               ></Field.Field
             >
             {#if preferences.sshType === "rsa"}<Field.Field
-                ><Field.Label>RSA 长度</Field.Label><Select.Root
+                ><Field.Label>{m.ui_rsa_key_size()}</Field.Label><Select.Root
                   type="single"
                   bind:value={preferences.rsaLength}
                   ><Select.Trigger>{preferences.rsaLength} bits</Select.Trigger><Select.Content
@@ -420,7 +428,7 @@
                 ></Field.Field
               >{/if}
             <Field.Field
-              ><Field.Label for="ssh-comment">注释</Field.Label><Input
+              ><Field.Label for="ssh-comment">{m.ui_comment()}</Field.Label><Input
                 id="ssh-comment"
                 bind:value={preferences.sshComment}
                 placeholder="name@example.com"

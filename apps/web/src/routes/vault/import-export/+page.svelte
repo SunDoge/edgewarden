@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { ArrowLeft, CheckCircle, Download, FileCode, ShieldAlert, Upload } from "@lucide/svelte";
   import { slide } from "svelte/transition";
   import { goto } from "$app/navigation";
@@ -77,10 +79,10 @@
 
       successMsg =
         exportFormat === "encrypted_json"
-          ? "导出成功！已下载 Bitwarden 兼容的密码保护备份。请妥善保管导出密码。"
-          : "导出成功！明文备份文件已下载。请妥善保存该文件。";
+          ? m.ui_password_protected_bitwarden_compatible_backup_downloaded_keep_the_export_passwo()
+          : m.ui_unencrypted_backup_downloaded_keep_this_file_secure();
     } catch (caught) {
-      errorMsg = `导出失败: ${errorDetail(caught)}`;
+      errorMsg = m.ui_export_failed_value({ value0: errorDetail(caught) });
     }
   }
 
@@ -92,7 +94,7 @@
     importPassword = "";
     if (!files?.[0]) return;
     if (files[0].size > MAX_IMPORT_BYTES) {
-      errorMsg = "导入文件不能超过 32 MiB。";
+      errorMsg = m.ui_import_files_must_not_exceed_32_mib();
       return;
     }
     try {
@@ -100,7 +102,9 @@
       if (importFormat === "json") {
         const encryptedType = inspectEncryptedVaultImport(text);
         if (encryptedType === "account-restricted")
-          throw new Error("账户限制型加密 JSON 不能跨服务器导入，请改用密码保护型加密导出");
+          throw new Error(
+            m.ui_account_restricted_json_cannot_be_imported_across_servers_use_a_password_protect(),
+          );
         if (encryptedType === "password-protected") {
           encryptedImport = true;
           return;
@@ -108,7 +112,7 @@
       }
       pendingImport = parseVaultImport(text, importFormat);
     } catch (e) {
-      errorMsg = "解析失败: " + (e instanceof Error ? e.message : e);
+      errorMsg = m.ui_unable_to_parse_file() + (e instanceof Error ? e.message : e);
     }
   }
 
@@ -127,24 +131,24 @@
     successMsg = "";
 
     if (!files || files.length === 0) {
-      errorMsg = "请先选择需要导入的 Bitwarden JSON 导出文件。";
+      errorMsg = m.ui_select_a_bitwarden_json_export_file_first();
       return;
     }
 
     importing = true;
     importProgress = 5;
-    importProgressLabel = "正在读取并解密导出文件…";
+    importProgressLabel = m.ui_reading_and_decrypting_export();
     try {
       const importedData =
         deduplicationReview?.original ??
         pendingImport ??
         (await parseVaultImportFile(await files[0].text(), importFormat, importPassword));
       if (importedData.folders.length === 0 && importedData.items.length === 0) {
-        throw new Error("导入的文件中没有发现任何文件夹或密码项。");
+        throw new Error(m.ui_no_folders_or_items_were_found_in_the_import_file());
       }
 
       if (!vault.symEncKey || !vault.symMacKey) {
-        throw new Error("加密密钥未就绪，请重新解锁保险库。");
+        throw new Error(m.ui_encryption_keys_are_not_ready_unlock_your_vault_again());
       }
 
       const existingData = buildPlainExportDocument(
@@ -152,7 +156,7 @@
         vault.ciphers.filter((cipher) => !cipher.organizationId),
       );
       importProgress = 12;
-      importProgressLabel = "正在检测重复条目…";
+      importProgressLabel = m.ui_checking_for_duplicates();
       const deduplicated =
         deduplicationReview?.result ?? deduplicateTransferDocument(importedData, existingData);
       if (
@@ -161,14 +165,16 @@
       ) {
         deduplicationReview = { original: importedData, result: deduplicated };
         importProgress = 12;
-        importProgressLabel = "重复项检测完成，等待选择";
+        importProgressLabel = m.ui_duplicate_check_complete_choose_how_to_proceed();
         return;
       }
       const documentToImport =
         strategy === "all" ? deduplicated.completeDocument : deduplicated.document;
 
       if (documentToImport.folders.length === 0 && documentToImport.items.length === 0) {
-        successMsg = `没有导入数据：${deduplicated.duplicateItems} 个密码项均已存在。`;
+        successMsg = m.ui_nothing_imported_all_value_items_already_exist({
+          value0: deduplicated.duplicateItems,
+        });
         files = undefined;
         pendingImport = null;
         deduplicationReview = null;
@@ -178,35 +184,42 @@
       }
 
       importProgress = 15;
-      importProgressLabel = "正在加密导入数据…";
+      importProgressLabel = m.ui_encrypting_imported_data();
       const encryptedPayload = await encryptTransferDocument(
         documentToImport,
         vault.symEncKey,
         vault.symMacKey,
         ({ processed, total, kind }) => {
           importProgress = total ? 15 + Math.round((processed / total) * 70) : 85;
-          importProgressLabel = `正在加密${kind === "folder" ? "文件夹" : "密码项"} ${processed}/${total}…`;
+          importProgressLabel = m.ui_encrypting_value_value_value({
+            value0: kind === "folder" ? m.ui_folder() : m.ui_vault_items(),
+            value1: processed,
+            value2: total,
+          });
         },
       );
       importProgress = 88;
-      importProgressLabel = "正在上传加密数据…";
+      importProgressLabel = m.ui_uploading_encrypted_data();
       await importCiphersApi(encryptedPayload);
 
       // 4. Reload local vault data
       importProgress = 96;
-      importProgressLabel = "正在同步保险库…";
+      importProgressLabel = m.ui_syncing_vault();
       await syncVaultData();
       importProgress = 100;
-      importProgressLabel = "导入完成";
+      importProgressLabel = m.ui_import_complete();
 
-      successMsg = `导入成功！已成功导入 ${encryptedPayload.folders.length} 个文件夹和 ${encryptedPayload.ciphers.length} 个密码项。`;
+      successMsg = m.ui_import_complete_folders_value_items_value({
+        value0: encryptedPayload.folders.length,
+        value1: encryptedPayload.ciphers.length,
+      });
       files = undefined;
       pendingImport = null;
       deduplicationReview = null;
       encryptedImport = false;
       importPassword = "";
     } catch (caught) {
-      errorMsg = `导入失败: ${errorDetail(caught)}`;
+      errorMsg = m.ui_import_failed_value({ value0: errorDetail(caught) });
     } finally {
       importing = false;
     }
@@ -214,17 +227,17 @@
 </script>
 
 <svelte:head>
-  <title>数据导入与导出 - Edgewarden</title>
+  <title>{m.ui_import_and_export_edgewarden()}</title>
 </svelte:head>
 
 <VaultPageShell
-  title="数据导入与导出"
-  description="在 Edgewarden 与兼容格式之间安全迁移保险库数据。"
+  title={m.ui_import_and_export()}
+  description={m.ui_move_vault_data_between_edgewarden_and_compatible_formats()}
   width="default"
 >
   {#if errorMsg}
     <Alert.Root variant="destructive"
-      ><ShieldAlert /><Alert.Title>操作失败</Alert.Title><Alert.Description
+      ><ShieldAlert /><Alert.Title>{m.ui_action_failed()}</Alert.Title><Alert.Description
         >{errorMsg}</Alert.Description
       ></Alert.Root
     >
@@ -232,7 +245,7 @@
 
   {#if successMsg}
     <Alert.Root
-      ><CheckCircle /><Alert.Title>操作成功</Alert.Title><Alert.Description
+      ><CheckCircle /><Alert.Title>{m.ui_action_completed()}</Alert.Title><Alert.Description
         >{successMsg}</Alert.Description
       ></Alert.Root
     >
@@ -249,26 +262,28 @@
             <Upload class="size-5" />
           </div>
           <div>
-            <Card.Title>导入密码数据</Card.Title>
-            <Card.Description>导入 Bitwarden JSON 或 CSV</Card.Description>
+            <Card.Title>{m.ui_import_vault_data()}</Card.Title>
+            <Card.Description>{m.ui_import_bitwarden_json_or_csv()}</Card.Description>
           </div>
         </div>
       </Card.Header>
       <Card.Content
         ><Field.Group>
           <Field.Field>
-            <Field.Label>导入格式</Field.Label>
+            <Field.Label>{m.ui_import_format()}</Field.Label>
             <div class="flex items-center gap-3 rounded-lg border bg-muted/40 p-3">
               <FileCode class="size-8 text-primary" />
               <div>
-                <p class="text-sm font-medium">Bitwarden Vault 导出</p>
-                <p class="text-xs text-muted-foreground">支持密码保护 JSON、未加密 JSON 和 CSV</p>
+                <p class="text-sm font-medium">{m.ui_bitwarden_vault_export()}</p>
+                <p class="text-xs text-muted-foreground">
+                  {m.ui_supports_password_protected_json_unencrypted_json_and_csv()}
+                </p>
               </div>
             </div>
           </Field.Field>
 
           <Field.Field
-            ><Field.Label>文件格式</Field.Label><Select.Root
+            ><Field.Label>{m.ui_file_format()}</Field.Label><Select.Root
               type="single"
               value={importFormat}
               onValueChange={(value) => {
@@ -277,11 +292,12 @@
               }}
               ><Select.Trigger class="w-full"
                 >{importFormat === "json"
-                  ? "Bitwarden JSON（密码保护或未加密）"
+                  ? m.ui_bitwarden_json_password_protected_or_unencrypted()
                   : "Bitwarden CSV"}</Select.Trigger
               ><Select.Content
                 ><Select.Group
-                  ><Select.Item value="json">Bitwarden JSON（密码保护或未加密）</Select.Item
+                  ><Select.Item value="json"
+                    >{m.ui_bitwarden_json_password_protected_or_unencrypted()}</Select.Item
                   ><Select.Item value="csv">Bitwarden CSV</Select.Item></Select.Group
                 ></Select.Content
               ></Select.Root
@@ -289,7 +305,7 @@
           >
 
           <Field.Field>
-            <Field.Label>选择文件</Field.Label>
+            <Field.Label>{m.ui_choose_file()}</Field.Label>
             <Input
               type="file"
               accept={importFormat === "json" ? ".json,application/json" : ".csv,text/csv"}
@@ -300,40 +316,51 @@
           </Field.Field>
 
           {#if pendingImport}<div class="rounded-md border bg-muted p-3 text-xs">
-              <p class="font-medium">导入预览</p>
-              <p>{pendingImport.folders.length} 个文件夹，{pendingImport.items.length} 个条目</p>
+              <p class="font-medium">{m.ui_import_preview()}</p>
+              <p>
+                {m.ui_folders_value_items_value({
+                  value0: pendingImport.folders.length,
+                  value1: pendingImport.items.length,
+                })}
+              </p>
               {#if pendingImport.warnings.length}<p class="mt-1 text-amber-600">
-                  {pendingImport.warnings.length} 条格式警告
+                  {m.ui_format_warnings_value({ value0: pendingImport.warnings.length })}
                 </p>{/if}
             </div>{/if}
           {#if encryptedImport}<div transition:slide={{ duration: 160 }}>
               <Field.Field
-                ><Field.Label for="import-password">加密导出密码</Field.Label><Input
+                ><Field.Label for="import-password">{m.ui_encrypted_export_password()}</Field.Label
+                ><Input
                   id="import-password"
                   type="password"
                   autocomplete="off"
                   bind:value={importPassword}
-                  placeholder="仅在浏览器内用于解密"
-                /><Field.Description>密码和解密后的内容不会发送到服务器。</Field.Description
+                  placeholder={m.ui_used_only_to_decrypt_in_your_browser()}
+                /><Field.Description
+                  >{m.ui_your_password_and_decrypted_content_are_not_sent_to_the_server()}</Field.Description
                 ></Field.Field
               >
             </div>{/if}
           {#if deduplicationReview}
             <Alert.Root class="flex flex-col gap-3">
-              <p class="font-semibold">写入前检测到重复内容</p>
+              <p class="font-semibold">{m.ui_duplicates_detected_before_import()}</p>
               <p>
-                已有或文件内重复密码项 {deduplicationReview.result.duplicateItems} 个，可复用的同名文件夹
-                {deduplicationReview.result.duplicateFolders} 个。请选择本次导入方式：
+                {m.ui_duplicate_items_value_reusable_folders_with_matching_names_value_choose_how_to_i(
+                  {
+                    value0: deduplicationReview.result.duplicateItems,
+                    value1: deduplicationReview.result.duplicateFolders,
+                  },
+                )}
               </p>
               <div class="flex flex-col gap-2 sm:flex-row">
                 <Button size="sm" disabled={importing} onclick={() => handleImport("skip")}
-                  >跳过重复项并导入</Button
+                  >{m.ui_skip_duplicates_and_import()}</Button
                 >
                 <Button
                   size="sm"
                   variant="outline"
                   disabled={importing}
-                  onclick={() => handleImport("all")}>仍然全部导入</Button
+                  onclick={() => handleImport("all")}>{m.ui_import_everything_anyway()}</Button
                 >
               </div>
             </Alert.Root>
@@ -347,12 +374,8 @@
             onclick={() => handleImport()}
           >
             {#if importing}
-              <Spinner data-icon="inline-start" />
-              正在导入并加密数据...
-            {:else}
-              <Upload data-icon="inline-start" />
-              导入数据
-            {/if}
+              <Spinner data-icon="inline-start" />{m.ui_importing_and_encrypting_data()}{:else}
+              <Upload data-icon="inline-start" />{m.ui_import_data()}{/if}
           </Button>
           {#if importing}
             <div
@@ -381,30 +404,32 @@
             <Download class="size-5" />
           </div>
           <div>
-            <Card.Title>导出密码数据</Card.Title>
-            <Card.Description>备份您存储在保险库中的全部密码数据</Card.Description>
+            <Card.Title>{m.ui_export_vault_data()}</Card.Title>
+            <Card.Description>{m.ui_back_up_the_items_stored_in_your_vault()}</Card.Description>
           </div>
         </div>
       </Card.Header>
       <Card.Content
         ><Field.Group>
           <Field.Field
-            ><Field.Label>导出格式</Field.Label><Select.Root
+            ><Field.Label>{m.ui_export_format()}</Field.Label><Select.Root
               type="single"
               value={exportFormat}
               onValueChange={(value) => (exportFormat = value as "encrypted_json" | "json" | "csv")}
               ><Select.Trigger class="w-full"
                 >{exportFormat === "encrypted_json"
-                  ? "Bitwarden 加密 JSON（密码保护）"
+                  ? m.ui_bitwarden_encrypted_json_password_protected()
                   : exportFormat === "json"
-                    ? "Bitwarden JSON（明文完整）"
-                    : "Bitwarden CSV（明文登录与笔记）"}</Select.Trigger
+                    ? m.ui_bitwarden_json_unencrypted_full_export()
+                    : m.ui_bitwarden_csv_unencrypted_logins_and_notes()}</Select.Trigger
               ><Select.Content
                 ><Select.Group
                   ><Select.Item value="encrypted_json"
-                    >Bitwarden 加密 JSON（密码保护，推荐）</Select.Item
-                  ><Select.Item value="json">Bitwarden JSON（明文完整）</Select.Item><Select.Item
-                    value="csv">Bitwarden CSV（明文登录与笔记）</Select.Item
+                    >{m.ui_bitwarden_encrypted_json_password_protected_recommended()}</Select.Item
+                  ><Select.Item value="json"
+                    >{m.ui_bitwarden_json_unencrypted_full_export()}</Select.Item
+                  ><Select.Item value="csv"
+                    >{m.ui_bitwarden_csv_unencrypted_logins_and_notes()}</Select.Item
                   ></Select.Group
                 ></Select.Content
               ></Select.Root
@@ -412,18 +437,22 @@
           >
           {#if exportFormat === "encrypted_json"}
             <Field.Field>
-              <Field.Label for="export-password">导出密码</Field.Label>
+              <Field.Label for="export-password">{m.ui_export_password()}</Field.Label>
               <Input
                 id="export-password"
                 type="password"
                 autocomplete="new-password"
                 bind:value={exportPassword}
-                placeholder="用于恢复此备份"
+                placeholder={m.ui_required_to_restore_this_backup()}
               />
-              <Field.Description>密码只在浏览器内用于加密，服务端无法找回。</Field.Description>
+              <Field.Description
+                >{m.ui_used_only_for_encryption_in_your_browser_the_server_cannot_recover_this_password()}</Field.Description
+              >
             </Field.Field>
             <Field.Field>
-              <Field.Label for="export-password-confirm">确认导出密码</Field.Label>
+              <Field.Label for="export-password-confirm"
+                >{m.ui_confirm_export_password()}</Field.Label
+              >
               <Input
                 id="export-password-confirm"
                 type="password"
@@ -431,13 +460,13 @@
                 bind:value={exportPasswordConfirm}
               />
               {#if exportPasswordConfirm && exportPassword !== exportPasswordConfirm}
-                <Field.Error>两次输入的密码不一致。</Field.Error>
+                <Field.Error>{m.ui_the_passwords_do_not_match()}</Field.Error>
               {/if}
             </Field.Field>
           {:else}
             <Alert.Root
-              ><ShieldAlert /><Alert.Title>安全警告</Alert.Title><Alert.Description
-                >导出的备份文件包含明文用户名、密码、笔记以及支付卡片。请勿发送给他人，用完后立即删除或存放于安全位置。</Alert.Description
+              ><ShieldAlert /><Alert.Title>{m.ui_security_warning()}</Alert.Title><Alert.Description
+                >{m.ui_this_export_contains_unencrypted_usernames_passwords_notes_and_payment_cards_do_()}</Alert.Description
               ></Alert.Root
             >
           {/if}
@@ -449,9 +478,8 @@
               (!exportPassword || exportPassword !== exportPasswordConfirm)}
             onclick={() => (exportConfirmOpen = true)}
           >
-            <Download data-icon="inline-start" />
-            导出数据
-          </Button>
+            <Download data-icon="inline-start" />{m.ui_export_data()}</Button
+          >
         </Field.Group></Card.Content
       >
     </Card.Root>
@@ -463,20 +491,20 @@
     <AlertDialog.Header
       ><AlertDialog.Title
         >{exportFormat === "encrypted_json"
-          ? "确认导出加密保险库"
-          : "确认导出明文保险库"}</AlertDialog.Title
+          ? m.ui_export_encrypted_vault()
+          : m.ui_export_unencrypted_vault()}</AlertDialog.Title
       ><AlertDialog.Description
         >{exportFormat === "encrypted_json"
-          ? "该文件只能使用刚才设置的密码恢复。Edgewarden 无法找回遗失的导出密码。"
-          : "导出的文件不会加密，任何获得该文件的人都能读取其中的密码。请确认你能安全保存并在使用后删除它。"}</AlertDialog.Description
+          ? m.ui_you_will_need_the_password_you_just_set_to_restore_this_file_edgewarden_cannot_r()
+          : m.ui_anyone_with_this_unencrypted_file_can_read_its_passwords_store_it_securely_and_d()}</AlertDialog.Description
       ></AlertDialog.Header
     >
     <AlertDialog.Footer
-      ><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action
+      ><AlertDialog.Cancel>{m.login_cancel()}</AlertDialog.Cancel><AlertDialog.Action
         class={exportFormat === "encrypted_json"
           ? ""
           : "bg-destructive text-destructive-foreground hover:bg-destructive/90"}
-        onclick={handleExport}>确认导出</AlertDialog.Action
+        onclick={handleExport}>{m.ui_confirm_export()}</AlertDialog.Action
       ></AlertDialog.Footer
     >
   </AlertDialog.Content>

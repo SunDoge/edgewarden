@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 export type GeneratorMode =
   | "password"
   | "passphrase"
@@ -66,7 +67,8 @@ const WORDS = [
 ];
 
 function randomInt(max: number): number {
-  if (!Number.isInteger(max) || max <= 0) throw new Error("随机范围无效");
+  if (!Number.isInteger(max) || max <= 0)
+    throw new Error(m.ui_invalid_random_range());
   const limit = Math.floor(0x100000000 / max) * max;
   const values = new Uint32Array(1);
   do crypto.getRandomValues(values);
@@ -108,7 +110,8 @@ export function generatePassword(options: PasswordOptions): string {
   ].filter((group): group is { chars: string; minimum: number | undefined } =>
     Boolean(group),
   );
-  if (!groups.length) throw new Error("至少选择一种字符类型");
+  if (!groups.length)
+    throw new Error(m.ui_select_at_least_one_character_type());
   const ambiguous = /[Il1O0o|`'"{}\[\](),.;:]/g;
   const normalized = groups.map((group) => ({
     chars: options.avoidAmbiguous
@@ -140,7 +143,8 @@ function resolveWords(customWords?: string): string[] {
         .filter((word) => word.length >= 2 && word.length <= 64),
     ),
   ];
-  if (values.length < 2) throw new Error("自定义词表至少需要两个有效单词");
+  if (values.length < 2)
+    throw new Error(m.ui_a_custom_word_list_needs_at_least_two_valid_words());
   return values;
 }
 
@@ -201,11 +205,12 @@ export function generateEmailAlias(args: {
 }): string {
   const token = `${WORDS[randomInt(WORDS.length)]}${randomInt(10000).toString().padStart(4, "0")}`;
   if (args.mode === "catchall") {
-    if (!args.domain?.includes(".")) throw new Error("请输入有效的域名");
+    if (!args.domain?.includes("."))
+      throw new Error(m.ui_enter_a_valid_domain());
     return `${token}@${args.domain.trim().toLowerCase()}`;
   }
   const [local, domain] = args.email.trim().toLowerCase().split("@");
-  if (!local || !domain) throw new Error("请输入有效的邮箱地址");
+  if (!local || !domain) throw new Error(m.ui_enter_a_valid_email_address());
   return args.mode === "subdomain"
     ? `${local}@${token}.${domain}`
     : `${local}+${token}@${domain}`;

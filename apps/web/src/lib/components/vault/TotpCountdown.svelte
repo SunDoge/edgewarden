@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   let { remain, period }: { remain: number; period: number } = $props();
 
   const radius = 18;
@@ -9,7 +11,7 @@
 <div
   class="relative flex size-11 shrink-0 items-center justify-center"
   role="timer"
-  aria-label={`${remain} 秒后刷新`}
+  aria-label={m.ui_refreshes_in_value_seconds({ value0: remain })}
 >
   <svg class="size-11 -rotate-90" viewBox="0 0 44 44" aria-hidden="true">
     <circle class="stroke-muted" cx="22" cy="22" r={radius} fill="none" stroke-width="4" />

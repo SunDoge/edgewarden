@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import { match } from "ts-pattern";
 import { canManageOrganizationMembers } from "@edgewarden/shared";
 import { deriveAccountPasswordHash } from "./api-auth";
@@ -78,7 +79,7 @@ export function createOrganizationManager() {
     error: "",
     createOpen: false,
     organizationName: "",
-    initialCollectionName: "默认集合",
+    initialCollectionName: m.ui_default_collection(),
     inviteEmail: "",
     inviteRole: "member",
     inviteAccessAll: true,
@@ -127,7 +128,7 @@ export function createOrganizationManager() {
         : (state.organizations[0] ?? null);
       await loadSelected();
     } catch (caught) {
-      state.error = errorMessage(caught, "加载组织失败");
+      state.error = errorMessage(caught, m.ui_unable_to_load_organizations());
     } finally {
       state.loading = false;
     }
@@ -163,7 +164,7 @@ export function createOrganizationManager() {
       await syncVaultData();
       await load();
     } catch (caught) {
-      state.error = errorMessage(caught, "创建组织失败");
+      state.error = errorMessage(caught, m.ui_unable_to_create_organization());
     } finally {
       state.busy = "";
     }
@@ -173,7 +174,8 @@ export function createOrganizationManager() {
     if (!state.selected || !state.inviteEmail.trim()) return;
     const organizationKey = getOrganizationKey(state.selected.id);
     if (!organizationKey) {
-      state.error = "组织密钥不可用，请重新同步并解锁";
+      state.error =
+        m.ui_organization_key_is_unavailable_sync_and_unlock_again();
       return;
     }
     state.busy = "invite";
@@ -183,7 +185,9 @@ export function createOrganizationManager() {
         state.inviteEmail.trim(),
       );
       if (!state.inviteAccessAll && !state.inviteCollectionIds.length)
-        throw new Error("受限成员至少需要选择一个集合");
+        throw new Error(
+          m.ui_select_at_least_one_collection_for_a_restricted_member(),
+        );
       await inviteOrganizationMemberApi(state.selected.id, {
         email: invitee.email,
         role: state.inviteRole,
@@ -204,7 +208,7 @@ export function createOrganizationManager() {
         await listOrganizationMembersApi(state.selected.id)
       ).data;
     } catch (caught) {
-      state.error = errorMessage(caught, "添加成员失败");
+      state.error = errorMessage(caught, m.ui_unable_to_add_member());
     } finally {
       state.busy = "";
     }
@@ -241,7 +245,8 @@ export function createOrganizationManager() {
         hidePasswords: access.hidePasswords,
       }));
     if (!state.memberAccessAll && !selectedCollections.length) {
-      state.error = "受限成员至少需要选择一个集合";
+      state.error =
+        m.ui_select_at_least_one_collection_for_a_restricted_member();
       return;
     }
     state.busy = "member";
@@ -261,7 +266,7 @@ export function createOrganizationManager() {
       ).data;
       await syncVaultData();
     } catch (caught) {
-      state.error = errorMessage(caught, "更新成员失败");
+      state.error = errorMessage(caught, m.ui_unable_to_update_member());
     } finally {
       state.busy = "";
     }
@@ -282,7 +287,7 @@ export function createOrganizationManager() {
       await syncVaultData();
       state.collections = collectionsFor(organization.id);
     } catch (caught) {
-      state.error = errorMessage(caught, "创建集合失败");
+      state.error = errorMessage(caught, m.ui_unable_to_create_collection());
     } finally {
       state.busy = "";
     }
@@ -314,7 +319,7 @@ export function createOrganizationManager() {
         )
         .with({ kind: "collection" }, async ({ id }) => {
           const key = getOrganizationKey(organization.id);
-          if (!key) throw new Error("组织密钥不可用");
+          if (!key) throw new Error(m.ui_organization_key_is_unavailable());
           await updateOrganizationCollectionApi(
             organization.id,
             id,
@@ -327,7 +332,7 @@ export function createOrganizationManager() {
       if (target.kind === "organization") await load();
       else state.collections = collectionsFor(organization.id);
     } catch (caught) {
-      state.error = errorMessage(caught, "重命名失败");
+      state.error = errorMessage(caught, m.ui_unable_to_rename());
     }
   }
 
@@ -373,7 +378,7 @@ export function createOrganizationManager() {
       await syncVaultData();
       await load();
     } catch (caught) {
-      state.error = errorMessage(caught, "删除组织失败");
+      state.error = errorMessage(caught, m.ui_unable_to_delete_organization());
     } finally {
       state.busy = "";
     }

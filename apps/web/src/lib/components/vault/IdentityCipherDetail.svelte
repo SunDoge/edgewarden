@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { Check, Copy } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import type { VaultIdentityData } from "$lib/services/vault-types";
@@ -13,10 +15,10 @@
     onCopy: (value: string, field: string) => void;
   } = $props();
   const copyFields = $derived([
-    ["用户名", identity?.username, "id-username"],
-    ["电子邮箱", identity?.email, "id-email"],
-    ["电话号码", identity?.phone, "id-phone"],
-    ["证件号码", identity?.number, "id-number"],
+    [m.ui_username(), identity?.username, "id-username"],
+    [m.ui_email_3(), identity?.email, "id-email"],
+    [m.ui_phone_number(), identity?.phone, "id-phone"],
+    [m.ui_identification_number(), identity?.number, "id-number"],
   ] as const);
   let fullAddress = $derived(
     [
@@ -35,7 +37,7 @@
 
 <div class="flex flex-col gap-4">
   {#if identity?.firstName || identity?.lastName}<div class="flex flex-col gap-1.5">
-      <span class="text-xs font-semibold text-muted-foreground">姓名</span>
+      <span class="text-xs font-semibold text-muted-foreground">{m.ui_name_2()}</span>
       <div class="rounded-lg border bg-background p-2.5 text-sm font-medium">
         {identity.lastName ?? ""}
         {identity.firstName ?? ""}
@@ -48,19 +50,19 @@
             variant="ghost"
             size="icon"
             onclick={() => onCopy(value, field)}
-            aria-label={`复制${label}`}
+            aria-label={m.ui_copy_value({ value0: label })}
             >{#if copiedField === field}<Check />{:else}<Copy />{/if}</Button
           >
         </div>
       </div>{/if}{/each}
   {#if identity?.company}<div class="flex flex-col gap-1.5">
-      <span class="text-xs font-semibold text-muted-foreground">公司 / 组织</span>
+      <span class="text-xs font-semibold text-muted-foreground">{m.ui_company_organization()}</span>
       <div class="rounded-lg border bg-background p-2.5 text-sm font-medium">
         {identity.company}
       </div>
     </div>{/if}
   {#if fullAddress}<div class="flex flex-col gap-1.5">
-      <span class="text-xs font-semibold text-muted-foreground">地址</span>
+      <span class="text-xs font-semibold text-muted-foreground">{m.ui_address()}</span>
       <div class="rounded-lg border bg-background p-2.5 text-sm font-medium leading-relaxed">
         {fullAddress}
       </div>
