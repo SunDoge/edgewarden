@@ -3,6 +3,11 @@
 # ssh-key-generator.test.ts: PEM header/footer assertions, no private key material.
 # vault-transfer.test.ts: synthetic wrapped-key placeholder.
 # app.test.ts and vault-scenarios.ts: synthetic attachment-key placeholder.
+# en.json: "Key type" followed by the ui_ed25519_recommended translation key;
+# the generic-api-key rule matches across JSON entries, not a credential.
+0aa0a76a20da3ffa42882c3e5a7f56efe07bf0cd:apps/web/messages/en.json:generic-api-key:595
+# Historical master branch: the same literal synthetic JWT test signing secret.
+d53dec04aed9b361a34463e22f209e34e407090e:apps/api/src/utils/jwt.test.ts:generic-api-key:13
 164dac9c0a6ecce005c22cbe0021a6d9152249de:apps/api/src/utils/jwt.test.ts:generic-api-key:21
 164dac9c0a6ecce005c22cbe0021a6d9152249de:apps/web/src/lib/services/ssh-key-generator.test.ts:private-key:15
 164dac9c0a6ecce005c22cbe0021a6d9152249de:apps/web/src/lib/services/vault-transfer.test.ts:generic-api-key:241
