@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/SunDoge/edgewarden/compare/v0.3.1...v0.4.0) (2026-10-16)
+
+
+### Features
+
+* **web:** add configurable demo landing page ([a8bedab](https://github.com/SunDoge/edgewarden/commit/a8bedab50cbb0914a3b1f0e5ea6b0626c03e928e))
+
+
+### Bug Fixes
+
+* enforce organization permissions and preserve shared attachments ([68fc6af](https://github.com/SunDoge/edgewarden/commit/68fc6af6c587beb85f8d6644a27d1a8f594fa0fc))
+* enforce organization permissions and preserve shared attachments ([6774e3e](https://github.com/SunDoge/edgewarden/commit/6774e3ee4ad4077078282fbb4af2b62c2d6733e1))
+
 ## [0.3.1](https://github.com/SunDoge/edgewarden/compare/v0.3.0...v0.3.1) (2026-10-12)
 
 
