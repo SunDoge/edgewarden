@@ -23,6 +23,8 @@ import type { EdgewardenBatchQuery } from "../../services/db/d1-dialect";
 import * as foldersDb from "../../services/db/folders";
 import { errorResponse } from "../../utils/response";
 import { now } from "../../utils/time";
+import { prepareCipherAttachmentMutation } from "../../services/ciphers/attachment-mutation";
+import { loadCipherResponse } from "./response";
 
 // Mutation tokens bind follow-up collection and revision statements to the exact cipher update that committed.
 // GET /api/ciphers/:id
@@ -100,6 +102,15 @@ const updateCipherFromBody = async (c: Context<HonoEnv>, body: CipherInput) => {
   // Keep revisions monotonic even when two writes happen in the same second.
   const ts = Math.max(now(), cipher.updated_at + 1);
   const mutationToken = crypto.randomUUID();
+  const attachmentMutation = await prepareCipherAttachmentMutation(
+    db,
+    cipher,
+    body,
+    mutationToken,
+    sharingPersonalCipher,
+  );
+  if ("error" in attachmentMutation)
+    return errorResponse(attachmentMutation.error, 400);
   const updateQuery = db
     .updateTable("ciphers")
     .set({
@@ -121,6 +132,8 @@ const updateCipherFromBody = async (c: Context<HonoEnv>, body: CipherInput) => {
       mutation_token: mutationToken,
     })
     .where("id", "=", cipher.id)
+    .where(sql<boolean>`mutation_token IS ${cipher.mutation_token}`)
+    .where(attachmentMutation.guard)
     .$if(Boolean(body.lastKnownRevisionDate), (query) =>
       query.where("updated_at", "=", cipher.updated_at),
     );
@@ -130,6 +143,7 @@ const updateCipherFromBody = async (c: Context<HonoEnv>, body: CipherInput) => {
     .where("id", "=", cipher.id)
     .where("mutation_token", "=", mutationToken);
   const followupQueries: EdgewardenBatchQuery[] = [
+    ...attachmentMutation.queries,
     ...(requestedOrganizationId
       ? [
           organizationCipherViewStateQuery(db, {
@@ -182,19 +196,10 @@ const updateCipherFromBody = async (c: Context<HonoEnv>, body: CipherInput) => {
     );
     return errorResponse("Cipher changed while updating", 409);
   }
-  return c.json(
-    cipherToResponse(
-      updated,
-      await attachmentsDb.listByCipherIds(db, [updated.id]),
-      sharingPersonalCipher
-        ? collectionIds
-        : await getVisibleCipherCollectionIds(
-            db,
-            updated.id,
-            c.get("orgMember"),
-          ),
-    ),
-  );
+  const response = await loadCipherResponse(c, updated.id);
+  return response
+    ? c.json(response)
+    : errorResponse("Cipher access changed while updating", 409);
 };
 
 export const updateCipher = factory.createHandlers(

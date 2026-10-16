@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { canManageOrganizationCollections } from "@edgewarden/shared";
   import { Pencil, Trash2 } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -17,7 +18,7 @@
     onrename,
     onremove,
   }: {
-    organization: Pick<OrganizationSummary, "role">;
+    organization: Pick<OrganizationSummary, "role" | "accessAll">;
     collections: Array<Pick<OrganizationCollection, "id" | "name">>;
     name: string;
     busy: boolean;
@@ -26,7 +27,7 @@
     onremove: (collection: Pick<OrganizationCollection, "id" | "name">) => void;
   } = $props();
 
-  const canManage = $derived(["owner", "admin", "manager"].includes(organization.role));
+  const canManage = $derived(canManageOrganizationCollections(organization));
 </script>
 
 <Card.Root>

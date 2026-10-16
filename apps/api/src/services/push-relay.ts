@@ -225,6 +225,29 @@ export async function publishPushVaultChange(
   );
 }
 
+/** Refreshes organization membership/keys on every device, including removed members. */
+export async function publishPushOrganizationKeys(
+  env: WorkerBindings,
+  userId: string,
+  options?: { fetcher?: typeof fetch; cache?: Cache | null },
+): Promise<boolean> {
+  return relayRequest(
+    env,
+    "/push/send",
+    {
+      userId,
+      organizationId: null,
+      deviceId: null,
+      identifier: null,
+      type: 6,
+      payload: { userId, date: new Date().toISOString() },
+      clientType: null,
+      installationId: null,
+    },
+    options,
+  );
+}
+
 /** Notifies the user's other native clients that a passwordless login needs review. */
 export async function publishPushAuthRequest(
   env: WorkerBindings,

@@ -6,6 +6,9 @@ service. Never enter real passwords or reuse your real master password.
 
 ## Experience
 
+- The Demo root URL displays a landing page. **Try demo** opens `/login`;
+  simply visiting the landing page never logs in or restores a session.
+
 - Public account: `demo@edgewarden.example`.
 - Public password: `Edgewarden-Demo-2026!`.
 - Log in through the Web Vault or set the Demo origin as an official Bitwarden
@@ -91,3 +94,20 @@ not guarantee a free public service under arbitrary traffic.
 
 The Web Vault reuses existing shadcn components; this mode adds no theme.
 Mobile-client compatibility still needs device testing before launch.
+
+## Optional landing page
+
+Set `VITE_LANDING_PAGE` in the **build environment**, before `pnpm build`:
+
+| Value | Root URL behavior |
+| --- | --- |
+| Unset | Landing enabled only when `/api/demo` confirms a read-only Demo |
+| `true` | Landing enabled on any deployment; ordinary instances show **Open vault**, not **Try demo** |
+| `false` | Landing disabled; restore the session and redirect to `/vault` or `/login` |
+
+For Workers Builds, configure this as a build variable, not a Worker runtime
+variable. Rebuild after changing it. Direct `/login` and `/vault` URLs are
+unaffected. This flag changes presentation only; it never changes Demo access
+restrictions or registration policy. Discovery failures fall back to the normal
+entry flow unless the landing is explicitly enabled. All landing copy supports
+English and Simplified Chinese using the existing language switcher.

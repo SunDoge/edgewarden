@@ -18,6 +18,18 @@ export async function loadCipherResponse(
   const db = c.get("db");
   const cipher = await ciphersDb.getCipherById(db, cipherId, c.get("user").id);
   if (!cipher) return null;
+  if (cipher.org_id) {
+    // Re-read membership after mutations, including initial sharing and
+    // collection changes. Never default an organization response to full access.
+    member = await db
+      .selectFrom("org_members")
+      .selectAll()
+      .where("org_id", "=", cipher.org_id)
+      .where("user_id", "=", c.get("user").id)
+      .where("status", "=", "confirmed")
+      .executeTakeFirst();
+    if (!member) return null;
+  } else if (cipher.user_id !== c.get("user").id) return null;
   const collectionIds = await getVisibleCipherCollectionIds(
     db,
     cipher.id,
@@ -29,6 +41,8 @@ export async function loadCipherResponse(
     member,
     collectionIds,
   );
+  if (cipher.org_id && !member?.access_all && !collectionIds.length)
+    return null;
   return cipherToResponse(
     cipher,
     await attachmentsDb.listByCipherIds(db, [cipher.id]),

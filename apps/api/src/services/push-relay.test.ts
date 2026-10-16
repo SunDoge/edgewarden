@@ -4,6 +4,7 @@ import {
   getPushRelayStatus,
   publishPushAuthRequest,
   publishPushAuthRequestResponse,
+  publishPushOrganizationKeys,
   publishPushVaultChange,
   registerPushDevice,
 } from "./push-relay";
@@ -13,6 +14,34 @@ function bindings(values: Partial<WorkerBindings> = {}): WorkerBindings {
 }
 
 describe("Bitwarden push relay", () => {
+  it("notifies a removed member directly with SyncOrgKeys", async () => {
+    const bodies: unknown[] = [];
+    const fetcher = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith("/connect/token"))
+          return Response.json({ access_token: "token", expires_in: 600 });
+        bodies.push(JSON.parse(String(init?.body)));
+        return new Response(null, { status: 200 });
+      },
+    ) as typeof fetch;
+    await publishPushOrganizationKeys(
+      bindings({ PUSH_INSTALLATION_ID: "id", PUSH_INSTALLATION_KEY: "key" }),
+      "removed-user",
+      { fetcher, cache: null },
+    );
+    expect(bodies).toEqual([
+      {
+        userId: "removed-user",
+        organizationId: null,
+        deviceId: null,
+        identifier: null,
+        type: 6,
+        payload: { userId: "removed-user", date: expect.any(String) },
+        clientType: null,
+        installationId: null,
+      },
+    ]);
+  });
   it("stays disabled unless both credentials and a valid region are present", () => {
     expect(getPushRelayStatus(bindings())).toEqual({
       enabled: false,

@@ -34,6 +34,7 @@ const SERVER_MANAGED_CIPHER_FIELDS = new Set([
   "fields",
   "passwordHistory",
   "attachments",
+  "attachments2",
   "revisionDate",
   "creationDate",
   "deletedDate",

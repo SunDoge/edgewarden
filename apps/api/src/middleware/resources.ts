@@ -1,4 +1,8 @@
 import { createMiddleware } from "hono/factory";
+import {
+  canManageOrganizationCollections,
+  canManageOrganizationMembers,
+} from "@edgewarden/shared";
 import type { HonoEnv } from "../env";
 import * as authRequestsDb from "../services/db/auth-requests";
 import * as ciphersDb from "../services/db/ciphers";
@@ -112,10 +116,7 @@ export const requireCipherWrite = createMiddleware<HonoEnv>(async (c, next) => {
     return;
   }
   const member = c.get("orgMember");
-  if (
-    (ROLE_LEVEL[member.role] ?? -1) >= ROLE_LEVEL.manager ||
-    member.access_all
-  ) {
+  if (member.access_all) {
     await next();
     return;
   }
@@ -182,13 +183,6 @@ export const requireAccountPasskey = createMiddleware<HonoEnv>(
   },
 );
 
-const ROLE_LEVEL: Record<string, number> = {
-  member: 0,
-  manager: 1,
-  admin: 2,
-  owner: 3,
-};
-
 export const requireOrgMember = createMiddleware<HonoEnv>(async (c, next) => {
   const orgId = c.req.param("orgId") || c.req.param("id");
   if (!orgId) return errorResponse("Organization not found", 404);
@@ -207,12 +201,27 @@ export const requireOrgMember = createMiddleware<HonoEnv>(async (c, next) => {
   await next();
 });
 
-export const requireOrgManager = createMiddleware<HonoEnv>(async (c, next) => {
-  const member = c.get("orgMember");
-  if ((ROLE_LEVEL[member.role] ?? -1) < ROLE_LEVEL.manager)
-    return errorResponse("Forbidden", 403);
-  await next();
-});
+export const requireOrgCollectionManager = createMiddleware<HonoEnv>(
+  async (c, next) => {
+    const member = c.get("orgMember");
+    if (
+      !canManageOrganizationCollections({
+        role: member.role,
+        accessAll: member.access_all === 1,
+      })
+    )
+      return errorResponse("Forbidden", 403);
+    await next();
+  },
+);
+
+export const requireOrgMemberManager = createMiddleware<HonoEnv>(
+  async (c, next) => {
+    if (!canManageOrganizationMembers(c.get("orgMember").role))
+      return errorResponse("Forbidden", 403);
+    await next();
+  },
+);
 
 export const requireOrgOwner = createMiddleware<HonoEnv>(async (c, next) => {
   if (c.get("orgMember").role !== "owner")

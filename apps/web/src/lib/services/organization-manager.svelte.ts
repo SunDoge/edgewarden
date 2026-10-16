@@ -1,4 +1,5 @@
 import { match } from "ts-pattern";
+import { canManageOrganizationMembers } from "@edgewarden/shared";
 import { deriveAccountPasswordHash } from "./api-auth";
 import {
   createOrganizationApi,
@@ -105,9 +106,7 @@ export function createOrganizationManager() {
       state.collections = [];
       return;
     }
-    const canManage = ["owner", "admin", "manager"].includes(
-      state.selected.role,
-    );
+    const canManage = canManageOrganizationMembers(state.selected.role);
     const [collectionResult, memberResult] = await Promise.all([
       listOrganizationCollectionsApi(state.selected.id),
       canManage ? listOrganizationMembersApi(state.selected.id) : null,

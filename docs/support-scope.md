@@ -88,6 +88,9 @@ Core scope includes:
   Account-restricted exports remain bound to their original account by design.
 - Edgewarden Web offline unlock and cache, followed by server reconciliation
   and stale-edit protection when connectivity returns.
+  This uses the local encrypted vault cache in an already loaded web app.
+  The web app does not provide a PWA or service worker; opening or reloading
+  the page while offline is not guaranteed.
 
 “Complete personal support” applies to password-manager functionality. It does
 not include every separate Bitwarden product or paid service attached to an
@@ -105,6 +108,9 @@ Basic organization support includes:
 - Creating, renaming, and deleting an organization.
 - Direct membership for existing Edgewarden accounts.
 - Owner, administrator, manager, and member roles.
+- Only owners and administrators manage membership. Managers with all-collection
+  access can manage collection structure; restricted managers cannot. Vault item
+  permissions follow collection grants regardless of the member's role.
 - Creating, renaming, and deleting collections.
 - Granting a member access to selected collections, including read-only and
   hide-passwords permissions.
@@ -126,6 +132,12 @@ The schema reserves collection-level `manage` permission for protocol
 evolution, but the current administration interface uses the simpler role-based
 management model. This reserved field should not be read as a claim of full
 Bitwarden flexible-collections parity.
+
+Sharing preserves attachment metadata atomically with the item. Items without
+an individual item key require re-encrypted metadata for every attachment;
+sharing is rejected while attachment uploads are pending. Membership changes
+notify the affected account, including after removal. Notifications are
+best-effort; server authorization applies independently of notification delivery.
 
 ## Deliberately out of scope
 

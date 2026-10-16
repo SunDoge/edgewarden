@@ -1622,11 +1622,12 @@ export function registerAdminOrganizationScenarios(
       .bind(restrictedUser.id)
       .first<{ revision_date: number }>();
     assert.ok(beforeCollectionRevision);
+    // The owner manages collection structure; restricted members still receive revisions.
     const updateCollection = (index: number) =>
       request(`/api/organizations/${orgId}/collections/${collectionId}`, {
         method: "PUT",
         headers: {
-          authorization: `Bearer ${context.memberAccessToken}`,
+          authorization: `Bearer ${context.accessToken}`,
           "content-type": "application/json",
         },
         body: JSON.stringify({ name: `encrypted-renamed-collection-${index}` }),
@@ -1655,7 +1656,7 @@ export function registerAdminOrganizationScenarios(
       {
         method: "DELETE",
         headers: {
-          authorization: `Bearer ${context.memberAccessToken}`,
+          authorization: `Bearer ${context.accessToken}`,
         },
       },
     );
