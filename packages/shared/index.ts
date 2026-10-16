@@ -10,3 +10,4 @@ export * from "./domain-normalize.ts";
 export * from "./backup-schema.ts";
 export * from "./json.ts";
 export * from "./version.ts";
+export * from "./organization-permissions.ts";

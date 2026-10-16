@@ -19,7 +19,8 @@ import {
 } from "../../handlers/organizations";
 import {
   requireCollection,
-  requireOrgManager,
+  requireOrgCollectionManager,
+  requireOrgMemberManager,
   requireOrgMember,
   requireOrgOwner,
 } from "../../middleware/resources";
@@ -46,31 +47,31 @@ export const organizationMemberRoutes = new Hono<HonoEnv>()
   .get(
     "/api/edgewarden/organizations/:orgId/invitee",
     requireOrgMember,
-    requireOrgManager,
+    requireOrgMemberManager,
     ...getInviteePublicKey,
   )
   .get(
     "/api/edgewarden/organizations/:orgId/members",
     requireOrgMember,
-    requireOrgManager,
+    requireOrgMemberManager,
     ...listOrganizationMembers,
   )
   .post(
     "/api/edgewarden/organizations/:orgId/members",
     requireOrgMember,
-    requireOrgManager,
+    requireOrgMemberManager,
     ...inviteOrganizationMember,
   )
   .put(
     "/api/edgewarden/organizations/:orgId/members/:memberId",
     requireOrgMember,
-    requireOrgManager,
+    requireOrgMemberManager,
     ...updateOrganizationMember,
   )
   .delete(
     "/api/edgewarden/organizations/:orgId/members/:memberId",
     requireOrgMember,
-    requireOrgManager,
+    requireOrgMemberManager,
     ...removeOrganizationMember,
   );
 
@@ -83,20 +84,20 @@ export const organizationCollectionRoutes = new Hono<HonoEnv>()
   .post(
     "/api/organizations/:orgId/collections",
     requireOrgMember,
-    requireOrgManager,
+    requireOrgCollectionManager,
     ...createCollection,
   )
   .put(
     "/api/organizations/:orgId/collections/:collectionId",
     requireOrgMember,
-    requireOrgManager,
+    requireOrgCollectionManager,
     requireCollection,
     ...updateCollection,
   )
   .delete(
     "/api/organizations/:orgId/collections/:collectionId",
     requireOrgMember,
-    requireOrgManager,
+    requireOrgCollectionManager,
     requireCollection,
     ...deleteCollection,
   );

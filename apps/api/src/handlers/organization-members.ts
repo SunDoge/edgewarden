@@ -1,5 +1,7 @@
 import { vValidator } from "@hono/valibot-validator";
-import { sql } from "kysely";
+import { type Kysely, sql } from "kysely";
+import type { DB } from "../types/db";
+import { notifyOrganizationMemberChange } from "../services/organizations/notifications";
 import { factory } from "../http/factory";
 import {
   InviteOrganizationMemberSchema,
@@ -28,7 +30,7 @@ function canManageRole(actorRole: string, targetRole: string) {
 }
 
 async function validateCollectionAccess(
-  db: any,
+  db: Kysely<DB>,
   orgId: string,
   accessAll: boolean,
   collections: Array<{ id: string; readOnly: boolean; hidePasswords: boolean }>,
@@ -276,6 +278,7 @@ export const inviteOrganizationMember = factory.createHandlers(
     ]);
     if (inserted.numAffectedRows !== 1n)
       return errorResponse("Member invitation changed or already exists", 409);
+    notifyOrganizationMemberChange(c, target.id);
     return c.json(
       {
         id: memberId,
@@ -401,6 +404,7 @@ export const updateOrganizationMember = factory.createHandlers(
     ]);
     if (updated.numAffectedRows !== 1n)
       return errorResponse("Member permissions changed concurrently", 409);
+    notifyOrganizationMemberChange(c, target.user_id);
     return c.json({
       id: target.id,
       email: target.email,
@@ -486,5 +490,6 @@ export const removeOrganizationMember = factory.createHandlers(async (c) => {
     Number(removed.numAffectedRows ?? 0n) < 1
   )
     return errorResponse("Member changed during removal", 409);
+  notifyOrganizationMemberChange(c, target.user_id);
   return new Response(null, { status: 204 });
 });

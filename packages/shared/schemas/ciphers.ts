@@ -19,6 +19,19 @@ const CipherEntries = {
     v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(1)),
   ),
   key: v.optional(v.nullable(v.string())),
+  // Attachment IDs are scoped to the cipher by the API before these encrypted
+  // metadata updates are committed together with the item mutation.
+  attachments2: v.optional(
+    v.nullable(
+      v.record(
+        v.string(),
+        v.object({
+          fileName: v.pipe(v.string(), v.minLength(1)),
+          key: v.pipe(v.string(), v.minLength(1)),
+        }),
+      ),
+    ),
+  ),
   encryptedFor: v.optional(v.nullable(v.pipe(v.string(), v.uuid()))),
   // Type-specific data — stored as opaque JSON, validated loosely
   login: v.optional(v.nullable(v.record(v.string(), v.unknown()))),

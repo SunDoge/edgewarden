@@ -9,15 +9,13 @@ import {
   revisionQueriesForCipher,
   validateOrganizationCollections,
 } from "../../services/ciphers/access";
-import {
-  buildCipherData,
-  cipherToResponse,
-} from "../../services/ciphers/presentation";
+import { buildCipherData } from "../../services/ciphers/presentation";
 import { executeBatch } from "../../services/db/batch";
 import * as ciphersDb from "../../services/db/ciphers";
 import * as foldersDb from "../../services/db/folders";
 import { errorResponse } from "../../utils/response";
 import { now } from "../../utils/time";
+import { loadCipherResponse } from "./response";
 
 // Creation validates organization and collection ownership before compiling the atomic write batch.
 async function createCipherFromBody(c: Context<HonoEnv>, body: CipherInput) {
@@ -109,7 +107,10 @@ async function createCipherFromBody(c: Context<HonoEnv>, body: CipherInput) {
     );
     return errorResponse("Cipher could not be read after creation", 500);
   }
-  return c.json(cipherToResponse(created, [], collectionIds), 200);
+  const response = await loadCipherResponse(c, created.id);
+  return response
+    ? c.json(response)
+    : errorResponse("Cipher access changed while creating", 409);
 }
 
 // POST /api/ciphers

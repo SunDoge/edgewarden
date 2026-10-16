@@ -7,7 +7,7 @@ describe("OrganizationCollectionsCard", () => {
   test("enables collection creation after the user enters a name", async () => {
     const onadd = vi.fn();
     const { user } = renderComponent(OrganizationCollectionsCard, {
-      organization: { role: "owner" },
+      organization: { role: "owner", accessAll: true },
       collections: [],
       name: "",
       busy: false,
@@ -28,18 +28,21 @@ describe("OrganizationCollectionsCard", () => {
     expect(onadd).toHaveBeenCalledOnce();
   });
 
-  test("hides management controls from ordinary members", () => {
-    renderComponent(OrganizationCollectionsCard, {
-      organization: { role: "member" },
-      collections: [{ id: "collection-1", name: "共享" }],
-      name: "",
-      busy: false,
-      onadd: vi.fn(),
-      onrename: vi.fn(),
-      onremove: vi.fn(),
-    });
+  test.each(["member", "manager"] as const)(
+    "hides management controls from restricted %s",
+    (role) => {
+      renderComponent(OrganizationCollectionsCard, {
+        organization: { role, accessAll: false },
+        collections: [{ id: "collection-1", name: "共享" }],
+        name: "",
+        busy: false,
+        onadd: vi.fn(),
+        onrename: vi.fn(),
+        onremove: vi.fn(),
+      });
 
-    expect(screen.getByText("共享")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /重命名集合/ })).toBeNull();
-  });
+      expect(screen.getByText("共享")).toBeVisible();
+      expect(screen.queryByRole("button", { name: /重命名集合/ })).toBeNull();
+    },
+  );
 });

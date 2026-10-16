@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { canManageOrganizationMembers } from "@edgewarden/shared";
   import { Building2, Pencil, Plus } from "@lucide/svelte";
   import OrganizationCollectionsCard from "$lib/components/organizations/OrganizationCollectionsCard.svelte";
   import OrganizationDialogs from "$lib/components/organizations/OrganizationDialogs.svelte";
@@ -86,7 +87,7 @@
                 name: collection.name,
               })}
           />
-          {#if ["owner", "admin", "manager"].includes(state.selected.role)}
+          {#if canManageOrganizationMembers(state.selected.role)}
             <OrganizationMembersCard
               organization={state.selected}
               members={state.members}

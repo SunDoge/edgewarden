@@ -1,6 +1,7 @@
 import type { CipherBulkShareInput } from "@edgewarden/shared";
 import { vValidator } from "@hono/valibot-validator";
-import { sql } from "kysely";
+import { type RawBuilder, sql } from "kysely";
+import type { EdgewardenBatchQuery } from "../../services/db/d1-dialect";
 import { factory } from "../../http/factory";
 import { redactedValidationHook } from "../../middleware/validation";
 import { CipherBulkShareSchema } from "../../schemas/ciphers";
@@ -15,6 +16,7 @@ import { textColumnInJson } from "../../services/db/json-array";
 import { errorResponse } from "../../utils/response";
 import { now } from "../../utils/time";
 import { loadCipherResponse } from "./response";
+import { prepareCipherAttachmentMutation } from "../../services/ciphers/attachment-mutation";
 
 export const shareCiphers = factory.createHandlers(
   vValidator("json", CipherBulkShareSchema, redactedValidationHook),
@@ -76,12 +78,33 @@ export const shareCiphers = factory.createHandlers(
     if (!firstCipher) return errorResponse("Cipher not found", 409);
     const timestamp = now();
     const mutationToken = crypto.randomUUID();
+    const attachmentMutations = new Map<
+      string,
+      { guard: RawBuilder<boolean>; queries: EdgewardenBatchQuery[] }
+    >();
+    for (const cipher of body.ciphers) {
+      const current = existingById.get(cipher.id)!;
+      const mutation = await prepareCipherAttachmentMutation(
+        db,
+        current,
+        cipher,
+        mutationToken,
+        true,
+      );
+      if ("error" in mutation) return errorResponse(mutation.error, 400);
+      attachmentMutations.set(cipher.id, mutation);
+    }
     // Ownership transfer must be atomic across the selected items. The first
     // statement claims the complete personal snapshot or none of it.
     const [claimed] = await c.get("dbDialect").batch([
       bulkCipherMutationClaimQuery(db, existing, mutationToken, {
         userId: user.id,
-      }),
+      }).where(
+        sql<boolean>`${sql.join(
+          [...attachmentMutations.values()].map((mutation) => mutation.guard),
+          sql` AND `,
+        )}`,
+      ),
       ...body.ciphers.flatMap((cipher) => {
         const current = existingById.get(cipher.id);
         if (!current) return [];
@@ -93,6 +116,7 @@ export const shareCiphers = factory.createHandlers(
           .where("org_id", "=", organizationId);
         const updatedAt = Math.max(timestamp, current.updated_at + 1);
         return [
+          ...(attachmentMutations.get(cipher.id)?.queries ?? []),
           db
             .updateTable("ciphers")
             .set({

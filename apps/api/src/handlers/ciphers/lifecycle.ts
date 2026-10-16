@@ -7,14 +7,12 @@ import {
 } from "../../services/audit";
 import {
   conditionalCipherRevisionQuery,
-  getVisibleCipherCollectionIds,
   organizationCipherViewStateQuery,
 } from "../../services/ciphers/access";
-import { cipherToResponse } from "../../services/ciphers/presentation";
-import * as attachmentsDb from "../../services/db/attachments";
 import * as ciphersDb from "../../services/db/ciphers";
 import { errorResponse } from "../../utils/response";
 import { now } from "../../utils/time";
+import { loadCipherResponse } from "./response";
 
 // Delete, restore, and archive operations use compare-and-swap guards to reject concurrent changes instead of overwriting them.
 // DELETE /api/ciphers/:id (soft delete, Bitwarden compat)
@@ -142,13 +140,10 @@ export const restoreCipher = factory.createHandlers(async (c) => {
     return errorResponse("Cipher changed during restore", 409);
   const cipher = await ciphersDb.getCipherById(db, id, c.get("user").id);
   if (!cipher) return errorResponse("Cipher changed after restore", 409);
-  return c.json(
-    cipherToResponse(
-      cipher,
-      await attachmentsDb.listByCipherIds(db, [cipher.id]),
-      await getVisibleCipherCollectionIds(db, id, c.get("orgMember")),
-    ),
-  );
+  const response = await loadCipherResponse(c, id);
+  return response
+    ? c.json(response)
+    : errorResponse("Cipher access changed after restore", 409);
 });
 
 export const archiveCipher = factory.createHandlers(async (c) => {
@@ -195,13 +190,10 @@ export const archiveCipher = factory.createHandlers(async (c) => {
     c.get("user").id,
   );
   if (!updated) return errorResponse("Cipher changed after archive", 409);
-  return c.json(
-    cipherToResponse(
-      updated,
-      await attachmentsDb.listByCipherIds(db, [cipher.id]),
-      await getVisibleCipherCollectionIds(db, cipher.id, c.get("orgMember")),
-    ),
-  );
+  const response = await loadCipherResponse(c, cipher.id);
+  return response
+    ? c.json(response)
+    : errorResponse("Cipher access changed after archive", 409);
 });
 
 export const unarchiveCipher = factory.createHandlers(async (c) => {
@@ -250,11 +242,8 @@ export const unarchiveCipher = factory.createHandlers(async (c) => {
     c.get("user").id,
   );
   if (!updated) return errorResponse("Cipher changed after unarchive", 409);
-  return c.json(
-    cipherToResponse(
-      updated,
-      await attachmentsDb.listByCipherIds(db, [cipher.id]),
-      await getVisibleCipherCollectionIds(db, cipher.id, c.get("orgMember")),
-    ),
-  );
+  const response = await loadCipherResponse(c, cipher.id);
+  return response
+    ? c.json(response)
+    : errorResponse("Cipher access changed after unarchive", 409);
 });

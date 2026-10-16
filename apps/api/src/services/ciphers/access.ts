@@ -30,11 +30,7 @@ export async function getVisibleCipherCollectionIds(
   cipherId: string,
   member: Selectable<OrgMembers> | undefined,
 ): Promise<string[]> {
-  if (
-    !member ||
-    member.access_all === 1 ||
-    ["manager", "admin", "owner"].includes(member.role)
-  ) {
+  if (!member || member.access_all === 1) {
     return getCipherCollectionIds(db, cipherId);
   }
   return (
@@ -57,14 +53,10 @@ export async function getCipherPermissions(
   member: Selectable<OrgMembers> | undefined,
   collectionIds: string[],
 ): Promise<CipherPermissions> {
-  if (
-    !cipher.org_id ||
-    !member ||
-    member.access_all === 1 ||
-    ["manager", "admin", "owner"].includes(member.role)
-  ) {
+  if (!cipher.org_id || member?.access_all === 1) {
     return { edit: true, viewPassword: true };
   }
+  if (!member) return { edit: false, viewPassword: false };
   const access = collectionIds.length
     ? await db
         .selectFrom("collection_members")
@@ -98,10 +90,7 @@ export async function resolveOrganizationCipherCollectionsForUpdate(
     .execute();
   if (requestedCollections.length !== requestedIds.length)
     return { error: "Collection not found" };
-  if (
-    member.access_all === 1 ||
-    ["manager", "admin", "owner"].includes(member.role)
-  ) {
+  if (member.access_all === 1) {
     return { collectionIds: requestedIds };
   }
 
@@ -290,8 +279,7 @@ export async function validateOrganizationCollections(
     .execute();
   if (collections.length !== uniqueIds.length)
     return { error: "Collection not found" } as const;
-  const elevated = ["manager", "admin", "owner"].includes(member.role);
-  if (!elevated && !member.access_all) {
+  if (!member.access_all) {
     const writable = await db
       .selectFrom("collection_members")
       .select("collection_id")
