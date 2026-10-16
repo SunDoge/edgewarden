@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import { CipherType, type CipherResponse } from "@edgewarden/shared";
 import {
   BookUser,
@@ -45,15 +46,15 @@ export function cipherTypeIcon(type: number) {
 
 export function cipherTypeName(type: number): string {
   return match(type)
-    .with(CipherType.Login, () => "登录凭据")
-    .with(CipherType.SecureNote, () => "安全便签")
-    .with(CipherType.Card, () => "支付卡片")
-    .with(CipherType.Identity, () => "个人身份")
-    .with(CipherType.SshKey, () => "SSH 密钥")
-    .with(CipherType.BankAccount, () => "银行账户")
-    .with(CipherType.DriversLicense, () => "驾驶证")
-    .with(CipherType.Passport, () => "护照")
-    .otherwise(() => "保险库项");
+    .with(CipherType.Login, () => m.ui_login())
+    .with(CipherType.SecureNote, () => m.ui_secure_note())
+    .with(CipherType.Card, () => m.ui_card())
+    .with(CipherType.Identity, () => m.ui_identity())
+    .with(CipherType.SshKey, () => m.ui_ssh_key())
+    .with(CipherType.BankAccount, () => m.ui_bank_account())
+    .with(CipherType.DriversLicense, () => m.ui_driver_s_license())
+    .with(CipherType.Passport, () => m.ui_passport())
+    .otherwise(() => m.ui_vault_item());
 }
 
 export function cipherExtraData(

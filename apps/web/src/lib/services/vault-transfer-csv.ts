@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import { CipherType } from "@edgewarden/shared";
 import Papa from "papaparse";
 import type {
@@ -28,8 +29,10 @@ function parseCsvRows(text: string): string[][] {
   );
   if (fatal) {
     const location =
-      fatal.row === undefined ? "" : `（第 ${fatal.row + 1} 行）`;
-    throw new Error(`CSV 格式错误${location}：${fatal.message}`);
+      fatal.row === undefined ? "" : m.ui_row_value({ value0: fatal.row + 1 });
+    throw new Error(
+      m.ui_invalid_csvvalue_value({ value0: location, value1: fatal.message }),
+    );
   }
   return result.data;
 }
@@ -41,7 +44,8 @@ function first(record: Record<string, string>, names: string[]): string {
 
 export function parseBitwardenCsv(text: string): TransferDocument {
   const rows = parseCsvRows(text);
-  if (rows.length < 2) throw new Error("CSV 中没有可导入的数据");
+  if (rows.length < 2)
+    throw new Error(m.ui_the_csv_contains_no_data_to_import());
   const headers = rows[0].map((value) =>
     value
       .trim()
@@ -77,7 +81,11 @@ export function parseBitwardenCsv(text: string): TransferDocument {
       }
     }
     if (!username && !password && !uri && !notes) {
-      warnings.push(`第 ${rowIndex + 2} 行缺少常见登录字段`);
+      warnings.push(
+        m.ui_row_value_is_missing_recognized_login_fields({
+          value0: rowIndex + 2,
+        }),
+      );
     }
     const common = {
       name,

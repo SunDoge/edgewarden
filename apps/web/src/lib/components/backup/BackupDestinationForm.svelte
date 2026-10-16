@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { Info, Save, Trash2 } from "@lucide/svelte";
   import * as Alert from "$lib/components/ui/alert/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -28,8 +30,8 @@
 <Card.Root>
   <Card.Header class="flex-row items-start justify-between">
     <div>
-      <Card.Title>备份服务配置</Card.Title><Card.Description
-        >配置原生 R2、WebDAV 或 S3 备份目的地</Card.Description
+      <Card.Title>{m.ui_backup_configuration()}</Card.Title><Card.Description
+        >{m.ui_configure_a_native_r2_webdav_or_s3_backup_destination()}</Card.Description
       >
     </div>
     <Card.Action class="flex gap-2">
@@ -40,33 +42,31 @@
         disabled={saving}
         class="text-red-500 hover:text-red-600"
       >
-        <Trash2 data-icon="inline-start" />
-        删除目的地
-      </Button>
+        <Trash2 data-icon="inline-start" />{m.ui_delete_destination()}</Button
+      >
       <Button size="sm" onclick={onSave} disabled={saving}>
         {#if saving}
           <Spinner data-icon="inline-start" />
         {:else}
           <Save data-icon="inline-start" />
-        {/if}
-        保存修改
-      </Button>
+        {/if}{m.ui_save_changes_2()}</Button
+      >
     </Card.Action>
   </Card.Header>
   <Card.Content class="flex flex-col gap-6">
     <!-- Generic fields -->
     <Field.Group class="grid grid-cols-1 md:grid-cols-2">
       <Field.Field>
-        <Field.Label for="backup-name">目的地名称</Field.Label>
+        <Field.Label for="backup-name">{m.ui_destination_name()}</Field.Label>
         <Input
           id="backup-name"
           type="text"
           bind:value={form.name}
-          placeholder="例如：我的 Nextcloud 备份"
+          placeholder={m.ui_for_example_my_nextcloud_backup()}
         />
       </Field.Field>
       <Field.Field>
-        <Field.Label>存储协议</Field.Label><Select.Root
+        <Field.Label>{m.ui_storage_protocol()}</Field.Label><Select.Root
           type="single"
           value={form.type}
           onValueChange={(value) => (form.type = value as typeof form.type)}
@@ -74,24 +74,23 @@
             >{form.type === "r2"
               ? "Cloudflare R2"
               : form.type === "webdav"
-                ? "WebDAV 协议"
-                : "S3 兼容协议"}</Select.Trigger
+                ? m.ui_webdav()
+                : m.ui_s3_compatible()}</Select.Trigger
           ><Select.Content
             ><Select.Group
               ><Select.Item value="r2">Cloudflare R2</Select.Item><Select.Item value="webdav"
-                >WebDAV 协议</Select.Item
-              ><Select.Item value="s3">S3 兼容协议</Select.Item></Select.Group
+                >{m.ui_webdav()}</Select.Item
+              ><Select.Item value="s3">{m.ui_s3_compatible()}</Select.Item></Select.Group
             ></Select.Content
           ></Select.Root
         >
       </Field.Field>
       <Field.Field class="md:col-span-2" orientation="horizontal">
         <Checkbox id="attachments" bind:checked={form.includeAttachments} />
-        <Field.Label for="attachments" class="flex items-center gap-1.5">
-          同时备份附件与文件 Send（包含 KV/R2 中的文件）
-          <Info
+        <Field.Label for="attachments" class="flex items-center gap-1.5"
+          >{m.ui_include_attachments_and_file_sends_files_in_kv_r2()}<Info
             class="size-3.5 text-muted-foreground"
-            title="勾选后，备份流程会将附件和文件 Send 的二进制内容写入 ZIP；不勾选时不会导出文件 Send，避免恢复出缺少文件的记录。"
+            title={m.ui_include_binary_attachment_and_send_files_in_the_zip_otherwise_file_sends_are_omi()}
           />
         </Field.Label>
       </Field.Field>
@@ -102,17 +101,17 @@
     {#if form.type === "r2"}
       <Alert.Root>
         <Info />
-        <Alert.Title>使用 Worker 的原生 R2 存储</Alert.Title>
-        <Alert.Description>
-          备份会写入 ATTACHMENTS_R2 bucket 的 backups/ 前缀，无需额外密钥。KV 部署无法使用此目的地。
-        </Alert.Description>
+        <Alert.Title>{m.ui_use_the_worker_s_native_r2_storage()}</Alert.Title>
+        <Alert.Description
+          >{m.ui_backups_are_stored_under_backups_in_attachments_r2_with_no_extra_credentials_thi()}</Alert.Description
+        >
       </Alert.Root>
     {:else if form.type === "webdav"}
       <Field.FieldSet>
-        <Field.FieldLegend>WebDAV 存储节点设置</Field.FieldLegend>
+        <Field.FieldLegend>{m.ui_webdav_settings()}</Field.FieldLegend>
         <Field.FieldGroup class="grid grid-cols-1 md:grid-cols-2">
           <Field.Field class="md:col-span-2">
-            <Field.Label for="dav-url">WebDAV 服务器基础 URL</Field.Label>
+            <Field.Label for="dav-url">{m.ui_webdav_base_url()}</Field.Label>
             <Input
               id="dav-url"
               type="url"
@@ -121,25 +120,25 @@
             />
           </Field.Field>
           <Field.Field>
-            <Field.Label for="dav-username">用户名</Field.Label>
+            <Field.Label for="dav-username">{m.ui_username()}</Field.Label>
             <Input
               id="dav-username"
               type="text"
               bind:value={form.davUsername}
-              placeholder="用户名"
+              placeholder={m.ui_username()}
             />
           </Field.Field>
           <Field.Field>
-            <Field.Label for="dav-password">应用密码 / 访问密码</Field.Label>
+            <Field.Label for="dav-password">{m.ui_app_password_access_password()}</Field.Label>
             <Input
               id="dav-password"
               type="password"
               bind:value={form.davPassword}
-              placeholder="密码 (密文显示)"
+              placeholder={m.ui_stored_password()}
             />
           </Field.Field>
           <Field.Field class="md:col-span-2">
-            <Field.Label for="dav-path">备份根目录</Field.Label>
+            <Field.Label for="dav-path">{m.ui_backup_root_directory()}</Field.Label>
             <Input
               id="dav-path"
               type="text"
@@ -152,10 +151,10 @@
     {:else}
       <!-- S3 Protocol Fields -->
       <Field.FieldSet>
-        <Field.FieldLegend>S3 兼容对象存储设置</Field.FieldLegend>
+        <Field.FieldLegend>{m.ui_s3_compatible_storage_settings()}</Field.FieldLegend>
         <Field.FieldGroup class="grid grid-cols-1 md:grid-cols-2">
           <Field.Field class="md:col-span-2">
-            <Field.Label for="s3-endpoint">Endpoint 端点 URL</Field.Label>
+            <Field.Label for="s3-endpoint">{m.ui_endpoint_url()}</Field.Label>
             <Input
               id="s3-endpoint"
               type="url"
@@ -164,7 +163,7 @@
             />
           </Field.Field>
           <Field.Field
-            ><Field.Label for="s3-bucket">Bucket 存储桶</Field.Label>
+            ><Field.Label for="s3-bucket">{m.ui_bucket()}</Field.Label>
             <Input
               id="s3-bucket"
               type="text"
@@ -173,7 +172,7 @@
             />
           </Field.Field>
           <Field.Field
-            ><Field.Label for="s3-region">Region 区域</Field.Label>
+            ><Field.Label for="s3-region">{m.ui_region_2()}</Field.Label>
             <Input id="s3-region" type="text" bind:value={form.s3Region} placeholder="auto" />
           </Field.Field>
           <Field.Field
@@ -195,26 +194,26 @@
             />
           </Field.Field>
           <Field.Field
-            ><Field.Label>Addressing Style 地址模式</Field.Label><Select.Root
+            ><Field.Label>{m.ui_addressing_style()}</Field.Label><Select.Root
               type="single"
               value={form.s3AddressingStyle}
               onValueChange={(value) =>
                 (form.s3AddressingStyle = value as typeof form.s3AddressingStyle)}
               ><Select.Trigger class="w-full"
                 >{form.s3AddressingStyle === "path-style"
-                  ? "Path Style（路径风格）"
-                  : "Virtual Hosted Style（虚拟主机名）"}</Select.Trigger
+                  ? m.ui_path_style()
+                  : m.ui_virtual_hosted_style()}</Select.Trigger
               ><Select.Content
                 ><Select.Group
-                  ><Select.Item value="path-style">Path Style（路径风格）</Select.Item><Select.Item
-                    value="virtual-hosted-style">Virtual Hosted Style（虚拟主机名）</Select.Item
+                  ><Select.Item value="path-style">{m.ui_path_style()}</Select.Item><Select.Item
+                    value="virtual-hosted-style">{m.ui_virtual_hosted_style()}</Select.Item
                   ></Select.Group
                 ></Select.Content
               ></Select.Root
             ></Field.Field
           >
           <Field.Field
-            ><Field.Label for="s3-path">备份根目录</Field.Label>
+            ><Field.Label for="s3-path">{m.ui_backup_root_directory()}</Field.Label>
             <Input id="s3-path" type="text" bind:value={form.s3RootPath} placeholder="edgewarden" />
           </Field.Field>
         </Field.FieldGroup>
@@ -223,15 +222,17 @@
 
     <!-- Schedule Settings Section -->
     <Field.FieldSet>
-      <Field.FieldLegend>定时自动备份设定 (Cron Trigger)</Field.FieldLegend>
+      <Field.FieldLegend>{m.ui_automatic_backup_schedule_cron_trigger()}</Field.FieldLegend>
       <Field.FieldGroup class="grid grid-cols-1 md:grid-cols-3">
         <Field.Field class="md:col-span-3" orientation="horizontal">
           <Checkbox id="schedEnabled" bind:checked={form.scheduleEnabled} />
-          <Field.Label for="schedEnabled">启用此目的地的自动定时备份任务</Field.Label>
+          <Field.Label for="schedEnabled"
+            >{m.ui_enable_scheduled_backups_for_this_destination()}</Field.Label
+          >
         </Field.Field>
 
         <Field.Field data-disabled={!form.scheduleEnabled}>
-          <Field.Label for="schedule-interval">备份执行间隔 (小时)</Field.Label>
+          <Field.Label for="schedule-interval">{m.ui_backup_interval_hours()}</Field.Label>
           <Input
             id="schedule-interval"
             type="number"
@@ -243,7 +244,7 @@
         </Field.Field>
 
         <Field.Field data-disabled={!form.scheduleEnabled}
-          ><Field.Label>每日首个备份小时</Field.Label><Select.Root
+          ><Field.Label>{m.ui_first_backup_hour_of_the_day()}</Field.Label><Select.Root
             type="single"
             value={form.scheduleStartTime}
             disabled={!form.scheduleEnabled}
@@ -256,12 +257,12 @@
               ></Select.Content
             ></Select.Root
           ><Field.Description
-            >任务每小时检查一次，会在所选小时内执行，不保证精确到分钟。</Field.Description
+            >{m.ui_tasks_are_checked_hourly_and_run_within_the_selected_hour_not_at_an_exact_minute()}</Field.Description
           ></Field.Field
         >
 
         <Field.Field data-disabled={!form.scheduleEnabled}>
-          <Field.Label for="schedule-retention">最大保留历史文件数 (Retention)</Field.Label>
+          <Field.Label for="schedule-retention">{m.ui_maximum_backup_files_to_keep()}</Field.Label>
           <Input
             id="schedule-retention"
             type="number"

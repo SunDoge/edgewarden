@@ -1,4 +1,7 @@
-# Generate independent values with: openssl rand -hex 32
+# Local development only; this file does not configure production secrets.
+# Copy to .dev.vars. Never commit filled values or reuse production secrets.
+# All three values below are required. Run openssl rand -hex 32 three times.
+# JWT_SECRET signs tokens; DATA_ENCRYPTION_SECRET protects stored server settings.
 JWT_SECRET=
 DATA_ENCRYPTION_SECRET=
 
@@ -11,4 +14,10 @@ BOOTSTRAP_SECRET=
 # PUSH_REGION=US
 
 # Optional Cloudflare Turnstile protection for login and registration.
+# Configure the matching public TURNSTILE_SITE_KEY as well.
 # TURNSTILE_SECRET_KEY=
+# TURNSTILE_SITE_KEY=
+
+# Optional YubiKey OTP validation credentials (not needed for WebAuthn).
+# YUBICO_CLIENT_ID=
+# YUBICO_SECRET_KEY=

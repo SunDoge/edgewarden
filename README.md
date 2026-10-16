@@ -16,7 +16,10 @@ The precise personal, organization and platform-dependent feature boundary is ma
 
 ## Deploy to Cloudflare
 
-Click the button above, connect GitHub, and accept the detected build and deploy commands:
+The button above connects the repository to Cloudflare. The complete first-time
+button flow on a fresh account has not yet been verified; do not assume a
+zero-configuration deployment. Review the secrets and permissions below before
+building. Use these build and deploy commands:
 
 ```text
 Build command:  pnpm build
@@ -27,21 +30,79 @@ The deploy command resolves or creates the named D1 database, applies every pend
 
 Before the first build, select a custom API token under **Worker → Settings → Build → API token**. In addition to the normal Workers Builds permissions, it must grant **Account → D1 → Edit** for the target account. Cloudflare's automatically generated build token currently omits D1 access, while Edgewarden's deploy command must list/create the database and apply migrations. Keep the remaining generated-token permissions for Workers Scripts, R2 (or KV), account membership, and Workers Routes.
 
-Configure these required secrets in the deployment form:
+### Required runtime secrets
 
-- `JWT_SECRET`: independently generated token-signing secret, at least 32 characters.
-- `DATA_ENCRYPTION_SECRET`: independently generated persistent-data encryption secret, at least 32 characters. Back it up securely.
-- `BOOTSTRAP_SECRET`: password required to create the first administrator account.
+All three are required. Generate a **different value for each**; none is your
+Cloudflare API token or your vault master password.
 
-Generate independent random values locally with:
+| Name | What to enter | Purpose and handling |
+| --- | --- | --- |
+| `JWT_SECRET` | A random string of at least 32 characters | Signs login and other short-lived tokens. Changing it invalidates tokens signed with the old value. |
+| `DATA_ENCRYPTION_SECRET` | Another random string of at least 32 characters | Encrypts persisted server settings such as backup destination and Yubico credentials. Keep it stable and back it up separately; losing it makes those encrypted settings unreadable. It is not the key used to encrypt your vault items. |
+| `BOOTSTRAP_SECRET` | A third independently generated random string | Enter this as the deployment password when registering the first administrator. Choose a separate master password for that account. This is not a recovery code or an existing user's login password. |
+
+Run this command **three times**, and save each output under its corresponding
+secret name in a secure password manager:
 
 ```sh
 openssl rand -hex 32
 ```
 
-To enable Turnstile for both login and registration, also configure the optional `TURNSTILE_SECRET_KEY` secret and the `TURNSTILE_SITE_KEY` Worker variable. Restrict the widget to the deployed hostname.
+Paste the generated value itself, without quotes or `NAME=`. Do not use example
+values, reuse one value for all three, or commit secrets to the repository.
 
-To enable background sync and device-login approval notifications in the official Bitwarden Android and iOS apps, request a unique Installation ID and Key from [bitwarden.com/host](https://bitwarden.com/host/), then set `PUSH_INSTALLATION_ID` and `PUSH_INSTALLATION_KEY` as Worker secrets. US is the default; EU installations should also set `PUSH_REGION=EU` as a Worker secret so Git deployments preserve it. Push Relay stays disabled when either credential is absent; its status is visible in the administration page.
+For a deployed Worker, set these under **Workers & Pages → your Worker → Settings
+→ Variables and Secrets**, choosing **Secret** as the type. The deployment
+form may also prompt for the three required secrets. Build-only environment
+variables do not automatically become Worker runtime secrets. See
+[Cloudflare's secrets guide](https://developers.cloudflare.com/workers/configuration/secrets/).
+
+For local development, copy `.dev.vars.example` to `.dev.vars` and fill the three
+values there. That file is local-only and does not configure production secrets.
+Use different secrets for development, demo, and production.
+
+### Optional integrations
+
+You can leave **all of these unset** for an initial deployment. Omit unused
+settings rather than entering placeholder credentials.
+
+| Name | Type | When needed / what to enter |
+| --- | --- | --- |
+| `PUSH_INSTALLATION_ID` | Secret | Installation ID obtained from [Bitwarden](https://bitwarden.com/host/); configure together with the key below for native mobile push. |
+| `PUSH_INSTALLATION_KEY` | Secret | Matching Bitwarden Installation Key, not a Cloudflare API token. Without this pair, Push Relay is disabled; manual sync remains available. |
+| `PUSH_REGION` | Non-sensitive setting; store as Secret for Git deployments | `US` (default; may be omitted) or `EU`, matching the installation credentials. Storing it as a secret keeps it outside repository-managed variables. |
+| `TURNSTILE_SECRET_KEY` | Secret | Server-side secret from your Cloudflare Turnstile widget. Configure together with its site key below, or leave both unset. |
+| `TURNSTILE_SITE_KEY` | Variable (public) | The same widget's public site key. Restrict the widget to your deployed hostname. |
+| `YUBICO_CLIENT_ID` | Secret | Yubico validation client ID; only for YubiKey OTP validation, not ordinary WebAuthn security keys. Configure with the key below. |
+| `YUBICO_SECRET_KEY` | Secret | Matching Yubico validation secret. These two settings override credentials configured through the administration UI. |
+
+Turnstile protection is enabled when its secret is present, so do not configure
+the secret without the matching public site key.
+
+### Ordinary variables and deployment credentials
+
+The repository defaults to `SIGNUPS_ALLOWED="false"` and
+`INVITATIONS_ALLOWED="true"`: after the first administrator, registration
+requires an invitation. The bootstrap secret is still required for the first
+account. `ATTACHMENT_STORAGE="r2"` is the default; use `pnpm deploy:kv` below
+instead of changing only this variable when deploying without R2.
+
+Keep ordinary variable changes in your deployment's Wrangler configuration so
+later Git deployments use the same values. Advanced CORS and WebAuthn variables
+are listed in [optional Worker configuration](apps/api/README.md#optional-worker-configuration);
+most deployments should leave them unset. Do not set the legacy `ADMIN_PASSWORD`
+alias for a new deployment.
+
+The **Cloudflare deployment API token** is separate from all application secrets.
+It authorizes the build/deploy process to manage your Cloudflare resources; it is
+not a vault credential and should not be added as an application runtime secret.
+Configure it under Workers Builds as described above. See
+[Cloudflare's build configuration guide](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/).
+
+After deploying, open the web vault and register the first account using your
+`BOOTSTRAP_SECRET` as the deployment password. Confirm login and sync before
+adding optional integrations. Push Relay configuration status is visible in the
+administration page; successful deployment alone does not prove push delivery.
 
 Optional deployment settings are documented in [apps/api/README.md](apps/api/README.md#optional-worker-configuration). Most deployments should leave the WebAuthn RP settings unset so passkeys derive the RP ID and origin from the request hostname.
 

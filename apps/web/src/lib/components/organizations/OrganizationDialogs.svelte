@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Checkbox } from "$lib/components/ui/checkbox/index.js";
@@ -57,29 +59,30 @@
 <Dialog.Root bind:open={createOpen}>
   <Dialog.Content>
     <Dialog.Header
-      ><Dialog.Title>创建组织</Dialog.Title><Dialog.Description
-        >浏览器会生成独立组织密钥和 RSA 密钥对。</Dialog.Description
+      ><Dialog.Title>{m.ui_create_organization()}</Dialog.Title><Dialog.Description
+        >{m.ui_your_browser_will_generate_an_organization_key_and_an_rsa_key_pair()}</Dialog.Description
       ></Dialog.Header
     >
     <Field.Group>
       <Field.Field
-        ><Field.Label for="organization-name">组织名称</Field.Label><Input
+        ><Field.Label for="organization-name">{m.ui_organization_name()}</Field.Label><Input
           id="organization-name"
           bind:value={organizationName}
         /></Field.Field
       >
       <Field.Field
-        ><Field.Label for="collection-name">初始集合</Field.Label><Input
+        ><Field.Label for="collection-name">{m.ui_initial_collection()}</Field.Label><Input
           id="collection-name"
           bind:value={initialCollectionName}
         /></Field.Field
       >
     </Field.Group>
     <Dialog.Footer
-      ><Button variant="outline" onclick={() => (createOpen = false)}>取消</Button><Button
+      ><Button variant="outline" onclick={() => (createOpen = false)}>{m.login_cancel()}</Button
+      ><Button
         onclick={oncreate}
         disabled={!organizationName.trim() || !initialCollectionName.trim() || busy === "create"}
-        >创建</Button
+        >{m.ui_create()}</Button
       ></Dialog.Footer
     >
   </Dialog.Content>
@@ -93,13 +96,13 @@
 >
   <Dialog.Content>
     <Dialog.Header
-      ><Dialog.Title>成员权限</Dialog.Title><Dialog.Description
+      ><Dialog.Title>{m.ui_member_permissions()}</Dialog.Title><Dialog.Description
         >{editingMember?.email}</Dialog.Description
       ></Dialog.Header
     >
     <Field.Group>
       <Field.Field
-        ><Field.Label>角色</Field.Label><Select.Root type="single" bind:value={memberRole}
+        ><Field.Label>{m.ui_role()}</Field.Label><Select.Root type="single" bind:value={memberRole}
           ><Select.Trigger>{memberRole}</Select.Trigger><Select.Content
             ><Select.Group
               ><Select.Item value="member">member</Select.Item
@@ -112,11 +115,11 @@
       >
       <Field.Field orientation="horizontal"
         ><Checkbox id="member-access-all" bind:checked={memberAccessAll} /><Field.Label
-          for="member-access-all">访问全部集合</Field.Label
+          for="member-access-all">{m.ui_access_all_collections()}</Field.Label
         ></Field.Field
       >
       {#if !memberAccessAll}<Field.FieldSet
-          ><Field.FieldLegend>集合权限</Field.FieldLegend><Field.FieldGroup>
+          ><Field.FieldLegend>{m.ui_collection_permissions()}</Field.FieldLegend><Field.FieldGroup>
             {#each collections as collection}{@const access = memberCollectionAccess[collection.id]}
               <Field.FieldSet class="rounded-md border p-3"
                 ><Field.Field orientation="horizontal"
@@ -144,7 +147,8 @@
                             ...memberCollectionAccess,
                             [collection.id]: { ...access, readOnly: checked },
                           })}
-                      /><Field.Label for={`readonly-${collection.id}`}>只读</Field.Label
+                      /><Field.Label for={`readonly-${collection.id}`}
+                        >{m.ui_read_only()}</Field.Label
                       ></Field.Field
                     ><Field.Field orientation="horizontal"
                       ><Checkbox
@@ -155,7 +159,8 @@
                             ...memberCollectionAccess,
                             [collection.id]: { ...access, hidePasswords: checked },
                           })}
-                      /><Field.Label for={`hide-${collection.id}`}>隐藏密码</Field.Label
+                      /><Field.Label for={`hide-${collection.id}`}
+                        >{m.login_hide_password()}</Field.Label
                       ></Field.Field
                     ></Field.FieldGroup
                   >{/if}</Field.FieldSet
@@ -165,9 +170,8 @@
         >{/if}
     </Field.Group>
     <Dialog.Footer
-      ><Button variant="outline" onclick={() => (editingMember = null)}>取消</Button><Button
-        onclick={onSaveMember}
-        disabled={busy === "member"}>保存</Button
+      ><Button variant="outline" onclick={() => (editingMember = null)}>{m.login_cancel()}</Button
+      ><Button onclick={onSaveMember} disabled={busy === "member"}>{m.ui_save()}</Button
       ></Dialog.Footer
     >
   </Dialog.Content>
@@ -182,17 +186,19 @@
   <Dialog.Content
     ><Dialog.Header
       ><Dialog.Title
-        >{renameTarget?.kind === "organization" ? "重命名组织" : "重命名集合"}</Dialog.Title
-      ><Dialog.Description>输入一个便于成员识别的新名称。</Dialog.Description></Dialog.Header
+        >{renameTarget?.kind === "organization"
+          ? m.ui_rename_organization()
+          : m.ui_rename_collection()}</Dialog.Title
+      ><Dialog.Description>{m.ui_enter_a_new_name_that_members_will_recognize()}</Dialog.Description
+      ></Dialog.Header
     ><Field.Field
-      ><Field.Label for="rename-name">名称</Field.Label><Input
+      ><Field.Label for="rename-name">{m.ui_name()}</Field.Label><Input
         id="rename-name"
         bind:value={renameName}
       /></Field.Field
     ><Dialog.Footer
-      ><Button variant="outline" onclick={() => (renameTarget = null)}>取消</Button><Button
-        onclick={onSaveRename}
-        disabled={!renameName.trim()}>保存</Button
+      ><Button variant="outline" onclick={() => (renameTarget = null)}>{m.login_cancel()}</Button
+      ><Button onclick={onSaveRename} disabled={!renameName.trim()}>{m.ui_save()}</Button
       ></Dialog.Footer
     ></Dialog.Content
   >
@@ -207,16 +213,20 @@
   <AlertDialog.Content
     ><AlertDialog.Header
       ><AlertDialog.Title
-        >{removeTarget?.kind === "member" ? "移除组织成员" : "删除集合"}</AlertDialog.Title
+        >{removeTarget?.kind === "member"
+          ? m.ui_remove_organization_member()
+          : m.ui_delete_collection()}</AlertDialog.Title
       ><AlertDialog.Description
         >{removeTarget?.kind === "member"
-          ? `确定要移除成员 ${removeTarget.name}？`
-          : `确定要删除集合 ${removeTarget?.name}？集合内条目必须先移动或删除。`}</AlertDialog.Description
+          ? m.ui_remove_member_value_2({ value0: removeTarget.name })
+          : m.ui_delete_collection_value_move_or_delete_its_items_first({
+              value0: removeTarget?.name ?? "",
+            })}</AlertDialog.Description
       ></AlertDialog.Header
     ><AlertDialog.Footer
-      ><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action
+      ><AlertDialog.Cancel>{m.login_cancel()}</AlertDialog.Cancel><AlertDialog.Action
         class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-        onclick={onConfirmRemove}>确认</AlertDialog.Action
+        onclick={onConfirmRemove}>{m.ui_confirm()}</AlertDialog.Action
       ></AlertDialog.Footer
     ></AlertDialog.Content
   >

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { Plus } from "@lucide/svelte";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -21,9 +23,9 @@
 
 <Card.Root>
   <Card.Header>
-    <Card.Title>备份目的地</Card.Title>
+    <Card.Title>{m.ui_backup_destinations()}</Card.Title>
     <Card.Action
-      ><Button size="icon-sm" variant="ghost" onclick={onAdd} aria-label="添加新目的地"
+      ><Button size="icon-sm" variant="ghost" onclick={onAdd} aria-label={m.ui_add_destination()}
         ><Plus /></Button
       ></Card.Action
     >
@@ -42,11 +44,13 @@
       <Empty.Root
         ><Empty.Header
           ><Empty.Media variant="icon"><Plus /></Empty.Media><Empty.Title
-            >未配置备份目的地</Empty.Title
-          ><Empty.Description>添加 R2、WebDAV 或 S3 目的地以启用自动备份。</Empty.Description
+            >{m.ui_no_backup_destinations_configured()}</Empty.Title
+          ><Empty.Description
+            >{m.ui_add_an_r2_webdav_or_s3_destination_to_enable_automatic_backups()}</Empty.Description
           ></Empty.Header
         ><Empty.Content
-          ><Button size="sm" onclick={onAdd}><Plus data-icon="inline-start" />添加目的地</Button
+          ><Button size="sm" onclick={onAdd}
+            ><Plus data-icon="inline-start" />{m.ui_add_destination_2()}</Button
           ></Empty.Content
         ></Empty.Root
       >

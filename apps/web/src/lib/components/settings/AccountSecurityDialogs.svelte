@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { Copy, Download, ShieldAlert } from "@lucide/svelte";
   import * as Alert from "$lib/components/ui/alert/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -66,9 +68,9 @@
   function downloadRecoveryCode() {
     const blob = new Blob(
       [
-        "Edgewarden 两步验证恢复代码\n\n",
+        m.ui_edgewarden_two_step_login_recovery_code(),
         `${recoveryCode}\n\n`,
-        "此代码只能使用一次。请离线保存在安全位置。\n",
+        m.ui_this_code_can_only_be_used_once_store_it_securely_offline(),
       ],
       { type: "text/plain;charset=utf-8" },
     );
@@ -84,22 +86,25 @@
 <Dialog.Root bind:open={deleteAccountOpen}
   ><Dialog.Content
     ><Dialog.Header
-      ><Dialog.Title>永久删除账户</Dialog.Title><Dialog.Description
-        >此操作无法撤销。服务器会删除个人保险库及账户数据，并清理附件和 Send
-        文件。请输入当前主密码确认。</Dialog.Description
+      ><Dialog.Title>{m.ui_permanently_delete_account()}</Dialog.Title><Dialog.Description
+        >{m.ui_this_cannot_be_undone_your_personal_vault_and_account_data_will_be_deleted_inclu()}</Dialog.Description
       ></Dialog.Header
     ><Field.Field
-      ><Field.Label for="delete-account-password">当前主密码</Field.Label><Input
+      ><Field.Label for="delete-account-password">{m.ui_current_master_password()}</Field.Label
+      ><Input
         id="delete-account-password"
         type="password"
         bind:value={deleteAccountPassword}
         autocomplete="current-password"
       /></Field.Field
     ><Dialog.Footer
-      ><Button variant="outline" onclick={() => (deleteAccountOpen = false)}>取消</Button><Button
+      ><Button variant="outline" onclick={() => (deleteAccountOpen = false)}
+        >{m.login_cancel()}</Button
+      ><Button
         variant="destructive"
         onclick={onDeleteAccount}
-        disabled={!deleteAccountPassword || busy === "delete-account"}>永久删除</Button
+        disabled={!deleteAccountPassword || busy === "delete-account"}
+        >{m.ui_delete_permanently()}</Button
       ></Dialog.Footer
     ></Dialog.Content
   ></Dialog.Root
@@ -114,19 +119,21 @@
 >
   <Dialog.Content>
     <Dialog.Header>
-      <Dialog.Title>验证主密码</Dialog.Title>
+      <Dialog.Title>{m.ui_verify_master_password()}</Dialog.Title>
       <Dialog.Description>
         {verificationAction === "totp"
-          ? "设置身份验证器前，需要重新验证你的身份。"
+          ? m.ui_verify_your_identity_before_setting_up_an_authenticator()
           : verificationAction === "recovery"
-            ? "恢复代码属于敏感凭据，查看前需要重新验证你的身份。"
+            ? m.ui_your_recovery_code_is_sensitive_verify_your_identity_before_viewing_it()
             : verificationAction === "api-key-reveal"
-              ? "API Key 属于账户凭据，查看前需要重新验证你的身份。"
-              : "轮换 API Key 会让旧密钥立即失效，请重新验证你的身份。"}
+              ? m.ui_your_api_key_is_an_account_credential_verify_your_identity_before_viewing_it()
+              : m.ui_rotating_your_api_key_immediately_invalidates_the_old_one_verify_your_identity_t()}
       </Dialog.Description>
     </Dialog.Header>
     <Field.Field>
-      <Field.Label for="two-factor-verification-password">当前主密码</Field.Label>
+      <Field.Label for="two-factor-verification-password"
+        >{m.ui_current_master_password()}</Field.Label
+      >
       <Input
         id="two-factor-verification-password"
         type="password"
@@ -135,10 +142,12 @@
       />
     </Field.Field>
     <Dialog.Footer>
-      <Button variant="outline" onclick={() => (verificationOpen = false)}>取消</Button>
+      <Button variant="outline" onclick={() => (verificationOpen = false)}
+        >{m.login_cancel()}</Button
+      >
       <Button
         onclick={onVerifySensitiveAction}
-        disabled={!verificationPassword || busy === "verification"}>继续</Button
+        disabled={!verificationPassword || busy === "verification"}>{m.ui_continue()}</Button
       >
     </Dialog.Footer>
   </Dialog.Content>
@@ -152,22 +161,22 @@
   }}
   ><Dialog.Content
     ><Dialog.Header
-      ><Dialog.Title>设置身份验证器</Dialog.Title><Dialog.Description
-        >在身份验证器中手动输入密钥，再填写生成的 6 位验证码。</Dialog.Description
+      ><Dialog.Title>{m.ui_set_up_authenticator()}</Dialog.Title><Dialog.Description
+        >{m.ui_enter_the_key_in_your_authenticator_app_then_enter_the_6_digit_code_it_generates()}</Dialog.Description
       ></Dialog.Header
     ><Field.Group
       ><Field.Field
-        ><Field.Label>密钥</Field.Label>
+        ><Field.Label>{m.ui_key()}</Field.Label>
         <div class="flex gap-2">
           <Input value={totpKey} readonly class="font-mono" /><Button
             variant="outline"
             size="icon"
             onclick={() => onCopy(totpKey)}
-            aria-label="复制密钥"><Copy /></Button
+            aria-label={m.ui_copy_key()}><Copy /></Button
           >
         </div></Field.Field
       ><Field.Field
-        ><Field.Label for="totp-token">验证码</Field.Label><Input
+        ><Field.Label for="totp-token">{m.nav_totp()}</Field.Label><Input
           bind:value={totpToken}
           inputmode="numeric"
           maxlength={6}
@@ -175,9 +184,10 @@
         /></Field.Field
       ></Field.Group
     ><Dialog.Footer
-      ><Button variant="outline" onclick={() => (totpOpen = false)}>取消</Button><Button
+      ><Button variant="outline" onclick={() => (totpOpen = false)}>{m.login_cancel()}</Button
+      ><Button
         onclick={onEnableTotp}
-        disabled={!/^\d{6}$/.test(totpToken) || busy === "totp-enable"}>启用</Button
+        disabled={!/^\d{6}$/.test(totpToken) || busy === "totp-enable"}>{m.ui_enable()}</Button
       ></Dialog.Footer
     ></Dialog.Content
   ></Dialog.Root
@@ -191,43 +201,45 @@
 >
   <Dialog.Content>
     <Dialog.Header>
-      <Dialog.Title>保存恢复代码</Dialog.Title>
-      <Dialog.Description>
-        如果身份验证器丢失，这是关闭两步验证并恢复账户访问的唯一备用凭据。
-      </Dialog.Description>
+      <Dialog.Title>{m.ui_save_your_recovery_code()}</Dialog.Title>
+      <Dialog.Description
+        >{m.ui_if_you_lose_your_authenticator_this_is_your_backup_credential_for_turning_off_tw()}</Dialog.Description
+      >
     </Dialog.Header>
     <Alert.Root>
       <ShieldAlert />
-      <Alert.Title>只显示给你，请立即保存</Alert.Title>
-      <Alert.Description>
-        恢复代码只能使用一次。不要只保存在本密码库中，建议下载后离线保存。
-      </Alert.Description>
+      <Alert.Title>{m.ui_keep_this_code_private_and_save_it_now()}</Alert.Title>
+      <Alert.Description
+        >{m.ui_this_code_can_only_be_used_once_do_not_keep_it_only_in_this_vault_download_it_an()}</Alert.Description
+      >
     </Alert.Root>
     <Field.Group>
       <Field.Field>
-        <Field.Label for="new-recovery-code">恢复代码</Field.Label>
+        <Field.Label for="new-recovery-code">{m.login_recovery_code()}</Field.Label>
         <div class="flex gap-2">
           <Input id="new-recovery-code" value={recoveryCode} readonly class="font-mono" />
           <Button
             variant="outline"
             size="icon"
             onclick={() => onCopy(recoveryCode)}
-            aria-label="复制恢复代码"><Copy /></Button
+            aria-label={m.ui_copy_recovery_code()}><Copy /></Button
           >
         </div>
       </Field.Field>
       <Field.Field orientation="horizontal">
         <Checkbox id="recovery-code-saved" bind:checked={recoveryConfirmed} />
-        <Field.Label for="recovery-code-saved">
-          我已将恢复代码保存在密码库之外的安全位置
-        </Field.Label>
+        <Field.Label for="recovery-code-saved"
+          >{m.ui_i_saved_my_recovery_code_somewhere_safe_outside_this_vault()}</Field.Label
+        >
       </Field.Field>
     </Field.Group>
     <Dialog.Footer>
       <Button variant="outline" onclick={downloadRecoveryCode}>
-        <Download data-icon="inline-start" />下载
-      </Button>
-      <Button onclick={onFinishRecoverySetup} disabled={!recoveryConfirmed}>保存并重新登录</Button>
+        <Download data-icon="inline-start" />{m.ui_download()}</Button
+      >
+      <Button onclick={onFinishRecoverySetup} disabled={!recoveryConfirmed}
+        >{m.ui_save_and_log_in_again()}</Button
+      >
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
@@ -235,21 +247,22 @@
 <Dialog.Root bind:open={disableOpen}
   ><Dialog.Content
     ><Dialog.Header
-      ><Dialog.Title>关闭两步验证</Dialog.Title><Dialog.Description
-        >请输入主密码确认。关闭后会撤销现有会话，并将你转到登录页面。</Dialog.Description
+      ><Dialog.Title>{m.ui_turn_off_two_step_login()}</Dialog.Title><Dialog.Description
+        >{m.ui_enter_your_master_password_to_confirm_existing_sessions_will_be_revoked_and_you_()}</Dialog.Description
       ></Dialog.Header
     ><Field.Field
-      ><Field.Label for="master-password">主密码</Field.Label><Input
+      ><Field.Label for="master-password">{m.login_master_password()}</Field.Label><Input
         id="master-password"
         type="password"
         bind:value={masterPassword}
         autocomplete="current-password"
       /></Field.Field
     ><Dialog.Footer
-      ><Button variant="outline" onclick={() => (disableOpen = false)}>取消</Button><Button
+      ><Button variant="outline" onclick={() => (disableOpen = false)}>{m.login_cancel()}</Button
+      ><Button
         variant="destructive"
         onclick={onDisableTotp}
-        disabled={!masterPassword || busy === "totp-disable"}>确认关闭</Button
+        disabled={!masterPassword || busy === "totp-disable"}>{m.ui_confirm_disabling()}</Button
       ></Dialog.Footer
     ></Dialog.Content
   ></Dialog.Root
@@ -258,26 +271,27 @@
 <Dialog.Root bind:open={passwordOpen}
   ><Dialog.Content
     ><Dialog.Header
-      ><Dialog.Title>更改主密码</Dialog.Title><Dialog.Description
-        >保险库密钥会使用新密码重新加密。完成后需要重新登录所有设备。</Dialog.Description
+      ><Dialog.Title>{m.ui_change_master_password()}</Dialog.Title><Dialog.Description
+        >{m.ui_your_vault_key_will_be_re_encrypted_with_the_new_password_you_will_need_to_log_i()}</Dialog.Description
       ></Dialog.Header
     ><Field.Group
       ><Field.Field
-        ><Field.Label for="current-password">当前主密码</Field.Label><Input
+        ><Field.Label for="current-password">{m.ui_current_master_password()}</Field.Label><Input
           id="current-password"
           type="password"
           bind:value={currentPassword}
           autocomplete="current-password"
         /></Field.Field
       ><Field.Field
-        ><Field.Label for="new-password">新主密码</Field.Label><Input
+        ><Field.Label for="new-password">{m.ui_new_master_password()}</Field.Label><Input
           id="new-password"
           type="password"
           bind:value={newPassword}
           autocomplete="new-password"
-        /><Field.Description>至少 12 个字符。</Field.Description></Field.Field
+        /><Field.Description>{m.ui_at_least_12_characters()}</Field.Description></Field.Field
       ><Field.Field
-        ><Field.Label for="confirm-password">确认新主密码</Field.Label><Input
+        ><Field.Label for="confirm-password">{m.ui_confirm_new_master_password()}</Field.Label
+        ><Input
           id="confirm-password"
           type="password"
           bind:value={confirmPassword}
@@ -285,13 +299,14 @@
         /></Field.Field
       ></Field.Group
     ><Dialog.Footer
-      ><Button variant="outline" onclick={() => (passwordOpen = false)}>取消</Button><Button
+      ><Button variant="outline" onclick={() => (passwordOpen = false)}>{m.login_cancel()}</Button
+      ><Button
         variant="destructive"
         onclick={onChangePassword}
         disabled={!currentPassword ||
           newPassword.length < 12 ||
           !confirmPassword ||
-          busy === "password"}>更改并退出</Button
+          busy === "password"}>{m.ui_change_and_log_out()}</Button
       ></Dialog.Footer
     ></Dialog.Content
   ></Dialog.Root

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { goto } from "$app/navigation";
   import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -87,7 +89,11 @@
       URL.revokeObjectURL(url);
       anchor.remove();
     } catch (error) {
-      onError(`下载备份文件失败：${error instanceof Error ? error.message : String(error)}`);
+      onError(
+        m.ui_unable_to_download_backup_value({
+          value0: error instanceof Error ? error.message : String(error),
+        }),
+      );
     } finally {
       downloading = null;
     }
@@ -105,9 +111,13 @@
     try {
       await deleteRemoteBackupApi(destinationId, path);
       await load();
-      onSuccess("文件删除成功！");
+      onSuccess(m.ui_file_deleted());
     } catch (error) {
-      onError(`删除远程备份文件失败：${error instanceof Error ? error.message : String(error)}`);
+      onError(
+        m.ui_unable_to_delete_remote_backup_value({
+          value0: error instanceof Error ? error.message : String(error),
+        }),
+      );
     } finally {
       deleting = null;
     }
@@ -118,12 +128,12 @@
     try {
       const integrity = (await inspectRemoteBackupApi(destinationId, path)).integrity ?? {};
       if (integrity.valid === true) {
-        onSuccess("备份文件校验和与归档结构验证通过。");
+        onSuccess(m.ui_backup_checksum_and_archive_structure_verified());
       } else {
-        onError(integrity.reason || "备份文件校验和与文件名不匹配。");
+        onError(integrity.reason || m.ui_the_backup_checksum_does_not_match_its_file_name());
       }
     } catch (error) {
-      onError(error instanceof Error ? error.message : "检查备份完整性失败。");
+      onError(error instanceof Error ? error.message : m.ui_unable_to_verify_backup_integrity());
     } finally {
       inspecting = null;
     }
@@ -141,10 +151,10 @@
     restoring = true;
     try {
       await restoreRemoteBackupApi(destinationId, path, true, allowChecksumMismatch);
-      onSuccess("恢复成功，主数据库已替换，请重新登录账户。");
+      onSuccess(m.ui_restore_completed_and_the_database_was_replaced_please_log_in_again());
       await goto("/login");
     } catch (error) {
-      onError(error instanceof Error ? error.message : "从远程备份恢复失败。");
+      onError(error instanceof Error ? error.message : m.ui_unable_to_restore_remote_backup());
     } finally {
       restoring = false;
     }
@@ -181,13 +191,15 @@
   }}
   ><AlertDialog.Content
     ><AlertDialog.Header
-      ><AlertDialog.Title>删除远程备份</AlertDialog.Title><AlertDialog.Description
-        >确定要从远程服务器删除“{deletePath}”吗？此操作无法撤销。</AlertDialog.Description
+      ><AlertDialog.Title>{m.ui_delete_remote_backup()}</AlertDialog.Title><AlertDialog.Description
+        >{m.ui_delete_value_from_remote_storage_this_cannot_be_undone({
+          value0: deletePath ?? "",
+        })}</AlertDialog.Description
       ></AlertDialog.Header
     ><AlertDialog.Footer
-      ><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action
+      ><AlertDialog.Cancel>{m.login_cancel()}</AlertDialog.Cancel><AlertDialog.Action
         class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-        onclick={confirmRemove}>确认删除</AlertDialog.Action
+        onclick={confirmRemove}>{m.ui_confirm_deletion()}</AlertDialog.Action
       ></AlertDialog.Footer
     ></AlertDialog.Content
   ></AlertDialog.Root
@@ -200,11 +212,11 @@
   }}
   ><AlertDialog.Content
     ><AlertDialog.Header
-      ><AlertDialog.Title>恢复远程备份</AlertDialog.Title><AlertDialog.Description
-        >此操作会用该备份覆盖整个系统，包括其他用户和保险库条目。请输入 REVERT 继续。</AlertDialog.Description
+      ><AlertDialog.Title>{m.ui_restore_remote_backup()}</AlertDialog.Title><AlertDialog.Description
+        >{m.ui_this_replaces_the_entire_instance_with_the_backup_including_other_users_and_vaul()}</AlertDialog.Description
       ></AlertDialog.Header
     ><Field.Field data-invalid={restoreConfirmation.length > 0 && restoreConfirmation !== "REVERT"}
-      ><Field.Label for="remote-restore-confirmation">确认文本</Field.Label><Input
+      ><Field.Label for="remote-restore-confirmation">{m.ui_confirmation_text()}</Field.Label><Input
         id="remote-restore-confirmation"
         bind:value={restoreConfirmation}
         aria-invalid={restoreConfirmation.length > 0 && restoreConfirmation !== "REVERT"}
@@ -212,10 +224,10 @@
         placeholder="REVERT"
       /></Field.Field
     ><AlertDialog.Footer
-      ><AlertDialog.Cancel>取消</AlertDialog.Cancel><Button
+      ><AlertDialog.Cancel>{m.login_cancel()}</AlertDialog.Cancel><Button
         variant="destructive"
         disabled={restoreConfirmation !== "REVERT"}
-        onclick={confirmRestore}>恢复备份</Button
+        onclick={confirmRestore}>{m.ui_restore_backup()}</Button
       ></AlertDialog.Footer
     ></AlertDialog.Content
   ></AlertDialog.Root

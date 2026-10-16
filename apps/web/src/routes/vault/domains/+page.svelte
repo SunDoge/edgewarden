@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { fetchDomainRules, updateDomainRules } from "$lib/services/api-vault";
@@ -58,7 +60,7 @@
         res.globalEquivalentDomains.filter((g) => g.excluded).map((g) => g.type),
       );
     } catch (caught) {
-      error = errorMessage(caught, "加载域名规则失败，请稍后重试。");
+      error = errorMessage(caught, m.ui_unable_to_load_domain_rules_please_try_again_later());
     } finally {
       loading = false;
     }
@@ -92,9 +94,9 @@
         updated.globalEquivalentDomains.filter((g) => g.excluded).map((g) => g.type),
       );
 
-      showTimedSuccess("等效域名规则已成功保存并应用！");
+      showTimedSuccess(m.ui_equivalent_domain_rules_saved_and_applied());
     } catch (caught) {
-      error = errorMessage(caught, "保存规则失败，请稍后重试。");
+      error = errorMessage(caught, m.ui_unable_to_save_rules_please_try_again_later());
     } finally {
       saving = false;
     }
@@ -122,26 +124,29 @@
 </script>
 
 <svelte:head>
-  <title>域名等效规则 - Edgewarden</title>
+  <title>{m.ui_equivalent_domains_edgewarden()}</title>
 </svelte:head>
 
-<VaultPageShell title="域名等效规则" description="管理自动填充时视为同一站点的域名组合。">
+<VaultPageShell
+  title={m.nav_domains()}
+  description={m.ui_manage_domains_treated_as_the_same_site_for_autofill()}
+>
   {#snippet actions()}
     <Button variant="outline" size="sm" onclick={loadRules} disabled={loading || saving}>
       {#if loading}<Spinner data-icon="inline-start" />{:else}<RefreshCw
           data-icon="inline-start"
         />{/if}
-      <span class="hidden sm:inline">同步刷新</span>
+      <span class="hidden sm:inline">{m.ui_sync_and_refresh()}</span>
     </Button>
     <Button onclick={handleSave} disabled={loading || saving} class="font-semibold">
       {#if saving}<Spinner data-icon="inline-start" />{:else}<Save data-icon="inline-start" />{/if}
-      {saving ? "保存中..." : "保存"}<span class="hidden sm:inline">并应用</span>
+      {saving ? m.ui_saving() : m.domains_save_and_apply()}
     </Button>
   {/snippet}
   <!-- Notification Alerts -->
   {#if error}
     <Alert.Root variant="destructive"
-      ><AlertCircle /><Alert.Title>操作提示</Alert.Title><Alert.Description
+      ><AlertCircle /><Alert.Title>{m.ui_notice()}</Alert.Title><Alert.Description
         >{error}</Alert.Description
       ></Alert.Root
     >
@@ -149,7 +154,7 @@
 
   {#if successMsg}
     <Alert.Root
-      ><ShieldCheck /><Alert.Title>成功</Alert.Title><Alert.Description
+      ><ShieldCheck /><Alert.Title>{m.ui_success()}</Alert.Title><Alert.Description
         >{successMsg}</Alert.Description
       ></Alert.Root
     >
@@ -158,15 +163,10 @@
   <!-- Intro Description Card -->
   <Alert.Root>
     <Info />
-    <Alert.Title>关于域名等效规则</Alert.Title>
-    <Alert.Description class="max-w-3xl leading-relaxed">
-      等效规则允许将不同的域名或主机名组合在一起。 当您登录属于同一规则下的任何域名时，Edgewarden
-      会认为它们是等效的，并自动推荐您的账户凭据。 例如，将 <code
-        class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-primary">apple.com</code
-      >
-      和
-      <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-primary">icloud.com</code> 设为等效。
-    </Alert.Description>
+    <Alert.Title>{m.ui_about_equivalent_domains()}</Alert.Title>
+    <Alert.Description class="max-w-3xl leading-relaxed"
+      >{m.domains_explanation({ first: "apple.com", second: "icloud.com" })}</Alert.Description
+    >
   </Alert.Root>
 
   {#if loading}

@@ -47,7 +47,7 @@ describe("backup destination form", () => {
     const updated = applyBackupDestinationForm(destination, form);
 
     expect(updated).toMatchObject({
-      name: "Cloudflare R2 备份",
+      name: "Cloudflare R2 backup",
       type: "r2",
       destination: { rootPath: "backups" },
     });
@@ -70,7 +70,7 @@ describe("backup destination form", () => {
     form.s3Endpoint = " https://s3.example.test ";
     form.s3Bucket = " backups ";
     const updated = applyBackupDestinationForm(destination, form);
-    expect(updated.name).toBe("S3 备份");
+    expect(updated.name).toBe("S3 backup");
     expect(updated.destination).toMatchObject({
       endpoint: "https://s3.example.test",
       bucket: "backups",

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { Pencil, Trash2, UserPlus } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Checkbox } from "$lib/components/ui/checkbox/index.js";
@@ -48,14 +50,21 @@
 
 <Card.Root>
   <Card.Header>
-    <Card.Title>成员</Card.Title>
-    <Card.Description>当前支持基础角色和集合范围；高级组织策略暂不在支持范围内。</Card.Description>
+    <Card.Title>{m.ui_members()}</Card.Title>
+    <Card.Description
+      >{m.ui_basic_roles_and_collection_access_are_supported_advanced_organization_policies_a()}</Card.Description
+    >
   </Card.Header>
   <Card.Content class="flex flex-col gap-4">
     <div class="grid gap-3 md:grid-cols-[1fr_10rem_auto]">
-      <Input type="email" bind:value={email} placeholder="已注册用户邮箱" aria-label="成员邮箱" />
+      <Input
+        type="email"
+        bind:value={email}
+        placeholder={m.ui_registered_user_s_email()}
+        aria-label={m.ui_member_email()}
+      />
       <Select.Root type="single" bind:value={role}>
-        <Select.Trigger aria-label="成员角色">{role}</Select.Trigger>
+        <Select.Trigger aria-label={m.ui_member_role()}>{role}</Select.Trigger>
         <Select.Content
           ><Select.Group
             ><Select.Item value="member">member</Select.Item
@@ -66,17 +75,17 @@
         >
       </Select.Root>
       <Button onclick={oninvite} disabled={!email.trim() || busy}
-        ><UserPlus data-icon="inline-start" />添加</Button
+        ><UserPlus data-icon="inline-start" />{m.ui_add()}</Button
       >
     </div>
     <Field.Field orientation="horizontal"
       ><Checkbox id="invite-access-all" bind:checked={accessAll} /><Field.Label
-        for="invite-access-all">访问全部集合</Field.Label
+        for="invite-access-all">{m.ui_access_all_collections()}</Field.Label
       ></Field.Field
     >
     {#if !accessAll}
       <Field.FieldSet
-        ><Field.FieldLegend>允许访问的集合</Field.FieldLegend><Field.FieldGroup
+        ><Field.FieldLegend>{m.ui_allowed_collections()}</Field.FieldLegend><Field.FieldGroup
           class="grid sm:grid-cols-2"
           >{#each collections as collection}<Field.Field orientation="horizontal"
               ><Checkbox
@@ -99,8 +108,8 @@
               <p class="truncate font-medium">{member.email}</p>
               <p class="mt-1 text-sm text-muted-foreground">
                 {member.role} · {member.accessAll
-                  ? "全部集合"
-                  : `${member.collections?.length ?? 0} 个集合`}
+                  ? m.ui_all_collections()
+                  : m.ui_collections_value({ value0: member.collections?.length ?? 0 })}
               </p>
             </div>
             {#if member.role !== "owner"}<div class="flex shrink-0">
@@ -108,43 +117,51 @@
                   variant="ghost"
                   size="icon-sm"
                   onclick={() => onedit(member)}
-                  aria-label={`编辑成员 ${member.email}`}><Pencil data-icon /></Button
+                  aria-label={m.ui_edit_member_value({ value0: member.email })}
+                  ><Pencil data-icon /></Button
                 ><Button
                   variant="ghost"
                   size="icon-sm"
                   onclick={() => onremove(member)}
-                  aria-label={`移除成员 ${member.email}`}><Trash2 data-icon /></Button
+                  aria-label={m.ui_remove_member_value({ value0: member.email })}
+                  ><Trash2 data-icon /></Button
                 >
               </div>{/if}
           </div>
         </div>
-      {:else}<p class="py-4 text-center text-sm text-muted-foreground">还没有其他成员。</p>{/each}
+      {:else}<p class="py-4 text-center text-sm text-muted-foreground">
+          {m.ui_no_other_members_yet()}
+        </p>{/each}
     </div>
     <div class="hidden md:block">
       <Table.Root
         ><Table.Header
           ><Table.Row
-            ><Table.Head>邮箱</Table.Head><Table.Head>角色</Table.Head><Table.Head>范围</Table.Head
-            ><Table.Head class="text-right">操作</Table.Head></Table.Row
+            ><Table.Head>{m.ui_email_2()}</Table.Head><Table.Head>{m.ui_role()}</Table.Head
+            ><Table.Head>{m.ui_scope()}</Table.Head><Table.Head class="text-right"
+              >{m.ui_actions()}</Table.Head
+            ></Table.Row
           ></Table.Header
         ><Table.Body
           >{#each members as member (member.id)}<Table.Row
               ><Table.Cell>{member.email}</Table.Cell><Table.Cell>{member.role}</Table.Cell
               ><Table.Cell
                 >{member.accessAll
-                  ? "全部"
-                  : `${member.collections?.length ?? 0} 个集合`}</Table.Cell
+                  ? m.ui_all()
+                  : m.ui_collections_value({ value0: member.collections?.length ?? 0 })}</Table.Cell
               ><Table.Cell class="text-right"
                 >{#if member.role !== "owner"}<Button
                     variant="ghost"
                     size="icon-sm"
                     onclick={() => onedit(member)}
-                    aria-label={`编辑成员 ${member.email}`}><Pencil data-icon /></Button
+                    aria-label={m.ui_edit_member_value({ value0: member.email })}
+                    ><Pencil data-icon /></Button
                   ><Button
                     variant="ghost"
                     size="icon-sm"
                     onclick={() => onremove(member)}
-                    aria-label={`移除成员 ${member.email}`}><Trash2 data-icon /></Button
+                    aria-label={m.ui_remove_member_value({ value0: member.email })}
+                    ><Trash2 data-icon /></Button
                   >{/if}</Table.Cell
               ></Table.Row
             >{/each}</Table.Body

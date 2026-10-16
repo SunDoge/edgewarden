@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import type { GlobalEquivalentDomain } from "@edgewarden/shared";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
@@ -34,18 +36,18 @@
 
 <Card.Root class="min-h-[500px] min-w-0">
   <Card.Header>
-    <Card.Title>全局等效规则</Card.Title>
-    <Card.Description>Bitwarden 标准全局等效域名表</Card.Description>
+    <Card.Title>{m.ui_global_equivalent_domains()}</Card.Title>
+    <Card.Description>{m.ui_bitwarden_s_standard_list_of_equivalent_domains()}</Card.Description>
     <Card.Action
       ><div class="relative w-full md:w-48">
         <Search
           class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
         /><Input
           type="search"
-          placeholder="搜索全局域名..."
+          placeholder={m.ui_search_global_domains()}
           bind:value={searchQuery}
           class="pl-8 text-xs"
-          aria-label="搜索全局等效域名"
+          aria-label={m.ui_search_global_equivalent_domains()}
         />
       </div></Card.Action
     >
@@ -64,7 +66,7 @@
           <Checkbox
             checked={!excluded}
             onCheckedChange={() => toggle(rule.type)}
-            aria-label={excluded ? "启用规则" : "禁用规则"}
+            aria-label={excluded ? m.ui_enable_rule() : m.ui_disable_rule()}
           />
           <div class="flex min-w-0 flex-1 flex-wrap gap-1.5">
             {#each rule.domains as domain}<code
@@ -73,14 +75,16 @@
               >{/each}
           </div>
         </div>
-        <Badge variant={excluded ? "secondary" : "default"}>{excluded ? "已排除" : "已启用"}</Badge>
+        <Badge variant={excluded ? "secondary" : "default"}
+          >{excluded ? m.ui_excluded() : m.ui_enabled()}</Badge
+        >
       </div>
     {:else}
       <Empty.Root class="h-full border border-dashed"
         ><Empty.Header
           ><Empty.Media variant="icon"><Search /></Empty.Media><Empty.Title
-            >未找到匹配的全局规则</Empty.Title
-          ><Empty.Description>请尝试其他域名关键词。</Empty.Description></Empty.Header
+            >{m.ui_no_matching_global_rules()}</Empty.Title
+          ><Empty.Description>{m.ui_try_another_domain_search()}</Empty.Description></Empty.Header
         ></Empty.Root
       >
     {/each}

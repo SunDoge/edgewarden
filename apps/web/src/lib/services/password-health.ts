@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import type { CipherResponse } from "@edgewarden/shared";
 
 const RANGE_URL = "https://api.pwnedpasswords.com/range/";
@@ -75,7 +76,8 @@ export async function checkPasswordHash(
   fetchImpl: typeof fetch = fetch,
   signal?: AbortSignal,
 ): Promise<number> {
-  if (!/^[A-F0-9]{40}$/.test(hash)) throw new Error("密码摘要无效");
+  if (!/^[A-F0-9]{40}$/.test(hash))
+    throw new Error(m.ui_invalid_password_hash());
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12_000);
@@ -89,12 +91,15 @@ export async function checkPasswordHash(
       referrerPolicy: "no-referrer",
       signal: controller.signal,
     });
-    if (!response.ok) throw new Error(`泄露密码查询失败 (${response.status})`);
+    if (!response.ok)
+      throw new Error(
+        m.ui_exposed_password_lookup_failed_value({ value0: response.status }),
+      );
     return parsePwnedRange(await response.text(), hash.slice(5));
   } catch (error) {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     if ((error as { name?: string })?.name === "AbortError")
-      throw new Error("泄露密码查询超时");
+      throw new Error(m.ui_exposed_password_lookup_timed_out());
     throw error;
   } finally {
     clearTimeout(timeout);

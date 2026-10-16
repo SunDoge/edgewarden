@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { formatDateTime } from "$lib/i18n/format";
+  import * as m from "$lib/paraglide/messages.js";
+
   import { CipherType } from "@edgewarden/shared";
   import {
     Archive,
@@ -150,7 +153,7 @@
           size="icon"
           onclick={() => onFavorite()}
           class="size-8.5 rounded-lg"
-          title={item.favorite ? "取消收藏" : "收藏"}
+          title={item.favorite ? m.ui_remove_from_favorites() : m.ui_add_to_favorites()}
           ><Star class="size-4 {item.favorite ? 'fill-current text-amber-400' : ''}" /></Button
         >{/if}
       {#if !item.deletedDate && !item.readOnly}<Button
@@ -158,7 +161,7 @@
           size="icon"
           onclick={onArchive}
           class="size-8.5 rounded-lg"
-          title={item.archivedDate ? "取消归档" : "归档"}
+          title={item.archivedDate ? m.ui_unarchive() : m.ui_archive()}
           >{#if item.archivedDate}<ArchiveRestore class="size-4" />{:else}<Archive
               class="size-4"
             />{/if}</Button
@@ -169,22 +172,26 @@
           size="icon"
           onclick={onRestore}
           class="size-8.5 rounded-lg"
-          title="恢复"><RotateCcw class="size-4" /></Button
+          title={m.ui_restore()}><RotateCcw class="size-4" /></Button
         >
       {:else if !item.readOnly}
         {#if !item.organizationId && canShare}
-          <Button variant="ghost" size="icon-sm" onclick={onShare} title="共享到组织"
-            ><Share2 /></Button
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onclick={onShare}
+            title={m.ui_share_with_organization()}><Share2 /></Button
           >
         {/if}
-        <Button variant="ghost" size="icon-sm" onclick={onEdit} title="编辑"><Edit /></Button>
+        <Button variant="ghost" size="icon-sm" onclick={onEdit} title={m.ui_edit()}><Edit /></Button
+        >
       {/if}
       {#if !item.readOnly}<Button
           variant="ghost"
           size="icon-sm"
           onclick={onDelete}
           class="text-destructive hover:text-destructive"
-          title="删除"
+          title={m.ui_delete()}
         >
           <Trash2 />
         </Button>{/if}
@@ -195,7 +202,7 @@
 
   {#if item.organizationId && !item.hidePasswords}
     <Button variant="outline" class="w-full" onclick={onCloneToPersonal} disabled={cloneBusy}
-      >{#if cloneBusy}<Spinner />{:else}<CopyPlus />{/if}保存到个人保险库</Button
+      >{#if cloneBusy}<Spinner />{:else}<CopyPlus />{/if}{m.ui_save_to_personal_vault()}</Button
     >
   {/if}
 
@@ -228,7 +235,7 @@
               variant="ghost"
               size="icon-sm"
               onclick={() => copyToClipboard(String(value ?? ""), `extra-${key}`)}
-              aria-label={`复制 ${key}`}><Copy /></Button
+              aria-label={m.ui_copy_value_2({ value0: key })}><Copy /></Button
             >
           </div>
         </div>
@@ -239,7 +246,7 @@
   <!-- Notes -->
   {#if item.notes}
     <div class="flex flex-col gap-1.5">
-      <span class="text-xs font-semibold text-muted-foreground">便签</span>
+      <span class="text-xs font-semibold text-muted-foreground">{m.ui_notes_3()}</span>
       <div class="rounded-lg border bg-background p-3 text-sm whitespace-pre-wrap leading-relaxed">
         {item.notes}
       </div>
@@ -249,16 +256,20 @@
   <!-- Custom Fields -->
   {#if item.fields && item.fields.length > 0}
     <div class="mt-4 flex flex-col gap-4 border-t pt-4">
-      <h4 class="text-xs font-bold uppercase tracking-wider text-muted-foreground">自定义字段</h4>
+      <h4 class="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        {m.ui_custom_fields()}
+      </h4>
       {#each item.fields as field, idx}
         <div class="flex flex-col gap-1.5">
-          <span class="text-xs font-semibold text-muted-foreground">{field.name || "未命名"}</span>
+          <span class="text-xs font-semibold text-muted-foreground"
+            >{field.name || m.ui_untitled()}</span
+          >
 
           {#if field.type === 2 || field.type === "2"}
             <div class="flex items-center gap-2 rounded-lg border bg-background p-2.5">
               <Checkbox checked={field.value === "true" || field.value === true} disabled />
               <span class="text-sm font-medium">
-                {#if field.value === "true" || field.value === true}是{:else}否{/if}
+                {#if field.value === "true" || field.value === true}{m.ui_yes()}{:else}{m.ui_no()}{/if}
               </span>
             </div>
           {:else if field.type === 1 || field.type === "1"}
@@ -316,14 +327,14 @@
         <h4
           class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground"
         >
-          <Paperclip class="size-3.5" />附件
+          <Paperclip class="size-3.5" />{m.ui_attachments()}
         </h4>
         <input
           bind:this={attachmentInput}
           type="file"
           class="sr-only"
           onchange={onAttachmentUpload}
-          aria-label="选择要上传的附件"
+          aria-label={m.ui_choose_an_attachment_to_upload()}
         />
         {#if !item.readOnly}<Button
             type="button"
@@ -332,7 +343,7 @@
             disabled={attachmentBusy !== null}
             onclick={() => attachmentInput?.click()}
           >
-            <Upload />{attachmentBusy === "upload" ? "正在加密…" : "添加附件"}
+            <Upload />{attachmentBusy === "upload" ? m.ui_encrypting() : m.ui_add_attachment()}
           </Button>{/if}
       </div>
       {#if item.attachments?.length}
@@ -350,7 +361,8 @@
                 size="icon-sm"
                 disabled={attachmentBusy !== null}
                 onclick={() => onAttachmentDownload(attachment)}
-                aria-label={`下载 ${attachment.fileName}`}><Download /></Button
+                aria-label={m.ui_download_value({ value0: attachment.fileName })}
+                ><Download /></Button
               >
               {#if !item.readOnly}<Button
                   type="button"
@@ -358,14 +370,16 @@
                   size="icon-sm"
                   disabled={attachmentBusy !== null}
                   onclick={() => onAttachmentDelete(attachment)}
-                  aria-label={`删除 ${attachment.fileName}`}
+                  aria-label={m.ui_delete_value({ value0: attachment.fileName })}
                   class="text-red-500"><Trash2 /></Button
                 >{/if}
             </div>
           {/each}
         </div>
       {:else}
-        <p class="text-xs text-muted-foreground">暂无附件。文件内容和文件名均在浏览器中加密。</p>
+        <p class="text-xs text-muted-foreground">
+          {m.ui_no_attachments_file_contents_and_names_are_encrypted_in_your_browser()}
+        </p>
       {/if}
     </div>
   {/if}
@@ -376,14 +390,14 @@
   >
     {#if item.creationDate}
       <p class="flex justify-between">
-        <span>创建时间</span>
-        <span>{new Date(item.creationDate).toLocaleString("zh-CN")}</span>
+        <span>{m.ui_created()}</span>
+        <span>{formatDateTime(item.creationDate)}</span>
       </p>
     {/if}
     {#if item.revisionDate}
       <p class="flex justify-between">
-        <span>修改时间</span>
-        <span>{new Date(item.revisionDate).toLocaleString("zh-CN")}</span>
+        <span>{m.ui_modified()}</span>
+        <span>{formatDateTime(item.revisionDate)}</span>
       </p>
     {/if}
   </div>

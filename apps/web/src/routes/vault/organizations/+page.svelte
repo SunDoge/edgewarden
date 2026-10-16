@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { onMount } from "svelte";
   import { canManageOrganizationMembers } from "@edgewarden/shared";
   import { Building2, Pencil, Plus } from "@lucide/svelte";
@@ -19,28 +21,31 @@
   onMount(manager.load);
 </script>
 
-<svelte:head><title>组织共享 · Edgewarden</title></svelte:head>
+<svelte:head><title>{m.ui_organizations_edgewarden()}</title></svelte:head>
 
-<VaultPageShell title="组织共享" description="组织密钥只在成员设备上解封，服务器无法读取共享条目。">
+<VaultPageShell
+  title={m.nav_organizations()}
+  description={m.ui_organization_keys_are_decrypted_only_on_members_devices_the_server_cannot_read_s()}
+>
   {#snippet actions()}
     <Button onclick={() => (state.createOpen = true)}
-      ><Plus data-icon="inline-start" />创建组织</Button
+      ><Plus data-icon="inline-start" />{m.ui_create_organization()}</Button
     >
   {/snippet}
   {#if state.error}
     <Alert.Root variant="destructive">
-      <Alert.Title>操作失败</Alert.Title>
+      <Alert.Title>{m.ui_action_failed()}</Alert.Title>
       <Alert.Description>{state.error}</Alert.Description>
     </Alert.Root>
   {/if}
   {#if state.loading}
     <div class="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-      <Spinner />正在加载…
+      <Spinner />{m.ui_loading()}
     </div>
   {:else}
     <div class="grid gap-6 md:grid-cols-[16rem_1fr]">
       <Card.Root>
-        <Card.Header><Card.Title>组织</Card.Title></Card.Header>
+        <Card.Header><Card.Title>{m.ui_organization()}</Card.Title></Card.Header>
         <Card.Content class="flex flex-col gap-2">
           {#each state.organizations as organization (organization.id)}
             <Button
@@ -49,7 +54,9 @@
               onclick={() => manager.select(organization)}><Building2 />{organization.name}</Button
             >
           {:else}
-            <p class="text-sm text-muted-foreground">尚未创建或加入组织。</p>
+            <p class="text-sm text-muted-foreground">
+              {m.ui_you_have_not_created_or_joined_an_organization()}
+            </p>
           {/each}
         </Card.Content>
       </Card.Root>
@@ -60,14 +67,16 @@
               <div class="flex items-center justify-between">
                 <div class="min-w-0">
                   <Card.Title class="truncate">{state.selected.name}</Card.Title>
-                  <Card.Description>角色：{state.selected.role}</Card.Description>
+                  <Card.Description
+                    >{m.ui_role_value({ value0: state.selected.role })}</Card.Description
+                  >
                 </div>
                 {#if state.selected.role === "owner"}
                   <Button
                     variant="ghost"
                     size="icon-sm"
                     onclick={manager.openRenameOrganization}
-                    aria-label="重命名组织"><Pencil data-icon /></Button
+                    aria-label={m.ui_rename_organization()}><Pencil data-icon /></Button
                   >
                 {/if}
               </div>
@@ -110,20 +119,23 @@
           {#if state.selected.role === "owner"}
             <Card.Root class="border-destructive/30">
               <Card.Header>
-                <Card.Title>删除组织</Card.Title>
-                <Card.Description>此操作会永久删除组织集合、共享条目和成员关系。</Card.Description>
+                <Card.Title>{m.ui_delete_organization()}</Card.Title>
+                <Card.Description
+                  >{m.ui_this_permanently_deletes_the_organization_s_collections_shared_items_and_members()}</Card.Description
+                >
               </Card.Header>
               <Card.Content class="flex flex-col gap-2 sm:flex-row">
                 <Input
                   type="password"
                   bind:value={state.deletePassword}
                   autocomplete="current-password"
-                  placeholder="输入主密码确认"
+                  placeholder={m.ui_enter_your_master_password_to_confirm()}
                 />
                 <Button
                   variant="destructive"
                   onclick={manager.removeOrganization}
-                  disabled={!state.deletePassword || state.busy === "delete-org"}>永久删除</Button
+                  disabled={!state.deletePassword || state.busy === "delete-org"}
+                  >{m.ui_delete_permanently()}</Button
                 >
               </Card.Content>
             </Card.Root>

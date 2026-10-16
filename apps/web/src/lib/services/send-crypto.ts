@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import {
   base64ToBytes,
   bytesToBase64,
@@ -50,7 +51,7 @@ export function encodeSendShareKey(raw: Uint8Array): string {
 }
 
 async function deriveSendKeys(raw: Uint8Array): Promise<SendKeys> {
-  if (raw.length !== 16) throw new Error("Send 密钥长度无效");
+  if (raw.length !== 16) throw new Error(m.ui_invalid_send_key_length());
   // Match the current Bitwarden SDK: extract with HMAC-SHA256("bitwarden-send"),
   // then HKDF-expand with "send" into separate encryption and MAC keys.
   const hmacKey = await crypto.subtle.importKey(
@@ -68,7 +69,8 @@ async function deriveSendKeys(raw: Uint8Array): Promise<SendKeys> {
 }
 
 export async function decodeSendShareKey(encoded: string): Promise<SendKeys> {
-  if (!/^[A-Za-z0-9_-]+$/.test(encoded)) throw new Error("Send 密钥格式无效");
+  if (!/^[A-Za-z0-9_-]+$/.test(encoded))
+    throw new Error(m.ui_invalid_send_key_format());
   const raw = base64ToBytes(encoded.replace(/-/g, "+").replace(/_/g, "/"));
   return deriveSendKeys(raw);
 }
@@ -81,7 +83,7 @@ export async function deriveSendPasswordHash(
   password: string,
   rawSendKey: Uint8Array,
 ): Promise<string> {
-  if (rawSendKey.length !== 16) throw new Error("Send 密钥长度无效");
+  if (rawSendKey.length !== 16) throw new Error(m.ui_invalid_send_key_length());
   const passwordKey = await crypto.subtle.importKey(
     "raw",
     toBufferSource(utf8(password)),

@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import type { BackupDestinationRecord } from "./types";
 
 export interface BackupDestinationForm {
@@ -85,10 +86,10 @@ export function applyBackupDestinationForm(
     name:
       form.name.trim() ||
       (form.type === "r2"
-        ? "Cloudflare R2 备份"
+        ? m.ui_cloudflare_r2_backup()
         : form.type === "s3"
-          ? "S3 备份"
-          : "WebDAV 备份"),
+          ? m.ui_s3_backup()
+          : m.ui_webdav_backup()),
     type: form.type,
     includeAttachments: form.includeAttachments,
     destination:

@@ -1,3 +1,5 @@
+// Also imported by Node-based compatibility scripts, outside Vite's aliases.
+import * as m from "../paraglide/messages.js";
 export { calcTotpNow, extractTotpSecret } from "./totp.ts";
 
 /**
@@ -388,7 +390,7 @@ export async function rewrapUserKeyForMasterPassword(args: {
     32,
   );
   const userKey = await decryptBw(args.profileKey, oldEncKey, oldMacKey);
-  if (userKey.length !== 64) throw new Error("保险库密钥无效");
+  if (userKey.length !== 64) throw new Error(m.ui_invalid_vault_key());
 
   const nextMasterKey = await deriveMasterKey(
     args.newPassword,

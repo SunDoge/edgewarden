@@ -13,6 +13,11 @@ import {
 } from "./policy";
 import { cleanupDemo, initializeDemo, type DemoBindings } from "./state";
 import { pbkdf2Sync } from "node:crypto";
+import {
+  DEMO_ENGLISH_MARKER,
+  DEMO_ENGLISH_PATCHES,
+  DEMO_ENGLISH_REVISION,
+} from "./english-content";
 
 describe("read-only Demo", () => {
   let harness: ApiTestHarness;
@@ -64,6 +69,50 @@ describe("read-only Demo", () => {
       ),
     );
   }
+  async function restoreChineseSample() {
+    await initializeDemo(env);
+    await env.DB.batch([
+      ...DEMO_ENGLISH_PATCHES.map((patch) =>
+        env.DB.prepare(
+          `UPDATE "${patch.table}" SET ${Object.keys(patch.before)
+            .map((field) => `"${field}" = ?`)
+            .join(",")}, updated_at = 1791590400 WHERE id = ?`,
+        ).bind(...Object.values(patch.before), patch.id),
+      ),
+      env.DB.prepare("UPDATE user_revisions SET revision_date = 1791590400"),
+      env.DB.prepare("DELETE FROM config WHERE key = ?").bind(
+        DEMO_ENGLISH_MARKER,
+      ),
+    ]);
+  }
+  it("upgrades Chinese samples atomically, preserving keys and remaining idempotent", async () => {
+    await initializeDemo(env);
+    const english = await snapshot();
+    await restoreChineseSample();
+    await Promise.all([initializeDemo(env), initializeDemo(env)]);
+    expect(await snapshot()).toEqual(english);
+    expect(
+      await env.DB.prepare("SELECT revision_date FROM user_revisions").first(
+        "revision_date",
+      ),
+    ).toBe(DEMO_ENGLISH_REVISION);
+    await initializeDemo(env);
+    expect(await snapshot()).toEqual(english);
+  });
+  it("does not partially overwrite unexpected demo content", async () => {
+    await restoreChineseSample();
+    await env.DB.prepare(
+      "UPDATE organizations SET name = 'Customized sample'",
+    ).run();
+    const before = await snapshot();
+    await expect(initializeDemo(env)).rejects.toThrow();
+    expect(await snapshot()).toEqual(before);
+    expect(
+      await env.DB.prepare("SELECT value FROM config WHERE key = ?")
+        .bind(DEMO_ENGLISH_MARKER)
+        .first(),
+    ).toBeNull();
+  });
   it("seeds once, concurrently, without granting admin or enabling registration", async () => {
     await Promise.all([initializeDemo(env), initializeDemo(env)]);
     const before = await snapshot();

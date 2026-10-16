@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { ShieldCheck } from "@lucide/svelte";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -49,25 +51,26 @@
 <div class="flex flex-col gap-6">
   <Card.Root>
     <Card.Header
-      ><Card.Title>主密码</Card.Title><Card.Description
-        >更改后会重新保护保险库密钥，并退出所有设备。</Card.Description
+      ><Card.Title>{m.login_master_password()}</Card.Title><Card.Description
+        >{m.ui_re_encrypts_your_vault_key_and_logs_out_all_devices()}</Card.Description
       ></Card.Header
     >
     <Card.Content
-      ><Button variant="outline" onclick={onChangePassword}>更改主密码</Button></Card.Content
+      ><Button variant="outline" onclick={onChangePassword}>{m.ui_change_master_password()}</Button
+      ></Card.Content
     >
   </Card.Root>
 
   <Card.Root>
     <Card.Header
-      ><Card.Title>身份验证器（TOTP）</Card.Title><Card.Description
-        >使用兼容 TOTP 的身份验证器保护登录。</Card.Description
+      ><Card.Title>{m.ui_authenticator_app_totp()}</Card.Title><Card.Description
+        >{m.ui_protect_login_with_a_totp_compatible_authenticator_app()}</Card.Description
       ></Card.Header
     >
     <Card.Content class="flex flex-col gap-4">
       <div class="flex items-center gap-2">
         <Badge variant={totpEnabled ? "default" : "secondary"}
-          >{totpEnabled ? "已启用" : "未启用"}</Badge
+          >{totpEnabled ? m.ui_enabled() : m.ui_not_enabled()}</Badge
         >
       </div>
       {#if recoveryCode}<div class="flex gap-2">
@@ -75,21 +78,22 @@
             variant="outline"
             size="icon"
             onclick={() => onCopy(recoveryCode)}
-            aria-label="复制恢复代码">复制</Button
+            aria-label={m.ui_copy_recovery_code()}>{m.ui_copy()}</Button
           >
         </div>{/if}
       <div class="flex flex-wrap gap-2">
         {#if totpEnabled}<Button
             variant="outline"
             onclick={onShowRecoveryCode}
-            disabled={busy === "recovery"}>查看恢复代码</Button
-          ><Button variant="destructive" onclick={onDisableTwoFactor}>关闭全部两步验证</Button
+            disabled={busy === "recovery"}>{m.ui_view_recovery_code()}</Button
+          ><Button variant="destructive" onclick={onDisableTwoFactor}
+            >{m.ui_turn_off_all_two_step_login_methods()}</Button
           >{:else}<Button onclick={onBeginTotp} disabled={busy === "totp"}
-            ><ShieldCheck data-icon="inline-start" />设置身份验证器</Button
+            ><ShieldCheck data-icon="inline-start" />{m.ui_set_up_authenticator()}</Button
           >{/if}
         {#if twoFactorEnabled && !totpEnabled}<Button
             variant="destructive"
-            onclick={onDisableTwoFactor}>关闭全部两步验证</Button
+            onclick={onDisableTwoFactor}>{m.ui_turn_off_all_two_step_login_methods()}</Button
           >{/if}
       </div>
     </Card.Content>

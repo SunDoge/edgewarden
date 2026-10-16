@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import type {
   CipherResponse,
   CollectionResponse,
@@ -120,7 +121,11 @@ async function unwrapOrganizationKeys(
     }
   }
   if (failures)
-    warnings.push(`${failures} 个组织密钥无法解封，相关条目已隔离。`);
+    warnings.push(
+      m.ui_unable_to_decrypt_value_organization_keys_related_items_have_been_quarantined(
+        { value0: failures },
+      ),
+    );
   return keys;
 }
 
@@ -160,7 +165,9 @@ export async function hydrateEncryptedVaultSnapshot(
   }
   if (cipherFailures)
     warnings.push(
-      `${cipherFailures} 个保险库条目未通过完整性校验，已从当前会话隔离。`,
+      m.ui_vault_items_failing_integrity_checks_value_they_have_been_quarantined_from_this_(
+        { value0: cipherFailures },
+      ),
     );
 
   const folderResults = await mapConcurrent(
@@ -185,7 +192,9 @@ export async function hydrateEncryptedVaultSnapshot(
   }
   if (folderFailures)
     warnings.push(
-      `${folderFailures} 个文件夹未通过完整性校验，已从当前会话隔离。`,
+      m.ui_folders_failing_integrity_checks_value_they_have_been_quarantined_from_this_sess(
+        { value0: folderFailures },
+      ),
     );
 
   const collections: CollectionResponse[] = [];
@@ -204,7 +213,11 @@ export async function hydrateEncryptedVaultSnapshot(
     }
   }
   if (collectionFailures)
-    warnings.push(`${collectionFailures} 个集合未通过完整性校验，已隔离。`);
+    warnings.push(
+      m.ui_collections_failing_integrity_checks_value_they_have_been_quarantined(
+        { value0: collectionFailures },
+      ),
+    );
 
   const encryptedSends = snapshot.sends ?? [];
   const sendResults = await mapConcurrent(encryptedSends, (send) =>
@@ -224,7 +237,11 @@ export async function hydrateEncryptedVaultSnapshot(
     }
   }
   if (sendFailures)
-    warnings.push(`${sendFailures} 个 Send 未通过完整性校验，已隔离。`);
+    warnings.push(
+      m.ui_sends_failing_integrity_checks_value_they_have_been_quarantined({
+        value0: sendFailures,
+      }),
+    );
 
   return {
     ciphers: applyOrganizationAccess(ciphers, collections),

@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import type {
   CollectionResponse,
   FolderResponse,
@@ -286,7 +287,8 @@ async function performVaultSync(): Promise<void> {
       }
     } catch (cacheError) {
       console.error("Failed to update encrypted vault cache", cacheError);
-      _vault.warning = "保险库已同步，但离线缓存更新失败。";
+      _vault.warning =
+        m.ui_vault_synced_but_the_offline_cache_could_not_be_updated();
     }
   } catch (error) {
     console.error("Sync error:", error);
@@ -300,13 +302,15 @@ async function performVaultSync(): Promise<void> {
         await hydrateVaultSnapshot(cached, "offline");
       } catch (decErr) {
         _vault.status = "error";
-        _vault.error = "本地缓存解密失败，可能密码已更改。";
+        _vault.error =
+          m.ui_unable_to_decrypt_the_local_cache_your_password_may_have_changed();
         rejectUnlock?.(decErr);
         throw decErr;
       }
     } else {
       _vault.status = "error";
-      _vault.error = "离线状态且无本地缓存，请先联网登录一次。";
+      _vault.error =
+        m.ui_you_are_offline_and_no_local_cache_is_available_log_in_online_first();
       rejectUnlock?.(error);
       throw new Error(_vault.error);
     }
@@ -345,7 +349,9 @@ export function ensureVaultData(): Promise<void> {
 export async function unlock(password: string): Promise<void> {
   const cached = await loadVaultSnapshot();
   if (!cached) {
-    throw new Error("无本地缓存，请联网登录后再使用离线功能。");
+    throw new Error(
+      m.ui_no_local_cache_is_available_log_in_online_before_using_offline_features(),
+    );
   }
 
   const { email, kdfIterations } = cached.profile;

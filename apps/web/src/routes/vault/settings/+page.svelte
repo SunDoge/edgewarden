@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -76,7 +78,7 @@
   let rotateApiKeyOpen = $state(false);
 
   function fail(value: unknown) {
-    error = value instanceof Error ? value.message : "操作失败";
+    error = value instanceof Error ? value.message : m.ui_action_failed();
     message = "";
   }
 
@@ -118,7 +120,7 @@
       sessionTimeoutAction,
     });
     applyThemePreference(theme);
-    message = "外观和会话策略已保存";
+    message = m.ui_appearance_and_session_settings_saved();
   }
 
   async function saveProfile() {
@@ -130,7 +132,7 @@
         masterPasswordHint: hint.trim() || null,
       });
       await syncVaultData();
-      message = "个人资料已保存";
+      message = m.ui_profile_saved();
     } catch (e) {
       fail(e);
     } finally {
@@ -140,7 +142,7 @@
 
   async function copy(value: string) {
     await navigator.clipboard.writeText(value);
-    message = "已复制到剪贴板";
+    message = m.ui_copied_to_clipboard();
   }
 
   async function removeAccount() {
@@ -189,7 +191,7 @@
         apiKey = (await fetchApiKeyApi(hash)).apiKey;
       } else {
         apiKey = (await rotateApiKeyApi(hash)).apiKey;
-        message = "API Key 已轮换";
+        message = m.ui_api_key_rotated();
       }
       verificationOpen = false;
       verificationPassword = "";
@@ -216,7 +218,7 @@
       recoveryConfirmed = false;
       recoveryOpen = true;
       totpVerificationToken = "";
-      message = "身份验证器已启用，请先保存恢复代码";
+      message = m.ui_authenticator_enabled_save_your_recovery_code_now();
     } catch (e) {
       fail(e);
     } finally {
@@ -253,15 +255,17 @@
   }
 
   async function passwordHash(password: string): Promise<string> {
-    if (!profile) throw new Error("账户资料尚未载入");
+    if (!profile) throw new Error(m.ui_account_details_have_not_loaded_yet());
     const key = await deriveMasterKey(password, profile.email, profile.kdfIterations);
     return deriveMasterPasswordHash(key, password);
   }
 
   async function changeMasterPassword() {
-    if (!profile) return fail(new Error("账户资料尚未载入"));
-    if (newPassword.length < 12) return fail(new Error("新主密码至少需要 12 个字符"));
-    if (newPassword !== confirmPassword) return fail(new Error("两次输入的新主密码不一致"));
+    if (!profile) return fail(new Error(m.ui_account_details_have_not_loaded_yet()));
+    if (newPassword.length < 12)
+      return fail(new Error(m.ui_your_new_master_password_must_contain_at_least_12_characters()));
+    if (newPassword !== confirmPassword)
+      return fail(new Error(m.ui_the_new_passwords_do_not_match()));
     busy = "password";
     try {
       await changeMasterPasswordApi({
@@ -283,24 +287,27 @@
   }
 </script>
 
-<svelte:head><title>账户与安全 · Edgewarden</title></svelte:head>
+<svelte:head><title>{m.ui_account_and_security_edgewarden()}</title></svelte:head>
 
 <VaultPageShell
-  title="账户与安全"
-  description="管理资料、API Key、两步验证和登录设备。"
+  title={m.nav_settings()}
+  description={m.ui_manage_your_profile_api_key_two_step_login_and_devices()}
   width="default"
 >
   {#if error}<Alert.Root variant="destructive"
-      ><Alert.Title>操作失败</Alert.Title><Alert.Description>{error}</Alert.Description></Alert.Root
+      ><Alert.Title>{m.ui_action_failed()}</Alert.Title><Alert.Description
+        >{error}</Alert.Description
+      ></Alert.Root
     >{/if}
   {#if message}<Alert.Root
-      ><Alert.Title>设置已更新</Alert.Title><Alert.Description>{message}</Alert.Description
+      ><Alert.Title>{m.ui_settings_updated()}</Alert.Title><Alert.Description
+        >{message}</Alert.Description
       ></Alert.Root
     >{/if}
 
   {#if loading}
     <div class="flex items-center gap-2 py-12 text-muted-foreground">
-      <LoaderCircle class="animate-spin" />正在加载账户设置…
+      <LoaderCircle class="animate-spin" />{m.ui_loading_account_settings()}
     </div>
   {:else if profile}
     <Tabs.Root
@@ -308,10 +315,10 @@
       class="flex flex-col gap-6"
     >
       <Tabs.List class="grid h-auto w-full grid-cols-2 sm:grid-cols-4"
-        ><Tabs.Trigger value="general">常规</Tabs.Trigger><Tabs.Trigger value="security"
-          >安全</Tabs.Trigger
-        ><Tabs.Trigger value="devices">设备</Tabs.Trigger><Tabs.Trigger value="danger"
-          >危险区域</Tabs.Trigger
+        ><Tabs.Trigger value="general">{m.ui_general()}</Tabs.Trigger><Tabs.Trigger value="security"
+          >{m.ui_security()}</Tabs.Trigger
+        ><Tabs.Trigger value="devices">{m.ui_devices()}</Tabs.Trigger><Tabs.Trigger value="danger"
+          >{m.ui_danger_zone()}</Tabs.Trigger
         ></Tabs.List
       >
       <Tabs.Content value="general"
@@ -373,12 +380,12 @@
       <Tabs.Content value="danger"
         ><Card.Root class="border-destructive/40"
           ><Card.Header
-            ><Card.Title>删除账户</Card.Title><Card.Description
-              >永久删除个人保险库、Sends、设备、通行密钥和账户资料。若你仍拥有组织，必须先删除或转移组织。</Card.Description
+            ><Card.Title>{m.ui_delete_account()}</Card.Title><Card.Description
+              >{m.ui_permanently_delete_your_personal_vault_sends_devices_passkeys_and_account_detail()}</Card.Description
             ></Card.Header
           ><Card.Content
             ><Button variant="destructive" onclick={() => (deleteAccountOpen = true)}
-              >永久删除账户</Button
+              >{m.ui_permanently_delete_account()}</Button
             ></Card.Content
           ></Card.Root
         ></Tabs.Content
@@ -419,15 +426,15 @@
 <AlertDialog.Root bind:open={rotateApiKeyOpen}
   ><AlertDialog.Content
     ><AlertDialog.Header
-      ><AlertDialog.Title>轮换 API Key</AlertDialog.Title><AlertDialog.Description
-        >旧 API Key 会立即失效，所有使用旧密钥的客户端都需要重新配置。</AlertDialog.Description
+      ><AlertDialog.Title>{m.ui_rotate_api_key()}</AlertDialog.Title><AlertDialog.Description
+        >{m.ui_your_old_api_key_will_stop_working_immediately_update_all_clients_that_use_it()}</AlertDialog.Description
       ></AlertDialog.Header
     ><AlertDialog.Footer
-      ><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action
+      ><AlertDialog.Cancel>{m.login_cancel()}</AlertDialog.Cancel><AlertDialog.Action
         onclick={() => {
           rotateApiKeyOpen = false;
           requestSensitiveAction("api-key-rotate");
-        }}>确认轮换</AlertDialog.Action
+        }}>{m.ui_confirm_rotation()}</AlertDialog.Action
       ></AlertDialog.Footer
     ></AlertDialog.Content
   ></AlertDialog.Root

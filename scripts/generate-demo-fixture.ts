@@ -90,7 +90,7 @@ add("user_revisions", { user_id: DEMO_USER_ID, revision_date: stamp });
 add("folders", {
   id: uuid(2),
   user_id: DEMO_USER_ID,
-  name: await enc("示例保险库"),
+  name: await enc("Sample vault"),
   created_at: stamp,
   updated_at: stamp,
 });
@@ -109,14 +109,17 @@ async function cipher(
     folder_id: organization ? null : uuid(2),
     type,
     name: await enc(name, key),
-    notes: await enc("仅供演示，不是真实凭据。", key),
+    notes: await enc(
+      "For demonstration only. These are not real credentials.",
+      key,
+    ),
     data: JSON.stringify(data),
     favorite: n === 3 ? 1 : 0,
     created_at: stamp,
     updated_at: stamp,
   });
 }
-await cipher(3, 1, "示例网站", {
+await cipher(3, 1, "Example website", {
   login: {
     username: await enc("demo@example.com"),
     password: await enc("Not-A-Real-Password!"),
@@ -124,8 +127,8 @@ await cipher(3, 1, "示例网站", {
     totp: await enc("JBSWY3DPEHPK3PXP"),
   },
 });
-await cipher(4, 2, "欢迎使用 Edgewarden", { secureNote: { type: 0 } });
-await cipher(5, 3, "测试信用卡", {
+await cipher(4, 2, "Welcome to Edgewarden", { secureNote: { type: 0 } });
+await cipher(5, 3, "Sample credit card", {
   card: {
     cardholderName: await enc("DEMO USER"),
     brand: await enc("Visa"),
@@ -135,7 +138,7 @@ await cipher(5, 3, "测试信用卡", {
     code: await enc("123"),
   },
 });
-await cipher(6, 4, "虚构身份", {
+await cipher(6, 4, "Sample identity", {
   identity: {
     firstName: await enc("Demo"),
     lastName: await enc("User"),
@@ -144,7 +147,7 @@ await cipher(6, 4, "虚构身份", {
 });
 add("organizations", {
   id: uuid(10),
-  name: "Edgewarden 示例组织",
+  name: "Edgewarden Demo Organization",
   created_at: stamp,
   updated_at: stamp,
 });
@@ -163,7 +166,7 @@ add("org_members", {
 add("collections", {
   id: uuid(12),
   org_id: uuid(10),
-  name: await enc("团队共享示例", org),
+  name: await enc("Team collection", org),
   created_at: stamp,
   updated_at: stamp,
 });
@@ -178,7 +181,7 @@ add("collection_members", {
 await cipher(
   13,
   1,
-  "组织共享登录",
+  "Shared team login",
   {
     login: {
       username: await enc("team@example.com", org),
@@ -217,9 +220,12 @@ add("sends", {
   id: uuid(20),
   user_id: DEMO_USER_ID,
   type: 0,
-  name: await enc("只读文本 Send", sendKeys),
+  name: await enc("Read-only text Send", sendKeys),
   data: JSON.stringify({
-    text: await enc("欢迎试用 Edgewarden。所有内容均为虚构示例。", sendKeys),
+    text: await enc(
+      "Welcome to Edgewarden. All content is fictional sample data.",
+      sendKeys,
+    ),
     hidden: false,
   }),
   key: await enc(rawSend),

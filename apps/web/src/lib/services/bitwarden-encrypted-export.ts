@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import { argon2id } from "hash-wasm";
 import {
   bytesToBase64,
@@ -49,7 +50,11 @@ function positiveInteger(
     Number(value) < 1 ||
     Number(value) > maximum
   ) {
-    throw new Error(`Bitwarden 加密导出的 ${field} 参数无效`);
+    throw new Error(
+      m.ui_invalid_value_parameter_in_bitwarden_encrypted_export({
+        value0: field,
+      }),
+    );
   }
   return Number(value);
 }
@@ -58,9 +63,10 @@ async function deriveExportKey(
   document: PasswordProtectedExport,
   password: string,
 ) {
-  if (!password) throw new Error("请输入 Bitwarden 加密导出密码");
+  if (!password)
+    throw new Error(m.ui_enter_your_bitwarden_encrypted_export_password());
   if (typeof document.salt !== "string" || !document.salt)
-    throw new Error("Bitwarden 加密导出缺少 salt");
+    throw new Error(m.ui_bitwarden_encrypted_export_is_missing_its_salt());
   const iterations = positiveInteger(
     document.kdfIterations,
     "kdfIterations",
@@ -90,7 +96,7 @@ async function deriveExportKey(
       outputType: "binary",
     });
   } else {
-    throw new Error("不支持此 Bitwarden 加密导出的 KDF 类型");
+    throw new Error(m.ui_unsupported_kdf_type_in_bitwarden_encrypted_export());
   }
   return {
     encKey: await hkdfExpand(material, "enc", 32),
@@ -103,7 +109,9 @@ export async function decryptPasswordProtectedExport(
   password: string,
 ): Promise<string> {
   if (!isPasswordProtectedExport(document)) {
-    throw new Error("这不是 Bitwarden 密码保护加密 JSON");
+    throw new Error(
+      m.ui_this_is_not_a_bitwarden_password_protected_json_export(),
+    );
   }
   if (
     typeof document.encKeyValidation_DO_NOT_EDIT !== "string" ||
@@ -111,14 +119,14 @@ export async function decryptPasswordProtectedExport(
     !document.encKeyValidation_DO_NOT_EDIT ||
     !document.data
   ) {
-    throw new Error("Bitwarden 加密导出结构不完整");
+    throw new Error(m.ui_bitwarden_encrypted_export_is_incomplete());
   }
   const { encKey, macKey } = await deriveExportKey(document, password);
   try {
     await decryptStr(document.encKeyValidation_DO_NOT_EDIT, encKey, macKey);
     return await decryptStr(document.data, encKey, macKey);
   } catch {
-    throw new Error("导出密码错误或加密文件已损坏");
+    throw new Error(m.ui_incorrect_export_password_or_damaged_encrypted_file());
   }
 }
 
@@ -131,7 +139,8 @@ export async function encryptPasswordProtectedExport(
   plaintext: string,
   password: string,
 ): Promise<string> {
-  if (!password) throw new Error("请输入加密导出密码");
+  if (!password)
+    throw new Error(m.ui_enter_an_encryption_password_for_the_export());
 
   const document: PasswordProtectedExport = {
     encrypted: true,

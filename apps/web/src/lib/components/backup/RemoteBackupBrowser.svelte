@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { formatDateTime } from "$lib/i18n/format";
+  import * as m from "$lib/paraglide/messages.js";
+
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Empty from "$lib/components/ui/empty/index.js";
@@ -47,15 +50,17 @@
 
 <Card.Root>
   <Card.Header>
-    <Card.Title>存储服务器备份浏览器</Card.Title>
-    <Card.Description>浏览远端归档，可直接还原或清理历史记录</Card.Description>
+    <Card.Title>{m.ui_remote_backups()}</Card.Title>
+    <Card.Description
+      >{m.ui_browse_archives_restore_a_backup_or_remove_old_files()}</Card.Description
+    >
     <Card.Action
       ><Button
         size="icon-sm"
         variant="outline"
         onclick={onRefresh}
         disabled={browsing}
-        aria-label="刷新远端备份"
+        aria-label={m.ui_refresh_remote_backups()}
         >{#if browsing}<Spinner />{:else}<RefreshCw />{/if}</Button
       ></Card.Action
     >
@@ -65,9 +70,10 @@
     <Table.Root>
       <Table.Header
         ><Table.Row
-          ><Table.Head>文件名</Table.Head><Table.Head>文件大小</Table.Head><Table.Head
-            >上次修改时间</Table.Head
-          ><Table.Head class="text-right">操作</Table.Head></Table.Row
+          ><Table.Head>{m.ui_file_name()}</Table.Head><Table.Head>{m.ui_file_size()}</Table.Head
+          ><Table.Head>{m.ui_last_modified()}</Table.Head><Table.Head class="text-right"
+            >{m.ui_actions()}</Table.Head
+          ></Table.Row
         ></Table.Header
       >
       <Table.Body>
@@ -89,9 +95,7 @@
               >{item.isDirectory ? "--" : formatFileSize(item.size)}</Table.Cell
             >
             <Table.Cell class="text-xs text-muted-foreground"
-              >{item.modifiedAt
-                ? new Date(item.modifiedAt).toLocaleString("zh-CN")
-                : "--"}</Table.Cell
+              >{item.modifiedAt ? formatDateTime(item.modifiedAt) : "--"}</Table.Cell
             >
             <Table.Cell
               ><div class="flex items-center justify-end gap-1.5">
@@ -101,7 +105,7 @@
                     size="icon-sm"
                     onclick={() => onInspect(item.path)}
                     disabled={inspecting === item.path}
-                    aria-label="验证完整性"
+                    aria-label={m.ui_verify_integrity()}
                     >{#if inspecting === item.path}<Spinner />{:else}<ShieldCheck />{/if}</Button
                   >
                   <Button
@@ -109,7 +113,7 @@
                     size="icon-sm"
                     onclick={() => onDownload(item.path, item.name)}
                     disabled={downloading === item.path}
-                    aria-label="下载备份"
+                    aria-label={m.ui_download_backup()}
                     >{#if downloading === item.path}<Spinner />{:else}<Download />{/if}</Button
                   >
                   <Button
@@ -117,14 +121,16 @@
                     size="sm"
                     onclick={() => onRestore(item.path)}
                     disabled={restoring}
-                    >{#if restoring}<Spinner data-icon="inline-start" />{/if}全量恢复</Button
+                    >{#if restoring}<Spinner
+                        data-icon="inline-start"
+                      />{/if}{m.ui_restore_entire_instance()}</Button
                   >
                   <Button
                     variant="destructive"
                     size="icon-sm"
                     onclick={() => onDelete(item.path)}
                     disabled={deleting === item.path}
-                    aria-label="删除备份"
+                    aria-label={m.ui_delete_backup()}
                     >{#if deleting === item.path}<Spinner />{:else}<Trash2 />{/if}</Button
                   >
                 {/if}
@@ -136,10 +142,10 @@
             ><Table.Cell colspan={4}
               ><Empty.Root
                 >{#if browsing}<Empty.Media variant="icon"><Spinner /></Empty.Media><Empty.Header
-                    ><Empty.Title>正在检索文件列表</Empty.Title></Empty.Header
+                    ><Empty.Title>{m.ui_retrieving_file_list()}</Empty.Title></Empty.Header
                   >{:else}<Empty.Media variant="icon"><Info /></Empty.Media><Empty.Header
-                    ><Empty.Title>暂无备份文件</Empty.Title><Empty.Description
-                      >此目录为空，或当前目的地没有读取权限。</Empty.Description
+                    ><Empty.Title>{m.ui_no_backup_files()}</Empty.Title><Empty.Description
+                      >{m.ui_this_directory_is_empty_or_the_destination_does_not_grant_read_access()}</Empty.Description
                     ></Empty.Header
                   >{/if}</Empty.Root
               ></Table.Cell

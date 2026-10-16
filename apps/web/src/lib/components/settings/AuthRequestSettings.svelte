@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { formatDateTime } from "$lib/i18n/format";
+  import * as m from "$lib/paraglide/messages.js";
+
   import { onMount } from "svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
@@ -55,7 +58,7 @@
       let key: string | undefined;
       if (approved) {
         if (!vault.symEncKey || !vault.symMacKey) {
-          throw new Error("保险库密钥不可用，请重新解锁");
+          throw new Error(m.ui_vault_key_is_unavailable_unlock_your_vault_again());
         }
         key = await encryptVaultKeyForAuthRequest(
           request.publicKey,
@@ -65,7 +68,7 @@
       }
       await respondToAuthRequestApi(request.id, approved, key);
       requests = requests.filter((item) => item.id !== request.id);
-      onMessage(approved ? "已批准设备登录" : "已拒绝设备登录");
+      onMessage(approved ? m.ui_device_login_approved() : m.ui_device_login_denied());
     } catch (error) {
       onError(error);
     } finally {
@@ -92,12 +95,14 @@
 <Card.Root id="device-login-requests">
   <Card.Header class="flex-row items-start justify-between">
     <div>
-      <Card.Title>待审批设备登录</Card.Title>
-      <Card.Description>批准前请在请求设备上核对验证短语和设备信息。</Card.Description>
+      <Card.Title>{m.ui_pending_device_logins()}</Card.Title>
+      <Card.Description
+        >{m.ui_compare_the_fingerprint_phrase_and_device_details_on_the_requesting_device_befor()}</Card.Description
+      >
     </div>
     <Button variant="outline" size="sm" onclick={() => refresh()} disabled={refreshing || !!busy}>
-      <RefreshCw class={showingRefresh ? "animate-spin" : ""} />刷新
-    </Button>
+      <RefreshCw class={showingRefresh ? "animate-spin" : ""} />{m.ui_refresh()}</Button
+    >
   </Card.Header>
   <Card.Content class="flex flex-col gap-3">
     {#each requests as request (request.id)}
@@ -110,29 +115,29 @@
             {request.requestDeviceIdentifier}
           </div>
           <div class="text-xs text-muted-foreground">
-            {new Date(request.creationDate).toLocaleString()}{request.requestIpAddress
+            {formatDateTime(request.creationDate)}{request.requestIpAddress
               ? ` · ${request.requestIpAddress}`
               : ""}
           </div>
-          <div class="mt-2 text-xs text-muted-foreground">验证短语</div>
+          <div class="mt-2 text-xs text-muted-foreground">{m.ui_fingerprint_phrase()}</div>
           <code class="mt-1 block break-words text-sm font-medium">
-            {request.fingerprintPhrase || "验证短语不可用"}
+            {request.fingerprintPhrase || m.ui_fingerprint_phrase_unavailable()}
           </code>
         </div>
         <div class="flex shrink-0 gap-2">
           <Button size="sm" onclick={() => respond(request, true)} disabled={!!busy}
-            ><ShieldCheck />批准</Button
+            ><ShieldCheck />{m.ui_approve()}</Button
           >
           <Button
             size="sm"
             variant="destructive"
             onclick={() => respond(request, false)}
-            disabled={!!busy}>拒绝</Button
+            disabled={!!busy}>{m.ui_deny()}</Button
           >
         </div>
       </div>
     {:else}
-      <p class="py-4 text-sm text-muted-foreground">没有待审批的设备登录。</p>
+      <p class="py-4 text-sm text-muted-foreground">{m.ui_no_device_logins_awaiting_approval()}</p>
     {/each}
   </Card.Content>
 </Card.Root>

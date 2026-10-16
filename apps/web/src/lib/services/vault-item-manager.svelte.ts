@@ -72,7 +72,7 @@ export function createVaultItemManager(options: {
   function startEdit() {
     if (!state.selected) return;
     if (state.selected.readOnly) {
-      toast.error("该组织条目为只读");
+      toast.error(m.ui_this_organization_item_is_read_only());
       return;
     }
     state.isCreating = false;
@@ -98,7 +98,7 @@ export function createVaultItemManager(options: {
         resolveOwnerKey,
       });
     } catch (caught) {
-      toast.error(`保存失败：${errorDetail(caught)}`);
+      toast.error(m.ui_unable_to_save_value({ value0: errorDetail(caught) }));
       return;
     }
 
@@ -120,7 +120,7 @@ export function createVaultItemManager(options: {
   function requestDelete() {
     if (!state.selected) return;
     if (state.selected.readOnly) {
-      toast.error("该组织条目为只读");
+      toast.error(m.ui_this_organization_item_is_read_only());
       return;
     }
     state.deleteDialogOpen = true;
@@ -138,7 +138,7 @@ export function createVaultItemManager(options: {
       state.isEditing = false;
       await syncVaultData();
     } catch (caught) {
-      toast.error(`删除失败：${errorDetail(caught)}`);
+      toast.error(m.ui_unable_to_delete_value({ value0: errorDetail(caught) }));
     } finally {
       state.busy = false;
     }
@@ -147,7 +147,7 @@ export function createVaultItemManager(options: {
   async function restore() {
     if (!state.selected?.deletedDate) return;
     if (state.selected.readOnly) {
-      toast.error("该组织条目为只读");
+      toast.error(m.ui_this_organization_item_is_read_only());
       return;
     }
     state.busy = true;
@@ -156,7 +156,9 @@ export function createVaultItemManager(options: {
       state.selected = null;
       await syncVaultData();
     } catch (caught) {
-      toast.error(`恢复失败：${errorDetail(caught)}`);
+      toast.error(
+        m.ui_unable_to_restore_value({ value0: errorDetail(caught) }),
+      );
     } finally {
       state.busy = false;
     }
@@ -165,7 +167,7 @@ export function createVaultItemManager(options: {
   async function toggleArchive() {
     if (!state.selected || state.selected.deletedDate) return;
     if (state.selected.readOnly) {
-      toast.error("该组织条目为只读");
+      toast.error(m.ui_this_organization_item_is_read_only());
       return;
     }
     state.busy = true;
@@ -176,7 +178,11 @@ export function createVaultItemManager(options: {
       state.selected = null;
       await syncVaultData();
     } catch (caught) {
-      toast.error(`归档操作失败：${errorDetail(caught)}`);
+      toast.error(
+        m.ui_unable_to_change_archive_state_value({
+          value0: errorDetail(caught),
+        }),
+      );
     } finally {
       state.busy = false;
     }
@@ -196,7 +202,11 @@ export function createVaultItemManager(options: {
       state.selected =
         vault.ciphers.find((cipher) => cipher.id === item.id) ?? null;
     } catch (caught) {
-      toast.error(`收藏操作失败：${errorDetail(caught)}`);
+      toast.error(
+        m.ui_unable_to_change_favorite_state_value({
+          value0: errorDetail(caught),
+        }),
+      );
     } finally {
       state.busy = false;
     }
@@ -207,7 +217,9 @@ export function createVaultItemManager(options: {
     if (!item?.organizationId || item.hidePasswords) return;
     const personalKeys = resolveOwnerKey(null);
     if (!personalKeys) {
-      toast.error("个人保险库密钥不可用，请重新解锁");
+      toast.error(
+        m.ui_personal_vault_key_is_unavailable_unlock_your_vault_again(),
+      );
       return;
     }
     state.busy = true;
@@ -216,9 +228,15 @@ export function createVaultItemManager(options: {
       await syncVaultData();
       state.selected =
         vault.ciphers.find((cipher) => cipher.id === created.id) ?? null;
-      toast.success("已保存到个人保险库，组织原件保持不变");
+      toast.success(
+        m.ui_saved_to_your_personal_vault_the_organization_original_is_unchanged(),
+      );
     } catch (caught) {
-      toast.error(`保存个人副本失败：${errorDetail(caught)}`);
+      toast.error(
+        m.ui_unable_to_save_a_personal_copy_value({
+          value0: errorDetail(caught),
+        }),
+      );
     } finally {
       state.busy = false;
     }

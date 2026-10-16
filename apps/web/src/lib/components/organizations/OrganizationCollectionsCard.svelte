@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { canManageOrganizationCollections } from "@edgewarden/shared";
   import { Pencil, Trash2 } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -32,14 +34,20 @@
 
 <Card.Root>
   <Card.Header>
-    <Card.Title>集合</Card.Title>
-    <Card.Description>集合用于划分共享条目及成员的访问范围。</Card.Description>
+    <Card.Title>{m.ui_collections()}</Card.Title>
+    <Card.Description
+      >{m.ui_collections_organize_shared_items_and_control_member_access()}</Card.Description
+    >
   </Card.Header>
   <Card.Content>
     {#if canManage}
       <div class="grid gap-3 sm:grid-cols-[1fr_auto]">
-        <Input bind:value={name} placeholder="新集合名称" aria-label="新集合名称" />
-        <Button onclick={onadd} disabled={!name.trim() || busy}>添加集合</Button>
+        <Input
+          bind:value={name}
+          placeholder={m.ui_new_collection_name()}
+          aria-label={m.ui_new_collection_name()}
+        />
+        <Button onclick={onadd} disabled={!name.trim() || busy}>{m.ui_add_collection()}</Button>
       </div>
     {/if}
     <div class:mt-4={canManage} class="flex flex-col gap-2">
@@ -52,19 +60,21 @@
                 variant="ghost"
                 size="icon-sm"
                 onclick={() => onrename(collection)}
-                aria-label={`重命名集合 ${collection.name}`}><Pencil data-icon /></Button
+                aria-label={m.ui_rename_collection_value({ value0: collection.name })}
+                ><Pencil data-icon /></Button
               >
               <Button
                 variant="ghost"
                 size="icon-sm"
                 onclick={() => onremove(collection)}
-                aria-label={`删除集合 ${collection.name}`}><Trash2 data-icon /></Button
+                aria-label={m.ui_delete_collection_value({ value0: collection.name })}
+                ><Trash2 data-icon /></Button
               >
             </div>
           {/if}
         </div>
       {:else}
-        <p class="py-4 text-center text-sm text-muted-foreground">还没有集合。</p>
+        <p class="py-4 text-center text-sm text-muted-foreground">{m.ui_no_collections_yet()}</p>
       {/each}
     </div>
   </Card.Content>

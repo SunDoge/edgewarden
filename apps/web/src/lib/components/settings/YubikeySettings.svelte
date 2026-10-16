@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { KeyRound } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
@@ -86,7 +88,7 @@
         userVerificationToken,
       });
       otps = "";
-      onMessage("YubiKey 两步验证已启用");
+      onMessage(m.ui_yubikey_two_step_login_enabled());
       await onSessionRevoked("two-factor-updated");
     } catch (error) {
       onError(error);
@@ -101,7 +103,7 @@
     busy = "disable";
     try {
       await disableYubikeysApi(userVerificationToken);
-      onMessage("YubiKey 两步验证已关闭");
+      onMessage(m.ui_yubikey_two_step_login_disabled());
       await onSessionRevoked("two-factor-updated");
     } catch (error) {
       onError(error);
@@ -121,7 +123,7 @@
       });
       secretKey = "";
       await loadSettings();
-      onMessage("Yubico 验证凭据已加密保存");
+      onMessage(m.ui_yubico_validation_credentials_encrypted_and_saved());
     } catch (error) {
       onError(error);
     } finally {
@@ -133,12 +135,12 @@
 <Card.Root>
   <Card.Header
     ><Card.Title>YubiKey OTP</Card.Title><Card.Description
-      >使用 Yubico OTP 模式的硬件密钥作为第二因素；登录时 OTP 会由服务端向 Yubico 验证。</Card.Description
+      >{m.ui_use_a_yubico_otp_hardware_key_as_a_second_factor_otps_are_verified_with_yubico_b()}</Card.Description
     ></Card.Header
   >
   <Card.Content
     ><Button variant="outline" onclick={() => (open = true)}
-      ><KeyRound data-icon="inline-start" />管理 YubiKey</Button
+      ><KeyRound data-icon="inline-start" />{m.ui_manage_yubikey()}</Button
     ></Card.Content
   >
 </Card.Root>
@@ -157,12 +159,12 @@
   <Dialog.Content class="max-h-[90vh] overflow-y-auto">
     <Dialog.Header
       ><Dialog.Title>YubiKey OTP</Dialog.Title><Dialog.Description
-        >每把密钥触摸一次并逐行输入完整 OTP。服务器只保存前 12 位公共 ID。</Dialog.Description
+        >{m.ui_touch_each_key_once_and_enter_its_full_otp_on_a_separate_line_the_server_stores_()}</Dialog.Description
       ></Dialog.Header
     >
     <Field.Group>
       <Field.Field
-        ><Field.Label for="yubikey-password">当前主密码</Field.Label><Input
+        ><Field.Label for="yubikey-password">{m.ui_current_master_password()}</Field.Label><Input
           id="yubikey-password"
           type="password"
           bind:value={password}
@@ -171,35 +173,43 @@
       >
       <Field.Field orientation="horizontal"
         ><Button variant="outline" onclick={loadSettings} disabled={!password || busy === "load"}
-          >读取设置</Button
+          >{m.ui_load_settings()}</Button
         ></Field.Field
       >
       {#if settings}<div class="flex flex-col gap-2 rounded-md border p-3 text-sm">
           <div class="flex items-center justify-between">
-            <span>状态</span><Badge variant={settings.enabled ? "default" : "secondary"}
-              >{settings.enabled ? "已启用" : "未启用"}</Badge
+            <span>{m.ui_status()}</span><Badge variant={settings.enabled ? "default" : "secondary"}
+              >{settings.enabled ? m.ui_enabled() : m.ui_not_enabled()}</Badge
             >
           </div>
-          <div>已登记：{registeredKeys(settings).join("、") || "无"}</div>
-          <div>Yubico 验证：{settings.configured ? "已配置" : "未配置"}</div>
+          <div>
+            {m.ui_registered_value({ value0: registeredKeys(settings).join("、") || m.ui_none() })}
+          </div>
+          <div>
+            {m.ui_yubico_validation_value({
+              value0: settings.configured ? m.ui_configured() : m.ui_not_configured(),
+            })}
+          </div>
         </div>{/if}
       <Field.Field
-        ><Field.Label for="yubikey-otps">新 YubiKey OTP</Field.Label><Textarea
+        ><Field.Label for="yubikey-otps">{m.ui_new_yubikey_otp()}</Field.Label><Textarea
           id="yubikey-otps"
           bind:value={otps}
           rows={3}
           autocomplete="off"
           spellcheck={false}
-          placeholder="每行输入一把密钥生成的 OTP（最多 5 把）"
+          placeholder={m.ui_one_otp_per_line_up_to_5_keys()}
         /></Field.Field
       >
       <Field.Field orientation="horizontal"
         ><Switch id="yubikey-nfc" bind:checked={nfc} /><Field.Label for="yubikey-nfc"
-          >允许 NFC 提示</Field.Label
+          >{m.ui_allow_nfc_prompts()}</Field.Label
         ></Field.Field
       >
       {#if isAdmin}<Field.FieldSet class="rounded-md border p-3"
-          ><Field.FieldLegend>Yubico 验证凭据（管理员）</Field.FieldLegend><Field.FieldGroup
+          ><Field.FieldLegend
+            >{m.ui_yubico_validation_credentials_administrator()}</Field.FieldLegend
+          ><Field.FieldGroup
             ><Field.Field
               ><Field.Label for="yubico-client-id">Client ID</Field.Label><Input
                 id="yubico-client-id"
@@ -217,7 +227,7 @@
               variant="outline"
               onclick={saveConfig}
               disabled={!password || !clientId || !secretKey || busy === "config"}
-              >加密保存验证凭据</Button
+              >{m.ui_encrypt_and_save_credentials()}</Button
             ></Field.FieldGroup
           ></Field.FieldSet
         >{/if}
@@ -226,9 +236,9 @@
       ><Button
         variant="destructive"
         onclick={() => (disableConfirmOpen = true)}
-        disabled={!settings?.enabled || busy === "disable"}>关闭 YubiKey</Button
+        disabled={!settings?.enabled || busy === "disable"}>{m.ui_disable_yubikey()}</Button
       ><Button onclick={save} disabled={!userVerificationToken || !otps.trim() || busy === "save"}
-        >验证并保存</Button
+        >{m.ui_verify_and_save()}</Button
       ></Dialog.Footer
     >
   </Dialog.Content>
@@ -237,13 +247,14 @@
 <AlertDialog.Root bind:open={disableConfirmOpen}
   ><AlertDialog.Content
     ><AlertDialog.Header
-      ><AlertDialog.Title>关闭 YubiKey 两步验证</AlertDialog.Title><AlertDialog.Description
-        >关闭后，已登记的 YubiKey 将不再作为登录第二因素。需要当前主密码才能执行。</AlertDialog.Description
+      ><AlertDialog.Title>{m.ui_disable_yubikey_two_step_login()}</AlertDialog.Title
+      ><AlertDialog.Description
+        >{m.ui_registered_yubikeys_will_no_longer_work_as_second_factors_your_current_master_pa()}</AlertDialog.Description
       ></AlertDialog.Header
     ><AlertDialog.Footer
-      ><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action
+      ><AlertDialog.Cancel>{m.login_cancel()}</AlertDialog.Cancel><AlertDialog.Action
         class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-        onclick={disable}>确认关闭</AlertDialog.Action
+        onclick={disable}>{m.ui_confirm_disabling()}</AlertDialog.Action
       ></AlertDialog.Footer
     ></AlertDialog.Content
   ></AlertDialog.Root

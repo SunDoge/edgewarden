@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import type { FolderResponse } from "@edgewarden/shared";
   import {
     Archive,
@@ -52,13 +54,13 @@
   const filters = $derived([
     {
       id: "all" as const,
-      label: "全部条目",
+      label: m.ui_all_items(),
       icon: Lock,
       count: vault.ciphers.filter((item) => !item.deletedDate && !item.archivedDate).length,
     },
     {
       id: "favorites" as const,
-      label: "我的收藏",
+      label: m.ui_favorites(),
       icon: Star,
       count: vault.ciphers.filter(
         (item) => item.favorite && !item.deletedDate && !item.archivedDate,
@@ -66,30 +68,30 @@
     },
     {
       id: "archive" as const,
-      label: "归档",
+      label: m.ui_archive(),
       icon: Archive,
       count: vault.ciphers.filter((item) => item.archivedDate && !item.deletedDate).length,
     },
     {
       id: "trash" as const,
-      label: "回收站",
+      label: m.ui_trash(),
       icon: Trash2,
       count: vault.ciphers.filter((item) => item.deletedDate).length,
     },
     {
       id: "duplicates" as const,
-      label: "重复项",
+      label: m.ui_duplicates(),
       icon: Copy,
       count: duplicateCount,
     },
   ]);
 
-  const cipherTypes = [
-    { id: "login" as const, label: "登录凭据", icon: KeyRound },
-    { id: "card" as const, label: "支付卡片", icon: CreditCard },
-    { id: "identity" as const, label: "个人身份", icon: User },
-    { id: "securenote" as const, label: "安全便签", icon: FileText },
-  ];
+  const cipherTypes = $derived([
+    { id: "login" as const, label: m.ui_login(), icon: KeyRound },
+    { id: "card" as const, label: m.ui_card(), icon: CreditCard },
+    { id: "identity" as const, label: m.ui_identity(), icon: User },
+    { id: "securenote" as const, label: m.ui_secure_note(), icon: FileText },
+  ]);
 
   function selectCategory(category: VaultCategory) {
     activeCategory = category;
@@ -100,13 +102,12 @@
 
 <aside class="flex h-full w-64 shrink-0 flex-col overflow-y-auto border-r bg-background p-4">
   <Button class="mb-6 w-full gap-2" onclick={onCreate}>
-    <Plus data-icon="inline-start" />
-    添加新条目
-  </Button>
+    <Plus data-icon="inline-start" />{m.ui_new_item()}</Button
+  >
 
-  <nav class="flex flex-col gap-1.5" aria-label="保险库导航">
+  <nav class="flex flex-col gap-1.5" aria-label={m.ui_vault_navigation()}>
     <p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-      类型过滤
+      {m.ui_filter_by_type()}
     </p>
     {#each filters as item (item.id)}
       <Button
@@ -140,7 +141,7 @@
         id="folders-heading"
         class="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
       >
-        文件夹
+        {m.ui_folder()}
       </p>
       <div class="flex items-center gap-1">
         {#if duplicateFolderCount}
@@ -149,8 +150,10 @@
             size="icon-xs"
             onclick={onMergeDuplicateFolders}
             disabled={mergingDuplicateFolders}
-            title={`合并 ${duplicateFolderCount} 个同名重复文件夹`}
-            aria-label="合并同名重复文件夹"><Combine data-icon /></Button
+            title={m.ui_merge_value_duplicate_folders_with_matching_names({
+              value0: duplicateFolderCount,
+            })}
+            aria-label={m.ui_merge_folders_with_matching_names()}><Combine data-icon /></Button
           >
         {/if}
         {#if vault.folders.length}
@@ -158,8 +161,8 @@
             variant="ghost"
             size="icon-xs"
             onclick={onDeleteAllFolders}
-            title="删除全部文件夹"
-            aria-label="删除全部文件夹"
+            title={m.ui_delete_all_folders()}
+            aria-label={m.ui_delete_all_folders()}
             class="text-muted-foreground hover:text-destructive"><Trash2 data-icon /></Button
           >
         {/if}
@@ -167,8 +170,8 @@
           variant="ghost"
           size="icon-xs"
           onclick={onCreateFolder}
-          title="新建文件夹"
-          aria-label="新建文件夹"
+          title={m.ui_new_folder()}
+          aria-label={m.ui_new_folder()}
           class="text-muted-foreground"><Plus data-icon /></Button
         >
       </div>
@@ -205,8 +208,8 @@
               event.stopPropagation();
               onRenameFolder(folder);
             }}
-            title="重命名"
-            aria-label={`重命名 ${folder.name}`}><Edit data-icon /></Button
+            title={m.ui_rename()}
+            aria-label={m.ui_rename_value({ value0: folder.name })}><Edit data-icon /></Button
           >
           <Button
             variant="ghost"
@@ -216,13 +219,13 @@
               event.stopPropagation();
               onDeleteFolder(folder);
             }}
-            title="删除"
-            aria-label={`删除 ${folder.name}`}><Trash2 data-icon /></Button
+            title={m.ui_delete()}
+            aria-label={m.ui_delete_value({ value0: folder.name })}><Trash2 data-icon /></Button
           >
         </div>
       </div>
     {:else}
-      <p class="px-3 text-xs italic text-muted-foreground">暂无文件夹</p>
+      <p class="px-3 text-xs italic text-muted-foreground">{m.ui_no_folders_yet()}</p>
     {/each}
   </nav>
 </aside>

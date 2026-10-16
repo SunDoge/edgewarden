@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { ShieldCheck } from "@lucide/svelte";
@@ -51,15 +53,15 @@
   <div class="border-b bg-muted/30 p-2 sm:px-4" aria-live="polite">
     <Alert.Root>
       <ShieldCheck />
-      <Alert.Title>有新的设备登录请求</Alert.Title>
+      <Alert.Title>{m.ui_new_device_login_request()}</Alert.Title>
       <Alert.Description>
         {pendingCount === 1
-          ? "请核对验证短语和设备信息后决定是否批准。"
-          : `共有 ${pendingCount} 个请求等待核对。`}
+          ? m.ui_verify_the_fingerprint_phrase_and_device_information_before_approving()
+          : m.ui_requests_awaiting_verification_value({ value0: pendingCount })}
       </Alert.Description>
       <Alert.Action>
         <Button size="sm" onclick={() => goto("/vault/settings?tab=security#device-login-requests")}
-          >查看请求</Button
+          >{m.ui_review_requests()}</Button
         >
       </Alert.Action>
     </Alert.Root>

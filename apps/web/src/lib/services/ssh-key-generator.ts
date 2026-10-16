@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 export interface SshKeyOptions {
   type: "ed25519" | "rsa";
   rsaLength: 2048 | 3072 | 4096;
@@ -57,7 +58,9 @@ function base64(bytes: Uint8Array): string {
 function required(jwk: JsonWebKey, property: keyof JsonWebKey): Uint8Array {
   const value = jwk[property];
   if (typeof value !== "string" || !value)
-    throw new Error(`生成的密钥缺少 ${String(property)}`);
+    throw new Error(
+      m.ui_generated_key_is_missing_value({ value0: String(property) }),
+    );
   return decodeBase64Url(value);
 }
 
@@ -106,7 +109,7 @@ export async function computeSshFingerprint(
   publicKey: string,
 ): Promise<string> {
   const encoded = publicKey.trim().split(/\s+/)[1];
-  if (!encoded) throw new Error("SSH 公钥格式无效");
+  if (!encoded) throw new Error(m.ui_invalid_ssh_public_key_format());
   const blob = Uint8Array.from(atob(encoded), (character) =>
     character.charCodeAt(0),
   );
@@ -188,7 +191,8 @@ async function generateRsa(
 export async function generateSshKey(
   options: SshKeyOptions,
 ): Promise<GeneratedSshKey> {
-  if (!crypto?.subtle) throw new Error("当前浏览器不支持 Web Crypto");
+  if (!crypto?.subtle)
+    throw new Error(m.ui_your_browser_does_not_support_web_crypto());
   const comment = options.comment.replace(/[\r\n]+/g, " ").trim();
   return options.type === "rsa"
     ? generateRsa(options.rsaLength, comment)

@@ -44,7 +44,7 @@ describe("vault import and export", () => {
     ).toBe(plaintext);
     await expect(
       decryptPasswordProtectedExport(envelope, "wrong password"),
-    ).rejects.toThrow("导出密码错误");
+    ).rejects.toThrow("Incorrect export password");
   });
 
   it("detects duplicate decrypted items despite different IDs and timestamps", () => {
@@ -309,7 +309,7 @@ describe("vault import and export", () => {
         'name,username,password\r\nExample,me,"unterminated',
         "csv",
       ),
-    ).toThrow(/CSV 格式错误/);
+    ).toThrow(/Invalid CSV/);
   });
 
   it("round-trips login values through Bitwarden-compatible CSV", () => {
@@ -380,7 +380,7 @@ describe("vault import and export", () => {
       items: [{ type: 1, name: "Site" }],
     });
     expect(() => parseVaultImport('{"encrypted":true,"items":[]}')).toThrow(
-      /账户限制型加密 JSON/,
+      /Account-restricted JSON/,
     );
   });
 
@@ -440,7 +440,7 @@ describe("vault import and export", () => {
     });
     await expect(
       parseVaultImportFile(document, "json", "wrong password"),
-    ).rejects.toThrow(/密码错误|已损坏/);
+    ).rejects.toThrow(/Incorrect export password|damaged/);
   });
 
   it("decrypts Bitwarden password-protected exports using Argon2id parameters", async () => {

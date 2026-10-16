@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { CipherType } from "@edgewarden/shared";
   import { onMount } from "svelte";
   import { toast } from "svelte-sonner";
@@ -140,10 +142,17 @@
       activeFolder = null;
       await syncVaultData();
       toast.success(
-        `已合并 ${result.mergedFolders} 个重复文件夹，移动 ${result.movedItems} 个密码项。`,
+        m.ui_merged_folders_value_moved_items_value({
+          value0: result.mergedFolders,
+          value1: result.movedItems,
+        }),
       );
     } catch (error) {
-      toast.error(`合并重复文件夹失败：${error instanceof Error ? error.message : error}`);
+      toast.error(
+        m.ui_unable_to_merge_duplicate_folders_value({
+          value0: error instanceof Error ? error.message : String(error),
+        }),
+      );
     } finally {
       mergingDuplicateFolders = false;
     }
@@ -162,25 +171,28 @@
 
   function pendingConfirmationText(): string {
     return match(pendingConfirmation)
-      .with(
-        { kind: "merge-folders" },
-        () => `合并 ${duplicateFolderCount} 个同名重复文件夹？密码项会移动到最近修改的同名文件夹。`,
+      .with({ kind: "merge-folders" }, () =>
+        m.ui_merge_value_duplicate_folders_items_will_move_to_the_most_recently_modified_fold({
+          value0: duplicateFolderCount,
+        }),
       )
-      .with(
-        { kind: "delete-attachment" },
-        ({ attachment }) => `确定删除附件“${attachment.fileName}”吗？`,
+      .with({ kind: "delete-attachment" }, ({ attachment }) =>
+        m.ui_delete_attachment_value({ value0: attachment.fileName }),
       )
-      .with(
-        { kind: "bulk", action: "permanent" },
-        () => `永久删除选中的 ${bulkManager.count} 项？此操作无法撤销。`,
+      .with({ kind: "bulk", action: "permanent" }, () =>
+        m.ui_permanently_delete_value_selected_items_this_cannot_be_undone({
+          value0: bulkManager.count,
+        }),
       )
-      .with({ kind: "bulk" }, () => `将选中的 ${bulkManager.count} 项移到回收站？`)
-      .otherwise(() => "请确认此操作。");
+      .with({ kind: "bulk" }, () =>
+        m.ui_move_value_selected_items_to_the_trash({ value0: bulkManager.count }),
+      )
+      .otherwise(() => m.ui_please_confirm_this_action());
   }
 </script>
 
 <svelte:head>
-  <title>我的保险库 - Edgewarden</title>
+  <title>{m.ui_my_vault_edgewarden()}</title>
 </svelte:head>
 
 <div class="relative flex h-full overflow-hidden">
@@ -284,13 +296,13 @@
 >
   <AlertDialog.Content
     ><AlertDialog.Header
-      ><AlertDialog.Title>确认操作</AlertDialog.Title><AlertDialog.Description
+      ><AlertDialog.Title>{m.ui_confirm_action()}</AlertDialog.Title><AlertDialog.Description
         >{pendingConfirmationText()}</AlertDialog.Description
       ></AlertDialog.Header
     ><AlertDialog.Footer
-      ><AlertDialog.Cancel>取消</AlertDialog.Cancel><AlertDialog.Action
+      ><AlertDialog.Cancel>{m.login_cancel()}</AlertDialog.Cancel><AlertDialog.Action
         class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-        onclick={confirmPendingAction}>确认</AlertDialog.Action
+        onclick={confirmPendingAction}>{m.ui_confirm()}</AlertDialog.Action
       ></AlertDialog.Footer
     ></AlertDialog.Content
   >

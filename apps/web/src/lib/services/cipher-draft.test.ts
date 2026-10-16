@@ -62,7 +62,7 @@ describe("cipher draft payload", () => {
         null,
         false,
       ),
-    ).toThrow(/有效的 JSON/);
+    ).toThrow(/valid JSON/);
   });
 
   it("normalizes custom fields and secure-note metadata", () => {

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { goto } from "$app/navigation";
   import { recoverTwoFactorApi } from "$lib/services/api-auth";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -23,7 +25,10 @@
       await recoverTwoFactorApi(email, password, recoveryCode);
       await goto("/login?recovered=1");
     } catch (value) {
-      error = value instanceof Error ? value.message : "恢复失败，请检查凭据和恢复代码";
+      error =
+        value instanceof Error
+          ? value.message
+          : m.ui_recovery_failed_check_your_credentials_and_recovery_code();
     } finally {
       password = "";
       loading = false;
@@ -31,7 +36,7 @@
   }
 </script>
 
-<svelte:head><title>恢复两步验证 · Edgewarden</title></svelte:head>
+<svelte:head><title>{m.ui_recover_two_step_login_edgewarden()}</title></svelte:head>
 
 <main class="flex min-h-screen items-center justify-center bg-muted/30 p-4">
   <Card.Root class="w-full max-w-md">
@@ -41,20 +46,20 @@
       >
         <KeyRound />
       </div>
-      <Card.Title>恢复两步验证</Card.Title><Card.Description
-        >使用主密码和一次性恢复代码关闭当前两步验证。成功后所有现有会话都会失效。</Card.Description
+      <Card.Title>{m.ui_recover_two_step_login()}</Card.Title><Card.Description
+        >{m.ui_use_your_master_password_and_one_time_recovery_code_to_turn_off_two_step_login_a()}</Card.Description
       ></Card.Header
     >
     <Card.Content>
       {#if error}<Alert.Root variant="destructive" class="mb-4"
-          ><ShieldAlert /><Alert.Title>恢复失败</Alert.Title><Alert.Description
+          ><ShieldAlert /><Alert.Title>{m.ui_recovery_failed()}</Alert.Title><Alert.Description
             >{error}</Alert.Description
           ></Alert.Root
         >{/if}
       <form onsubmit={submit}>
         <Field.Group>
           <Field.Field
-            ><Field.Label for="recover-email">电子邮件</Field.Label><Input
+            ><Field.Label for="recover-email">{m.ui_email()}</Field.Label><Input
               id="recover-email"
               type="email"
               bind:value={email}
@@ -63,7 +68,7 @@
             /></Field.Field
           >
           <Field.Field
-            ><Field.Label for="recover-password">主密码</Field.Label><Input
+            ><Field.Label for="recover-password">{m.login_master_password()}</Field.Label><Input
               id="recover-password"
               type="password"
               bind:value={password}
@@ -72,7 +77,7 @@
             /></Field.Field
           >
           <Field.Field
-            ><Field.Label for="recover-code">恢复代码</Field.Label><Input
+            ><Field.Label for="recover-code">{m.login_recovery_code()}</Field.Label><Input
               id="recover-code"
               bind:value={recoveryCode}
               autocomplete="one-time-code"
@@ -87,13 +92,14 @@
             disabled={loading || !email || !password || recoveryCode.length < 8}
             >{#if loading}<Spinner
                 data-icon="inline-start"
-              />正在恢复…{:else}关闭两步验证{/if}</Button
+              />{m.ui_recovering()}{:else}{m.ui_turn_off_two_step_login()}{/if}</Button
           >
         </Field.Group>
       </form>
     </Card.Content>
     <Card.Footer
-      ><Button variant="link" class="px-0" onclick={() => goto("/login")}>返回登录</Button
+      ><Button variant="link" class="px-0" onclick={() => goto("/login")}
+        >{m.ui_back_to_login()}</Button
       ></Card.Footer
     >
   </Card.Root>

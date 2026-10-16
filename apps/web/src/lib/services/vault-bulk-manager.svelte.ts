@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import { toast } from "svelte-sonner";
 import {
   applyVaultBulkAction,
@@ -42,7 +43,9 @@ export function createVaultBulkManager(options: {
       options.clearSelectedItem();
       await syncVaultData();
     } catch (caught) {
-      toast.error(`批量操作失败：${errorDetail(caught)}`);
+      toast.error(
+        m.ui_bulk_action_failed_value({ value0: errorDetail(caught) }),
+      );
     } finally {
       busy = false;
     }
@@ -106,7 +109,9 @@ export function createVaultBulkManager(options: {
         for (const id of selectedIdList) {
           const item = vault.ciphers.find((cipher) => cipher.id === id);
           if (item?.organizationId)
-            throw new Error("组织条目使用集合，不能移动到个人文件夹");
+            throw new Error(
+              m.ui_organization_items_use_collections_and_cannot_be_moved_to_personal_folders(),
+            );
           if (item && !item.deletedDate)
             await updateEncryptedVaultCipher(
               item,
@@ -118,7 +123,9 @@ export function createVaultBulkManager(options: {
         clear();
         await syncVaultData();
       } catch (caught) {
-        toast.error(`移动失败：${errorDetail(caught)}`);
+        toast.error(
+          m.ui_unable_to_move_items_value({ value0: errorDetail(caught) }),
+        );
       } finally {
         busy = false;
       }

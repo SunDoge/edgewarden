@@ -65,7 +65,7 @@ describe("vault folder actions", () => {
   it("requires encryption keys before writing", async () => {
     await expect(
       saveVaultFolder({ mode: "create", name: "Work" }),
-    ).rejects.toThrow("密钥未就绪");
+    ).rejects.toThrow("Keys are not ready");
     expect(mocks.create).not.toHaveBeenCalled();
   });
 

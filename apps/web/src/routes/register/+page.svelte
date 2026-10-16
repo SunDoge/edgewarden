@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
   import { getRegistrationConfigApi, register } from "$lib/services/api-auth";
@@ -47,10 +49,10 @@
       turnstileEnabled = config.turnstileEnabled;
       turnstileSiteKey = config.turnstileSiteKey;
       if (config.turnstileEnabled && !config.turnstileSiteKey) {
-        error = "Turnstile 已启用，但服务器没有配置站点密钥。";
+        error = m.login_turnstile_missing();
       }
     } catch (caught) {
-      error = errorMessage(caught, "无法加载注册配置。");
+      error = errorMessage(caught, m.ui_unable_to_load_registration_settings());
     } finally {
       configLoading = false;
     }
@@ -71,30 +73,30 @@
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     if (!email || !password || !confirmPassword) {
-      error = "请填写所有必填字段。";
+      error = m.ui_fill_in_all_required_fields();
       return;
     }
     if (bootstrapRequired && !adminPassword) {
-      error = "首次创建管理员账号需要部署管理员密码。";
+      error = m.ui_the_first_administrator_requires_the_deployment_password();
       return;
     }
     if (turnstileEnabled && !turnstileToken) {
-      error = "请先完成人机验证。";
+      error = m.login_verify_required();
       return;
     }
 
     if (!isPasswordMatch) {
-      error = "两次输入的密码不一致。";
+      error = m.ui_the_passwords_do_not_match();
       return;
     }
 
     if (!isPasswordLengthValid) {
-      error = "主密码长度必须至少为 8 位。";
+      error = m.ui_your_master_password_must_contain_at_least_8_characters();
       return;
     }
 
     if (iterations < 100000) {
-      error = "为了您的安全，KDF 迭代次数不能低于 100,000 次。";
+      error = m.ui_for_your_security_kdf_iterations_must_be_at_least_100_000();
       return;
     }
 
@@ -117,7 +119,7 @@
         goto("/login");
       }, 2000);
     } catch (caught) {
-      error = errorMessage(caught, "注册失败，请稍后重试。");
+      error = errorMessage(caught, m.ui_registration_failed_please_try_again_later());
       if (turnstileEnabled) turnstileWidget?.reset();
     } finally {
       loading = false;
@@ -126,7 +128,7 @@
 </script>
 
 <svelte:head>
-  <title>注册账号 - Edgewarden</title>
+  <title>{m.ui_create_account_edgewarden()}</title>
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center bg-muted/30 p-4">
@@ -138,8 +140,12 @@
       >
         <User class="size-6" />
       </div>
-      <Card.Title class="text-2xl font-bold tracking-tight">创建您的 Edgewarden 账号</Card.Title>
-      <Card.Description>请记住您设置的主密码，它是解密您所有密码的唯一钥匙。</Card.Description>
+      <Card.Title class="text-2xl font-bold tracking-tight"
+        >{m.ui_create_your_edgewarden_account()}</Card.Title
+      >
+      <Card.Description
+        >{m.ui_remember_your_master_password_you_need_it_to_decrypt_your_vault()}</Card.Description
+      >
     </Card.Header>
 
     <Card.Content>
@@ -147,30 +153,31 @@
         <Empty.Root
           ><Empty.Header
             ><Empty.Media variant="icon"><CheckCircle2 /></Empty.Media><Empty.Title
-              >注册成功</Empty.Title
-            ><Empty.Description>您的零知识密码库已初始化，正在跳转到登录页面。</Empty.Description
+              >{m.ui_account_created()}</Empty.Title
+            ><Empty.Description
+              >{m.ui_your_encrypted_vault_is_ready_redirecting_to_login()}</Empty.Description
             ></Empty.Header
           ><Empty.Content><Spinner /></Empty.Content></Empty.Root
         >
       {:else}
         {#if !configLoading && bootstrapRequired && !adminPasswordConfigured}
           <Alert.Root variant="destructive" class="mb-4"
-            ><Alert.Title>部署配置不完整</Alert.Title><Alert.Description
-              >服务端尚未配置 BOOTSTRAP_SECRET，无法安全创建首个管理员账号。</Alert.Description
+            ><Alert.Title>{m.ui_deployment_configuration_incomplete()}</Alert.Title
+            ><Alert.Description
+              >{m.ui_bootstrap_secret_is_not_configured_on_the_server_the_first_administrator_cannot_()}</Alert.Description
             ></Alert.Root
           >
         {:else if !configLoading && !registrationAvailable}
           <Alert.Root class="mb-4"
-            ><Alert.Title>公开注册已关闭</Alert.Title><Alert.Description
-              >请填写有效邀请码，或联系管理员开启注册。</Alert.Description
+            ><Alert.Title>{m.ui_public_registration_is_closed()}</Alert.Title><Alert.Description
+              >{m.ui_enter_a_valid_invitation_code_or_contact_your_administrator()}</Alert.Description
             ></Alert.Root
           >
         {/if}
         {#if error}
           <Alert.Root variant="destructive" class="mb-4"
-            ><ShieldAlert /><Alert.Title>注册失败</Alert.Title><Alert.Description
-              >{error}</Alert.Description
-            ></Alert.Root
+            ><ShieldAlert /><Alert.Title>{m.ui_registration_failed()}</Alert.Title
+            ><Alert.Description>{error}</Alert.Description></Alert.Root
           >
         {/if}
 
@@ -178,7 +185,7 @@
           <Field.Group>
             {#if bootstrapRequired}
               <Field.Field
-                ><Field.Label for="admin-password">部署管理员密码 *</Field.Label><Input
+                ><Field.Label for="admin-password">{m.ui_deployment_password()}</Field.Label><Input
                   id="admin-password"
                   type="password"
                   bind:value={adminPassword}
@@ -189,7 +196,8 @@
               >
             {:else if invitationsAllowed}
               <Field.Field
-                ><Field.Label for="invite-code">邀请码（可选）</Field.Label><Input
+                ><Field.Label for="invite-code">{m.ui_invitation_code_optional()}</Field.Label
+                ><Input
                   id="invite-code"
                   bind:value={inviteCode}
                   autocomplete="off"
@@ -199,7 +207,7 @@
             {/if}
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Field.Field>
-                <Field.Label for="email">电子邮件地址 *</Field.Label>
+                <Field.Label for="email">{m.ui_email_address()}</Field.Label>
                 <div class="relative">
                   <span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                     <Mail class="size-4" />
@@ -217,7 +225,7 @@
               </Field.Field>
 
               <Field.Field>
-                <Field.Label for="name">您的姓名（可选）</Field.Label>
+                <Field.Label for="name">{m.ui_your_name_optional()}</Field.Label>
                 <div class="relative">
                   <span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                     <User class="size-4" />
@@ -225,7 +233,7 @@
                   <Input
                     id="name"
                     type="text"
-                    placeholder="张三"
+                    placeholder={m.ui_alex_smith()}
                     bind:value={name}
                     disabled={loading}
                     class="pl-10"
@@ -236,7 +244,7 @@
 
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Field.Field data-invalid={password.length > 0 && !isPasswordLengthValid}>
-                <Field.Label for="password">主密码 *</Field.Label>
+                <Field.Label for="password">{m.ui_master_password()}</Field.Label>
                 <div class="relative">
                   <span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                     <KeyRound class="size-4" />
@@ -244,7 +252,7 @@
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="至少 8 位字符"
+                    placeholder={m.ui_at_least_8_characters()}
                     bind:value={password}
                     disabled={loading}
                     class="pl-10 pr-10"
@@ -256,7 +264,7 @@
                     size="icon-xs"
                     class="absolute right-1 top-1/2 -translate-y-1/2"
                     onclick={() => (showPassword = !showPassword)}
-                    aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                    aria-label={showPassword ? m.login_hide_password() : m.login_show_password()}
                   >
                     {#if showPassword}
                       <EyeOff class="size-4" />
@@ -265,11 +273,11 @@
                     {/if}
                   </Button>
                 </div>
-                <Field.Description>至少 8 位字符。</Field.Description>
+                <Field.Description>{m.ui_at_least_8_characters_2()}</Field.Description>
               </Field.Field>
 
               <Field.Field data-invalid={confirmPassword.length > 0 && !isPasswordMatch}>
-                <Field.Label for="confirmPassword">确认主密码 *</Field.Label>
+                <Field.Label for="confirmPassword">{m.ui_confirm_master_password()}</Field.Label>
                 <div class="relative">
                   <span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                     <KeyRound class="size-4" />
@@ -277,7 +285,7 @@
                   <Input
                     id="confirmPassword"
                     type={showConfirmPassword ? "text" : "password"}
-                    placeholder="请再次输入"
+                    placeholder={m.ui_enter_it_again()}
                     bind:value={confirmPassword}
                     disabled={loading}
                     class="pl-10 pr-10"
@@ -289,7 +297,9 @@
                     size="icon-xs"
                     class="absolute right-1 top-1/2 -translate-y-1/2"
                     onclick={() => (showConfirmPassword = !showConfirmPassword)}
-                    aria-label={showConfirmPassword ? "隐藏密码" : "显示密码"}
+                    aria-label={showConfirmPassword
+                      ? m.login_hide_password()
+                      : m.login_show_password()}
                   >
                     {#if showConfirmPassword}
                       <EyeOff class="size-4" />
@@ -299,28 +309,28 @@
                   </Button>
                 </div>
                 {#if confirmPassword.length > 0 && !isPasswordMatch}<Field.Error
-                    >两次输入的密码不一致。</Field.Error
+                    >{m.ui_the_passwords_do_not_match()}</Field.Error
                   >{/if}
               </Field.Field>
             </div>
 
             <Field.Field>
-              <Field.Label for="hint">密码提示问题（可选）</Field.Label>
+              <Field.Label for="hint">{m.ui_password_hint_optional()}</Field.Label>
               <Input
                 id="hint"
                 type="text"
-                placeholder="例如：我最喜欢的书的作者"
+                placeholder={m.ui_for_example_the_author_of_my_favorite_book()}
                 bind:value={hint}
                 disabled={loading}
               />
               <Field.Description
-                >如果忘记密码，提示可帮助回忆；服务端仅存储提示文本。</Field.Description
+                >{m.ui_a_hint_can_help_you_remember_your_password_the_server_stores_only_the_hint_text()}</Field.Description
               >
             </Field.Field>
 
             <Separator />
             <Field.Field>
-              <Field.Label for="iterations">PBKDF2 迭代次数</Field.Label>
+              <Field.Label for="iterations">{m.ui_pbkdf2_iterations()}</Field.Label>
               <Input
                 id="iterations"
                 type="number"
@@ -328,10 +338,9 @@
                 min="100000"
                 disabled={loading}
               />
-              <Field.Description>
-                更高的次数意味着更强的防暴力破解能力，但设备导出密钥的时间会随之变长。推荐值为
-                600,000。
-              </Field.Description>
+              <Field.Description
+                >{m.ui_more_iterations_increase_resistance_to_brute_force_attacks_but_take_longer_on_yo()}</Field.Description
+              >
             </Field.Field>
 
             {#if turnstileEnabled && turnstileSiteKey}
@@ -343,7 +352,7 @@
                   turnstileToken = token;
                 }}
                 onError={() => {
-                  error = "人机验证加载失败，请重试。";
+                  error = m.ui_human_verification_failed_to_load_please_try_again();
                 }}
               />
             {/if}
@@ -358,11 +367,9 @@
                 (turnstileEnabled && !turnstileToken)}
             >
               {#if loading}
-                <Spinner data-icon="inline-start" />
-                正在本地派生加密密钥...
-              {:else}
-                创建我的主密码库
-              {/if}
+                <Spinner
+                  data-icon="inline-start"
+                />{m.ui_deriving_encryption_keys_on_your_device()}{:else}{m.ui_create_my_vault()}{/if}
             </Button>
           </Field.Group>
         </form>
@@ -371,8 +378,10 @@
 
     <Card.Footer class="flex flex-col items-center gap-2 border-t py-4">
       <p class="text-sm text-muted-foreground">
-        已有 Edgewarden 账号？
-        <a href="/login" class="text-primary font-medium hover:underline"> 立即登录 </a>
+        {m.ui_already_have_an_edgewarden_account()}<a
+          href="/login"
+          class="text-primary font-medium hover:underline">{m.ui_log_in()}</a
+        >
       </p>
     </Card.Footer>
   </Card.Root>

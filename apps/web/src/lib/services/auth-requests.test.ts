@@ -58,7 +58,7 @@ describe("auth request cryptography", () => {
     );
     await expect(
       decryptApprovedVaultKey("2.AQID", pair.privateKey),
-    ).rejects.toThrow("缺少有效");
+    ).rejects.toThrow("missing a valid");
 
     const shortEnvelope = `4.${bytesToBase64(
       new Uint8Array(
@@ -71,7 +71,7 @@ describe("auth request cryptography", () => {
     )}`;
     await expect(
       decryptApprovedVaultKey(shortEnvelope, pair.privateKey),
-    ).rejects.toThrow("长度无效");
+    ).rejects.toThrow("Invalid vault key length");
   });
 
   it("produces a stable account-bound public-key fingerprint", async () => {
@@ -104,7 +104,7 @@ describe("auth request cryptography", () => {
         new Uint8Array(31),
         new Uint8Array(32),
       ),
-    ).rejects.toThrow("保险库密钥无效");
+    ).rejects.toThrow("Invalid vault key");
   });
 });
 

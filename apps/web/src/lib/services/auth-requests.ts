@@ -1,3 +1,4 @@
+import * as m from "$lib/paraglide/messages.js";
 import { long as fingerprintWords } from "@wordlist/english-eff/long";
 import type { TokenResponse } from "@edgewarden/shared";
 import {
@@ -171,7 +172,8 @@ export async function pollDeviceLoginRequest(
   );
   if (!response.responseDate) return "pending";
   if (!response.approved) return "declined";
-  if (!response.key) throw new Error("批准响应缺少有效的保险库密钥");
+  if (!response.key)
+    throw new Error(m.ui_the_approval_response_is_missing_a_valid_vault_key());
   const { encKey, macKey } = await decryptApprovedVaultKey(
     response.key,
     request.privateKey,
@@ -185,7 +187,7 @@ export async function decryptApprovedVaultKey(
   privateKey: CryptoKey,
 ): Promise<{ encKey: Uint8Array; macKey: Uint8Array }> {
   if (!encryptedKey.startsWith("4."))
-    throw new Error("批准响应缺少有效的保险库密钥");
+    throw new Error(m.ui_the_approval_response_is_missing_a_valid_vault_key());
   const raw = new Uint8Array(
     await crypto.subtle.decrypt(
       { name: "RSA-OAEP" },
@@ -193,7 +195,8 @@ export async function decryptApprovedVaultKey(
       toBufferSource(base64ToBytes(encryptedKey.slice(2))),
     ),
   );
-  if (raw.length !== 64) throw new Error("批准响应中的保险库密钥长度无效");
+  if (raw.length !== 64)
+    throw new Error(m.ui_invalid_vault_key_length_in_approval_response());
   return { encKey: raw.slice(0, 32), macKey: raw.slice(32, 64) };
 }
 
@@ -287,7 +290,7 @@ export async function encryptVaultKeyForAuthRequest(
   symMacKey: Uint8Array,
 ): Promise<string> {
   if (symEncKey.length !== 32 || symMacKey.length !== 32)
-    throw new Error("保险库密钥无效");
+    throw new Error(m.ui_invalid_vault_key());
   const userKey = new Uint8Array(64);
   userKey.set(symEncKey, 0);
   userKey.set(symMacKey, 32);
