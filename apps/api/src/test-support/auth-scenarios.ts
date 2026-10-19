@@ -140,8 +140,12 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
       token_type: string;
       access_token: string;
       refresh_token: string;
+      userDecryptionOptions: Record<string, unknown>;
+      UserDecryptionOptions?: Record<string, unknown>;
     }>();
     assert.equal(tokenBody.token_type, "Bearer");
+    assert.ok(tokenBody.userDecryptionOptions);
+    assert.equal("UserDecryptionOptions" in tokenBody, false);
     context.accessToken = tokenBody.access_token;
     context.refreshToken = tokenBody.refresh_token;
     const encodedEmail = btoa(EMAIL)

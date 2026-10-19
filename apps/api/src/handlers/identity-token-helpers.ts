@@ -127,7 +127,6 @@ export function buildTokenResponse(
     ApiUseKeyConnector: false,
     scope: "api offline_access",
     unofficialServer: true,
-    UserDecryptionOptions: buildUserDecryptionOptions(user, webAuthnPrfOption),
     userDecryptionOptions: buildUserDecryptionOptions(user, webAuthnPrfOption),
   };
 }

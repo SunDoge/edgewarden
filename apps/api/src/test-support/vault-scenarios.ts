@@ -69,7 +69,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       assert.equal(response.status, 200, await response.clone().text());
       return response.json<{
         access_token: string;
-        UserDecryptionOptions: {
+        userDecryptionOptions: {
           MasterPasswordUnlock: { ContainedKeyId: string | null };
         };
       }>();
@@ -161,7 +161,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     const loggedIn = await login("new-client-password-hash");
     token = loggedIn.access_token;
     assert.equal(
-      loggedIn.UserDecryptionOptions.MasterPasswordUnlock.ContainedKeyId,
+      loggedIn.userDecryptionOptions.MasterPasswordUnlock.ContainedKeyId,
       recorded,
     );
     assert.equal((await sync()).userDecryption.userKeyId, recorded);
