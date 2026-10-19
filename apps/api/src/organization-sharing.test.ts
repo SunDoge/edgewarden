@@ -217,6 +217,36 @@ test.each(["manager", "member", "admin"])(
   },
 );
 
+test.each(["collections", "collections_v2"])(
+  "removing the last visible collection through %s reports success, not a conflict",
+  async (endpoint) => {
+    await run(
+      "UPDATE collection_members SET read_only=0 WHERE collection_id=? AND org_member_id=?",
+      allowed,
+      managerMember,
+    );
+    const client = h.authenticated(manager.accessToken);
+    const response = await client.json(
+      `/api/ciphers/${shared}/${endpoint}`,
+      { collectionIds: [] },
+      { method: "PUT" },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      unavailable: true,
+      cipher: null,
+    });
+    const links = await h.database
+      .prepare("SELECT collection_id FROM cipher_collections WHERE cipher_id=?")
+      .bind(shared)
+      .all<{ collection_id: string }>();
+    expect(links.results).toHaveLength(0);
+    expect(
+      (await client.request(`/api/ciphers/${shared}`)).status,
+    ).toBe(404);
+  },
+);
+
 test("restricted managers cannot administer even assigned collection structure", async () => {
   const client = h.authenticated(manager.accessToken);
   expect(
