@@ -27,12 +27,10 @@ export function buildAccountKeys(
       publicKey: user.public_key ?? "",
       signedPublicKey: user.signed_public_key,
       object: "publicKeyEncryptionKeyPair",
-      Object: "publicKeyEncryptionKeyPair",
     },
     securityState: user.security_state,
     signatureKeyPair: null,
     object: "privateKeys",
-    Object: "privateKeys",
   };
 }
 

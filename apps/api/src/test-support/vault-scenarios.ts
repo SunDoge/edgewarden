@@ -94,7 +94,6 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
           userKeyId: string | null;
           masterPasswordUnlock: { containedKeyId: string | null };
         };
-        UserDecryption: { UserKeyId: string | null };
       }>();
     };
     assert.equal((await sync()).userDecryption.userKeyId, null);
@@ -131,7 +130,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       synced.userDecryption.masterPasswordUnlock.containedKeyId,
       recorded,
     );
-    assert.equal(synced.UserDecryption.UserKeyId, recorded);
+    assert.equal("UserDecryption" in synced, false);
     assert.equal(
       (await sync(context.memberAccessToken)).userDecryption.userKeyId,
       null,

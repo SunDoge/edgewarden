@@ -33,3 +33,33 @@ Run these checks against staging before publishing a release:
 | Edgewarden Web | Offline unlock, reconnect sync, stale-edit conflict, import/export, QR TOTP |
 
 For mobile clients, also confirm `email_verified`, `amr`, user-decryption options, attachment URLs, and recovery-provider responses remain accepted. Record the tested client versions in the release notes.
+
+## Native Rust SDK check (Plico / Warden)
+
+The pinned Bitwarden Rust SDK accepts PascalCase names as Serde aliases, but
+rejects a response containing both an alias and its canonical camelCase field.
+Sync therefore emits only `userDecryption` and `userDecryptionOptions`; account
+keys emit only `object`, including nested key-pair discriminators. The token
+endpoint retains its separate SDK decryption-options contract. Distinct protocol
+fields such as `masterKeyWrappedUserKey` and `masterKeyEncryptedUserKey` remain.
+
+Build the sibling Warden probe, then test against an isolated local Worker:
+
+```sh
+cargo build --manifest-path ../warden-desktop/Cargo.toml --example plico_login_probe
+node scripts/bw-compat-local.ts --demo --plico-probe=../warden-desktop/target/debug/examples/plico_login_probe
+```
+
+This runs Plico's real native input bindings and Rust SDK actor against the five
+synthetic demo entries: password login, initial sync, browse details, refresh,
+and lock clearing. The probe receives credentials on stdin and returns only
+status/counts. The harness creates temporary D1 state and a trusted test leaf
+certificate, then removes both. It does not change the deployed service or the
+developer's local database. Without `--demo`, the harness registers a disposable
+account in the isolated database. The regular `test:compat:bw:local` command keeps
+running the official CLI's broader CRUD suite.
+
+Validation for this change: 326 API unit/scenario tests plus four Worker-pool
+tests pass, TypeScript checking passes, both five-item demo and freshly registered
+empty-vault Plico probes pass, and the official CLI extended compatibility suite
+passes (auth/session, sync, personal item types, lifecycle, attachments and Sends).
