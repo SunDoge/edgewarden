@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0](https://github.com/SunDoge/edgewarden/compare/v0.4.0...v0.5.0) (2026-10-19)
+
+
+### Features
+
+* complete web vault localization and English demo samples ([128b134](https://github.com/SunDoge/edgewarden/commit/128b134f904737655582fc290ebcf7e3bb4baf36))
+* complete web vault localization and English demo samples ([0aa0a76](https://github.com/SunDoge/edgewarden/commit/0aa0a76a20da3ffa42882c3e5a7f56efe07bf0cd))
+
+
+### Bug Fixes
+
+* **auth:** avoid duplicate decryption options field ([394450b](https://github.com/SunDoge/edgewarden/commit/394450b8a720ca2725de7d020cf23ad493dbbaa0))
+* **auth:** avoid duplicate decryption options field ([fda1ba6](https://github.com/SunDoge/edgewarden/commit/fda1ba64a7676ef1f5c754ba0d5faaa94acffd09))
+* route web collection edits to the collections endpoint ([6d6c293](https://github.com/SunDoge/edgewarden/commit/6d6c293739cfff278b038df53fa33e69a2ca181b))
+
 ## [0.4.0](https://github.com/SunDoge/edgewarden/compare/v0.3.1...v0.4.0) (2026-10-16)
 
 
