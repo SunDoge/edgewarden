@@ -8,6 +8,8 @@
 0aa0a76a20da3ffa42882c3e5a7f56efe07bf0cd:apps/web/messages/en.json:generic-api-key:595
 # Historical master branch: the same literal synthetic JWT test signing secret.
 d53dec04aed9b361a34463e22f209e34e407090e:apps/api/src/utils/jwt.test.ts:generic-api-key:13
+# user-decryption.test.ts: explicit synthetic wrapped private-key placeholder.
+359f71542b74967eb1104303e9111db402491f06:apps/api/src/utils/user-decryption.test.ts:generic-api-key:15
 164dac9c0a6ecce005c22cbe0021a6d9152249de:apps/api/src/utils/jwt.test.ts:generic-api-key:21
 164dac9c0a6ecce005c22cbe0021a6d9152249de:apps/web/src/lib/services/ssh-key-generator.test.ts:private-key:15
 164dac9c0a6ecce005c22cbe0021a6d9152249de:apps/web/src/lib/services/vault-transfer.test.ts:generic-api-key:241

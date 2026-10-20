@@ -4,6 +4,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { getCACertificates, setDefaultCACertificates } from "node:tls";
+import { DEMO_EMAIL, DEMO_PASSWORD } from "../apps/api/src/demo/policy.ts";
 import {
   bytesToBase64,
   deriveMasterKey,
@@ -12,10 +13,11 @@ import {
   hkdfExpand,
 } from "../apps/web/src/lib/services/crypto.ts";
 
-import { DEMO_EMAIL, DEMO_PASSWORD } from "../apps/api/src/demo/policy.ts";
-
 const root = resolve(import.meta.dirname, "..");
 const demo = process.argv.includes("--demo");
+const plicoProbe = process.argv
+  .find((arg) => arg.startsWith("--plico-probe="))
+  ?.slice("--plico-probe=".length);
 const persistencePath = await mkdtemp(
   join(tmpdir(), "edgewarden-compat-state-"),
 );
@@ -233,6 +235,8 @@ execFileSync(
     "/CN=localhost",
     "-addext",
     "subjectAltName=DNS:localhost,IP:127.0.0.1",
+    "-addext",
+    "basicConstraints=critical,CA:FALSE",
   ],
   { stdio: "ignore" },
 );
@@ -352,11 +356,59 @@ try {
   });
   await waitForServer(worker, () => workerStartupError);
   if (!demo) await register(bootstrapSecret);
-  process.env.BW_SERVER = server;
-  process.env.BW_EMAIL = demo ? DEMO_EMAIL : email;
-  process.env.BW_PASSWORD = demo ? DEMO_PASSWORD : password;
-  if (demo) await import("./bw-demo-smoke.ts");
-  else await import("./bw-compat-smoke.ts");
+  if (plicoProbe) {
+    const result = await new Promise<string>((resolveProbe, reject) => {
+      const probe = spawn(resolve(plicoProbe), [], {
+        cwd: root,
+        stdio: ["pipe", "pipe", "pipe"],
+        env: { ...process.env, SSL_CERT_FILE: certificatePath },
+      });
+      let output = "";
+      const timeout = setTimeout(() => {
+        probe.kill();
+        reject(new Error("Plico SDK probe timed out"));
+      }, 65_000);
+      probe.stdout.on("data", (chunk: Buffer) => {
+        output += chunk.toString("utf8");
+      });
+      // Do not forward stderr: SDK errors can embed response bodies.
+      probe.stderr.resume();
+      probe.once("error", reject);
+      probe.once("exit", (code) => {
+        clearTimeout(timeout);
+        if (code === 0) resolveProbe(output);
+        else reject(new Error("Plico SDK probe failed (details suppressed)"));
+      });
+      probe.stdin.end(
+        JSON.stringify({
+          email: demo ? DEMO_EMAIL : email,
+          password: demo ? DEMO_PASSWORD : password,
+          server,
+        }) + "\n",
+      );
+    });
+    const status = JSON.parse(result);
+    // Only explicitly safe diagnostics leave the process.
+    console.log(
+      JSON.stringify({
+        authenticated: status.authenticated === true,
+        item_count: status.item_count,
+        details_verified: status.details_verified,
+        refresh_verified: status.refresh_verified,
+        lock_verified: status.lock_verified,
+        error_kind: status.error_kind,
+        tags: status.tags,
+      }),
+    );
+    if (!status.authenticated)
+      throw new Error("Plico SDK login/sync compatibility failed");
+  } else {
+    process.env.BW_SERVER = server;
+    process.env.BW_EMAIL = demo ? DEMO_EMAIL : email;
+    process.env.BW_PASSWORD = demo ? DEMO_PASSWORD : password;
+    if (demo) await import("./bw-demo-smoke.ts");
+    else await import("./bw-compat-smoke.ts");
+  }
 } finally {
   await cleanup();
 }
