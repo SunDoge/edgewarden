@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.1](https://github.com/SunDoge/edgewarden/compare/v0.5.0...v0.5.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **compat:** emit unique SDK response fields ([85f85fe](https://github.com/SunDoge/edgewarden/commit/85f85fe3ef73b79b80fdee0e51c3af5e511ad8a1))
+* **compat:** emit unique SDK response fields and verify Plico login locally ([359f715](https://github.com/SunDoge/edgewarden/commit/359f71542b74967eb1104303e9111db402491f06))
+
 ## [0.5.0](https://github.com/SunDoge/edgewarden/compare/v0.4.0...v0.5.0) (2026-10-19)
 
 
