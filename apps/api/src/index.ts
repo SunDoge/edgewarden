@@ -1,3 +1,4 @@
+import { WorkerEntrypoint } from "cloudflare:workers";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
@@ -161,7 +162,7 @@ export { VaultRealtime } from "./durable-objects/vault-realtime";
 
 export async function runScheduledTasks(
   env: CloudflareBindings,
-): Promise<void> {
+): Promise<{ status: "ok" | "skipped"; message: string }> {
   const startedAt = Date.now();
   let backupResult: Awaited<ReturnType<typeof runScheduledBackupIfDue>> | null =
     null;
@@ -188,7 +189,10 @@ export async function runScheduledTasks(
         backup: backupResult,
       }),
     );
-    return;
+    return {
+      status: "skipped",
+      message: "已有数据维护或备份任务正在执行，本次跳过",
+    };
   }
   try {
     maintenanceResult = await runScheduledMaintenance(env);
@@ -217,6 +221,30 @@ export async function runScheduledTasks(
     throw new Error(
       `${backupResult.failed} scheduled backup destination(s) failed`,
     );
+  }
+  const cleaned = maintenanceResult
+    ? maintenanceResult.refreshTokens +
+      maintenanceResult.deviceTrustTokens +
+      maintenanceResult.webauthnChallenges +
+      maintenanceResult.attachmentDownloadTokens +
+      maintenanceResult.attachmentUploads +
+      maintenanceResult.authRequests +
+      maintenanceResult.loginAttempts
+    : 0;
+  return {
+    status: "ok",
+    message: `备份检查完成：到期 ${backupResult?.due ?? 0} 个目的地，成功 ${backupResult?.succeeded ?? 0} 个；清理临时记录 ${cleaned} 条，关闭过期邀请 ${maintenanceResult?.expiredInvites ?? 0} 条，回收文件 ${maintenanceResult?.blobGc.deleted ?? 0} 个`,
+  };
+}
+
+// Private RPC entrypoint used by the account-level cron-worker dispatcher.
+export class ScheduledTasksService extends WorkerEntrypoint<CloudflareBindings> {
+  async runScheduledTasks(_invocation: {
+    scheduled_time: number;
+    cron: string;
+  }) {
+    const result = await runScheduledTasks(this.env);
+    return { ...result, completed_at: Date.now() };
   }
 }
 
