@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.6.0](https://github.com/SunDoge/edgewarden/compare/v0.5.0...v0.6.0) (2026-10-24)
+
+
+### Features
+
+* expose scheduled maintenance through private RPC ([70bd1fe](https://github.com/SunDoge/edgewarden/commit/70bd1fef777e13a9a057986c515542f33d41a722))
+* expose scheduled maintenance through private RPC ([aafc41d](https://github.com/SunDoge/edgewarden/commit/aafc41d0cb2039bb45fdb5a6a70d88018c43b751))
+
+
+### Bug Fixes
+
+* **compat:** emit unique SDK response fields ([85f85fe](https://github.com/SunDoge/edgewarden/commit/85f85fe3ef73b79b80fdee0e51c3af5e511ad8a1))
+* **compat:** emit unique SDK response fields and verify Plico login locally ([359f715](https://github.com/SunDoge/edgewarden/commit/359f71542b74967eb1104303e9111db402491f06))
+* **deps:** patch zod and undici advisories ([376eb8d](https://github.com/SunDoge/edgewarden/commit/376eb8df40c974c3789554d47d9dd47fd0ac1c5e))
+
 ## [0.5.0](https://github.com/SunDoge/edgewarden/compare/v0.4.0...v0.5.0) (2026-10-19)
 
 
