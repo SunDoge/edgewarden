@@ -8,3 +8,14 @@ export abstract class DurableObject<Env = Cloudflare.Env> {
     this.env = env;
   }
 }
+
+/** Private RPC entrypoint base for tests importing the API module. */
+export abstract class WorkerEntrypoint<Env = Cloudflare.Env> {
+  protected readonly ctx: ExecutionContext;
+  protected readonly env: Env;
+
+  constructor(ctx: ExecutionContext, env: Env) {
+    this.ctx = ctx;
+    this.env = env;
+  }
+}
