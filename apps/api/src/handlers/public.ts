@@ -10,14 +10,14 @@ import { hashPasswordServer } from "../services/auth";
 import { getBlobStorageKind } from "../services/blob-store";
 import { hashCredential } from "../services/credential-protection";
 import { executeBatch, revisionQuery } from "../services/db/batch";
-import { getConfigValue } from "../services/db/config";
 import type { EdgewardenBatchQuery } from "../services/db/d1-dialect";
 import * as usersDb from "../services/db/users";
 import {
   adminPasswordConfigured,
   BOOTSTRAP_LOCK_KEY,
   inviteConsumptionLockKey,
-  loadRegistrationPolicy,
+  type loadRegistrationPolicy,
+  loadRegistrationState,
   verifyBootstrapSecret,
 } from "../services/registration-policy";
 import {
@@ -49,9 +49,10 @@ export const registerAccount = factory.createHandlers(
     }
     const db = c.get("db");
     const email = body.email.toLowerCase();
-    const policy = await loadRegistrationPolicy(db, c.env);
-    const userCount = await usersDb.getUserCount(db);
-    const bootstrapLock = await getConfigValue(db, BOOTSTRAP_LOCK_KEY);
+    const { policy, userCount, bootstrapLock } = await loadRegistrationState(
+      db,
+      c.env,
+    );
     const demo = isDemoRuntime(c.env);
     const isBootstrap = !demo && userCount === 0 && !bootstrapLock;
     if (!demo && userCount === 0 && bootstrapLock)
@@ -253,9 +254,11 @@ function configPayload(
 
 export const getConfig = factory.createHandlers(async (c) => {
   const db = c.get("db");
-  const userCount = await usersDb.getUserCount(db);
-  const bootstrapLock = await getConfigValue(db, BOOTSTRAP_LOCK_KEY);
-  const registration = await loadRegistrationPolicy(db, c.env);
+  const {
+    userCount,
+    bootstrapLock,
+    policy: registration,
+  } = await loadRegistrationState(db, c.env);
   const bootstrapRequired =
     !isDemoRuntime(c.env) && userCount === 0 && !bootstrapLock;
   return c.json(

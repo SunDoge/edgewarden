@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from "hono";
-import { Kysely, sql } from "kysely";
+import { Kysely } from "kysely";
 import type { HonoEnv } from "../env";
 import { D1Dialect } from "../services/db/d1-dialect";
 import type { DB } from "../types/db";
@@ -10,8 +10,8 @@ export async function createDatabase(d1: D1Database): Promise<{
 }> {
   const dialect = new D1Dialect(d1);
   const db = new Kysely<DB>({ dialect });
-  // D1/SQLite does not enforce FK constraints by default — enable per connection
-  await sql`PRAGMA foreign_keys = ON`.execute(db);
+  // D1 always enforces foreign keys. Issuing PRAGMA foreign_keys = ON here is
+  // both ineffective and an extra remote query on every API request.
   return { db, dialect };
 }
 
