@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/SunDoge/edgewarden/compare/v0.6.0...v0.6.1) (2026-10-26)
+
+
+### Performance Improvements
+
+* **api:** reduce D1 round trips on public routes ([dddf857](https://github.com/SunDoge/edgewarden/commit/dddf857d31d64e37ad5f6e00e0041f49732ab36c))
+* **api:** reduce D1 round trips on public routes ([2860d2a](https://github.com/SunDoge/edgewarden/commit/2860d2aa0401a42427a2b3b75302adf8b3909ddb))
+
 ## [0.6.0](https://github.com/SunDoge/edgewarden/compare/v0.5.0...v0.6.0) (2026-10-24)
 
 
