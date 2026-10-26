@@ -49,10 +49,10 @@
     }
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
+    "@biomejs/biome": "2.6.2",
     "prettier": "^3.9.10",
     "prettier-plugin-svelte": "^4.1.1",
-    "wrangler": "^4.151.0"
+    "wrangler": "^4.152.0"
   },
   "dependencies": {
     "fflate": "^0.8.3"
