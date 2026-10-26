@@ -1,5 +1,5 @@
 import { safeParseJsonWithSchema } from "@edgewarden/shared";
-import type { CompiledQuery, Kysely } from "kysely";
+import { type CompiledQuery, type Kysely, sql } from "kysely";
 import * as v from "valibot";
 import { isDemoRuntime } from "../demo/policy";
 import type { DB } from "../types/db";
@@ -41,8 +41,17 @@ export async function loadRegistrationPolicy(
 ): Promise<RegistrationPolicy> {
   if (isDemoRuntime(env))
     return { signupsAllowed: false, invitationsAllowed: false };
-  const fallback = defaultRegistrationPolicy(env);
   const value = await getConfigValue(db, REGISTRATION_CONFIG_KEY);
+  return resolveRegistrationPolicy(value, env);
+}
+
+export function resolveRegistrationPolicy(
+  value: string | null,
+  env: WorkerBindings,
+): RegistrationPolicy {
+  if (isDemoRuntime(env))
+    return { signupsAllowed: false, invitationsAllowed: false };
+  const fallback = defaultRegistrationPolicy(env);
   if (!value) return fallback;
   const parsed = safeParseJsonWithSchema(
     value,
@@ -53,6 +62,36 @@ export async function loadRegistrationPolicy(
     signupsAllowed: parsed.signupsAllowed ?? fallback.signupsAllowed,
     invitationsAllowed:
       parsed.invitationsAllowed ?? fallback.invitationsAllowed,
+  };
+}
+
+export interface RegistrationState {
+  userCount: number;
+  bootstrapLock: string | null;
+  policy: RegistrationPolicy;
+}
+
+/** Read the public registration state in one D1 query. Besides reducing
+ * cross-region round trips, a single statement gives callers one snapshot. */
+export async function loadRegistrationState(
+  db: Kysely<DB>,
+  env: WorkerBindings,
+): Promise<RegistrationState> {
+  const result = await sql<{
+    user_count: number;
+    bootstrap_lock: string | null;
+    registration_policy: string | null;
+  }>`
+    SELECT
+      (SELECT count(*) FROM users) AS user_count,
+      (SELECT value FROM config WHERE key = ${BOOTSTRAP_LOCK_KEY}) AS bootstrap_lock,
+      (SELECT value FROM config WHERE key = ${REGISTRATION_CONFIG_KEY}) AS registration_policy
+  `.execute(db);
+  const row = result.rows[0];
+  return {
+    userCount: Number(row?.user_count ?? 0),
+    bootstrapLock: row?.bootstrap_lock ?? null,
+    policy: resolveRegistrationPolicy(row?.registration_policy ?? null, env),
   };
 }
 

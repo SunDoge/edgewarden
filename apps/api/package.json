@@ -35,7 +35,7 @@
     "aws4fetch": "^1.0.20",
     "fast-xml-parser": "^5.11.2",
     "hono": "^4.13.13",
-    "kysely": "0.29.6",
+    "kysely": "0.29.7",
     "otpauth": "^9.5.2",
     "valibot": "^1.5.0"
   },
