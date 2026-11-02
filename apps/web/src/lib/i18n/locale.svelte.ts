@@ -17,11 +17,16 @@ function initialLocale(): Locale {
   }
 }
 
-let current = $state<Locale>(initialLocale());
+const preferredLocale = initialLocale();
+let current = $state<Locale>(baseLocale);
 
-// This is a client-only SPA (ssr=false). Reading the rune from Paraglide's
-// getter makes messages reactive without remounting forms or losing vault keys.
+// Match prerendered public HTML on the first client render. Restore the saved
+// preference after hydration without remounting forms or losing their input.
 overwriteGetLocale(() => current);
+
+export function restoreLocalePreference(): void {
+  current = preferredLocale;
+}
 
 export function changeLocale(locale: string): void {
   if (!isLocale(locale)) return;
