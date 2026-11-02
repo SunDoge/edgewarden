@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.2](https://github.com/SunDoge/edgewarden/compare/v0.6.1...v0.6.2) (2026-11-02)
+
+
+### Bug Fixes
+
+* deliver device approval notifications ([9005c0f](https://github.com/SunDoge/edgewarden/commit/9005c0f3e7692872947163c40d144f3bac1c730a))
+* deliver device approval notifications ([7626ca0](https://github.com/SunDoge/edgewarden/commit/7626ca02af8f712cc044ba34d7b1431281e4a3a0))
+
 ## [0.6.1](https://github.com/SunDoge/edgewarden/compare/v0.6.0...v0.6.1) (2026-10-26)
 
 
