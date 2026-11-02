@@ -1,6 +1,7 @@
 import { createMiddleware } from "hono/factory";
 import type { HonoEnv } from "../env";
 import { getAuthRequestById } from "../services/db/auth-requests";
+import { getDevice } from "../services/db/devices";
 import { getRevisionValue } from "../services/db/revisions";
 import {
   logPushRelayFailure,
@@ -46,6 +47,13 @@ export const realtimeMutationMiddleware = createMiddleware<HonoEnv>(
     const decidedAuthRequest = originalAuthRequest
       ? await getAuthRequestById(c.get("db"), originalAuthRequest.id)
       : null;
+    const responseDevice = decidedAuthRequest?.response_device_identifier
+      ? await getDevice(
+          c.get("db"),
+          userId,
+          decidedAuthRequest.response_device_identifier,
+        )
+      : null;
     // A rejection is intentionally silent so a forged request cannot discover
     // that the account owner acted on it. Requesting clients can still poll.
     const push =
@@ -55,6 +63,7 @@ export const realtimeMutationMiddleware = createMiddleware<HonoEnv>(
             userId,
             decidedAuthRequest.id,
             decidedAuthRequest.response_device_identifier,
+            responseDevice?.push_uuid ?? null,
           )
         : originalAuthRequest
           ? Promise.resolve(false)

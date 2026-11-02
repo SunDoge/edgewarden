@@ -60,10 +60,21 @@ export const createAuthRequest = factory.createHandlers(
     const authRequest = await authRequestsDb.getAuthRequestById(db, id);
     if (!authRequest)
       return errorResponse("Failed to create auth request", 500);
+    const requestDevice = await devicesDb.getDevice(
+      db,
+      user.id,
+      body.deviceIdentifier,
+    );
     c.executionCtx.waitUntil(
       Promise.all([
-        publishPushAuthRequest(c.env, user.id, id, body.deviceIdentifier).catch(
-          (error) => logPushRelayFailure("push.auth-request.failed", error),
+        publishPushAuthRequest(
+          c.env,
+          user.id,
+          id,
+          body.deviceIdentifier,
+          requestDevice?.push_uuid ?? null,
+        ).catch((error) =>
+          logPushRelayFailure("push.auth-request.failed", error),
         ),
         publishAuthRequestNotification(
           c.env,

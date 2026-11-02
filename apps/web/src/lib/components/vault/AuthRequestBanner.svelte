@@ -7,6 +7,10 @@
   import * as Alert from "$lib/components/ui/alert/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { listPendingAuthRequestsApi } from "$lib/services/auth-requests";
+  import {
+    browserNotificationPermission,
+    requestBrowserNotificationPermission,
+  } from "$lib/services/browser-notifications";
 
   let {
     email,
@@ -17,6 +21,7 @@
   } = $props();
 
   let pendingCount = $state(0);
+  let notificationPermission = $state<NotificationPermission | null>(null);
   let loadVersion = 0;
 
   async function refresh() {
@@ -37,6 +42,7 @@
   });
 
   onMount(() => {
+    notificationPermission = browserNotificationPermission();
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") void refresh();
     };
@@ -47,6 +53,10 @@
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   });
+
+  async function enableNotifications() {
+    notificationPermission = await requestBrowserNotificationPermission();
+  }
 </script>
 
 {#if pendingCount > 0}
@@ -60,9 +70,18 @@
           : m.ui_requests_awaiting_verification_value({ value0: pendingCount })}
       </Alert.Description>
       <Alert.Action>
-        <Button size="sm" onclick={() => goto("/vault/settings?tab=security#device-login-requests")}
-          >{m.ui_review_requests()}</Button
-        >
+        <div class="flex flex-wrap gap-2">
+          {#if notificationPermission === "default"}
+            <Button size="sm" variant="outline" onclick={enableNotifications}
+              >{m.ui_enable_notifications()}</Button
+            >
+          {/if}
+          <Button
+            size="sm"
+            onclick={() => goto("/vault/settings?tab=security#device-login-requests")}
+            >{m.ui_review_requests()}</Button
+          >
+        </div>
       </Alert.Action>
     </Alert.Root>
   </div>

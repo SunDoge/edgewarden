@@ -254,6 +254,7 @@ export async function publishPushAuthRequest(
   userId: string,
   authRequestId: string,
   requestDeviceIdentifier: string,
+  requestDevicePushId: string | null,
   options?: { fetcher?: typeof fetch; cache?: Cache | null },
 ): Promise<boolean> {
   return relayRequest(
@@ -262,7 +263,10 @@ export async function publishPushAuthRequest(
     {
       userId,
       organizationId: null,
-      deviceId: null,
+      // Bitwarden uses both values to identify the client that originated the
+      // request. The relay can then exclude that installation while notifying
+      // the account owner's other registered devices.
+      deviceId: requestDevicePushId,
       identifier: requestDeviceIdentifier,
       type: 15,
       payload: { userId, id: authRequestId },
@@ -279,6 +283,7 @@ export async function publishPushAuthRequestResponse(
   userId: string,
   authRequestId: string,
   responseDeviceIdentifier: string | null,
+  responseDevicePushId: string | null,
   options?: { fetcher?: typeof fetch; cache?: Cache | null },
 ): Promise<boolean> {
   return relayRequest(
@@ -287,7 +292,9 @@ export async function publishPushAuthRequestResponse(
     {
       userId,
       organizationId: null,
-      deviceId: null,
+      // Identify the approving installation so the relay can deliver the
+      // response to the requesting device without echoing it to the approver.
+      deviceId: responseDevicePushId,
       identifier: responseDeviceIdentifier,
       type: 16,
       payload: { userId, id: authRequestId },
