@@ -18,6 +18,8 @@
   import VaultAppNavigation from "$lib/components/vault/VaultAppNavigation.svelte";
   import VaultHeader from "$lib/components/vault/VaultHeader.svelte";
   import AuthRequestBanner from "$lib/components/vault/AuthRequestBanner.svelte";
+  import { showBrowserNotification } from "$lib/services/browser-notifications";
+  import * as m from "$lib/paraglide/messages.js";
 
   let { children } = $props();
   let ready = $state(false);
@@ -83,6 +85,12 @@
       },
       onAuthRequest: () => {
         authRequestRefreshVersion += 1;
+        showBrowserNotification(m.ui_new_device_login_request(), {
+          body: m.ui_verify_the_fingerprint_phrase_and_device_information_before_approving(),
+          icon: "/edgewarden-icon.svg",
+          tag: "edgewarden-auth-request",
+          targetUrl: "/vault/settings?tab=security#device-login-requests",
+        });
       },
     });
     const refreshWhenVisible = () => {

@@ -845,6 +845,7 @@
   "ui_verify_the_fingerprint_phrase_and_device_information_before_approving": "请核对验证短语和设备信息后决定是否批准。",
   "ui_requests_awaiting_verification_value": "共有 {value0} 个请求等待核对。",
   "ui_review_requests": "查看请求",
+  "ui_enable_notifications": "开启通知",
   "ui_copy_card_number": "复制卡号",
   "ui_brand": "卡片品牌",
   "ui_expiration": "有效期",

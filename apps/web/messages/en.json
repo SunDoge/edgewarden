@@ -845,6 +845,7 @@
   "ui_verify_the_fingerprint_phrase_and_device_information_before_approving": "Verify the fingerprint phrase and device information before approving.",
   "ui_requests_awaiting_verification_value": "Requests awaiting verification: {value0}.",
   "ui_review_requests": "Review requests",
+  "ui_enable_notifications": "Enable notifications",
   "ui_copy_card_number": "Copy card number",
   "ui_brand": "Brand",
   "ui_expiration": "Expiration",

@@ -184,6 +184,7 @@ describe("Bitwarden push relay", () => {
       "user-id",
       "request-id",
       "approving-device",
+      "approving-push-id",
       { fetcher, cache: null },
     );
 
@@ -191,7 +192,7 @@ describe("Bitwarden push relay", () => {
       {
         userId: "user-id",
         organizationId: null,
-        deviceId: null,
+        deviceId: "approving-push-id",
         identifier: "approving-device",
         type: 16,
         payload: { userId: "user-id", id: "request-id" },
@@ -220,6 +221,7 @@ describe("Bitwarden push relay", () => {
       "user-id",
       "request-id",
       "requesting-device",
+      "requesting-push-id",
       { fetcher, cache: null },
     );
 
@@ -227,7 +229,7 @@ describe("Bitwarden push relay", () => {
       {
         userId: "user-id",
         organizationId: null,
-        deviceId: null,
+        deviceId: "requesting-push-id",
         identifier: "requesting-device",
         type: 15,
         payload: { userId: "user-id", id: "request-id" },
