@@ -1,6 +1,6 @@
 <script lang="ts">
   import "./layout.css";
-  import "$lib/i18n/locale.svelte";
+  import { restoreLocalePreference } from "$lib/i18n/locale.svelte";
   import { onMount } from "svelte";
   import DemoNotice from "$lib/components/DemoNotice.svelte";
   import {
@@ -19,6 +19,7 @@
   let networkStatus = $state<NetworkStatus>("checking");
 
   onMount(() => {
+    restoreLocalePreference();
     syncDocumentLocale();
 
     const media = matchMedia("(prefers-color-scheme: dark)");

@@ -60,7 +60,7 @@
 
 <aside
   class="flex h-full w-64 shrink-0 flex-col overflow-y-auto border-r bg-background p-4"
-  data-sveltekit-preload-code="eager"
+  data-sveltekit-preload-code="hover"
 >
   <nav class="flex flex-1 flex-col gap-1.5" aria-label={m.nav_label()}>
     <p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">

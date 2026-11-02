@@ -17,8 +17,9 @@ export class SessionTimeout {
   constructor(options: SessionTimeoutOptions) {
     this.#timeoutMs = options.timeoutMs;
     this.#onTimeout = options.onTimeout;
-    this.#setTimer = options.setTimer ?? setTimeout;
-    this.#clearTimer = options.clearTimer ?? clearTimeout;
+    this.#setTimer = options.setTimer ?? globalThis.setTimeout.bind(globalThis);
+    this.#clearTimer =
+      options.clearTimer ?? globalThis.clearTimeout.bind(globalThis);
   }
 
   reset(): void {

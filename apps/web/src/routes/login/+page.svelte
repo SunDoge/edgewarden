@@ -1,6 +1,6 @@
 <script lang="ts">
   import { m } from "$lib/paraglide/messages.js";
-  import { goto } from "$app/navigation";
+  import { goto, preloadCode } from "$app/navigation";
   import { onDestroy, onMount } from "svelte";
   import { deriveMasterKey } from "$lib/services/crypto";
   import {
@@ -34,6 +34,7 @@
   import TurnstileWidget from "$lib/components/turnstile-widget.svelte";
   import { readDevLoginCredentials } from "$lib/services/dev-login";
   import { prefillDemoLogin } from "$lib/services/demo-login";
+  import { allowsRoutePreload } from "$lib/services/route-preload";
   import LanguageSwitcher from "$lib/components/LanguageSwitcher.svelte";
   import ThemeToggle from "$lib/components/theme-toggle.svelte";
   import { match } from "ts-pattern";
@@ -76,6 +77,9 @@
   let credentialsTouched = false;
 
   onMount(() => {
+    // This is the next destination for every login method. Download its code
+    // while the user enters credentials instead of waiting for authentication.
+    if (allowsRoutePreload()) void preloadCode("/vault").catch(() => undefined);
     void initializeLogin();
     const controller = new AbortController();
     void prefillDemoLogin(
