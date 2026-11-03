@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.3](https://github.com/SunDoge/edgewarden/compare/v0.6.2...v0.6.3) (2026-11-02)
+
+
+### Performance Improvements
+
+* **web:** prerender public forms and prioritize route loading ([12742cc](https://github.com/SunDoge/edgewarden/commit/12742cc3c0c541cd89f26c2d69b62ffc2bfca294))
+
 ## [0.6.2](https://github.com/SunDoge/edgewarden/compare/v0.6.1...v0.6.2) (2026-11-02)
 
 
