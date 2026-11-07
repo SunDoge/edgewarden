@@ -193,6 +193,15 @@ export async function importPreparedBackupRows(
       : importedConfigRows,
     users: cloneRows(payload.users || []).map((row) => ({
       ...row,
+      // Backups from before deleted_email existed may contain retained accounts
+      // whose original email still occupies the login namespace.
+      ...(row.deletion_requested_at != null && !row.deleted_email
+        ? {
+            deleted_email: row.email,
+            master_password_salt: row.master_password_salt ?? row.email,
+            email: `deleted-${crypto.randomUUID()}@deleted.invalid`,
+          }
+        : {}),
       verify_devices: row.verify_devices ?? 1,
       security_stamp: crypto.randomUUID(),
     })),

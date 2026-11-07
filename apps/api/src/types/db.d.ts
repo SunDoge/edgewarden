@@ -275,6 +275,7 @@ export interface Users {
   api_key_encrypted: string | null;
   api_key_hash: string | null;
   created_at: number;
+  deleted_email: string | null;
   deletion_requested_at: number | null;
   email: string;
   id: string;

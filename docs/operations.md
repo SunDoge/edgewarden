@@ -82,6 +82,17 @@ Keep `DATA_ENCRYPTION_SECRET` separately: portable backup settings may require i
 
 Both production deployment variants use the account-level `cron-worker` dispatcher at minute 17 of every UTC hour (`17 * * * *`). They expose the private `ScheduledTasksService.runScheduledTasks` RPC entrypoint and install no dedicated Cron Trigger (`triggers.crons` is empty). Deploy this entrypoint before enabling its Service Binding in cron-worker; when migrating an account with no free trigger slots, deploy edgewarden first to free its old slot, then deploy cron-worker between hourly slots. The demo deployment retains its separate Cron Trigger. Backup schedules intentionally select a local hour rather than an exact minute; a `03:00` schedule runs during the local 03:00–03:59 hour, normally near `03:17`. The same invocation runs bounded housekeeping: expired sessions, challenges and download tokens are removed; old login/auth-request records are pruned; expired invitations are closed; and orphaned unpublished, replaced, or failed-restore blobs are retried from the GC queue. User-facing deletion creates a D1 tombstone and immediately hides the entity from normal API and sync results. Account deletion also bans login and revokes refresh tokens immediately; organization deletion immediately hides membership and vault access. Scheduled housekeeping never physically deletes a published vault entity or its blob.
 
+Deleted accounts are excluded from the administrator's user list. Their original
+email is retained as `deleted_email`, while the unique login address is replaced
+with a random address under `deleted.invalid`. The original master-password salt
+and encrypted records are preserved. Migration `0004_deleted_account_email.sql`
+also releases addresses held by accounts deleted before this behavior was added.
+Deleting a regular member leaves the organization and its shared items intact;
+the same email can register again with a new account ID and must be invited to
+the organization again. Repeating an account deletion is safe and does not
+create a second deletion audit event. Actual organization owners must still
+delete or transfer their organizations before deleting their account.
+
 Audit events are append-only through the API and are retained permanently by default; there is no bulk-clear endpoint. An operator may explicitly configure finite retention for privacy or D1 capacity requirements. Logically deleted vault rows and their published attachment/Send blobs are retained as encrypted source material for audit and disaster recovery. Scheduled maintenance only removes ephemeral authentication state and orphaned unpublished or replaced blobs; it never physically purges a published vault entity.
 
 Every Cron invocation emits a structured `scheduled.completed` log containing duration, per-destination backup totals, GC counts, and an error count. Individual backup destinations emit `backup.scheduled.failed`; configuration/decryption failures emit `backup.scheduled.error`. Backup and maintenance failures are isolated so maintenance still runs when backup configuration is broken, but the Scheduled event is marked failed so Cloudflare notification or log-based alerts can detect it.
