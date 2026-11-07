@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.4](https://github.com/SunDoge/edgewarden/compare/v0.6.3...v0.6.4) (2026-11-07)
+
+
+### Bug Fixes
+
+* **accounts:** release deleted user emails and make deletion idempotent ([aca8bf8](https://github.com/SunDoge/edgewarden/commit/aca8bf8382148353041638713ce3d2e54b4cd8d9))
+* **accounts:** release deleted user emails and make deletion idempotent ([a7bf1a8](https://github.com/SunDoge/edgewarden/commit/a7bf1a884e19e6946671c25c461607c4269144ae))
+
 ## [0.6.3](https://github.com/SunDoge/edgewarden/compare/v0.6.2...v0.6.3) (2026-11-02)
 
 
