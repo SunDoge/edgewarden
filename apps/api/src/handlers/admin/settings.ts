@@ -53,6 +53,7 @@ export const listAdminUsers = factory.createHandlers(async (c) => {
 					and credential.purpose = 'twoFactor'
 			)`.as("has_two_factor_passkey"),
     ])
+    .where("deletion_requested_at", "is", null)
     .orderBy("created_at", "desc")
     .execute();
   return c.json({

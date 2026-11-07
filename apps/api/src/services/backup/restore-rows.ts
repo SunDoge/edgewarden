@@ -61,6 +61,7 @@ export async function importBackupRows(
       [
         "id",
         "email",
+        "deleted_email",
         "name",
         "master_password_hint",
         "master_password_hash",

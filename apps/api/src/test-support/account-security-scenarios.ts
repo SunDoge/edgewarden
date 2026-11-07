@@ -1077,9 +1077,9 @@ export function registerAccountSecurityScenarios(
     assert.equal(deleted.status, 204, await deleted.clone().text());
     const tombstone = await context.database
       .prepare(
-        "SELECT status, deletion_requested_at FROM users WHERE email = ?",
+        "SELECT status, deletion_requested_at FROM users WHERE id = ?",
       )
-      .bind(email)
+      .bind(deletingUser.id)
       .first<{ status: string; deletion_requested_at: number | null }>();
     assert.equal(tombstone?.status, "banned");
     assert.ok(tombstone?.deletion_requested_at);
@@ -1116,7 +1116,7 @@ export function registerAccountSecurityScenarios(
     }
     assert.equal(
       await context.database
-        .prepare("SELECT COUNT(*) AS count FROM users WHERE email = ?")
+        .prepare("SELECT COUNT(*) AS count FROM users WHERE deleted_email = ?")
         .bind(email)
         .first<{ count: number }>()
         .then((row) => Number(row?.count)),
