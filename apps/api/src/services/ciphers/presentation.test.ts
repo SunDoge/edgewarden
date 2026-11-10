@@ -110,7 +110,7 @@ describe("cipherToResponse", () => {
     ]) {
       const credential = {
         credentialId: "2.synthetic-credential",
-        keyValue: "2.synthetic-encrypted-key",
+        keyValue: "2.test-key",
         counter: "2.synthetic-counter",
         creationDate,
       };
