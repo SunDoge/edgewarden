@@ -69,9 +69,21 @@ function normalizeFido2Dates(value: unknown): unknown {
     )
       return credential;
     const normalized = { ...(credential as Record<string, unknown>) };
-    if ("creationDate" in normalized)
+    if ("creationDate" in normalized) {
+      const value = normalized.creationDate;
+      const iso = normalizeIsoDate(value);
+      // Native clients can send UTC RFC3339 timestamps with nanosecond
+      // precision. Date.toISOString() truncates those to milliseconds.
+      // Keep valid UTC timestamps intact, while still repairing legacy
+      // encrypted/non-date values and normalizing other date formats.
       normalized.creationDate =
-        normalizeIsoDate(normalized.creationDate) ?? EPOCH_ISO;
+        typeof value === "string" &&
+        iso !== null &&
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/.test(value) &&
+        value.slice(0, 19) === iso.slice(0, 19)
+          ? value
+          : (iso ?? EPOCH_ISO);
+    }
     return normalized;
   });
 }

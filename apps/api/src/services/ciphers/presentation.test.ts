@@ -101,6 +101,43 @@ describe("cipherToResponse", () => {
     });
   });
 
+  it("preserves native passkey timestamp precision and credential fields", () => {
+    for (const creationDate of [
+      "2026-11-10T12:34:56.123456789Z",
+      "2026-11-10T12:34:56.1234567Z",
+      "2026-11-10T12:34:56.123Z",
+      "2026-11-10T12:34:56Z",
+    ]) {
+      const credential = {
+        credentialId: "2.synthetic-credential",
+        keyValue: "2.synthetic-encrypted-key",
+        counter: "2.synthetic-counter",
+        creationDate,
+      };
+      const response = cipherToResponse(
+        loginCipher({ fido2Credentials: [credential] }),
+      );
+      expect(response.login).toMatchObject({ fido2Credentials: [credential] });
+    }
+  });
+
+  it("normalizes non-RFC3339 passkey dates without preserving invalid calendar dates", () => {
+    const response = cipherToResponse(
+      loginCipher({
+        fido2Credentials: [
+          { creationDate: "2026-02-30T12:34:56.123456789Z" },
+          { creationDate: "2026-11-10T12:34:56+02:00" },
+        ],
+      }),
+    );
+    expect(response.login).toMatchObject({
+      fido2Credentials: [
+        { creationDate: "2026-03-02T12:34:56.123Z" },
+        { creationDate: "2026-11-10T10:34:56.000Z" },
+      ],
+    });
+  });
+
   it("repairs metadata dates encrypted by legacy web imports", () => {
     const cipher = loginCipher({
       passwordRevisionDate: "2.encrypted-date",
