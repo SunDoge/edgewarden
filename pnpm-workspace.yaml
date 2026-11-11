@@ -16,6 +16,9 @@ overrides:
   "miniflare>sharp@<0.35.5": 0.35.5
   # GHSA-pxg6-pf52-xh8x: remove once SvelteKit requires cookie >=0.7.0.
   "@sveltejs/kit>cookie@<0.7.0": 0.7.2
+  # jsdom 31 and parse5-parser-stream 8.1 use Tokenizer.flushCharacters,
+  # which is only present in parse5 8.1. Keep their parser APIs aligned.
+  "parse5-parser-stream@8.1.0>parse5": 8.1.0
 
 auditConfig:
   ignoreGhsas:
