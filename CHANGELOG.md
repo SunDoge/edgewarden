@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.7.0](https://github.com/SunDoge/edgewarden/compare/v0.6.4...v0.7.0) (2026-11-11)
+
+
+### Features
+
+* **api:** add structured sync telemetry ([801b049](https://github.com/SunDoge/edgewarden/commit/801b04924ab79fe9aea020ca289e97f7a8a5e78a))
+* **api:** add structured sync telemetry ([85e2160](https://github.com/SunDoge/edgewarden/commit/85e2160a9652aa8b02be5e6081b8bde2c17bd7a3))
+
+
+### Bug Fixes
+
+* **deps:** align jsdom parser versions ([2a45046](https://github.com/SunDoge/edgewarden/commit/2a450466344abf3fc68293fcd40d039b11fd8b32))
+* **vault:** preserve passkey timestamp precision ([59bd8eb](https://github.com/SunDoge/edgewarden/commit/59bd8eb13899427c1ad91b4341dd8a2e4621a273))
+* **vault:** preserve passkey timestamp precision ([a170880](https://github.com/SunDoge/edgewarden/commit/a170880d98e6129bf4e75d99bce87a6ca7783a4a))
+* **web:** keep crypto helpers Node-compatible ([5c84d7f](https://github.com/SunDoge/edgewarden/commit/5c84d7f0be8808abc46e83e7e5082b7a6154a519))
+
 ## [0.6.4](https://github.com/SunDoge/edgewarden/compare/v0.6.3...v0.6.4) (2026-11-07)
 
 
