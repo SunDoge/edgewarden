@@ -1,5 +1,3 @@
-// Also imported by Node-based compatibility scripts, outside Vite's aliases.
-import * as m from "../paraglide/messages.js";
 export { calcTotpNow, extractTotpSecret } from "./totp.ts";
 
 /**
@@ -390,7 +388,12 @@ export async function rewrapUserKeyForMasterPassword(args: {
     32,
   );
   const userKey = await decryptBw(args.profileKey, oldEncKey, oldMacKey);
-  if (userKey.length !== 64) throw new Error(m.ui_invalid_vault_key());
+  if (userKey.length !== 64) {
+    // Keep the shared crypto primitives importable by Node compatibility
+    // scripts. Paraglide 3 message modules use a Vite-only virtual import.
+    const m = await import("../paraglide/messages.js");
+    throw new Error(m.ui_invalid_vault_key());
+  }
 
   const nextMasterKey = await deriveMasterKey(
     args.newPassword,
