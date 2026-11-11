@@ -1,4 +1,6 @@
 # Reviewed historical test fixtures only; do not ignore entire test paths.
+# presentation.test.ts: synthetic passkey key placeholder, no credential material.
+a170880d98e6129bf4e75d99bce87a6ca7783a4a:apps/api/src/services/ciphers/presentation.test.ts:generic-api-key:113
 # jwt.test.ts: synthetic signing secret.
 # ssh-key-generator.test.ts: PEM header/footer assertions, no private key material.
 # vault-transfer.test.ts: synthetic wrapped-key placeholder.

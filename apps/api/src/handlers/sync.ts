@@ -44,6 +44,52 @@ export function supportsSshKeys(clientVersion: string | undefined): boolean {
 
 export { organizationRoleType };
 
+type SyncStage =
+  | "revision.before"
+  | "user"
+  | "personalCiphers"
+  | "folders"
+  | "domains"
+  | "accountCredentials"
+  | "sends"
+  | "organizations"
+  | "restrictedCollectionAccess"
+  | "visibleCollections"
+  | "organizationCiphers"
+  | "attachments"
+  | "cipherCollectionLinks"
+  | "presentation"
+  | "revision.after"
+  | "response";
+
+type SyncTelemetry = {
+  currentStage: SyncStage | null;
+  attempts: number;
+  revisionReads: number;
+  durationsMs: Partial<Record<SyncStage, number>>;
+  counts: Record<string, number>;
+};
+
+async function measureSyncStage<T>(
+  telemetry: SyncTelemetry,
+  stage: SyncStage,
+  operation: () => Promise<T> | T,
+): Promise<T> {
+  telemetry.currentStage = stage;
+  const startedAt = performance.now();
+  try {
+    return await operation();
+  } finally {
+    telemetry.durationsMs[stage] = Number(
+      (
+        (telemetry.durationsMs[stage] ?? 0) +
+        performance.now() -
+        startedAt
+      ).toFixed(1),
+    );
+  }
+}
+
 function folderToResponse(folder: Selectable<Folders>) {
   return {
     id: folder.id,
@@ -54,47 +100,73 @@ function folderToResponse(folder: Selectable<Folders>) {
   };
 }
 
-async function buildSyncPayload(c: Context<HonoEnv>, excludeDomains: boolean) {
+async function buildSyncPayload(
+  c: Context<HonoEnv>,
+  excludeDomains: boolean,
+  telemetry: SyncTelemetry,
+) {
+  telemetry.attempts += 1;
   const db = c.get("db");
   const userId = c.get("user").id;
-  const user = (await usersDb.getUserById(db, userId)) ?? c.get("user");
+  const user =
+    (await measureSyncStage(telemetry, "user", () =>
+      usersDb.getUserById(db, userId),
+    )) ?? c.get("user");
 
   // Keep queries on the Kysely-D1 connection ordered. Promise.all does not make
   // a single D1 session faster and can make adapters overlap session requests.
-  const personalCiphers = await ciphersDb.getAllCiphersByUserId(db, user.id);
-  const folders = await foldersDb.getFoldersByUserId(db, user.id);
+  const personalCiphers = await measureSyncStage(
+    telemetry,
+    "personalCiphers",
+    () => ciphersDb.getAllCiphersByUserId(db, user.id),
+  );
+  const folders = await measureSyncStage(telemetry, "folders", () =>
+    foldersDb.getFoldersByUserId(db, user.id),
+  );
   const domainSettings = excludeDomains
     ? null
-    : await domainSettingsDb.getDomainSettings(db, user.id);
-  const accountCredentials =
-    await webauthnDb.listAllAccountPasskeyCredentialsByUserId(db, user.id);
+    : await measureSyncStage(telemetry, "domains", () =>
+        domainSettingsDb.getDomainSettings(db, user.id),
+      );
+  const accountCredentials = await measureSyncStage(
+    telemetry,
+    "accountCredentials",
+    () => webauthnDb.listAllAccountPasskeyCredentialsByUserId(db, user.id),
+  );
   const accountPasskeys = accountCredentials.filter(
     (credential) => credential.purpose === "login",
   );
   const hasTwoFactorPasskey = accountCredentials.some(
     (credential) => credential.purpose === "twoFactor",
   );
-  const sends = await sendsDb.getSendsByUserId(db, user.id);
-  const organizationRows = await db
-    .selectFrom("org_members as member")
-    .innerJoin("organizations as org", "org.id", "member.org_id")
-    .select([
-      "member.id as member_id",
-      "member.org_id",
-      "member.key",
-      "member.role",
-      "member.status",
-      "member.access_all",
-      "org.name",
-      "org.public_key",
-      "org.private_key",
-      "org.created_at",
-      "org.updated_at",
-    ])
-    .where("member.user_id", "=", user.id)
-    .where("member.status", "=", "confirmed")
-    .where("org.deletion_requested_at", "is", null)
-    .execute();
+  const sends = await measureSyncStage(telemetry, "sends", () =>
+    sendsDb.getSendsByUserId(db, user.id),
+  );
+  const organizationRows = await measureSyncStage(
+    telemetry,
+    "organizations",
+    () =>
+      db
+        .selectFrom("org_members as member")
+        .innerJoin("organizations as org", "org.id", "member.org_id")
+        .select([
+          "member.id as member_id",
+          "member.org_id",
+          "member.key",
+          "member.role",
+          "member.status",
+          "member.access_all",
+          "org.name",
+          "org.public_key",
+          "org.private_key",
+          "org.created_at",
+          "org.updated_at",
+        ])
+        .where("member.user_id", "=", user.id)
+        .where("member.status", "=", "confirmed")
+        .where("org.deletion_requested_at", "is", null)
+        .execute(),
+  );
   const organizationIds = organizationRows.map((row) => row.org_id);
   const allAccessOrgIds = organizationRows
     .filter((row) => row.access_all === 1)
@@ -103,13 +175,15 @@ async function buildSyncPayload(c: Context<HonoEnv>, excludeDomains: boolean) {
     (row) => row.access_all !== 1,
   );
   const restrictedCollectionAccess = restrictedMembers.length
-    ? await db
-        .selectFrom("collection_members")
-        .select(["collection_id", "read_only", "hide_passwords", "manage"])
-        .where(
-          sql<boolean>`org_member_id in (select value from json_each(${JSON.stringify(restrictedMembers.map((row) => row.member_id))}))`,
-        )
-        .execute()
+    ? await measureSyncStage(telemetry, "restrictedCollectionAccess", () =>
+        db
+          .selectFrom("collection_members")
+          .select(["collection_id", "read_only", "hide_passwords", "manage"])
+          .where(
+            sql<boolean>`org_member_id in (select value from json_each(${JSON.stringify(restrictedMembers.map((row) => row.member_id))}))`,
+          )
+          .execute(),
+      )
     : [];
   const allowedRestrictedCollectionIds = restrictedCollectionAccess.map(
     (row) => row.collection_id,
@@ -118,54 +192,58 @@ async function buildSyncPayload(c: Context<HonoEnv>, excludeDomains: boolean) {
     restrictedCollectionAccess.map((row) => [row.collection_id, row]),
   );
   const visibleCollections = organizationIds.length
-    ? await db
-        .selectFrom("collections")
-        .selectAll()
-        .where((expression) =>
-          expression.or([
-            sql<boolean>`org_id in (
+    ? await measureSyncStage(telemetry, "visibleCollections", () =>
+        db
+          .selectFrom("collections")
+          .selectAll()
+          .where((expression) =>
+            expression.or([
+              sql<boolean>`org_id in (
 							select value from json_each(${JSON.stringify(allAccessOrgIds)})
 						)`,
-            textColumnInJson("id", allowedRestrictedCollectionIds),
-          ]),
-        )
-        .execute()
+              textColumnInJson("id", allowedRestrictedCollectionIds),
+            ]),
+          )
+          .execute(),
+      )
     : [];
   const organizationCiphers = organizationIds.length
-    ? await db
-        .selectFrom("ciphers")
-        .leftJoin("cipher_user_settings as view", (join) =>
-          join
-            .onRef("view.cipher_id", "=", "ciphers.id")
-            .on("view.user_id", "=", user.id),
-        )
-        .selectAll("ciphers")
-        .select([
-          "view.folder_id as folder_id",
-          "view.favorite as favorite",
-          "view.archived_at as archived_at",
-        ])
-        .where((expression) =>
-          expression.or([
-            sql<boolean>`org_id in (
+    ? await measureSyncStage(telemetry, "organizationCiphers", () =>
+        db
+          .selectFrom("ciphers")
+          .leftJoin("cipher_user_settings as view", (join) =>
+            join
+              .onRef("view.cipher_id", "=", "ciphers.id")
+              .on("view.user_id", "=", user.id),
+          )
+          .selectAll("ciphers")
+          .select([
+            "view.folder_id as folder_id",
+            "view.favorite as favorite",
+            "view.archived_at as archived_at",
+          ])
+          .where((expression) =>
+            expression.or([
+              sql<boolean>`org_id in (
 							select value from json_each(${JSON.stringify(allAccessOrgIds)})
 						)`,
-            sql<boolean>`id in (
+              sql<boolean>`id in (
 							select cipher_id
 							from cipher_collections
 							where collection_id in (
 								select value from json_each(${JSON.stringify(allowedRestrictedCollectionIds)})
 							)
 						)`,
-          ]),
-        )
-        .where((expression) =>
-          expression.or([
-            expression("purge_after", "is", null),
-            expression("purge_after", ">", now()),
-          ]),
-        )
-        .execute()
+            ]),
+          )
+          .where((expression) =>
+            expression.or([
+              expression("purge_after", "is", null),
+              expression("purge_after", ">", now()),
+            ]),
+          )
+          .execute(),
+      )
     : [];
 
   const webAuthnPrfOptions = accountPasskeys
@@ -185,32 +263,39 @@ async function buildSyncPayload(c: Context<HonoEnv>, excludeDomains: boolean) {
   const allCiphers = [...personalCiphers, ...organizationCiphers].filter(
     (cipher) => includeSshKeys || cipher.type !== 5,
   );
-  const attachments = await attachmentsDb.listVisibleForSync(
-    db,
-    user.id,
-    allAccessOrgIds,
-    allowedRestrictedCollectionIds,
+  const attachments = await measureSyncStage(telemetry, "attachments", () =>
+    attachmentsDb.listVisibleForSync(
+      db,
+      user.id,
+      allAccessOrgIds,
+      allowedRestrictedCollectionIds,
+    ),
   );
   const attachmentsByCipher = Map.groupBy(
     attachments,
     (attachment) => attachment.cipher_id,
   );
-  const cipherCollectionLinks = await db
-    .selectFrom("cipher_collections")
-    .selectAll()
-    .where((expression) =>
-      expression.or([
-        sql<boolean>`cipher_id in (
+  const cipherCollectionLinks = await measureSyncStage(
+    telemetry,
+    "cipherCollectionLinks",
+    () =>
+      db
+        .selectFrom("cipher_collections")
+        .selectAll()
+        .where((expression) =>
+          expression.or([
+            sql<boolean>`cipher_id in (
 					select id from ciphers where user_id = ${user.id}
 					union
 					select id from ciphers where org_id in (
 						select value from json_each(${JSON.stringify(allAccessOrgIds)})
 					)
 				)`,
-        textColumnInJson("collection_id", allowedRestrictedCollectionIds),
-      ]),
-    )
-    .execute();
+            textColumnInJson("collection_id", allowedRestrictedCollectionIds),
+          ]),
+        )
+        .execute(),
+  );
   const collectionIdsByCipher = Map.groupBy(
     cipherCollectionLinks,
     (link) => link.cipher_id,
@@ -275,7 +360,9 @@ async function buildSyncPayload(c: Context<HonoEnv>, excludeDomains: boolean) {
         excludedGlobalEquivalentDomains,
       );
 
-  return {
+  telemetry.currentStage = "presentation";
+  const presentationStartedAt = performance.now();
+  const payload = {
     profile,
     folders: folders.map(folderToResponse),
     collections: visibleCollections.map((collection) => {
@@ -332,26 +419,102 @@ async function buildSyncPayload(c: Context<HonoEnv>, excludeDomains: boolean) {
     userDecryption: buildUserDecryptionCompat(user, webAuthnPrfOptions),
     object: "sync",
   };
+  telemetry.durationsMs.presentation = Number(
+    (performance.now() - presentationStartedAt).toFixed(1),
+  );
+  telemetry.counts = {
+    ciphers: allCiphers.length,
+    personalCiphers: personalCiphers.length,
+    organizationCiphers: organizationCiphers.length,
+    folders: folders.length,
+    organizations: organizationRows.length,
+    collections: visibleCollections.length,
+    attachments: attachments.length,
+    sends: sends.length,
+    accountCredentials: accountCredentials.length,
+  };
+  return payload;
 }
 
 // GET /api/sync
 export const sync = factory.createHandlers(async (c) => {
+  const startedAt = performance.now();
+  const requestId = c.req.header("cf-ray") ?? crypto.randomUUID();
+  const telemetry: SyncTelemetry = {
+    currentStage: null,
+    attempts: 0,
+    revisionReads: 0,
+    durationsMs: {},
+    counts: {},
+  };
   const db = c.get("db");
   const userId = c.get("user").id;
   const excludeDomains = c.req.query("excludeDomains") === "true";
-  const payload = await readAtStableRevision({
-    readRevision: () => getRevisionValue(db, userId),
-    read: () => buildSyncPayload(c, excludeDomains),
-  });
-  if (!payload) {
-    return c.json(
-      {
-        message: "Vault changed repeatedly while synchronizing; retry",
-        object: "error",
+  try {
+    const payload = await readAtStableRevision({
+      readRevision: () => {
+        const stage =
+          telemetry.revisionReads % 2 === 0
+            ? "revision.before"
+            : "revision.after";
+        telemetry.revisionReads += 1;
+        return measureSyncStage(telemetry, stage, () =>
+          getRevisionValue(db, userId),
+        );
       },
-      503,
-      { "Retry-After": "1" },
+      read: () => buildSyncPayload(c, excludeDomains, telemetry),
+    });
+    if (!payload) {
+      console.warn(
+        JSON.stringify({
+          event: "sync.unstable_revision",
+          requestId,
+          attempts: telemetry.attempts,
+          durationMs: Number((performance.now() - startedAt).toFixed(1)),
+          stagesMs: telemetry.durationsMs,
+          counts: telemetry.counts,
+        }),
+      );
+      return c.json(
+        {
+          message: "Vault changed repeatedly while synchronizing; retry",
+          object: "error",
+        },
+        503,
+        { "Retry-After": "1" },
+      );
+    }
+    const responseStartedAt = performance.now();
+    telemetry.currentStage = "response";
+    const response = c.json(payload);
+    telemetry.durationsMs.response = Number(
+      (performance.now() - responseStartedAt).toFixed(1),
     );
+    console.log(
+      JSON.stringify({
+        event: "sync.completed",
+        requestId,
+        excludeDomains,
+        attempts: telemetry.attempts,
+        durationMs: Number((performance.now() - startedAt).toFixed(1)),
+        stagesMs: telemetry.durationsMs,
+        counts: telemetry.counts,
+      }),
+    );
+    return response;
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "sync.failed",
+        requestId,
+        stage: telemetry.currentStage,
+        attempts: telemetry.attempts,
+        durationMs: Number((performance.now() - startedAt).toFixed(1)),
+        stagesMs: telemetry.durationsMs,
+        counts: telemetry.counts,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      }),
+    );
+    throw error;
   }
-  return c.json(payload);
 });
