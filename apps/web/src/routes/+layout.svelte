@@ -8,15 +8,10 @@
     clientPreferencesStorageKey,
     loadClientPreferences,
   } from "$lib/services/client-preferences";
-  import { NetworkStatusMonitor, type NetworkStatus } from "$lib/services/network-status";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import { Wifi, WifiOff } from "@lucide/svelte";
-  import { m } from "$lib/paraglide/messages.js";
   import { syncDocumentLocale } from "$lib/i18n/format";
   import { Toaster } from "$lib/components/ui/sonner/index.js";
 
   let { children } = $props();
-  let networkStatus = $state<NetworkStatus>("checking");
 
   onMount(() => {
     restoreLocalePreference();
@@ -35,38 +30,6 @@
       window.removeEventListener("storage", onStorage);
     };
   });
-
-  onMount(() => {
-    const monitor = new NetworkStatusMonitor({
-      probe: async () => {
-        const response = await fetch("/api/health", {
-          cache: "no-store",
-          signal: AbortSignal.timeout(5_000),
-        });
-        if (!response.ok) throw new Error("Service unavailable");
-      },
-      onStatus: (status) => {
-        networkStatus = status;
-      },
-    });
-    const check = () => void monitor.check();
-    const offline = () => void monitor.check(false);
-    const visible = () => {
-      if (document.visibilityState === "visible") check();
-    };
-    monitor.start();
-    window.addEventListener("online", check);
-    window.addEventListener("offline", offline);
-    window.addEventListener("focus", check);
-    document.addEventListener("visibilitychange", visible);
-    return () => {
-      monitor.stop();
-      window.removeEventListener("online", check);
-      window.removeEventListener("offline", offline);
-      window.removeEventListener("focus", check);
-      document.removeEventListener("visibilitychange", visible);
-    };
-  });
 </script>
 
 <svelte:head>
@@ -76,10 +39,3 @@
 {@render children()}
 <DemoNotice />
 <Toaster richColors position="top-center" />
-<div class="fixed bottom-3 right-3 z-50" aria-live="polite">
-  <Badge variant={networkStatus === "offline" ? "destructive" : "outline"}>
-    {#if networkStatus === "offline"}<WifiOff class="size-3" />{m.network_offline()}{:else}<Wifi
-        class="size-3"
-      />{networkStatus === "checking" ? m.network_checking() : m.network_online()}{/if}
-  </Badge>
-</div>

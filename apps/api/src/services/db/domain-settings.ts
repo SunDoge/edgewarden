@@ -6,13 +6,14 @@ export async function getDomainSettings(
   db: Kysely<DB>,
   userId: string,
 ): Promise<Selectable<DomainSettings> | null> {
-  return (
-    (await db
-      .selectFrom("domain_settings")
-      .selectAll()
-      .where("user_id", "=", userId)
-      .executeTakeFirst()) ?? null
-  );
+  return (await getDomainSettingsQuery(db, userId).executeTakeFirst()) ?? null;
+}
+
+export function getDomainSettingsQuery(db: Kysely<DB>, userId: string) {
+  return db
+    .selectFrom("domain_settings")
+    .selectAll()
+    .where("user_id", "=", userId);
 }
 
 export function upsertDomainSettingsQuery(

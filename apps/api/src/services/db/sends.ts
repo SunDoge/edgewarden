@@ -6,12 +6,19 @@ export async function getSendsByUserId(
   db: Kysely<DB>,
   userId: string,
 ): Promise<Selectable<Sends>[]> {
+  return getSendsByUserIdQuery(db, userId).execute();
+}
+
+export function getSendsByUserIdQuery(
+  db: Kysely<DB>,
+  userId: string,
+  timestamp = now(),
+) {
   return db
     .selectFrom("sends")
     .selectAll()
     .where("user_id", "=", userId)
-    .where("deletion_date", ">", now())
-    .execute();
+    .where("deletion_date", ">", timestamp);
 }
 
 export async function getSendById(

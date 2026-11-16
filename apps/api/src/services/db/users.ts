@@ -18,13 +18,11 @@ export async function getUserById(
   db: Kysely<DB>,
   id: string,
 ): Promise<Selectable<Users> | null> {
-  return (
-    (await db
-      .selectFrom("users")
-      .selectAll()
-      .where("id", "=", id)
-      .executeTakeFirst()) ?? null
-  );
+  return (await getUserByIdQuery(db, id).executeTakeFirst()) ?? null;
+}
+
+export function getUserByIdQuery(db: Kysely<DB>, id: string) {
+  return db.selectFrom("users").selectAll().where("id", "=", id);
 }
 
 export async function getUserCount(db: Kysely<DB>): Promise<number> {

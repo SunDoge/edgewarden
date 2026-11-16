@@ -44,6 +44,26 @@ for (const file of sourceFiles(webSource)) {
 
 const vaultPage = join(vaultRoutes, "+page.svelte");
 const vaultPageSource = readFileSync(vaultPage, "utf8");
+
+const rootLayout = join(webSource, "routes/+layout.svelte");
+const rootLayoutSource = readFileSync(rootLayout, "utf8");
+if (
+  rootLayoutSource.includes("NetworkStatusMonitor") ||
+  rootLayoutSource.includes('fetch("/api/health"')
+) {
+  violations.push(
+    `${rootLayout}: public routes must not start the private vault health monitor`,
+  );
+}
+
+const layoutStyles = join(webSource, "routes/layout.css");
+const layoutStylesSource = readFileSync(layoutStyles, "utf8");
+if (layoutStylesSource.includes('@import "@fontsource-variable/inter"')) {
+  violations.push(
+    `${layoutStyles}: import only the Latin Inter subset instead of every script`,
+  );
+}
+
 for (const manager of [
   "createVaultAttachmentManager",
   "createVaultBulkManager",
