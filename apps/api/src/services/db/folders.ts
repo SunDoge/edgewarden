@@ -6,12 +6,15 @@ export async function getFoldersByUserId(
   db: Kysely<DB>,
   userId: string,
 ): Promise<Selectable<Folders>[]> {
+  return getFoldersByUserIdQuery(db, userId).execute();
+}
+
+export function getFoldersByUserIdQuery(db: Kysely<DB>, userId: string) {
   return db
     .selectFrom("folders")
     .selectAll()
     .where("user_id", "=", userId)
-    .orderBy("updated_at", "desc")
-    .execute();
+    .orderBy("updated_at", "desc");
 }
 
 export async function getFolderById(

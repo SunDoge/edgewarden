@@ -67,6 +67,14 @@ test("emits queryable sync timings without vault or credential data", async () =
     assert.equal(entry.attempts, 1);
     assert.equal(typeof entry.durationMs, "number");
     assert.equal(typeof entry.stagesMs, "object");
+    assert.equal(
+      typeof (entry.stagesMs as Record<string, unknown>).coreBatch,
+      "number",
+    );
+    assert.equal(
+      typeof (entry.stagesMs as Record<string, unknown>).vaultBatch,
+      "number",
+    );
     assert.deepEqual(entry.counts, {
       ciphers: 0,
       personalCiphers: 0,

@@ -5,7 +5,7 @@ import { now } from "../../utils/time";
 
 export type CipherView = Selectable<Ciphers>;
 
-type CipherViewRow = Selectable<Ciphers> & {
+export type CipherViewRow = Selectable<Ciphers> & {
   view_folder_id: string | null;
   view_favorite: number;
   view_archived_at: number | null;
@@ -19,6 +19,10 @@ function toCipherView(row: CipherViewRow): CipherView {
     favorite: cipher.org_id ? view_favorite : cipher.favorite,
     archived_at: cipher.org_id ? view_archived_at : cipher.archived_at,
   };
+}
+
+export function mapCipherViewRows(rows: CipherViewRow[]): CipherView[] {
+  return rows.map(toCipherView);
 }
 
 function selectCipherView(db: Kysely<DB>, userId: string) {
@@ -52,6 +56,12 @@ export async function getAllCiphersByUserId(
   db: Kysely<DB>,
   userId: string,
 ): Promise<Selectable<Ciphers>[]> {
+  return getAllCiphersByUserIdQuery(db, userId)
+    .execute()
+    .then((rows) => mapCipherViewRows(rows as CipherViewRow[]));
+}
+
+export function getAllCiphersByUserIdQuery(db: Kysely<DB>, userId: string) {
   return selectCipherView(db, userId)
     .where("ciphers.user_id", "=", userId)
     .where((expression) =>
@@ -59,9 +69,7 @@ export async function getAllCiphersByUserId(
         expression("ciphers.purge_after", "is", null),
         expression("ciphers.purge_after", ">", now()),
       ]),
-    )
-    .execute()
-    .then((rows) => rows.map((row) => toCipherView(row as CipherViewRow)));
+    );
 }
 
 export async function getCipherById(

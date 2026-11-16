@@ -34,6 +34,20 @@ export async function listVisibleForSync(
   allAccessOrgIds: string[],
   restrictedCollectionIds: string[],
 ): Promise<Selectable<Attachments>[]> {
+  return listVisibleForSyncQuery(
+    db,
+    userId,
+    allAccessOrgIds,
+    restrictedCollectionIds,
+  ).execute();
+}
+
+export function listVisibleForSyncQuery(
+  db: Kysely<DB>,
+  userId: string,
+  allAccessOrgIds: string[],
+  restrictedCollectionIds: string[],
+) {
   return db
     .selectFrom("attachments")
     .selectAll()
@@ -53,8 +67,7 @@ export async function listVisibleForSync(
 				)
 			`,
     )
-    .orderBy("created_at", "asc")
-    .execute();
+    .orderBy("created_at", "asc");
 }
 
 export async function listByUserId(
