@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/SunDoge/edgewarden/compare/v0.7.0...v0.7.1) (2026-11-16)
+
+
+### Performance Improvements
+
+* batch vault sync queries and trim public assets ([b35e17e](https://github.com/SunDoge/edgewarden/commit/b35e17ec8a991fbbde4fe51c17c02a7f8cf5fc18))
+
 ## [0.7.0](https://github.com/SunDoge/edgewarden/compare/v0.6.4...v0.7.0) (2026-11-11)
 
 
