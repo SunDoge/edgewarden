@@ -1,4 +1,4 @@
-import * as m from "$lib/paraglide/messages.js";
+import * as m from "#lib/paraglide/messages.js";
 import type { InferRequestType } from "hono/client";
 import { ApiError, rpc, rpcJson, rpcVoid } from "./rpc";
 import type {

@@ -1,13 +1,13 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { ArrowLeft, Lock } from "@lucide/svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Empty from "$lib/components/ui/empty/index.js";
-  import { Separator } from "$lib/components/ui/separator/index.js";
-  import { Skeleton } from "$lib/components/ui/skeleton/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Empty from "#lib/components/ui/empty/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { fade } from "svelte/transition";
-  import type { VaultEditorForm as VaultEditorDraft } from "$lib/services/vault-editor";
+  import type { VaultEditorForm as VaultEditorDraft } from "#lib/services/vault-editor.ts";
   import type {
     VaultAttachment,
     VaultCipher,
@@ -15,7 +15,7 @@
     VaultFolder,
     VaultOrganization,
     VaultTotp,
-  } from "$lib/services/vault-types";
+  } from "#lib/services/vault-types.ts";
   import VaultEditorForm from "./VaultEditorForm.svelte";
   import VaultItemDetail from "./VaultItemDetail.svelte";
 

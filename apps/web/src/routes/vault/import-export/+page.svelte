@@ -1,22 +1,22 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { ArrowLeft, CheckCircle, Download, FileCode, ShieldAlert, Upload } from "@lucide/svelte";
   import { slide } from "svelte/transition";
   import { goto } from "$app/navigation";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import { Progress } from "$lib/components/ui/progress/index.js";
-  import * as Select from "$lib/components/ui/select/index.js";
-  import { Separator } from "$lib/components/ui/separator/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
-  import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
-  import { importCiphersApi } from "$lib/services/api-folders";
-  import { errorDetail } from "$lib/services/error-message";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Progress } from "#lib/components/ui/progress/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import VaultPageShell from "#lib/components/vault/VaultPageShell.svelte";
+  import { importCiphersApi } from "#lib/services/api-folders.ts";
+  import { errorDetail } from "#lib/services/error-message.ts";
   import {
     buildBitwardenCsv,
     buildBitwardenJson,
@@ -28,9 +28,9 @@
     parseVaultImport,
     parseVaultImportFile,
     type TransferDocument,
-  } from "$lib/services/vault-transfer";
-  import { syncVaultData, vault } from "$lib/stores/vault.svelte";
-  import { encryptPasswordProtectedExport } from "$lib/services/bitwarden-encrypted-export";
+  } from "#lib/services/vault-transfer.ts";
+  import { syncVaultData, vault } from "#lib/stores/vault.svelte.ts";
+  import { encryptPasswordProtectedExport } from "#lib/services/bitwarden-encrypted-export.ts";
 
   let errorMsg = $state("");
   let successMsg = $state("");

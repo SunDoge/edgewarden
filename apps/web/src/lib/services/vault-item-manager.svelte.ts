@@ -1,6 +1,6 @@
 import { toast } from "svelte-sonner";
-import { formatTime } from "$lib/i18n/format";
-import { m } from "$lib/paraglide/messages.js";
+import { formatTime } from "#lib/i18n/format.ts";
+import { m } from "#lib/paraglide/messages.js";
 import {
   archiveCipherApi,
   deleteCipherApi,
@@ -25,7 +25,7 @@ import {
   getOrganizationKey,
   syncVaultData,
   vault,
-} from "$lib/stores/vault.svelte";
+} from "#lib/stores/vault.svelte.ts";
 
 interface VaultItemManagerState {
   selected: VaultCipher | null;

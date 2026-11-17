@@ -1,15 +1,15 @@
 <script lang="ts">
   import "./layout.css";
-  import { restoreLocalePreference } from "$lib/i18n/locale.svelte";
+  import { restoreLocalePreference } from "#lib/i18n/locale.svelte.ts";
   import { onMount } from "svelte";
-  import DemoNotice from "$lib/components/DemoNotice.svelte";
+  import DemoNotice from "#lib/components/DemoNotice.svelte";
   import {
     applyThemePreference,
     clientPreferencesStorageKey,
     loadClientPreferences,
-  } from "$lib/services/client-preferences";
-  import { syncDocumentLocale } from "$lib/i18n/format";
-  import { Toaster } from "$lib/components/ui/sonner/index.js";
+  } from "#lib/services/client-preferences.ts";
+  import { syncDocumentLocale } from "#lib/i18n/format.ts";
+  import { Toaster } from "#lib/components/ui/sonner/index.js";
 
   let { children } = $props();
 

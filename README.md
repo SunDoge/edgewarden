@@ -35,11 +35,11 @@ Before the first build, select a custom API token under **Worker â†’ Settings â†
 All three are required. Generate a **different value for each**; none is your
 Cloudflare API token or your vault master password.
 
-| Name | What to enter | Purpose and handling |
-| --- | --- | --- |
-| `JWT_SECRET` | A random string of at least 32 characters | Signs login and other short-lived tokens. Changing it invalidates tokens signed with the old value. |
+| Name                     | What to enter                                   | Purpose and handling                                                                                                                                                                                                                     |
+| ------------------------ | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JWT_SECRET`             | A random string of at least 32 characters       | Signs login and other short-lived tokens. Changing it invalidates tokens signed with the old value.                                                                                                                                      |
 | `DATA_ENCRYPTION_SECRET` | Another random string of at least 32 characters | Encrypts persisted server settings such as backup destination and Yubico credentials. Keep it stable and back it up separately; losing it makes those encrypted settings unreadable. It is not the key used to encrypt your vault items. |
-| `BOOTSTRAP_SECRET` | A third independently generated random string | Enter this as the deployment password when registering the first administrator. Choose a separate master password for that account. This is not a recovery code or an existing user's login password. |
+| `BOOTSTRAP_SECRET`       | A third independently generated random string   | Enter this as the deployment password when registering the first administrator. Choose a separate master password for that account. This is not a recovery code or an existing user's login password.                                    |
 
 Run this command **three times**, and save each output under its corresponding
 secret name in a secure password manager:
@@ -66,18 +66,32 @@ Use different secrets for development, demo, and production.
 You can leave **all of these unset** for an initial deployment. Omit unused
 settings rather than entering placeholder credentials.
 
-| Name | Type | When needed / what to enter |
-| --- | --- | --- |
-| `PUSH_INSTALLATION_ID` | Secret | Installation ID obtained from [Bitwarden](https://bitwarden.com/host/); configure together with the key below for native mobile push. |
-| `PUSH_INSTALLATION_KEY` | Secret | Matching Bitwarden Installation Key, not a Cloudflare API token. Without this pair, Push Relay is disabled; manual sync remains available. |
-| `PUSH_REGION` | Non-sensitive setting; store as Secret for Git deployments | `US` (default; may be omitted) or `EU`, matching the installation credentials. Storing it as a secret keeps it outside repository-managed variables. |
-| `TURNSTILE_SECRET_KEY` | Secret | Server-side secret from your Cloudflare Turnstile widget. Configure together with its site key below, or leave both unset. |
-| `TURNSTILE_SITE_KEY` | Variable (public) | The same widget's public site key. Restrict the widget to your deployed hostname. |
-| `YUBICO_CLIENT_ID` | Secret | Yubico validation client ID; only for YubiKey OTP validation, not ordinary WebAuthn security keys. Configure with the key below. |
-| `YUBICO_SECRET_KEY` | Secret | Matching Yubico validation secret. These two settings override credentials configured through the administration UI. |
+| Name                    | Type                                                       | When needed / what to enter                                                                                                                                 |
+| ----------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EMAIL_FROM`            | Variable                                                   | Enables transactional email when a provider is available. Use a verified sender such as `Edgewarden <vault@example.com>`. Leave unset to disable all email. |
+| `EMAIL_PRIVACY_MODE`    | Variable                                                   | `minimal` (default) keeps Emergency Access mail generic; `detailed` includes the event and actor identity.                                                  |
+| `EMAIL_PROVIDER`        | Variable                                                   | Optional: `auto` (default), `cloudflare`, or `resend`. `auto` prefers the native Cloudflare Email Service binding, then Resend.                             |
+| `EMAIL_REPLY_TO`        | Variable                                                   | Optional verified reply-to address for transactional messages.                                                                                              |
+| `RESEND_API_KEY`        | Secret                                                     | Resend API key. Required only when selecting Resend or when `auto` cannot use Cloudflare Email Service.                                                     |
+| `PUSH_INSTALLATION_ID`  | Secret                                                     | Installation ID obtained from [Bitwarden](https://bitwarden.com/host/); configure together with the key below for native mobile push.                       |
+| `PUSH_INSTALLATION_KEY` | Secret                                                     | Matching Bitwarden Installation Key, not a Cloudflare API token. Without this pair, Push Relay is disabled; manual sync remains available.                  |
+| `PUSH_REGION`           | Non-sensitive setting; store as Secret for Git deployments | `US` (default; may be omitted) or `EU`, matching the installation credentials. Storing it as a secret keeps it outside repository-managed variables.        |
+| `TURNSTILE_SECRET_KEY`  | Secret                                                     | Server-side secret from your Cloudflare Turnstile widget. Configure together with its site key below, or leave both unset.                                  |
+| `TURNSTILE_SITE_KEY`    | Variable (public)                                          | The same widget's public site key. Restrict the widget to your deployed hostname.                                                                           |
+| `YUBICO_CLIENT_ID`      | Secret                                                     | Yubico validation client ID; only for YubiKey OTP validation, not ordinary WebAuthn security keys. Configure with the key below.                            |
+| `YUBICO_SECRET_KEY`     | Secret                                                     | Matching Yubico validation secret. These two settings override credentials configured through the administration UI.                                        |
 
 Turnstile protection is enabled when its secret is present, so do not configure
 the secret without the matching public site key.
+
+Transactional email is used for account invitations and Emergency Access state changes. The repository
+already declares the native `EMAIL` binding; Cloudflare delivery requires an
+onboarded sending domain and an account plan that permits the intended
+recipients. Resend is an independent alternative. Email delivery runs in the
+background and never changes whether the underlying vault operation succeeds.
+Administrators can manage the provider, sender, privacy mode, and encrypted
+Resend credential from the Email tab in user management. The variables above
+remain deployment-level overrides for existing installations.
 
 ### Ordinary variables and deployment credentials
 

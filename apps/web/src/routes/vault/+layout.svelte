@@ -2,27 +2,27 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { createRealtimeTicketApi, fetchRevisionDateApi } from "$lib/services/api-vault";
-  import { isLoggedIn } from "$lib/services/api-auth";
-  import { ensureVaultData, syncVaultData, vault } from "$lib/stores/vault.svelte";
-  import { lock, logout } from "$lib/stores/vault.svelte";
-  import { VaultRevisionWatcher } from "$lib/services/vault-revision-watcher";
-  import { VaultRealtimeClient } from "$lib/services/vault-realtime";
+  import { createRealtimeTicketApi, fetchRevisionDateApi } from "#lib/services/api-vault.ts";
+  import { isLoggedIn } from "#lib/services/api-auth.ts";
+  import { ensureVaultData, syncVaultData, vault } from "#lib/stores/vault.svelte.ts";
+  import { lock, logout } from "#lib/stores/vault.svelte.ts";
+  import { VaultRevisionWatcher } from "#lib/services/vault-revision-watcher.ts";
+  import { VaultRealtimeClient } from "#lib/services/vault-realtime.ts";
   import {
     CLIENT_PREFERENCES_CHANGED_EVENT,
     clientPreferencesStorageKey,
     loadClientPreferences,
-  } from "$lib/services/client-preferences";
-  import { SessionTimeout } from "$lib/services/session-timeout";
-  import { restoreWebSession } from "$lib/services/rpc";
-  import VaultAppNavigation from "$lib/components/vault/VaultAppNavigation.svelte";
-  import VaultHeader from "$lib/components/vault/VaultHeader.svelte";
-  import AuthRequestBanner from "$lib/components/vault/AuthRequestBanner.svelte";
-  import { showBrowserNotification } from "$lib/services/browser-notifications";
-  import { NetworkStatusMonitor, type NetworkStatus } from "$lib/services/network-status";
-  import { Badge } from "$lib/components/ui/badge/index.js";
+  } from "#lib/services/client-preferences.ts";
+  import { SessionTimeout } from "#lib/services/session-timeout.ts";
+  import { restoreWebSession } from "#lib/services/rpc.ts";
+  import VaultAppNavigation from "#lib/components/vault/VaultAppNavigation.svelte";
+  import VaultHeader from "#lib/components/vault/VaultHeader.svelte";
+  import AuthRequestBanner from "#lib/components/vault/AuthRequestBanner.svelte";
+  import { showBrowserNotification } from "#lib/services/browser-notifications.ts";
+  import { NetworkStatusMonitor, type NetworkStatus } from "#lib/services/network-status.ts";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Wifi, WifiOff } from "@lucide/svelte";
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   let { children } = $props();
   let ready = $state(false);

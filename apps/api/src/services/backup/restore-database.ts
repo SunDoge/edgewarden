@@ -15,6 +15,7 @@ export type BackupTableName =
   | "user_revisions"
   | "organizations"
   | "org_members"
+  | "emergency_access"
   | "collections"
   | "collection_members"
   | "folders"
@@ -34,6 +35,7 @@ const BACKUP_TABLES: BackupTableName[] = [
   "user_revisions",
   "organizations",
   "org_members",
+  "emergency_access",
   "collections",
   "collection_members",
   "folders",
@@ -190,6 +192,7 @@ function buildResetImportTargetStatements(
     "DELETE FROM folders",
     "DELETE FROM collection_members",
     "DELETE FROM collections",
+    "DELETE FROM emergency_access",
     "DELETE FROM org_members",
     "DELETE FROM organizations",
     "DELETE FROM webauthn_credentials",

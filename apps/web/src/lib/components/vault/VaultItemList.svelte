@@ -11,20 +11,24 @@
     Trash2,
     TriangleAlert,
   } from "@lucide/svelte";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { Checkbox } from "$lib/components/ui/checkbox/index.js";
-  import * as Empty from "$lib/components/ui/empty/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import * as Select from "$lib/components/ui/select/index.js";
-  import { Skeleton } from "$lib/components/ui/skeleton/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import * as Empty from "#lib/components/ui/empty/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { match } from "ts-pattern";
   import { fade, slide } from "svelte/transition";
-  import { cn } from "$lib/utils";
-  import { m } from "$lib/paraglide/messages.js";
-  import type { DuplicateMode, VaultCategory, VaultSort } from "$lib/services/vault-filter";
-  import type { VaultCipher } from "$lib/services/vault-types";
-  import { cipherDomain, cipherTypeIcon, cipherTypeName } from "$lib/services/vault-item-display";
+  import { cn } from "#lib/utils.ts";
+  import { m } from "#lib/paraglide/messages.js";
+  import type { DuplicateMode, VaultCategory, VaultSort } from "#lib/services/vault-filter.ts";
+  import type { VaultCipher } from "#lib/services/vault-types.ts";
+  import {
+    cipherDomain,
+    cipherTypeIcon,
+    cipherTypeName,
+  } from "#lib/services/vault-item-display.ts";
 
   let {
     items,

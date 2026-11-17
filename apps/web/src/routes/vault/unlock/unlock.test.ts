@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { waitFor } from "@testing-library/svelte";
-import { renderComponent, screen } from "$lib/../test/component";
+import { renderComponent, screen } from "#test/component.ts";
 import UnlockPage from "./+page.svelte";
 
 const mocks = vi.hoisted(() => ({
@@ -10,11 +10,11 @@ const mocks = vi.hoisted(() => ({
   goto: vi.fn(),
 }));
 vi.mock("$app/navigation", () => ({ goto: mocks.goto }));
-vi.mock("$lib/services/api-auth", () => ({ isLoggedIn: () => true }));
-vi.mock("$lib/services/vault-db", () => ({
+vi.mock("#lib/services/api-auth.ts", () => ({ isLoggedIn: () => true }));
+vi.mock("#lib/services/vault-db.ts", () => ({
   loadVaultSnapshot: mocks.snapshot,
 }));
-vi.mock("$lib/stores/vault.svelte", () => ({
+vi.mock("#lib/stores/vault.svelte.ts", () => ({
   vault: { isUnlocked: false },
   unlock: mocks.unlock,
 }));

@@ -1,9 +1,9 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { Check, Copy } from "@lucide/svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import type { VaultIdentityData } from "$lib/services/vault-types";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import type { VaultIdentityData } from "#lib/services/vault-types.ts";
 
   let {
     identity,

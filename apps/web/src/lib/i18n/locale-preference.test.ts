@@ -14,7 +14,7 @@ test.each([
     vi.resetModules();
     vi.stubGlobal("localStorage", { getItem: () => saved, setItem: vi.fn() });
     const { restoreLocalePreference } = await import("./locale.svelte");
-    const { getLocale } = await import("$lib/paraglide/runtime.js");
+    const { getLocale } = await import("#lib/paraglide/runtime.js");
     expect(getLocale()).toBe("en");
     restoreLocalePreference();
     expect(getLocale()).toBe(expected);
@@ -29,6 +29,6 @@ test("defaults to English if reading storage is blocked", async () => {
     },
   });
   await import("./locale.svelte");
-  const { getLocale } = await import("$lib/paraglide/runtime.js");
+  const { getLocale } = await import("#lib/paraglide/runtime.js");
   expect(getLocale()).toBe("en");
 });

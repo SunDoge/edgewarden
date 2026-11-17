@@ -16,3 +16,8 @@ export {
   listAuditLogs,
   updateAuditSettings,
 } from "./admin-audit";
+export {
+  getAdminEmailSettings,
+  testAdminEmailSettings,
+  updateAdminEmailSettings,
+} from "./admin/email-settings";

@@ -43,12 +43,12 @@ review before it enters the supported scope.
 
 ## Support levels
 
-| Level | Meaning |
-| --- | --- |
-| Core | Part of the complete personal-vault goal. Missing behavior and official-client regressions should be fixed. |
-| Basic | Supported for ordinary small-team sharing, without enterprise parity. |
-| Edgewarden extension | An operational feature provided by Edgewarden rather than a Bitwarden protocol commitment. |
-| Out of scope | Deliberately not promised. It may return an empty compatibility response when an official client expects the endpoint. |
+| Level                | Meaning                                                                                                                |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Core                 | Part of the complete personal-vault goal. Missing behavior and official-client regressions should be fixed.            |
+| Basic                | Supported for ordinary small-team sharing, without enterprise parity.                                                  |
+| Edgewarden extension | An operational feature provided by Edgewarden rather than a Bitwarden protocol commitment.                             |
+| Out of scope         | Deliberately not promised. It may return an empty compatibility response when an official client expects the endpoint. |
 
 ## Personal accounts: core scope
 
@@ -80,6 +80,9 @@ Core scope includes:
   OTP, including recovery codes and trusted-device flows.
 - Account-login passkeys and login approval/auth-request flows supported by the
   official clients.
+- Zero-knowledge emergency access for existing accounts on the same server,
+  including view and takeover grants, configurable waiting periods, manual
+  approval or rejection, and automatic approval after the deadline.
 - Website passkeys stored in login items. Imports preserve their encrypted
   `fido2Credentials` payload.
 - Equivalent-domain settings and generated Bitwarden global domain rules.
@@ -94,8 +97,8 @@ Core scope includes:
 
 “Complete personal support” applies to password-manager functionality. It does
 not include every separate Bitwarden product or paid service attached to an
-individual account. In particular, emergency access, email delivery, billing,
-subscriptions, and hosted Bitwarden account services are outside this promise.
+individual account. In particular, email delivery, billing, subscriptions, and
+hosted Bitwarden account services are outside this promise.
 
 ## Organizations: basic scope
 
@@ -155,7 +158,9 @@ The following official-server areas are not part of the compatibility promise:
   storage purchases.
 - Families-specific administration and collections behavior beyond what the
   basic organization model can express.
-- Emergency access.
+- Emergency-access email delivery. The zero-knowledge emergency-access protocol
+  is supported for existing accounts on the same server; invitations are
+  accepted in-app because Edgewarden does not require an SMTP sidecar.
 - Mail delivery, password-hint email, invite email, and email verification
   workflows. Edgewarden does not require an SMTP sidecar; deployments currently
   use bootstrap secrets and direct invitation instead. A future implementation

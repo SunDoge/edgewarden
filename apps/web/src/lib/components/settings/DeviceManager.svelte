@@ -1,26 +1,26 @@
 <script lang="ts">
-  import { formatDateTime } from "$lib/i18n/format";
-  import * as m from "$lib/paraglide/messages.js";
+  import { formatDateTime } from "#lib/i18n/format.ts";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { Pencil, Trash2 } from "@lucide/svelte";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import { Checkbox } from "$lib/components/ui/checkbox/index.js";
-  import * as Dialog from "$lib/components/ui/dialog/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import * as Table from "$lib/components/ui/table/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
   import {
     deleteAllDevicesApi,
     deleteDeviceApi,
     deleteDevicesApi,
     fetchDevicesApi,
     renameDeviceApi,
-  } from "$lib/services/api-account";
-  import { getCurrentDeviceIdentifier } from "$lib/services/client-device";
-  import type { AccountDevice } from "$lib/services/account-types";
+  } from "#lib/services/api-account.ts";
+  import { getCurrentDeviceIdentifier } from "#lib/services/client-device.ts";
+  import type { AccountDevice } from "#lib/services/account-types.ts";
 
   let {
     devices = $bindable(),

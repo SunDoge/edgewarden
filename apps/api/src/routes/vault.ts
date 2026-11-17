@@ -31,12 +31,15 @@ import {
   deleteAdminUser,
   getAdminPushRelayStatus,
   getAdminRegistrationPolicy,
+  getAdminEmailSettings,
   getAuditSettings,
   listAdminInvites,
   listAdminUsers,
   listAuditLogs,
   setAdminUserStatus,
   updateAdminRegistrationPolicy,
+  updateAdminEmailSettings,
+  testAdminEmailSettings,
   updateAuditSettings,
 } from "../handlers/admin";
 import {
@@ -74,6 +77,21 @@ import {
   updateDevicesTrust,
 } from "../handlers/devices";
 import { getDomains, updateDomains } from "../handlers/domains";
+import {
+  approveEmergencyAccess,
+  confirmEmergencyContact,
+  deleteEmergencyAccess,
+  emergencyAccessPolicies,
+  initiateEmergencyAccess,
+  inviteEmergencyContact,
+  listGrantedEmergencyAccess,
+  listTrustedEmergencyContacts,
+  rejectEmergencyAccess,
+  takeoverEmergencyAccess,
+  takeoverEmergencyAccessPassword,
+  updateEmergencyContact,
+  viewEmergencyAccess,
+} from "../handlers/emergency-access";
 import {
   createFolder,
   deleteAllFolders,
@@ -237,6 +255,26 @@ const requestAndSettingsRoutes = new Hono<HonoEnv>()
   .get("/api/collections", ...listUserCollections)
   .get("/api/policies", ...getEmptyCompatibilityList);
 
+const emergencyAccessRoutes = new Hono<HonoEnv>()
+  .get("/api/emergency-access/trusted", ...listTrustedEmergencyContacts)
+  .get("/api/emergency-access/granted", ...listGrantedEmergencyAccess)
+  .post("/api/emergency-access/invite", ...inviteEmergencyContact)
+  .put("/api/emergency-access/:id", ...updateEmergencyContact)
+  .post("/api/emergency-access/:id", ...updateEmergencyContact)
+  .post("/api/emergency-access/:id/confirm", ...confirmEmergencyContact)
+  .post("/api/emergency-access/:id/initiate", ...initiateEmergencyAccess)
+  .post("/api/emergency-access/:id/approve", ...approveEmergencyAccess)
+  .post("/api/emergency-access/:id/reject", ...rejectEmergencyAccess)
+  .post("/api/emergency-access/:id/view", ...viewEmergencyAccess)
+  .post("/api/emergency-access/:id/takeover", ...takeoverEmergencyAccess)
+  .post(
+    "/api/emergency-access/:id/password",
+    ...takeoverEmergencyAccessPassword,
+  )
+  .get("/api/emergency-access/:id/policies", ...emergencyAccessPolicies)
+  .post("/api/emergency-access/:id/delete", ...deleteEmergencyAccess)
+  .delete("/api/emergency-access/:id", ...deleteEmergencyAccess);
+
 const backupRoutes = new Hono<HonoEnv>()
   .use("/api/admin/backup/*", requireAdmin)
   .post("/api/admin/backup/export", ...exportBackup)
@@ -255,8 +293,11 @@ const adminRoutes = new Hono<HonoEnv>()
   .use("/api/admin/*", requireAdmin)
   .get("/api/admin/users", ...listAdminUsers)
   .get("/api/admin/registration", ...getAdminRegistrationPolicy)
+  .get("/api/admin/email", ...getAdminEmailSettings)
   .get("/api/admin/push-relay", ...getAdminPushRelayStatus)
   .put("/api/admin/registration", ...updateAdminRegistrationPolicy)
+  .put("/api/admin/email", ...updateAdminEmailSettings)
+  .post("/api/admin/email/test", ...testAdminEmailSettings)
   .put("/api/admin/users/:id/status", ...setAdminUserStatus)
   .delete("/api/admin/users/:id", ...deleteAdminUser)
   .get("/api/admin/invites", ...listAdminInvites)
@@ -331,6 +372,7 @@ export const vaultRouter = new Hono<HonoEnv>()
   .route("/", attachmentRoutes)
   .route("/", folderAndDeviceRoutes)
   .route("/", requestAndSettingsRoutes)
+  .route("/", emergencyAccessRoutes)
   .route("/", backupRoutes)
   .route("/", adminRoutes)
   .route("/", apiPasskeyRoutes)

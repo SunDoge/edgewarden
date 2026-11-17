@@ -21,6 +21,8 @@ import {
   hashCredential,
 } from "../../services/credential-protection";
 import { conditionalRefreshTokenDeletionQuery } from "../../services/db/batch";
+import { scheduleTransactionalEmail } from "../../services/email";
+import { invitationEmail } from "../../services/invitation-email";
 import { getPushRelayStatus } from "../../services/push-relay";
 import {
   loadRegistrationPolicy,
@@ -53,9 +55,12 @@ async function inviteResponse(
     "invite-code",
   );
   const inviteLink = new URL("/register", request.url);
-  inviteLink.searchParams.set("invite", code);
+  const fragment = new URLSearchParams({ invite: code });
   // Convenience only: registration still verifies the invite's stored email.
-  if (invite.email) inviteLink.searchParams.set("email", invite.email);
+  if (invite.email) fragment.set("email", invite.email);
+  // Fragments are available to the registration page but are not sent in HTTP
+  // requests, keeping the bearer credential out of access logs and Referer.
+  inviteLink.hash = fragment.toString();
   return {
     code,
     email: invite.email,
@@ -141,10 +146,19 @@ export const createAdminInvite = factory.createHandlers(
       .selectAll()
       .where("code", "=", code)
       .executeTakeFirstOrThrow();
-    return c.json(
-      await inviteResponse(c.req.raw, c.env.DATA_ENCRYPTION_SECRET, invite),
-      201,
+    const response = await inviteResponse(
+      c.req.raw,
+      c.env.DATA_ENCRYPTION_SECRET,
+      invite,
     );
+    scheduleTransactionalEmail(c.executionCtx, db, c.env, () =>
+      invitationEmail({
+        to: normalizedEmail,
+        inviteLink: response.inviteLink,
+        expiresAt: response.expiresAt,
+      }),
+    );
+    return c.json(response, 201);
   },
 );
 

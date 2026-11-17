@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { m } from "$lib/paraglide/messages.js";
+  import { m } from "#lib/paraglide/messages.js";
   import { goto, preloadCode } from "$app/navigation";
   import { onDestroy, onMount } from "svelte";
-  import { deriveMasterKey } from "$lib/services/crypto";
+  import { deriveMasterKey } from "#lib/services/crypto.ts";
   import {
     getTurnstileConfigApi,
     isTwoFactorRequiredError,
@@ -10,18 +10,22 @@
     loginWithPasskeyApi,
     twoFactorPasskeyChallengeFromError,
     twoFactorProvidersFromError,
-  } from "$lib/services/api-auth";
-  import { errorMessage } from "$lib/services/error-message";
-  import { prepareVaultNavigation, setMasterKey, setSymmetricKeys } from "$lib/stores/vault.svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import { Separator } from "$lib/components/ui/separator/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
-  import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
-  import { assertTwoFactorPasskeyCredential } from "$lib/services/passkeys";
+  } from "#lib/services/api-auth.ts";
+  import { errorMessage } from "#lib/services/error-message.ts";
+  import {
+    prepareVaultNavigation,
+    setMasterKey,
+    setSymmetricKeys,
+  } from "#lib/stores/vault.svelte.ts";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { assertTwoFactorPasskeyCredential } from "#lib/services/passkeys.ts";
   import {
     Eye,
     EyeOff,
@@ -31,12 +35,12 @@
     Mail,
     Fingerprint,
   } from "@lucide/svelte";
-  import TurnstileWidget from "$lib/components/turnstile-widget.svelte";
-  import { readDevLoginCredentials } from "$lib/services/dev-login";
-  import { prefillDemoLogin } from "$lib/services/demo-login";
-  import { allowsRoutePreload } from "$lib/services/route-preload";
-  import LanguageSwitcher from "$lib/components/LanguageSwitcher.svelte";
-  import ThemeToggle from "$lib/components/theme-toggle.svelte";
+  import TurnstileWidget from "#lib/components/turnstile-widget.svelte";
+  import { readDevLoginCredentials } from "#lib/services/dev-login.ts";
+  import { prefillDemoLogin } from "#lib/services/demo-login.ts";
+  import { allowsRoutePreload } from "#lib/services/route-preload.ts";
+  import LanguageSwitcher from "#lib/components/LanguageSwitcher.svelte";
+  import ThemeToggle from "#lib/components/theme-toggle.svelte";
   import { match } from "ts-pattern";
   import {
     createDeviceLoginRequest,
@@ -44,8 +48,8 @@
     pollDeviceLoginRequest,
     type ApprovedDeviceLogin,
     type DeviceLoginRequest,
-  } from "$lib/services/auth-requests";
-  import { setMemoryAccessToken } from "$lib/services/rpc";
+  } from "#lib/services/auth-requests.ts";
+  import { setMemoryAccessToken } from "#lib/services/rpc.ts";
 
   let email = $state("");
   let password = $state("");

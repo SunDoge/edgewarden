@@ -1,15 +1,16 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { ShieldCheck } from "@lucide/svelte";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import AccountPasskeys from "./AccountPasskeys.svelte";
   import AuthRequestSettings from "./AuthRequestSettings.svelte";
   import TwoFactorPasskeys from "./TwoFactorPasskeys.svelte";
   import YubikeySettings from "./YubikeySettings.svelte";
+  import EmergencyAccessSettings from "./EmergencyAccessSettings.svelte";
 
   let {
     profile,
@@ -121,4 +122,5 @@
     {onError}
   />
   <AuthRequestSettings email={profile.email} {onMessage} {onError} />
+  <EmergencyAccessSettings {onMessage} {onError} />
 </div>

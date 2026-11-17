@@ -1,23 +1,23 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { Fingerprint, Trash2 } from "@lucide/svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import * as Dialog from "$lib/components/ui/dialog/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import {
     createTwoFactorPasskeyApi,
     deleteAllTwoFactorPasskeysApi,
     deleteTwoFactorPasskeyApi,
     getTwoFactorPasskeyChallengeApi,
     getTwoFactorPasskeysApi,
-  } from "$lib/services/api-two-factor";
-  import { deriveMasterKey, deriveMasterPasswordHash } from "$lib/services/crypto";
-  import { createTwoFactorPasskeyCredential } from "$lib/services/passkeys";
-  import type { TwoFactorPasskey } from "$lib/services/two-factor-types";
+  } from "#lib/services/api-two-factor.ts";
+  import { deriveMasterKey, deriveMasterPasswordHash } from "#lib/services/crypto.ts";
+  import { createTwoFactorPasskeyCredential } from "#lib/services/passkeys.ts";
+  import type { TwoFactorPasskey } from "#lib/services/two-factor-types.ts";
 
   let {
     email,

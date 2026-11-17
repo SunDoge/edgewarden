@@ -1,17 +1,17 @@
 <script lang="ts">
-  import { formatDateTime } from "$lib/i18n/format";
-  import * as m from "$lib/paraglide/messages.js";
+  import { formatDateTime } from "#lib/i18n/format.ts";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { onMount } from "svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
   import {
     encryptVaultKeyForAuthRequest,
     listPendingAuthRequestsApi,
     respondToAuthRequestApi,
     type AuthRequest,
-  } from "$lib/services/auth-requests";
-  import { vault } from "$lib/stores/vault.svelte";
+  } from "#lib/services/auth-requests.ts";
+  import { vault } from "#lib/stores/vault.svelte.ts";
   import { RefreshCw, ShieldCheck } from "@lucide/svelte";
 
   let {

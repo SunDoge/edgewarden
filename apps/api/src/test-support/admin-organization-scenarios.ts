@@ -116,6 +116,50 @@ export function registerAdminOrganizationScenarios(
     assert.equal(response.status, 403);
   });
 
+  test("stores email configuration encrypted and never returns the Resend key", async () => {
+    const headers = {
+      authorization: `Bearer ${context.accessToken}`,
+      "content-type": "application/json",
+    };
+    const saved = await request("/api/admin/email", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        masterPasswordHash: MASTER_PASSWORD_HASH,
+        enabled: true,
+        provider: "resend",
+        from: "Edgewarden <vault@example.test>",
+        replyTo: "support@example.test",
+        privacyMode: "minimal",
+        resendApiKey: "re_super_secret_test_key",
+      }),
+    });
+    assert.equal(saved.status, 200, await saved.clone().text());
+    const response = await saved.json<{
+      resendApiKeyConfigured: boolean;
+      activeProvider: string | null;
+    }>();
+    assert.equal(response.resendApiKeyConfigured, true);
+    assert.equal(response.activeProvider, "resend");
+    assert.doesNotMatch(JSON.stringify(response), /re_super_secret/);
+    const stored = await context.database
+      .prepare(
+        "SELECT value FROM config WHERE key = 'system.email.settings.v1'",
+      )
+      .first<{ value: string }>();
+    assert.ok(stored);
+    assert.doesNotMatch(stored.value, /re_super_secret/);
+
+    const read = await request("/api/admin/email", {
+      headers: { authorization: `Bearer ${context.accessToken}` },
+    });
+    assert.equal(read.status, 200);
+    assert.doesNotMatch(await read.text(), /re_super_secret/);
+    await context.database
+      .prepare("DELETE FROM config WHERE key = 'system.email.settings.v1'")
+      .run();
+  });
+
   test("manages users and one-time invites with admin password re-verification", async () => {
     const adminAuth = { authorization: `Bearer ${context.accessToken}` };
     const memberDenied = await request("/api/admin/users", {
@@ -243,8 +287,10 @@ export function registerAdminOrganizationScenarios(
     assert.equal(invite.email, "invited-api-test@example.com");
     const inviteUrl = new URL(invite.inviteLink);
     assert.equal(inviteUrl.pathname, "/register");
-    assert.equal(inviteUrl.searchParams.get("invite"), invite.code);
-    assert.equal(inviteUrl.searchParams.get("email"), invite.email);
+    assert.equal(inviteUrl.search, "");
+    const inviteFragment = new URLSearchParams(inviteUrl.hash.slice(1));
+    assert.equal(inviteFragment.get("invite"), invite.code);
+    assert.equal(inviteFragment.get("email"), invite.email);
     const storedInvite = await context.database
       .prepare("SELECT code, code_encrypted FROM invites WHERE code = ?")
       .bind(await hashCredential(invite.code))

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { waitFor } from "@testing-library/svelte";
-import { renderComponent, screen } from "$lib/../test/component";
+import { renderComponent, screen } from "#test/component.ts";
 import DemoNotice from "./DemoNotice.svelte";
 
 // Node 26 exposes an unavailable localStorage global without a backing file;

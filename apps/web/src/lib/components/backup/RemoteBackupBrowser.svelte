@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { formatDateTime } from "$lib/i18n/format";
-  import * as m from "$lib/paraglide/messages.js";
+  import { formatDateTime } from "#lib/i18n/format.ts";
+  import * as m from "#lib/paraglide/messages.js";
 
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import * as Empty from "$lib/components/ui/empty/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
-  import * as Table from "$lib/components/ui/table/index.js";
-  import { formatFileSize } from "$lib/services/backup-display";
-  import type { RemoteBackupItem } from "$lib/services/backup-types";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Empty from "#lib/components/ui/empty/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
+  import { formatFileSize } from "#lib/services/backup-display.ts";
+  import type { RemoteBackupItem } from "#lib/services/backup-types.ts";
   import {
     Download,
     FileArchive,

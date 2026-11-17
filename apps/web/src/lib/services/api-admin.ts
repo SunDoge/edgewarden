@@ -19,6 +19,17 @@ export interface AdminPushRelayStatus {
   reason: "ready" | "missing_credentials" | "invalid_region";
 }
 
+export interface AdminEmailSettings {
+  enabled: boolean;
+  provider: "auto" | "cloudflare" | "resend";
+  activeProvider: "cloudflare" | "resend" | null;
+  from: string;
+  replyTo: string | null;
+  privacyMode: "minimal" | "detailed";
+  resendApiKeyConfigured: boolean;
+  environmentOverrides: string[];
+}
+
 export async function listAdminUsersApi(): Promise<ApiList<AdminUser>> {
   return (await rpcJson(
     await rpc.api.admin.users.$get(),
@@ -31,6 +42,34 @@ export async function getAdminRegistrationPolicyApi(): Promise<AdminRegistration
 
 export async function getAdminPushRelayStatusApi(): Promise<AdminPushRelayStatus> {
   return rpcJson(await rpc.api.admin["push-relay"].$get());
+}
+
+export async function getAdminEmailSettingsApi(): Promise<AdminEmailSettings> {
+  return rpcJson(
+    await rpc.api.admin.email.$get(),
+  ) as Promise<AdminEmailSettings>;
+}
+
+export async function updateAdminEmailSettingsApi(
+  masterPasswordHash: string,
+  settings: Omit<
+    AdminEmailSettings,
+    "activeProvider" | "resendApiKeyConfigured" | "environmentOverrides"
+  > & { resendApiKey?: string; clearResendApiKey?: boolean },
+): Promise<AdminEmailSettings> {
+  return rpcJson(
+    await rpc.api.admin.email.$put({
+      json: { masterPasswordHash, ...settings },
+    }),
+  ) as Promise<AdminEmailSettings>;
+}
+
+export async function testAdminEmailSettingsApi(
+  masterPasswordHash: string,
+): Promise<void> {
+  rpcVoid(
+    await rpc.api.admin.email.test.$post({ json: { masterPasswordHash } }),
+  );
 }
 
 export async function updateAdminRegistrationPolicyApi(

@@ -1,28 +1,28 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { onMount } from "svelte";
   import { match } from "ts-pattern";
   import { goto } from "$app/navigation";
-  import { fetchSendsApi, deleteSendApi, deleteSendsApi } from "$lib/services/api-sends";
-  import { vault } from "$lib/stores/vault.svelte";
-  import { decryptOwnedSend, type DecryptedSend } from "$lib/services/send-crypto";
-  import { saveOwnedSend } from "$lib/services/send-actions";
-  import { createSendEditorDraft, sendToEditorDraft } from "$lib/services/send-editor";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import { Checkbox } from "$lib/components/ui/checkbox/index.js";
-  import * as Empty from "$lib/components/ui/empty/index.js";
-  import SendEditorForm from "$lib/components/sends/SendEditorForm.svelte";
-  import SendDetail from "$lib/components/sends/SendDetail.svelte";
-  import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import { Separator } from "$lib/components/ui/separator/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
-  import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
-  import { cn } from "$lib/utils";
+  import { fetchSendsApi, deleteSendApi, deleteSendsApi } from "#lib/services/api-sends.ts";
+  import { vault } from "#lib/stores/vault.svelte.ts";
+  import { decryptOwnedSend, type DecryptedSend } from "#lib/services/send-crypto.ts";
+  import { saveOwnedSend } from "#lib/services/send-actions.ts";
+  import { createSendEditorDraft, sendToEditorDraft } from "#lib/services/send-editor.ts";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import * as Empty from "#lib/components/ui/empty/index.js";
+  import SendEditorForm from "#lib/components/sends/SendEditorForm.svelte";
+  import SendDetail from "#lib/components/sends/SendDetail.svelte";
+  import VaultPageShell from "#lib/components/vault/VaultPageShell.svelte";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { cn } from "#lib/utils.ts";
   import {
     Search,
     Plus,

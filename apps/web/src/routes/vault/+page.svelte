@@ -1,18 +1,18 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { CipherType } from "@edgewarden/shared";
   import { onMount } from "svelte";
   import { toast } from "svelte-sonner";
   import { match } from "ts-pattern";
   import { page } from "$app/state";
-  import VaultDetailPanel from "$lib/components/vault/VaultDetailPanel.svelte";
-  import VaultDialogs from "$lib/components/vault/VaultDialogs.svelte";
-  import VaultItemList from "$lib/components/vault/VaultItemList.svelte";
-  import VaultNavigation from "$lib/components/vault/VaultNavigation.svelte";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-  import { calcTotpNow } from "$lib/services/crypto";
-  import type { VaultBulkAction } from "$lib/services/vault-cipher-actions";
+  import VaultDetailPanel from "#lib/components/vault/VaultDetailPanel.svelte";
+  import VaultDialogs from "#lib/components/vault/VaultDialogs.svelte";
+  import VaultItemList from "#lib/components/vault/VaultItemList.svelte";
+  import VaultNavigation from "#lib/components/vault/VaultNavigation.svelte";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { calcTotpNow } from "#lib/services/crypto.ts";
+  import type { VaultBulkAction } from "#lib/services/vault-cipher-actions.ts";
   import {
     type DuplicateMode,
     filterAndSortVaultItems,
@@ -20,17 +20,17 @@
     findDuplicateCipherIds,
     type VaultCategory,
     type VaultSort,
-  } from "$lib/services/vault-filter";
+  } from "#lib/services/vault-filter.ts";
   import {
     findDuplicateFolderGroups,
     mergeDuplicateVaultFolders,
-  } from "$lib/services/vault-folder-actions";
-  import type { VaultAttachment } from "$lib/services/vault-types";
-  import { createVaultFolderManager } from "$lib/services/vault-folder-manager.svelte";
-  import { createVaultAttachmentManager } from "$lib/services/vault-attachment-manager.svelte";
-  import { createVaultBulkManager } from "$lib/services/vault-bulk-manager.svelte";
-  import { createVaultItemManager } from "$lib/services/vault-item-manager.svelte";
-  import { syncVaultData, vault } from "$lib/stores/vault.svelte";
+  } from "#lib/services/vault-folder-actions.ts";
+  import type { VaultAttachment } from "#lib/services/vault-types.ts";
+  import { createVaultFolderManager } from "#lib/services/vault-folder-manager.svelte.ts";
+  import { createVaultAttachmentManager } from "#lib/services/vault-attachment-manager.svelte.ts";
+  import { createVaultBulkManager } from "#lib/services/vault-bulk-manager.svelte.ts";
+  import { createVaultItemManager } from "#lib/services/vault-item-manager.svelte.ts";
+  import { syncVaultData, vault } from "#lib/stores/vault.svelte.ts";
 
   // UI state
   let searchQuery = $state("");

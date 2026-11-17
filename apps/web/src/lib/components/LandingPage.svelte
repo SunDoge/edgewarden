@@ -1,11 +1,11 @@
 <script lang="ts">
   import { ArrowRight, Code, KeyRound, ShieldCheck, Smartphone, Cloud } from "@lucide/svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import { Separator } from "$lib/components/ui/separator/index.js";
-  import LanguageSwitcher from "$lib/components/LanguageSwitcher.svelte";
-  import ThemeToggle from "$lib/components/theme-toggle.svelte";
-  import { m } from "$lib/paraglide/messages.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import LanguageSwitcher from "#lib/components/LanguageSwitcher.svelte";
+  import ThemeToggle from "#lib/components/theme-toggle.svelte";
+  import { m } from "#lib/paraglide/messages.js";
 
   let { demo }: { demo: boolean } = $props();
   const repository = "https://github.com/SunDoge/edgewarden";

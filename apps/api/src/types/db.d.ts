@@ -177,6 +177,19 @@ export interface DomainSettings {
   user_id: string;
 }
 
+export interface EmergencyAccess {
+  created_at: number;
+  grantee_id: string;
+  grantor_id: string;
+  id: string;
+  key_encrypted: string | null;
+  recovery_initiated_at: number | null;
+  status: number;
+  type: number;
+  updated_at: number;
+  wait_time_days: number;
+}
+
 export interface Folders {
   created_at: number;
   id: string;
@@ -351,6 +364,7 @@ export interface DB {
   device_trust_tokens: DeviceTrustTokens;
   devices: Devices;
   domain_settings: DomainSettings;
+  emergency_access: EmergencyAccess;
   folders: Folders;
   invites: Invites;
   login_attempts: LoginAttempts;

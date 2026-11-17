@@ -33,6 +33,9 @@ function requiredId(row: SqlRow, field: string, table: string): string {
 export function validateBackupOrganizationGraph(
   payload: BackupPayload["db"],
 ): void {
+  const users = new Set(
+    (payload.users || []).map((row) => requiredId(row, "id", "users")),
+  );
   const organizations = new Set(
     (payload.organizations || []).map((row) =>
       requiredId(row, "id", "organizations"),
@@ -98,6 +101,18 @@ export function validateBackupOrganizationGraph(
     if (!orgId)
       throw new Error(
         "Invalid backup: personal cipher cannot have organization user settings",
+      );
+  }
+  for (const row of payload.emergency_access || []) {
+    const grantorId = requiredId(row, "grantor_id", "emergency_access");
+    const granteeId = requiredId(row, "grantee_id", "emergency_access");
+    if (
+      grantorId === granteeId ||
+      !users.has(grantorId) ||
+      !users.has(granteeId)
+    )
+      throw new Error(
+        "Invalid backup: emergency access references unknown or identical users",
       );
   }
 }
@@ -209,6 +224,7 @@ export async function importPreparedBackupRows(
     user_revisions: cloneRows(payload.user_revisions || []),
     organizations: cloneRows(payload.organizations || []),
     org_members: cloneRows(payload.org_members || []),
+    emergency_access: cloneRows(payload.emergency_access || []),
     collections: cloneRows(payload.collections || []),
     collection_members: cloneRows(payload.collection_members || []).map(
       (row) => ({

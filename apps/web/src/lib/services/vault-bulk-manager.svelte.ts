@@ -1,4 +1,4 @@
-import * as m from "$lib/paraglide/messages.js";
+import * as m from "#lib/paraglide/messages.js";
 import { toast } from "svelte-sonner";
 import {
   applyVaultBulkAction,
@@ -12,7 +12,7 @@ import {
 } from "./vault-filter";
 import type { VaultCipher } from "./vault-types";
 import { errorDetail } from "./error-message";
-import { syncVaultData, vault } from "$lib/stores/vault.svelte";
+import { syncVaultData, vault } from "#lib/stores/vault.svelte.ts";
 
 export function createVaultBulkManager(options: {
   duplicateMode(): DuplicateMode;

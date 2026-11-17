@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { formatDateTime } from "$lib/i18n/format";
-  import * as m from "$lib/paraglide/messages.js";
+  import { formatDateTime } from "#lib/i18n/format.ts";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { Server } from "@lucide/svelte";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
-  import { formatFileSize } from "$lib/services/backup-display";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { formatFileSize } from "#lib/services/backup-display.ts";
   import type { BackupDestinationRecord } from "./types";
 
   let {

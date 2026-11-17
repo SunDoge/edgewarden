@@ -5,7 +5,7 @@ import {
   overwriteGetLocale,
   setLocale,
   type Locale,
-} from "$lib/paraglide/runtime.js";
+} from "#lib/paraglide/runtime.js";
 import { syncDocumentLocale } from "./format";
 
 function initialLocale(): Locale {

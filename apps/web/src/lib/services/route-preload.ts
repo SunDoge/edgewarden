@@ -13,9 +13,9 @@ export function allowsRoutePreload(): boolean {
 
 /** Warm a small set of common routes without competing with the first task.
  * Imports already in flight cannot be cancelled, but disposal stops the queue. */
-export function warmRoutes(
-  paths: readonly string[],
-  preload: (path: string) => Promise<void>,
+export function warmRoutes<TPath extends string>(
+  paths: readonly TPath[],
+  preload: (path: TPath) => Promise<void>,
   canPreload: () => boolean,
 ): () => void {
   if (!allowsRoutePreload()) return () => undefined;

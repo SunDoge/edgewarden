@@ -52,6 +52,7 @@ export function ensureBackupCompatibilityFields(payload: BackupPayload) {
   payload.db.sends ??= [];
   payload.db.device_trust_tokens ??= [];
   payload.db.audit_logs ??= [];
+  payload.db.emergency_access ??= [];
   for (const row of payload.db.audit_logs) {
     row.is_tombstone ??= isAuditTombstoneAction(String(row.action ?? ""))
       ? 1
@@ -72,6 +73,7 @@ export function backupTableCounts(
     user_revisions: (db.user_revisions || []).length,
     organizations: (db.organizations || []).length,
     org_members: (db.org_members || []).length,
+    emergency_access: (db.emergency_access || []).length,
     collections: (db.collections || []).length,
     collection_members: (db.collection_members || []).length,
     device_trust_tokens: (db.device_trust_tokens || []).length,

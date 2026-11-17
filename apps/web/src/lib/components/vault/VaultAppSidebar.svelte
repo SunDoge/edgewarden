@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { m } from "$lib/paraglide/messages.js";
+  import { m } from "#lib/paraglide/messages.js";
   import {
     Building2,
     Database,
@@ -16,10 +16,10 @@
   } from "@lucide/svelte";
   import { navigating, page } from "$app/state";
   import { onMount } from "svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { Separator } from "$lib/components/ui/separator/index.js";
-  import { loadAppVersion, type AppVersionInfo } from "$lib/services/app-version";
-  import { vault } from "$lib/stores/vault.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { loadAppVersion, type AppVersionInfo } from "#lib/services/app-version.ts";
+  import { vault } from "#lib/stores/vault.svelte.ts";
   import { EDGEWARDEN_VERSION } from "@edgewarden/shared";
 
   let { onNavigate }: { onNavigate?: () => void } = $props();

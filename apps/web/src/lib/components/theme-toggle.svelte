@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { Moon, Sun } from "@lucide/svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     CLIENT_PREFERENCES_CHANGED_EVENT,
     applyThemePreference,
@@ -10,8 +10,8 @@
     resolveDarkTheme,
     saveClientPreferences,
     toggledThemePreference,
-  } from "$lib/services/client-preferences";
-  import { m } from "$lib/paraglide/messages.js";
+  } from "#lib/services/client-preferences.ts";
+  import { m } from "#lib/paraglide/messages.js";
 
   let dark = $state(false);
 

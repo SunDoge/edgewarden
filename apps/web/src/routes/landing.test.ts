@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
 import { waitFor } from "@testing-library/svelte";
-import { renderComponent, screen } from "$lib/../test/component";
-import { changeLocale } from "$lib/i18n/locale.svelte";
+import { renderComponent, screen } from "#test/component.ts";
+import { changeLocale } from "#lib/i18n/locale.svelte.ts";
 import Page from "./+page.svelte";
 
 const mocks = vi.hoisted(() => ({
@@ -12,9 +12,9 @@ const mocks = vi.hoisted(() => ({
   settings: vi.fn(),
 }));
 vi.mock("$app/navigation", () => ({ goto: mocks.goto }));
-vi.mock("$lib/services/api-auth", () => ({ isLoggedIn: mocks.loggedIn }));
-vi.mock("$lib/services/rpc", () => ({ restoreWebSession: mocks.restore }));
-vi.mock("$lib/services/landing", () => ({
+vi.mock("#lib/services/api-auth.ts", () => ({ isLoggedIn: mocks.loggedIn }));
+vi.mock("#lib/services/rpc.ts", () => ({ restoreWebSession: mocks.restore }));
+vi.mock("#lib/services/landing.ts", () => ({
   loadLandingSettings: mocks.settings,
 }));
 
@@ -74,7 +74,7 @@ test.each([true, false])(
     renderComponent(Page, {});
     await waitFor(() =>
       expect(mocks.goto).toHaveBeenCalledWith(loggedIn ? "/vault" : "/login", {
-        replaceState: true,
+        replace: true,
       }),
     );
     expect(mocks.restore).toHaveBeenCalledOnce();
@@ -86,7 +86,7 @@ test("a failed session restore still reaches login", async () => {
   mocks.restore.mockRejectedValue(new Error("offline"));
   renderComponent(Page, {});
   await waitFor(() =>
-    expect(mocks.goto).toHaveBeenCalledWith("/login", { replaceState: true }),
+    expect(mocks.goto).toHaveBeenCalledWith("/login", { replace: true }),
   );
 });
 

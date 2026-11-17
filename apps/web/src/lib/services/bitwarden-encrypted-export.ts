@@ -1,4 +1,4 @@
-import * as m from "$lib/paraglide/messages.js";
+import * as m from "#lib/paraglide/messages.js";
 import { argon2id } from "hash-wasm";
 import {
   bytesToBase64,

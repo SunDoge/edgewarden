@@ -1,4 +1,4 @@
-import * as m from "$lib/paraglide/messages.js";
+import * as m from "#lib/paraglide/messages.js";
 import QrScanner from "qr-scanner";
 import { extractTotpSecret } from "./crypto";
 

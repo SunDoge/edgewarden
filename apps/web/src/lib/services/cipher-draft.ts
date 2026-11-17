@@ -1,4 +1,4 @@
-import * as m from "$lib/paraglide/messages.js";
+import * as m from "#lib/paraglide/messages.js";
 import { CipherType, parseJsonWithSchema } from "@edgewarden/shared";
 import { match } from "ts-pattern";
 import * as v from "valibot";

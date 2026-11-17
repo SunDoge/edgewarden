@@ -29,7 +29,7 @@ Pass the `CloudflareBindings` as generics when instantiating `Hono`:
 
 ```ts
 // src/index.ts
-const app = new Hono<{ Bindings: CloudflareBindings }>()
+const app = new Hono<{ Bindings: CloudflareBindings }>();
 ```
 
 # Blob storage
@@ -99,11 +99,53 @@ These settings are intentionally absent from the portable Wrangler configs. Add 
 - `WEBAUTHN_RP_NAME`: display name shown by passkey prompts; defaults to `Edgewarden`.
 - `WEBAUTHN_ALLOWED_ORIGINS`: comma-separated canonical HTTPS origins accepted for passkey verification. Local development may use `http://localhost[:port]` or `http://127.0.0.1[:port]`; paths, credentials, and other HTTP origins are rejected.
 - `YUBICO_CLIENT_ID` and `YUBICO_SECRET_KEY`: optional Yubico validation credentials. Configure both together as secrets. They override credentials encrypted in D1 through the admin UI.
+- `EMAIL_FROM`: verified sender address. This is the feature switch; leave it unset to disable transactional email.
+- `EMAIL_PRIVACY_MODE`: `minimal` (default) sends generic Emergency Access notifications; `detailed` also identifies the event and actor.
+- `EMAIL_PROVIDER`: `auto` (default), `cloudflare`, or `resend`. `auto` uses the native `EMAIL` binding first and Resend only when that binding is unavailable.
+- `EMAIL_REPLY_TO`: optional verified reply-to address.
+- `RESEND_API_KEY`: secret Resend API key, needed only for the Resend provider.
 - `ADMIN_PASSWORD`: compatibility-only alias for `BOOTSTRAP_SECRET`. New deployments should not set it.
 
-Store `TURNSTILE_SECRET_KEY`, `YUBICO_CLIENT_ID`, and `YUBICO_SECRET_KEY` as
+Store `TURNSTILE_SECRET_KEY`, `YUBICO_CLIENT_ID`, `YUBICO_SECRET_KEY`, and `RESEND_API_KEY` as
 secrets. The CORS and WebAuthn settings are non-secret variables; keep them in
 the deployment's Wrangler configuration to persist them across Git deployments.
+
+## Optional transactional email
+
+Email is disabled by default and can be enabled in administration or by setting
+`EMAIL_FROM`. Account invitations and Emergency Access notifications are
+sent after the database operation succeeds, using `waitUntil`; delivery failure
+is recorded as an `email.failed` structured log and does not roll back the vault
+operation. Messages never contain encrypted keys, password material, or tokens.
+
+Account invitation mail is the exception to the no-token rule: it contains the
+same short-lived, email-bound, single-use invitation credential returned to the
+administrator. The credential is placed in the URL fragment so browsers do not
+send it in the HTTP request, Referer, or access logs. The registration page
+copies it into memory and immediately removes the fragment from browser history.
+
+The preferred configuration path is the administration page's Email tab. Its
+settings are stored as an AES-GCM encrypted envelope in D1 under
+`system.email.settings.v1`; the Resend key is never returned by the API. Existing
+Worker variables and secrets remain supported and override the corresponding D1
+fields. `JWT_SECRET`, `DATA_ENCRYPTION_SECRET`, and `BOOTSTRAP_SECRET` must remain
+deployment secrets and are intentionally not manageable through the application.
+
+For Cloudflare Email Service, onboard and verify the sending domain, then set
+`EMAIL_FROM` and optionally `EMAIL_PROVIDER=cloudflare`. The Wrangler configs
+already contain the `EMAIL` send binding. For Resend, verify the sender domain,
+store the API key, and select the provider:
+
+```sh
+pnpm exec wrangler secret put RESEND_API_KEY --config ../../wrangler.jsonc
+pnpm exec wrangler secret put EMAIL_FROM --config ../../wrangler.jsonc
+pnpm exec wrangler secret put EMAIL_PROVIDER --config ../../wrangler.jsonc
+```
+
+Enter `resend` when prompted for `EMAIL_PROVIDER`. Although the provider and
+sender are not credentials, storing them as secrets keeps Git-based deployments
+from overwriting dashboard-only variables. `auto` does not retry through Resend
+after a Cloudflare send failure, avoiding duplicate notifications.
 
 # Cryptographic secrets
 

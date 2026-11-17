@@ -1,16 +1,16 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { ShieldCheck } from "@lucide/svelte";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { listPendingAuthRequestsApi } from "$lib/services/auth-requests";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { listPendingAuthRequestsApi } from "#lib/services/auth-requests.ts";
   import {
     browserNotificationPermission,
     requestBrowserNotificationPermission,
-  } from "$lib/services/browser-notifications";
+  } from "#lib/services/browser-notifications.ts";
 
   let {
     email,

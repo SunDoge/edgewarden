@@ -1,5 +1,5 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
@@ -17,29 +17,29 @@
     getAuthenticatorApi,
     rotateApiKeyApi,
     updateProfileApi,
-  } from "$lib/services/api-account";
-  import { deriveMasterKey, deriveMasterPasswordHash } from "$lib/services/crypto";
-  import { vault, syncVaultData, logout } from "$lib/stores/vault.svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-  import AccountSecurityDialogs from "$lib/components/settings/AccountSecurityDialogs.svelte";
-  import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
-  import DeviceManager from "$lib/components/settings/DeviceManager.svelte";
-  import SettingsGeneralPanel from "$lib/components/settings/SettingsGeneralPanel.svelte";
-  import SettingsSecurityPanel from "$lib/components/settings/SettingsSecurityPanel.svelte";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import * as Tabs from "$lib/components/ui/tabs/index.js";
+  } from "#lib/services/api-account.ts";
+  import { deriveMasterKey, deriveMasterPasswordHash } from "#lib/services/crypto.ts";
+  import { vault, syncVaultData, logout } from "#lib/stores/vault.svelte.ts";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import AccountSecurityDialogs from "#lib/components/settings/AccountSecurityDialogs.svelte";
+  import VaultPageShell from "#lib/components/vault/VaultPageShell.svelte";
+  import DeviceManager from "#lib/components/settings/DeviceManager.svelte";
+  import SettingsGeneralPanel from "#lib/components/settings/SettingsGeneralPanel.svelte";
+  import SettingsSecurityPanel from "#lib/components/settings/SettingsSecurityPanel.svelte";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import {
     applyThemePreference,
     loadClientPreferences,
     saveClientPreferences,
     type SessionTimeoutAction,
     type ThemePreference,
-  } from "$lib/services/client-preferences";
+  } from "#lib/services/client-preferences.ts";
   import { ArrowLeft, LoaderCircle } from "@lucide/svelte";
-  import type { AccountDevice, AccountProfile } from "$lib/services/account-types";
-  import { summarizeTwoFactorProviders } from "$lib/services/two-factor-status";
+  import type { AccountDevice, AccountProfile } from "#lib/services/account-types.ts";
+  import { summarizeTwoFactorProviders } from "#lib/services/two-factor-status.ts";
 
   let loading = $state(true);
   let busy = $state("");

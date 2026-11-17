@@ -1,21 +1,21 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
-  import { isLoggedIn } from "$lib/services/api-auth";
-  import { errorMessage } from "$lib/services/error-message";
-  import { prefillDemoLogin } from "$lib/services/demo-login";
-  import { loadVaultSnapshot } from "$lib/services/vault-db";
-  import { vault, unlock } from "$lib/stores/vault.svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
+  import { isLoggedIn } from "#lib/services/api-auth.ts";
+  import { errorMessage } from "#lib/services/error-message.ts";
+  import { prefillDemoLogin } from "#lib/services/demo-login.ts";
+  import { loadVaultSnapshot } from "#lib/services/vault-db.ts";
+  import { vault, unlock } from "#lib/stores/vault.svelte.ts";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { ShieldCheck, KeyRound, Eye, EyeOff, WifiOff } from "@lucide/svelte";
-  import ThemeToggle from "$lib/components/theme-toggle.svelte";
+  import ThemeToggle from "#lib/components/theme-toggle.svelte";
 
   let email = $state("");
   let showPassword = $state(false);

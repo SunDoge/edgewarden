@@ -1,20 +1,23 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { onMount } from "svelte";
   import { match } from "ts-pattern";
   import { goto } from "$app/navigation";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import * as Empty from "$lib/components/ui/empty/index.js";
-  import { Progress } from "$lib/components/ui/progress/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
-  import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
-  import { inspectPasswordHealth, type PasswordHealthReport } from "$lib/services/password-health";
-  import { vault } from "$lib/stores/vault.svelte";
-  import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Empty from "#lib/components/ui/empty/index.js";
+  import { Progress } from "#lib/components/ui/progress/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import {
+    inspectPasswordHealth,
+    type PasswordHealthReport,
+  } from "#lib/services/password-health.ts";
+  import { vault } from "#lib/stores/vault.svelte.ts";
+  import VaultPageShell from "#lib/components/vault/VaultPageShell.svelte";
   import { AlertTriangle, ArrowLeft, CheckCircle2, Eye, EyeOff, ShieldAlert } from "@lucide/svelte";
 
   let report = $state<PasswordHealthReport | null>(null);
