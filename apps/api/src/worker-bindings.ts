@@ -9,9 +9,14 @@ import type { DEMO_RUNTIME } from "./demo/policy";
 type OptionalWorkerBindings = {
   ADMIN_PASSWORD?: string;
   CORS_ALLOWED_ORIGINS?: string;
+  EMAIL_FROM?: string;
+  EMAIL_PRIVACY_MODE?: string;
+  EMAIL_PROVIDER?: string;
+  EMAIL_REPLY_TO?: string;
   PUSH_INSTALLATION_ID?: string;
   PUSH_INSTALLATION_KEY?: string;
   PUSH_REGION?: string;
+  RESEND_API_KEY?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
   WEBAUTHN_ALLOWED_ORIGINS?: string;
@@ -30,9 +35,14 @@ export type WorkerBindings = Omit<
 export const OPTIONAL_WORKER_BINDING_NAMES = [
   "ADMIN_PASSWORD",
   "CORS_ALLOWED_ORIGINS",
+  "EMAIL_FROM",
+  "EMAIL_PRIVACY_MODE",
+  "EMAIL_PROVIDER",
+  "EMAIL_REPLY_TO",
   "PUSH_INSTALLATION_ID",
   "PUSH_INSTALLATION_KEY",
   "PUSH_REGION",
+  "RESEND_API_KEY",
   "TURNSTILE_SECRET_KEY",
   "TURNSTILE_SITE_KEY",
   "WEBAUTHN_ALLOWED_ORIGINS",

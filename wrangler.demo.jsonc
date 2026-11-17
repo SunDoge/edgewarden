@@ -24,6 +24,7 @@
       "bucket_name": "edgewarden-demo-attachments"
     }
   ],
+  "send_email": [{ "name": "EMAIL" }],
   "secrets": {
     "required": ["JWT_SECRET", "DATA_ENCRYPTION_SECRET", "BOOTSTRAP_SECRET"]
   },

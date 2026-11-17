@@ -161,6 +161,27 @@ export async function importBackupRows(
   );
   await runInsertBatch(
     db,
+    tableName("emergency_access"),
+    buildInsertStatements(
+      db,
+      tableName("emergency_access"),
+      [
+        "id",
+        "grantor_id",
+        "grantee_id",
+        "key_encrypted",
+        "type",
+        "status",
+        "wait_time_days",
+        "recovery_initiated_at",
+        "created_at",
+        "updated_at",
+      ],
+      payload.emergency_access || [],
+    ),
+  );
+  await runInsertBatch(
+    db,
     tableName("collections"),
     buildInsertStatements(
       db,

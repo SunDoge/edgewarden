@@ -7,6 +7,7 @@ export interface BackupDatabaseSnapshot {
   revisionRows: BackupSnapshotRow[];
   organizationRows: BackupSnapshotRow[];
   orgMemberRows: BackupSnapshotRow[];
+  emergencyAccessRows: BackupSnapshotRow[];
   collectionRows: BackupSnapshotRow[];
   collectionMemberRows: BackupSnapshotRow[];
   folderRows: BackupSnapshotRow[];
@@ -39,6 +40,7 @@ export async function readBackupDatabaseSnapshot(
     db.prepare("SELECT * FROM user_revisions ORDER BY user_id ASC"),
     db.prepare("SELECT * FROM organizations ORDER BY created_at ASC"),
     db.prepare("SELECT * FROM org_members ORDER BY created_at ASC"),
+    db.prepare("SELECT * FROM emergency_access ORDER BY created_at ASC"),
     db.prepare("SELECT * FROM collections ORDER BY created_at ASC"),
     db.prepare("SELECT * FROM collection_members ORDER BY collection_id ASC"),
     db.prepare("SELECT * FROM folders ORDER BY created_at ASC"),
@@ -60,15 +62,16 @@ export async function readBackupDatabaseSnapshot(
     revisionRows: rows(results[3]),
     organizationRows: rows(results[4]),
     orgMemberRows: rows(results[5]),
-    collectionRows: rows(results[6]),
-    collectionMemberRows: rows(results[7]),
-    folderRows: rows(results[8]),
-    cipherRows: rows(results[9]),
-    cipherUserSettingRows: rows(results[10]),
-    cipherCollectionRows: rows(results[11]),
-    attachmentRows: rows(results[12]),
-    webauthnRows: rows(results[13]),
-    auditRows: rows(results[14]),
-    sendsRows: rows(results[15]),
+    emergencyAccessRows: rows(results[6]),
+    collectionRows: rows(results[7]),
+    collectionMemberRows: rows(results[8]),
+    folderRows: rows(results[9]),
+    cipherRows: rows(results[10]),
+    cipherUserSettingRows: rows(results[11]),
+    cipherCollectionRows: rows(results[12]),
+    attachmentRows: rows(results[13]),
+    webauthnRows: rows(results[14]),
+    auditRows: rows(results[15]),
+    sendsRows: rows(results[16]),
   };
 }

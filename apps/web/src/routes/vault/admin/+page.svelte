@@ -19,6 +19,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Field from "$lib/components/ui/field/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
+  import * as Select from "$lib/components/ui/select/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import * as Tabs from "$lib/components/ui/tabs/index.js";
@@ -28,16 +29,20 @@
     deleteAdminInviteApi,
     deleteAdminUserApi,
     getAdminPushRelayStatusApi,
+    getAdminEmailSettingsApi,
     getAdminRegistrationPolicyApi,
     listAdminInvitesApi,
     listAdminUsersApi,
     setAdminUserStatusApi,
     updateAdminRegistrationPolicyApi,
+    updateAdminEmailSettingsApi,
+    testAdminEmailSettingsApi,
   } from "$lib/services/api-admin";
   import { deriveAccountPasswordHash } from "$lib/services/api-auth";
   import { vault } from "$lib/stores/vault.svelte";
   import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
   import type { AdminInvite, AdminUser } from "$lib/services/admin-types";
+  import type { AdminEmailSettings } from "$lib/services/api-admin";
 
   let users = $state<AdminUser[]>([]);
   let invites = $state<AdminInvite[]>([]);
@@ -55,6 +60,9 @@
     installationKeyConfigured: boolean;
     reason: "ready" | "missing_credentials" | "invalid_region";
   } | null>(null);
+  let emailSettings = $state<AdminEmailSettings | null>(null);
+  let resendApiKey = $state("");
+  let clearResendApiKey = $state(false);
   let userSearchQuery = $state("");
   let deleteUser = $state<AdminUser | null>(null);
   const filteredUsers = $derived(searchAdminUsers(users, userSearchQuery));
@@ -63,17 +71,19 @@
     busy = "refresh";
     error = null;
     try {
-      const [nextUsers, nextInvites, policy, nextPushRelay] = await Promise.all([
+      const [nextUsers, nextInvites, policy, nextPushRelay, nextEmailSettings] = await Promise.all([
         listAdminUsersApi().then((r) => r.data),
         listAdminInvitesApi().then((r) => r.data),
         getAdminRegistrationPolicyApi(),
         getAdminPushRelayStatusApi(),
+        getAdminEmailSettingsApi(),
       ]);
       users = nextUsers;
       invites = nextInvites;
       signupsAllowed = policy.signupsAllowed;
       invitationsAllowed = policy.invitationsAllowed;
       pushRelay = nextPushRelay;
+      emailSettings = nextEmailSettings;
     } catch (reason) {
       error = reason instanceof Error ? reason.message : String(reason);
     } finally {
@@ -116,6 +126,27 @@
     );
   }
 
+  async function saveEmailSettings() {
+    if (!emailSettings) return;
+    await run("email-settings", (hash) =>
+      updateAdminEmailSettingsApi(hash, {
+        enabled: emailSettings!.enabled,
+        provider: emailSettings!.provider,
+        from: emailSettings!.from,
+        replyTo: emailSettings!.replyTo,
+        privacyMode: emailSettings!.privacyMode,
+        resendApiKey: resendApiKey || undefined,
+        clearResendApiKey,
+      }),
+    );
+    resendApiKey = "";
+    clearResendApiKey = false;
+  }
+
+  async function sendTestEmail() {
+    await run("email-test", (hash) => testAdminEmailSettingsApi(hash));
+  }
+
   async function confirmDeleteUser() {
     if (!deleteUser) return;
     const user = deleteUser;
@@ -156,10 +187,12 @@
   >
 
   <Tabs.Root value="users" class="flex flex-col gap-4">
-    <Tabs.List class="grid h-auto w-full grid-cols-3"
+    <Tabs.List class="grid h-auto w-full grid-cols-2 sm:grid-cols-4"
       ><Tabs.Trigger value="users">{m.ui_users()}</Tabs.Trigger><Tabs.Trigger value="registration"
         >{m.ui_registration_and_invitations()}</Tabs.Trigger
-      ><Tabs.Trigger value="operations">{m.ui_service_status()}</Tabs.Trigger></Tabs.List
+      ><Tabs.Trigger value="email">{m.ui_email_2()}</Tabs.Trigger><Tabs.Trigger value="operations"
+        >{m.ui_service_status()}</Tabs.Trigger
+      ></Tabs.List
     >
     <Tabs.Content value="registration" class="mt-0 flex flex-col gap-6">
       <section class="rounded-lg border bg-card p-4">
@@ -273,6 +306,124 @@
             ></Table.Root
           >
         </div>
+      </section>
+    </Tabs.Content>
+
+    <Tabs.Content value="email" class="mt-0">
+      <section class="rounded-lg border bg-card p-4">
+        {#if emailSettings}
+          <div class="flex flex-col gap-5">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h2 class="font-semibold">{m.ui_transactional_email()}</h2>
+                <p class="text-xs text-muted-foreground">
+                  {m.ui_email_settings_description()}
+                </p>
+              </div>
+              <Badge variant={emailSettings.activeProvider ? "secondary" : "outline"}
+                >{emailSettings.activeProvider ?? m.ui_off()}</Badge
+              >
+            </div>
+            {#if emailSettings.environmentOverrides.length}
+              <Alert.Root>
+                <ShieldAlert /><Alert.Title>{m.ui_environment_overrides_active()}</Alert.Title>
+                <Alert.Description
+                  >{emailSettings.environmentOverrides.join(", ")}</Alert.Description
+                >
+              </Alert.Root>
+            {/if}
+            <Field.Group class="grid gap-4 md:grid-cols-2">
+              <Field.Field orientation="horizontal" class="md:col-span-2">
+                <Field.Content
+                  ><Field.Label for="email-enabled">{m.ui_enable_email()}</Field.Label
+                  ></Field.Content
+                >
+                <Switch id="email-enabled" bind:checked={emailSettings.enabled} />
+              </Field.Field>
+              <Field.Field>
+                <Field.Label>{m.ui_provider()}</Field.Label>
+                <Select.Root
+                  type="single"
+                  value={emailSettings.provider}
+                  onValueChange={(value) =>
+                    (emailSettings!.provider = value as AdminEmailSettings["provider"])}
+                >
+                  <Select.Trigger class="w-full">{emailSettings.provider}</Select.Trigger>
+                  <Select.Content
+                    ><Select.Item value="auto">auto</Select.Item><Select.Item value="cloudflare"
+                      >Cloudflare</Select.Item
+                    ><Select.Item value="resend">Resend</Select.Item></Select.Content
+                  >
+                </Select.Root>
+              </Field.Field>
+              <Field.Field>
+                <Field.Label>{m.ui_privacy_mode()}</Field.Label>
+                <Select.Root
+                  type="single"
+                  value={emailSettings.privacyMode}
+                  onValueChange={(value) =>
+                    (emailSettings!.privacyMode = value as AdminEmailSettings["privacyMode"])}
+                >
+                  <Select.Trigger class="w-full">{emailSettings.privacyMode}</Select.Trigger>
+                  <Select.Content
+                    ><Select.Item value="minimal">minimal</Select.Item><Select.Item value="detailed"
+                      >detailed</Select.Item
+                    ></Select.Content
+                  >
+                </Select.Root>
+              </Field.Field>
+              <Field.Field>
+                <Field.Label for="email-from">From</Field.Label>
+                <Input
+                  id="email-from"
+                  bind:value={emailSettings.from}
+                  placeholder="Edgewarden <vault@example.com>"
+                />
+              </Field.Field>
+              <Field.Field>
+                <Field.Label for="email-reply-to">Reply-To</Field.Label>
+                <Input
+                  id="email-reply-to"
+                  bind:value={emailSettings.replyTo}
+                  placeholder="support@example.com"
+                />
+              </Field.Field>
+              <Field.Field class="md:col-span-2">
+                <Field.Label for="resend-api-key">Resend API key</Field.Label>
+                <Input
+                  id="resend-api-key"
+                  type="password"
+                  bind:value={resendApiKey}
+                  autocomplete="new-password"
+                  placeholder={emailSettings.resendApiKeyConfigured
+                    ? m.ui_resend_key_configured_placeholder()
+                    : "re_…"}
+                />
+              </Field.Field>
+              <Field.Field orientation="horizontal" class="md:col-span-2">
+                <Field.Content
+                  ><Field.Label for="clear-resend-key"
+                    >{m.ui_remove_stored_resend_key()}</Field.Label
+                  ></Field.Content
+                >
+                <Switch id="clear-resend-key" bind:checked={clearResendApiKey} />
+              </Field.Field>
+            </Field.Group>
+            <div class="flex flex-wrap gap-2">
+              <Button onclick={saveEmailSettings} disabled={busy !== null || !masterPassword}
+                >{m.ui_save_email_settings()}</Button
+              >
+              <Button
+                variant="outline"
+                onclick={sendTestEmail}
+                disabled={busy !== null || !masterPassword || !emailSettings.activeProvider}
+                >{m.ui_send_test_to_my_account()}</Button
+              >
+            </div>
+          </div>
+        {:else}
+          <p class="text-sm text-muted-foreground">{m.ui_loading_email_settings()}</p>
+        {/if}
       </section>
     </Tabs.Content>
 

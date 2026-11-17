@@ -5,6 +5,7 @@ const ENVELOPE_VERSION = 1;
 
 type CredentialPurpose =
   | "api-key"
+  | "system-settings"
   | "totp-secret"
   | "totp-recovery"
   | "invite-code";

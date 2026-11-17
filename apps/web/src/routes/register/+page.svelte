@@ -36,10 +36,13 @@
   let turnstileWidget = $state<{ reset(): void } | null>(null);
 
   onMount(async () => {
-    const params = new URLSearchParams(location.search);
+    const fragment = new URLSearchParams(location.hash.replace(/^#/, ""));
+    const params = fragment.has("invite") ? fragment : new URLSearchParams(location.search);
     inviteCode = params.get("invite")?.trim() ?? "";
-    // Prefill once; query parameters never authorize use of an invitation.
+    // Prefill once; URL parameters never authorize use of an invitation.
     if (inviteCode && !email) email = params.get("email")?.trim() ?? "";
+    if (fragment.has("invite"))
+      history.replaceState(null, "", `${location.pathname}${location.search}`);
     try {
       const config = await getRegistrationConfigApi();
       signupsAllowed = config.signupsAllowed;

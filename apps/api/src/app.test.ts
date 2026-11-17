@@ -27,6 +27,7 @@ import { createBackupRestoreFixture } from "./test-support/backup-restore-fixtur
 import { registerAuthReliabilityScenarios } from "./test-support/auth-reliability-scenarios";
 import { registerAuthScenarios } from "./test-support/auth-scenarios";
 import { registerDatabaseMaintenanceScenarios } from "./test-support/database-maintenance-scenarios";
+import { registerEmergencyAccessScenarios } from "./test-support/emergency-access-scenarios";
 import { registerInfrastructureScenarios } from "./test-support/infrastructure-scenarios";
 import { registerMaintenanceReliabilityScenarios } from "./test-support/maintenance-reliability-scenarios";
 import { createOrganizationBackupFixture } from "./test-support/organization-backup-fixture";
@@ -145,6 +146,19 @@ describe("Edgewarden API", () => {
     request,
     email: EMAIL,
     masterPasswordHash: MASTER_PASSWORD_HASH,
+  });
+  registerEmergencyAccessScenarios({
+    get database() {
+      return testDatabase;
+    },
+    get accessToken() {
+      return accessToken;
+    },
+    get memberAccessToken() {
+      return memberAccessToken;
+    },
+    memberEmail: MEMBER_EMAIL,
+    request,
   });
   registerSendScenarios({
     get database() {

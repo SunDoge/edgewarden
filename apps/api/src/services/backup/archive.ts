@@ -78,6 +78,7 @@ export interface BackupPayload {
     user_revisions: SqlRow[];
     organizations?: SqlRow[];
     org_members?: SqlRow[];
+    emergency_access?: SqlRow[];
     collections?: SqlRow[];
     collection_members?: SqlRow[];
     folders: SqlRow[];
@@ -150,6 +151,7 @@ const BACKUP_DB_TABLES = [
   "user_revisions",
   "organizations",
   "org_members",
+  "emergency_access",
   "collections",
   "collection_members",
   "folders",
@@ -506,6 +508,7 @@ export async function buildBackupArchive(
     revisionRows,
     organizationRows,
     orgMemberRows,
+    emergencyAccessRows,
     collectionRows,
     collectionMemberRows,
     folderRows,
@@ -630,6 +633,7 @@ export async function buildBackupArchive(
       user_revisions: revisionRows.length,
       organizations: exportedOrganizationRows.length,
       org_members: exportedOrgMemberRows.length,
+      emergency_access: emergencyAccessRows.length,
       collections: exportedCollectionRows.length,
       collection_members: collectionMemberRows.length,
       folders: exportedFolderRows.length,
@@ -672,6 +676,7 @@ export async function buildBackupArchive(
           user_revisions: revisionRows,
           organizations: exportedOrganizationRows,
           org_members: exportedOrgMemberRows,
+          emergency_access: emergencyAccessRows,
           collections: exportedCollectionRows,
           collection_members: collectionMemberRows,
           folders: exportedFolderRows,

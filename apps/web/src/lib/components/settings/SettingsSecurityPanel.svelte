@@ -10,6 +10,7 @@
   import AuthRequestSettings from "./AuthRequestSettings.svelte";
   import TwoFactorPasskeys from "./TwoFactorPasskeys.svelte";
   import YubikeySettings from "./YubikeySettings.svelte";
+  import EmergencyAccessSettings from "./EmergencyAccessSettings.svelte";
 
   let {
     profile,
@@ -121,4 +122,5 @@
     {onError}
   />
   <AuthRequestSettings email={profile.email} {onMessage} {onError} />
+  <EmergencyAccessSettings {onMessage} {onError} />
 </div>
