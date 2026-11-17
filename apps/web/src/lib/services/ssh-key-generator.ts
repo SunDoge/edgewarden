@@ -1,4 +1,4 @@
-import * as m from "$lib/paraglide/messages.js";
+import * as m from "#lib/paraglide/messages.js";
 export interface SshKeyOptions {
   type: "ed25519" | "rsa";
   rsaLength: 2048 | 3072 | 4096;

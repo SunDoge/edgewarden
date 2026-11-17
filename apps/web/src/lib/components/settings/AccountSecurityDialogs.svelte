@@ -1,13 +1,13 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { Copy, Download, ShieldAlert } from "@lucide/svelte";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { Checkbox } from "$lib/components/ui/checkbox/index.js";
-  import * as Dialog from "$lib/components/ui/dialog/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
 
   let {
     deleteAccountOpen = $bindable(),

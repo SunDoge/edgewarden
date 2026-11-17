@@ -2,7 +2,7 @@ import {
   getLocale,
   getTextDirection,
   type Locale,
-} from "$lib/paraglide/runtime.js";
+} from "#lib/paraglide/runtime.js";
 
 export function formatTime(
   value: Date | number | string,

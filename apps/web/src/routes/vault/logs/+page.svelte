@@ -1,25 +1,25 @@
 <script lang="ts">
-  import { formatDateTime } from "$lib/i18n/format";
-  import * as m from "$lib/paraglide/messages.js";
+  import { formatDateTime } from "#lib/i18n/format.ts";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, ShieldAlert } from "@lucide/svelte";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import * as Select from "$lib/components/ui/select/index.js";
-  import * as Table from "$lib/components/ui/table/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
   import {
     fetchAuditLogSettingsApi,
     listAuditLogsApi,
     updateAuditLogSettingsApi,
-  } from "$lib/services/api-admin";
-  import { vault } from "$lib/stores/vault.svelte";
-  import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
-  import type { AuditLogEntry } from "$lib/services/admin-types";
+  } from "#lib/services/api-admin.ts";
+  import { vault } from "#lib/stores/vault.svelte.ts";
+  import VaultPageShell from "#lib/components/vault/VaultPageShell.svelte";
+  import type { AuditLogEntry } from "#lib/services/admin-types.ts";
 
   let logs = $state<AuditLogEntry[]>([]);
   let total = $state(0);

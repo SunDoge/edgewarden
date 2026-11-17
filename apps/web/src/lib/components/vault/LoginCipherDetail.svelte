@@ -1,10 +1,10 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
   import { Check, Copy, ExternalLink, Eye, EyeOff } from "@lucide/svelte";
-  import type { VaultLoginData, VaultTotp } from "$lib/services/vault-types";
+  import type { VaultLoginData, VaultTotp } from "#lib/services/vault-types.ts";
 
   let {
     login,

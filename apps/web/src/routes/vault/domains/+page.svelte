@@ -1,19 +1,19 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { fetchDomainRules, updateDomainRules } from "$lib/services/api-vault";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import { Skeleton } from "$lib/components/ui/skeleton/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
-  import CustomEquivalentDomains from "$lib/components/domains/CustomEquivalentDomains.svelte";
-  import { normalizeEquivalentDomainRule } from "$lib/services/equivalent-domains";
-  import GlobalEquivalentDomains from "$lib/components/domains/GlobalEquivalentDomains.svelte";
-  import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
-  import { errorMessage } from "$lib/services/error-message";
+  import { fetchDomainRules, updateDomainRules } from "#lib/services/api-vault.ts";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import CustomEquivalentDomains from "#lib/components/domains/CustomEquivalentDomains.svelte";
+  import { normalizeEquivalentDomainRule } from "#lib/services/equivalent-domains.ts";
+  import GlobalEquivalentDomains from "#lib/components/domains/GlobalEquivalentDomains.svelte";
+  import VaultPageShell from "#lib/components/vault/VaultPageShell.svelte";
+  import { errorMessage } from "#lib/services/error-message.ts";
   import {
     ArrowLeft,
     Save,

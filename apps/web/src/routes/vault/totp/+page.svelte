@@ -1,16 +1,16 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import * as Empty from "$lib/components/ui/empty/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
-  import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
-  import TotpCountdown from "$lib/components/vault/TotpCountdown.svelte";
-  import { calcTotpNow } from "$lib/services/crypto";
-  import { vault } from "$lib/stores/vault.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Empty from "#lib/components/ui/empty/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import VaultPageShell from "#lib/components/vault/VaultPageShell.svelte";
+  import TotpCountdown from "#lib/components/vault/TotpCountdown.svelte";
+  import { calcTotpNow } from "#lib/services/crypto.ts";
+  import { vault } from "#lib/stores/vault.svelte.ts";
   import { ArrowLeft, Check, Copy, KeyRound } from "@lucide/svelte";
 
   let codes = $state<Record<string, { code: string; remain: number; period: number } | null>>({});

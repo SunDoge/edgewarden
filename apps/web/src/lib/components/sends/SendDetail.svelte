@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { formatDate, formatDateTime } from "$lib/i18n/format";
-  import * as m from "$lib/paraglide/messages.js";
+  import { formatDate, formatDateTime } from "#lib/i18n/format.ts";
+  import * as m from "#lib/paraglide/messages.js";
 
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import { Separator } from "$lib/components/ui/separator/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import { Check, Copy, ExternalLink, File as FileIcon, FileText, Trash2 } from "@lucide/svelte";
   import { match } from "ts-pattern";
-  import type { DecryptedSend } from "$lib/services/send-crypto";
+  import type { DecryptedSend } from "#lib/services/send-crypto.ts";
 
   let {
     send,

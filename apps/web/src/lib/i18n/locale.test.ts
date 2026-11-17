@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
-import { renderComponent, screen } from "$lib/../test/component";
+import { renderComponent, screen } from "#test/component.ts";
 import { changeLocale } from "./locale.svelte";
-import { getLocale, localStorageKey } from "$lib/paraglide/runtime.js";
+import { getLocale, localStorageKey } from "#lib/paraglide/runtime.js";
 import LocaleFixture from "./LocaleFixture.svelte";
 
 beforeEach(() => {

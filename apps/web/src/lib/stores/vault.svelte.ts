@@ -1,36 +1,36 @@
-import * as m from "$lib/paraglide/messages.js";
+import * as m from "#lib/paraglide/messages.js";
 import type {
   CollectionResponse,
   FolderResponse,
   ProfileOrganizationResponse,
   SyncResponse,
 } from "@edgewarden/shared";
-import type { VaultCipher } from "$lib/services/vault-types";
-import type { DecryptedSend } from "$lib/services/send-crypto";
-import { logout as apiLogout } from "$lib/services/api-auth";
-import { syncVault } from "$lib/services/api-vault";
+import type { VaultCipher } from "#lib/services/vault-types.ts";
+import type { DecryptedSend } from "#lib/services/send-crypto.ts";
+import { logout as apiLogout } from "#lib/services/api-auth.ts";
+import { syncVault } from "#lib/services/api-vault.ts";
 import {
   base64ToBytes,
   bytesToBase64,
   decryptBw,
   deriveMasterKey,
   hkdfExpand,
-} from "$lib/services/crypto";
+} from "#lib/services/crypto.ts";
 import {
   clearVaultSnapshot,
   loadVaultSnapshot,
   saveValidatedVaultSnapshot,
   type VaultSnapshot,
-} from "$lib/services/vault-db";
+} from "#lib/services/vault-db.ts";
 import {
   broadcastVaultEvent,
   subscribeToVaultEvents,
   type VaultEvent,
-} from "$lib/services/vault-events";
+} from "#lib/services/vault-events.ts";
 import {
   applyOrganizationAccess,
   hydrateEncryptedVaultSnapshot,
-} from "$lib/services/vault-hydration";
+} from "#lib/services/vault-hydration.ts";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

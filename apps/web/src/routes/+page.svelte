@@ -1,14 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { isLoggedIn } from "$lib/services/api-auth";
-  import { restoreWebSession } from "$lib/services/rpc";
-  import * as Empty from "$lib/components/ui/empty/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import LandingPage from "$lib/components/LandingPage.svelte";
-  import { loadLandingSettings } from "$lib/services/landing";
-  import { m } from "$lib/paraglide/messages.js";
+  import { isLoggedIn } from "#lib/services/api-auth.ts";
+  import { restoreWebSession } from "#lib/services/rpc.ts";
+  import * as Empty from "#lib/components/ui/empty/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import LandingPage from "#lib/components/LandingPage.svelte";
+  import { loadLandingSettings } from "#lib/services/landing.ts";
+  import { m } from "#lib/paraglide/messages.js";
 
   let landing = $state<{ enabled: boolean; demo: boolean } | null>(null);
   onMount(() => {
@@ -26,7 +26,7 @@
         // Login stays reachable when a stale session cannot be restored.
       }
       if (!controller.signal.aborted)
-        await goto(isLoggedIn() ? "/vault" : "/login", { replaceState: true });
+        await goto(isLoggedIn() ? "/vault" : "/login", { replace: true });
     }
     void initialize();
     return () => controller.abort();

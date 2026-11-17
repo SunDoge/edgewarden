@@ -1,19 +1,19 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { onMount } from "svelte";
   import { canManageOrganizationMembers } from "@edgewarden/shared";
   import { Building2, Pencil, Plus } from "@lucide/svelte";
-  import OrganizationCollectionsCard from "$lib/components/organizations/OrganizationCollectionsCard.svelte";
-  import OrganizationDialogs from "$lib/components/organizations/OrganizationDialogs.svelte";
-  import OrganizationMembersCard from "$lib/components/organizations/OrganizationMembersCard.svelte";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
-  import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
-  import { createOrganizationManager } from "$lib/services/organization-manager.svelte";
+  import OrganizationCollectionsCard from "#lib/components/organizations/OrganizationCollectionsCard.svelte";
+  import OrganizationDialogs from "#lib/components/organizations/OrganizationDialogs.svelte";
+  import OrganizationMembersCard from "#lib/components/organizations/OrganizationMembersCard.svelte";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import VaultPageShell from "#lib/components/vault/VaultPageShell.svelte";
+  import { createOrganizationManager } from "#lib/services/organization-manager.svelte.ts";
 
   const manager = createOrganizationManager();
   const state = manager.state;

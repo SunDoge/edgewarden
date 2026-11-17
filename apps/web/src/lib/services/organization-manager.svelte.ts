@@ -1,4 +1,4 @@
-import * as m from "$lib/paraglide/messages.js";
+import * as m from "#lib/paraglide/messages.js";
 import { match } from "ts-pattern";
 import { canManageOrganizationMembers } from "@edgewarden/shared";
 import { deriveAccountPasswordHash } from "./api-auth";
@@ -34,7 +34,7 @@ import {
   getOrganizationKey,
   syncVaultData,
   vault,
-} from "$lib/stores/vault.svelte";
+} from "#lib/stores/vault.svelte.ts";
 
 type MemberRole = "admin" | "manager" | "member";
 

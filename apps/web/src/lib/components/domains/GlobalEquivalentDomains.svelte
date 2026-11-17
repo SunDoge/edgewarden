@@ -1,14 +1,14 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import type { GlobalEquivalentDomain } from "@edgewarden/shared";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import { Checkbox } from "$lib/components/ui/checkbox/index.js";
-  import * as Empty from "$lib/components/ui/empty/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import * as Empty from "#lib/components/ui/empty/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import { Search } from "@lucide/svelte";
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils.ts";
 
   let {
     rules,

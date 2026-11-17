@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { changeLocale } from "$lib/i18n/locale.svelte";
-import { renderComponent, screen } from "$lib/../test/component";
+import { changeLocale } from "#lib/i18n/locale.svelte.ts";
+import { renderComponent, screen } from "#test/component.ts";
 import OrganizationCollectionsCard from "./OrganizationCollectionsCard.svelte";
 
 describe("OrganizationCollectionsCard", () => {

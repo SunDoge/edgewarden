@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { formatDateTime } from "$lib/i18n/format";
-  import * as m from "$lib/paraglide/messages.js";
+  import { formatDateTime } from "#lib/i18n/format.ts";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { ShieldCheck, Trash2 } from "@lucide/svelte";
   import { onMount } from "svelte";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import * as Dialog from "$lib/components/ui/dialog/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import {
     createAccountPasskeyApi,
     deleteAccountPasskeyApi,
@@ -18,17 +18,21 @@
     getAccountPasskeyAttestationOptionsApi,
     listAccountPasskeysApi,
     updateAccountPasskeyEncryptionApi,
-  } from "$lib/services/api-account";
-  import { bytesToBase64, deriveMasterKey, deriveMasterPasswordHash } from "$lib/services/crypto";
+  } from "#lib/services/api-account.ts";
+  import {
+    bytesToBase64,
+    deriveMasterKey,
+    deriveMasterPasswordHash,
+  } from "#lib/services/crypto.ts";
   import {
     assertAccountPasskey,
     buildAccountPasskeyPrfKeySet,
     buildAccountPasskeyPrfKeySetFromPrfKey,
     createAccountPasskeyCredential,
-  } from "$lib/services/passkeys";
-  import { vault } from "$lib/stores/vault.svelte";
-  import type { AccountPasskey } from "$lib/services/account-types";
-  import type { PendingAccountPasskeyCredential } from "$lib/services/passkeys";
+  } from "#lib/services/passkeys.ts";
+  import { vault } from "#lib/stores/vault.svelte.ts";
+  import type { AccountPasskey } from "#lib/services/account-types.ts";
+  import type { PendingAccountPasskeyCredential } from "#lib/services/passkeys.ts";
 
   let {
     email,

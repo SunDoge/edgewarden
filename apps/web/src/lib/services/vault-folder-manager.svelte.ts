@@ -1,4 +1,4 @@
-import * as m from "$lib/paraglide/messages.js";
+import * as m from "#lib/paraglide/messages.js";
 import { toast } from "svelte-sonner";
 import {
   removeAllVaultFolders,
@@ -8,7 +8,7 @@ import {
 } from "./vault-folder-actions";
 import type { VaultFolder } from "./vault-types";
 import { errorDetail } from "./error-message";
-import { syncVaultData, vault } from "$lib/stores/vault.svelte";
+import { syncVaultData, vault } from "#lib/stores/vault.svelte.ts";
 
 export function createVaultFolderManager(activeFolder: {
   get(): string | null;

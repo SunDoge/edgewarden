@@ -1,24 +1,24 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { KeyRound } from "@lucide/svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import * as Dialog from "$lib/components/ui/dialog/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import { Switch } from "$lib/components/ui/switch/index.js";
-  import { Textarea } from "$lib/components/ui/textarea/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
     disableYubikeysApi,
     getYubikeySettingsApi,
     saveYubicoConfigApi,
     saveYubikeysApi,
-  } from "$lib/services/api-two-factor";
-  import { deriveMasterKey, deriveMasterPasswordHash } from "$lib/services/crypto";
-  import type { YubikeySettingsResult } from "$lib/services/two-factor-types";
+  } from "#lib/services/api-two-factor.ts";
+  import { deriveMasterKey, deriveMasterPasswordHash } from "#lib/services/crypto.ts";
+  import type { YubikeySettingsResult } from "#lib/services/two-factor-types.ts";
 
   let {
     email,

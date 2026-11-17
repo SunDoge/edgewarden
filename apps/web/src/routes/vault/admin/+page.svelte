@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { formatDateTime } from "$lib/i18n/format";
-  import * as m from "$lib/paraglide/messages.js";
+  import { formatDateTime } from "#lib/i18n/format.ts";
+  import * as m from "#lib/paraglide/messages.js";
 
   import {
     ArrowLeft,
@@ -13,17 +13,17 @@
   } from "@lucide/svelte";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import * as Select from "$lib/components/ui/select/index.js";
-  import { Switch } from "$lib/components/ui/switch/index.js";
-  import * as Table from "$lib/components/ui/table/index.js";
-  import * as Tabs from "$lib/components/ui/tabs/index.js";
-  import { searchAdminUsers } from "$lib/services/admin-search";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
+  import { searchAdminUsers } from "#lib/services/admin-search.ts";
   import {
     createAdminInviteApi,
     deleteAdminInviteApi,
@@ -37,12 +37,12 @@
     updateAdminRegistrationPolicyApi,
     updateAdminEmailSettingsApi,
     testAdminEmailSettingsApi,
-  } from "$lib/services/api-admin";
-  import { deriveAccountPasswordHash } from "$lib/services/api-auth";
-  import { vault } from "$lib/stores/vault.svelte";
-  import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
-  import type { AdminInvite, AdminUser } from "$lib/services/admin-types";
-  import type { AdminEmailSettings } from "$lib/services/api-admin";
+  } from "#lib/services/api-admin.ts";
+  import { deriveAccountPasswordHash } from "#lib/services/api-auth.ts";
+  import { vault } from "#lib/stores/vault.svelte.ts";
+  import VaultPageShell from "#lib/components/vault/VaultPageShell.svelte";
+  import type { AdminInvite, AdminUser } from "#lib/services/admin-types.ts";
+  import type { AdminEmailSettings } from "#lib/services/api-admin.ts";
 
   let users = $state<AdminUser[]>([]);
   let invites = $state<AdminInvite[]>([]);

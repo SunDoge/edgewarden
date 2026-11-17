@@ -1,14 +1,14 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { Download } from "@lucide/svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import { Checkbox } from "$lib/components/ui/checkbox/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import { Separator } from "$lib/components/ui/separator/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
 
   let {
     file = $bindable(),

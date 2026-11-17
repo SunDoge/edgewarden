@@ -47,6 +47,6 @@ User-facing messages live in `messages/{locale}.json` and are compiled by
 Paraglide JS into `src/lib/paraglide`. The generated directory is ignored by
 Git and recreated automatically by Vite.
 
-Import typed message functions from `$lib/paraglide/messages.js`. Add a locale
+Import typed message functions from `#lib/paraglide/messages.js`. Add a locale
 to `project.inlang/settings.json` only when its catalog is ready; this avoids a
 partially translated interface being selected from the browser preference.

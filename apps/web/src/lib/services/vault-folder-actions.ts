@@ -1,12 +1,12 @@
-import * as m from "$lib/paraglide/messages.js";
+import * as m from "#lib/paraglide/messages.js";
 import {
   createFolderApi,
   deleteFolderApi,
   deleteFoldersApi,
   updateFolderApi,
-} from "$lib/services/api-folders";
-import { moveCiphersApi } from "$lib/services/api-vault";
-import { encryptStr } from "$lib/services/crypto";
+} from "#lib/services/api-folders.ts";
+import { moveCiphersApi } from "#lib/services/api-vault.ts";
+import { encryptStr } from "#lib/services/crypto.ts";
 
 export type FolderEditorMode = "create" | "rename";
 

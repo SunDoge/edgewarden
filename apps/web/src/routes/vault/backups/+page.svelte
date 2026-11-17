@@ -1,35 +1,35 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { AlertCircle, ArrowLeft, Check, Database, Lock, Settings2 } from "@lucide/svelte";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import BackupDestinationForm from "$lib/components/backup/BackupDestinationForm.svelte";
-  import BackupDestinationList from "$lib/components/backup/BackupDestinationList.svelte";
-  import RemoteBackupManager from "$lib/components/backup/RemoteBackupManager.svelte";
-  import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
+  import BackupDestinationForm from "#lib/components/backup/BackupDestinationForm.svelte";
+  import BackupDestinationList from "#lib/components/backup/BackupDestinationList.svelte";
+  import RemoteBackupManager from "#lib/components/backup/RemoteBackupManager.svelte";
+  import VaultPageShell from "#lib/components/vault/VaultPageShell.svelte";
   import {
     applyBackupDestinationForm,
     backupDestinationToForm,
     createDefaultBackupDestinationForm,
-  } from "$lib/components/backup/destination-form";
-  import LocalBackupPanel from "$lib/components/backup/LocalBackupPanel.svelte";
-  import type { BackupDestinationRecord, BackupSettings } from "$lib/components/backup/types";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-  import * as Empty from "$lib/components/ui/empty/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
+  } from "#lib/components/backup/destination-form.ts";
+  import LocalBackupPanel from "#lib/components/backup/LocalBackupPanel.svelte";
+  import type { BackupDestinationRecord, BackupSettings } from "#lib/components/backup/types.ts";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import * as Empty from "#lib/components/ui/empty/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     exportBackupLocalApi,
     fetchBackupSettingsApi,
     importBackupLocalApi,
     runBackupApi,
     updateBackupSettingsApi,
-  } from "$lib/services/api-backup";
-  import { vault } from "$lib/stores/vault.svelte";
+  } from "#lib/services/api-backup.ts";
+  import { vault } from "#lib/stores/vault.svelte.ts";
 
   // UI State
   let loading = $state(true);

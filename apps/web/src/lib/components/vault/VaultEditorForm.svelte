@@ -1,18 +1,18 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { CipherType } from "@edgewarden/shared";
   import { Plus, ScanLine, Trash2 } from "@lucide/svelte";
   import { match } from "ts-pattern";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { Checkbox } from "$lib/components/ui/checkbox/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import * as Select from "$lib/components/ui/select/index.js";
-  import { Separator } from "$lib/components/ui/separator/index.js";
-  import { Textarea } from "$lib/components/ui/textarea/index.js";
-  import { scanTotpQrFile } from "$lib/services/totp-qr";
-  import type { VaultEditorForm } from "$lib/services/vault-editor";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { scanTotpQrFile } from "#lib/services/totp-qr.ts";
+  import type { VaultEditorForm } from "#lib/services/vault-editor.ts";
 
   interface FolderOption {
     id: string;

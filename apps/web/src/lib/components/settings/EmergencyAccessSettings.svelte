@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import * as Select from "$lib/components/ui/select/index.js";
-  import * as m from "$lib/paraglide/messages.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import * as m from "#lib/paraglide/messages.js";
   import {
     approveEmergencyAccessApi,
     confirmEmergencyContactApi,
@@ -20,20 +20,20 @@
     setEmergencyAccessPasswordApi,
     takeoverEmergencyAccessApi,
     viewEmergencyAccessApi,
-  } from "$lib/services/api-emergency-access";
-  import { decryptCipher } from "$lib/services/cipher-crypto";
+  } from "#lib/services/api-emergency-access.ts";
+  import { decryptCipher } from "#lib/services/cipher-crypto.ts";
   import {
     deriveMasterKey,
     deriveMasterPasswordHash,
     encryptBw,
     hkdfExpand,
-  } from "$lib/services/crypto";
+  } from "#lib/services/crypto.ts";
   import {
     importAccountPrivateKey,
     unwrapOrganizationKey,
     wrapOrganizationKey,
-  } from "$lib/services/organization-crypto";
-  import { vault } from "$lib/stores/vault.svelte";
+  } from "#lib/services/organization-crypto.ts";
+  import { vault } from "#lib/stores/vault.svelte.ts";
 
   let {
     onMessage,

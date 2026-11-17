@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import * as Dialog from "$lib/components/ui/dialog/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { m } from "$lib/paraglide/messages.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { m } from "#lib/paraglide/messages.js";
 
   let demo = $state<{ email: string; password: string } | null>(null);
   let origin = $state("");

@@ -1,21 +1,21 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { goto } from "$app/navigation";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import {
     deleteRemoteBackupApi,
     downloadRemoteBackupApi,
     inspectRemoteBackupApi,
     listRemoteBackupsApi,
     restoreRemoteBackupApi,
-  } from "$lib/services/api-backup";
+  } from "#lib/services/api-backup.ts";
   import BackupRuntimePanel from "./BackupRuntimePanel.svelte";
   import RemoteBackupBrowser from "./RemoteBackupBrowser.svelte";
-  import type { RemoteBackupItem } from "$lib/services/backup-types";
+  import type { RemoteBackupItem } from "#lib/services/backup-types.ts";
   import type { BackupDestinationRecord } from "./types";
 
   let {

@@ -8,16 +8,16 @@
     TriangleAlert,
     WifiOff,
   } from "@lucide/svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
-  import { formatTime } from "$lib/i18n/format";
-  import { m } from "$lib/paraglide/messages.js";
-  import { syncVaultData, vault } from "$lib/stores/vault.svelte";
-  import LanguageSwitcher from "$lib/components/LanguageSwitcher.svelte";
-  import ThemeToggle from "$lib/components/theme-toggle.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { formatTime } from "#lib/i18n/format.ts";
+  import { m } from "#lib/paraglide/messages.js";
+  import { syncVaultData, vault } from "#lib/stores/vault.svelte.ts";
+  import LanguageSwitcher from "#lib/components/LanguageSwitcher.svelte";
+  import ThemeToggle from "#lib/components/theme-toggle.svelte";
 
   let {
     onOpenNavigation,

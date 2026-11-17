@@ -1,5 +1,5 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import type { FolderResponse } from "@edgewarden/shared";
   import {
@@ -17,11 +17,11 @@
     Trash2,
     User,
   } from "@lucide/svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import { Separator } from "$lib/components/ui/separator/index.js";
-  import type { VaultCategory } from "$lib/services/vault-filter";
-  import { vault } from "$lib/stores/vault.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import type { VaultCategory } from "#lib/services/vault-filter.ts";
+  import { vault } from "#lib/stores/vault.svelte.ts";
 
   let {
     activeCategory = $bindable(),

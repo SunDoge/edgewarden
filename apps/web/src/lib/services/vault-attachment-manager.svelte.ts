@@ -1,4 +1,4 @@
-import * as m from "$lib/paraglide/messages.js";
+import * as m from "#lib/paraglide/messages.js";
 import { toast } from "svelte-sonner";
 import { deleteAttachmentApi } from "./api-vault";
 import {
@@ -10,7 +10,7 @@ import {
   getOrganizationKey,
   syncVaultData,
   vault,
-} from "$lib/stores/vault.svelte";
+} from "#lib/stores/vault.svelte.ts";
 import { errorDetail } from "./error-message";
 
 export function createVaultAttachmentManager(options: {

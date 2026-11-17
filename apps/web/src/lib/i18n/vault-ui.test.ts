@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { tick } from "svelte";
-import { renderComponent, screen } from "$lib/../test/component";
+import { renderComponent, screen } from "#test/component.ts";
 import { changeLocale } from "./locale.svelte";
-import OrganizationCollectionsCard from "$lib/components/organizations/OrganizationCollectionsCard.svelte";
-import VaultSidebar from "$lib/components/vault/VaultSidebar.svelte";
-import LoginCipherDetail from "$lib/components/vault/LoginCipherDetail.svelte";
-import { cipherTypeName } from "$lib/services/vault-item-display";
+import OrganizationCollectionsCard from "#lib/components/organizations/OrganizationCollectionsCard.svelte";
+import VaultSidebar from "#lib/components/vault/VaultSidebar.svelte";
+import LoginCipherDetail from "#lib/components/vault/LoginCipherDetail.svelte";
+import { cipherTypeName } from "#lib/services/vault-item-display.ts";
 import { CipherType } from "@edgewarden/shared";
 
 beforeEach(() => changeLocale("en"));

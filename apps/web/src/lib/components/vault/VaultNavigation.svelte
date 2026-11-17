@@ -1,10 +1,10 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import VaultSidebar from "./VaultSidebar.svelte";
-  import * as Sheet from "$lib/components/ui/sheet/index.js";
-  import type { VaultCategory } from "$lib/services/vault-filter";
-  import type { VaultFolder } from "$lib/services/vault-types";
+  import * as Sheet from "#lib/components/ui/sheet/index.js";
+  import type { VaultCategory } from "#lib/services/vault-filter.ts";
+  import type { VaultFolder } from "#lib/services/vault-types.ts";
 
   let {
     mobileOpen = $bindable(false),

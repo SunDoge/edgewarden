@@ -1,12 +1,12 @@
-import * as m from "$lib/paraglide/messages.js";
+import * as m from "#lib/paraglide/messages.js";
 import {
   createFileSendApi,
   createSendApi,
   removeSendPasswordApi,
   updateSendApi,
-} from "$lib/services/api-sends";
-import { encryptBw, encryptBwFileData } from "$lib/services/crypto";
-import type { SendEditorDraft } from "$lib/services/send-editor";
+} from "#lib/services/api-sends.ts";
+import { encryptBw, encryptBwFileData } from "#lib/services/crypto.ts";
+import type { SendEditorDraft } from "#lib/services/send-editor.ts";
 import {
   createSendKeys,
   deriveSendPasswordHash,
@@ -14,8 +14,8 @@ import {
   wrapSendKey,
   type SendKeys,
   type DecryptedSend,
-} from "$lib/services/send-crypto";
-import type { SendMutationPayload } from "$lib/services/send-types";
+} from "#lib/services/send-crypto.ts";
+import type { SendMutationPayload } from "#lib/services/send-types.ts";
 
 export function validateSendDraft(form: SendEditorDraft, isCreating: boolean) {
   if (!form.name.trim()) throw new Error(m.ui_name_is_required_2());

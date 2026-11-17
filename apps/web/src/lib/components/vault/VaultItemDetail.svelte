@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { formatDateTime } from "$lib/i18n/format";
-  import * as m from "$lib/paraglide/messages.js";
+  import { formatDateTime } from "#lib/i18n/format.ts";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { CipherType } from "@edgewarden/shared";
   import {
@@ -21,10 +21,10 @@
     Trash2,
     Upload,
   } from "@lucide/svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { Checkbox } from "$lib/components/ui/checkbox/index.js";
-  import { Separator } from "$lib/components/ui/separator/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import LoginCipherDetail from "./LoginCipherDetail.svelte";
   import CardCipherDetail from "./CardCipherDetail.svelte";
   import IdentityCipherDetail from "./IdentityCipherDetail.svelte";
@@ -33,13 +33,13 @@
     cipherExtraData as getExtraData,
     cipherTypeIcon as getItemIcon,
     cipherTypeName as getTypeName,
-  } from "$lib/services/vault-item-display";
+  } from "#lib/services/vault-item-display.ts";
   import type {
     VaultAttachment,
     VaultCipher,
     VaultFolder,
     VaultTotp,
-  } from "$lib/services/vault-types";
+  } from "#lib/services/vault-types.ts";
 
   let {
     item,

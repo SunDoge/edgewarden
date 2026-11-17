@@ -1,14 +1,14 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { goto } from "$app/navigation";
-  import { recoverTwoFactorApi } from "$lib/services/api-auth";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
+  import { recoverTwoFactorApi } from "#lib/services/api-auth.ts";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { KeyRound, ShieldAlert } from "@lucide/svelte";
 
   let email = $state("");

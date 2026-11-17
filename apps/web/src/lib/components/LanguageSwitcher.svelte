@@ -1,9 +1,9 @@
 <script lang="ts">
   import { Languages } from "@lucide/svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { changeLocale } from "$lib/i18n/locale.svelte";
-  import { getLocale } from "$lib/paraglide/runtime.js";
-  import { m } from "$lib/paraglide/messages.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { changeLocale } from "#lib/i18n/locale.svelte.ts";
+  import { getLocale } from "#lib/paraglide/runtime.js";
+  import { m } from "#lib/paraglide/messages.js";
 </script>
 
 <Button

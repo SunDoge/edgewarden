@@ -1,22 +1,22 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import * as Tabs from "$lib/components/ui/tabs/index.js";
-  import VaultPageShell from "$lib/components/vault/VaultPageShell.svelte";
-  import * as Select from "$lib/components/ui/select/index.js";
-  import { Textarea } from "$lib/components/ui/textarea/index.js";
-  import { Switch } from "$lib/components/ui/switch/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
+  import VaultPageShell from "#lib/components/vault/VaultPageShell.svelte";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
   import {
     GENERATOR_SETTINGS_KEY,
     createGeneratorPreferences,
     parseGeneratorPreferences,
-  } from "$lib/services/generator-preferences";
+  } from "#lib/services/generator-preferences.ts";
   import {
     estimateBits,
     generateEmailAlias,
@@ -25,8 +25,8 @@
     generatePin,
     generateUsername,
     type GeneratorMode,
-  } from "$lib/services/password-generator";
-  import { generateSshKey, type GeneratedSshKey } from "$lib/services/ssh-key-generator";
+  } from "#lib/services/password-generator.ts";
+  import { generateSshKey, type GeneratedSshKey } from "#lib/services/ssh-key-generator.ts";
   import { ArrowLeft, Check, Copy, Download, RefreshCw } from "@lucide/svelte";
   import { match } from "ts-pattern";
 

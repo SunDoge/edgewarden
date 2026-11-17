@@ -1,26 +1,26 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { accessSendPublicApi, requestSendFileDownloadApi } from "$lib/services/api-sends";
-  import { decryptBwFileData } from "$lib/services/crypto";
+  import { accessSendPublicApi, requestSendFileDownloadApi } from "#lib/services/api-sends.ts";
+  import { decryptBwFileData } from "#lib/services/crypto.ts";
   import {
     decodeSendShareKey,
     deriveSendPasswordHash,
     decryptPublicSend,
     type DecryptedPublicSend,
     type SendKeys,
-  } from "$lib/services/send-crypto";
-  import { ApiError } from "$lib/services/rpc";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import * as Empty from "$lib/components/ui/empty/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import { Separator } from "$lib/components/ui/separator/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
+  } from "#lib/services/send-crypto.ts";
+  import { ApiError } from "#lib/services/rpc.ts";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Empty from "#lib/components/ui/empty/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     Share2,
     File,

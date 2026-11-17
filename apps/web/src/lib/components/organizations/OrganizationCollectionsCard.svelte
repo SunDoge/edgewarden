@@ -1,15 +1,15 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { canManageOrganizationCollections } from "@edgewarden/shared";
   import { Pencil, Trash2 } from "@lucide/svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
   import type {
     OrganizationCollection,
     OrganizationSummary,
-  } from "$lib/services/organization-types";
+  } from "#lib/services/organization-types.ts";
 
   let {
     organization,

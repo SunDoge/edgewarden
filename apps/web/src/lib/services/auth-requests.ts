@@ -1,4 +1,4 @@
-import * as m from "$lib/paraglide/messages.js";
+import * as m from "#lib/paraglide/messages.js";
 import { long as fingerprintWords } from "@wordlist/english-eff/long";
 import type { TokenResponse } from "@edgewarden/shared";
 import {

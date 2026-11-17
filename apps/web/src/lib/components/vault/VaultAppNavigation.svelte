@@ -2,10 +2,10 @@
   import { onMount } from "svelte";
   import { preloadCode } from "$app/navigation";
   import { navigating } from "$app/state";
-  import { warmRoutes } from "$lib/services/route-preload";
-  import { vault } from "$lib/stores/vault.svelte";
-  import { m } from "$lib/paraglide/messages.js";
-  import * as Sheet from "$lib/components/ui/sheet/index.js";
+  import { warmRoutes } from "#lib/services/route-preload.ts";
+  import { vault } from "#lib/stores/vault.svelte.ts";
+  import { m } from "#lib/paraglide/messages.js";
+  import * as Sheet from "#lib/components/ui/sheet/index.js";
   import VaultAppSidebar from "./VaultAppSidebar.svelte";
 
   let { mobileOpen = $bindable(false) }: { mobileOpen: boolean } = $props();

@@ -1,4 +1,4 @@
-import * as m from "$lib/paraglide/messages.js";
+import * as m from "#lib/paraglide/messages.js";
 import { CipherType } from "@edgewarden/shared";
 import Papa from "papaparse";
 import type {

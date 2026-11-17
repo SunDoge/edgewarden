@@ -1,20 +1,20 @@
 <script lang="ts">
-  import * as m from "$lib/paraglide/messages.js";
+  import * as m from "#lib/paraglide/messages.js";
 
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
-  import { getRegistrationConfigApi, register } from "$lib/services/api-auth";
-  import { errorMessage } from "$lib/services/error-message";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import * as Alert from "$lib/components/ui/alert/index.js";
-  import * as Empty from "$lib/components/ui/empty/index.js";
-  import * as Field from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import { Separator } from "$lib/components/ui/separator/index.js";
-  import { Spinner } from "$lib/components/ui/spinner/index.js";
-  import TurnstileWidget from "$lib/components/turnstile-widget.svelte";
-  import ThemeToggle from "$lib/components/theme-toggle.svelte";
+  import { getRegistrationConfigApi, register } from "#lib/services/api-auth.ts";
+  import { errorMessage } from "#lib/services/error-message.ts";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as Empty from "#lib/components/ui/empty/index.js";
+  import * as Field from "#lib/components/ui/field/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import TurnstileWidget from "#lib/components/turnstile-widget.svelte";
+  import ThemeToggle from "#lib/components/theme-toggle.svelte";
   import { Eye, EyeOff, ShieldAlert, KeyRound, Mail, User, CheckCircle2 } from "@lucide/svelte";
 
   let email = $state("");

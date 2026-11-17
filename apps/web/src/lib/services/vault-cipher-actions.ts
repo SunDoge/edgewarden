@@ -1,5 +1,5 @@
-import * as m from "$lib/paraglide/messages.js";
-import type { VaultEditorForm } from "$lib/services/vault-editor";
+import * as m from "#lib/paraglide/messages.js";
+import type { VaultEditorForm } from "#lib/services/vault-editor.ts";
 import {
   archiveCipherApi,
   archiveCiphersApi,
@@ -14,15 +14,15 @@ import {
   unarchiveCiphersApi,
   updateCipherApi,
   updateCipherCollectionsApi,
-} from "$lib/services/api-vault";
-import { encryptCipher, rewrapCipherKey } from "$lib/services/cipher-crypto";
-import { buildCipherPayload } from "$lib/services/cipher-draft";
-import { vaultCipherToEditorForm } from "$lib/services/vault-editor";
+} from "#lib/services/api-vault.ts";
+import { encryptCipher, rewrapCipherKey } from "#lib/services/cipher-crypto.ts";
+import { buildCipherPayload } from "#lib/services/cipher-draft.ts";
+import { vaultCipherToEditorForm } from "#lib/services/vault-editor.ts";
 import {
   downloadVaultAttachment,
   uploadVaultAttachment,
-} from "$lib/services/vault-attachments";
-import type { VaultCipher } from "$lib/services/vault-types";
+} from "#lib/services/vault-attachments.ts";
+import type { VaultCipher } from "#lib/services/vault-types.ts";
 
 export type CipherOwnerKey = { encKey: Uint8Array; macKey: Uint8Array };
 export type CipherOwnerKeyResolver = (
@@ -122,15 +122,9 @@ export async function saveVaultCipher({
     if (
       !ownershipChanged &&
       selectedItem.organizationId &&
-      !sameCollectionIds(
-        selectedItem.collectionIds ?? [],
-        editor.collectionIds,
-      )
+      !sameCollectionIds(selectedItem.collectionIds ?? [], editor.collectionIds)
     ) {
-      await updateCipherCollectionsApi(
-        selectedItem.id,
-        editor.collectionIds,
-      );
+      await updateCipherCollectionsApi(selectedItem.id, editor.collectionIds);
     }
     return saved;
   }
