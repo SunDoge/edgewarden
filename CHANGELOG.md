@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0](https://github.com/SunDoge/edgewarden/compare/v0.7.1...v0.8.0) (2026-11-18)
+
+
+### Features
+
+* add emergency access and managed email ([a0fa3b6](https://github.com/SunDoge/edgewarden/commit/a0fa3b64e6a0aaca6de05f491edc002768babfef))
+* add emergency access and managed email ([9a07609](https://github.com/SunDoge/edgewarden/commit/9a076090f6d7c75fd743a8e5bc97ce399667dc8c))
+
+
+### Bug Fixes
+
+* **ci:** remove duplicate translation keys ([0288480](https://github.com/SunDoge/edgewarden/commit/0288480ef346a0287b30f84299b3c20f04742368))
+* **security:** document temporary picomatch audit exception ([dafb605](https://github.com/SunDoge/edgewarden/commit/dafb605390c6f3548d2cbd4a486f2bd715a7e891))
+* **security:** document temporary picomatch audit exception ([3ecea8b](https://github.com/SunDoge/edgewarden/commit/3ecea8bf5d3617c76facef2d2bb989e67530089a))
+
 ## [0.7.1](https://github.com/SunDoge/edgewarden/compare/v0.7.0...v0.7.1) (2026-11-16)
 
 
