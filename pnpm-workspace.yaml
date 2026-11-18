@@ -26,6 +26,11 @@ overrides:
 
 auditConfig:
   ignoreGhsas:
+    # Reviewed 2026-11-18: upstream lists no patched release; npm latest is
+    # 4.0.7. Dependency paths are limited to local build and test tooling
+    # (Vite, Vitest, Svelte Check, and Paraglide), not the deployed Worker.
+    # Remove this exception when picomatch publishes a patched release.
+    - GHSA-fc5q-39xc-vjpf
     # Reviewed 2026-10-05: upstream lists no patched release; npm latest is
     # 3.0.3. Dependency path: kysely-codegen -> micromatch -> braces.
     # Used only by local database type generation, not the deployed Worker.
