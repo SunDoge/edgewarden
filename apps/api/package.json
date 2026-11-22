@@ -33,8 +33,8 @@
     "@simplewebauthn/server": "^14.1.0",
     "@sundoge/kysely-d1": "^0.3.0",
     "aws4fetch": "^1.0.20",
-    "fast-xml-parser": "^5.12.0",
-    "hono": "^4.13.18",
+    "fast-xml-parser": "^5.12.1",
+    "hono": "^4.13.19",
     "kysely": "0.29.9",
     "otpauth": "^9.6.0",
     "valibot": "^1.5.0"
