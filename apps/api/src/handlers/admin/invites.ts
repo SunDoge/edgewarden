@@ -23,7 +23,6 @@ import {
 import { conditionalRefreshTokenDeletionQuery } from "../../services/db/batch";
 import { scheduleTransactionalEmail } from "../../services/email";
 import { invitationEmail } from "../../services/invitation-email";
-import { getPushRelayStatus } from "../../services/push-relay";
 import {
   loadRegistrationPolicy,
   REGISTRATION_CONFIG_KEY,

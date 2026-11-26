@@ -14,9 +14,9 @@ import { getSafeSendJwtSecret } from "../services/sends/jwt-secret";
 import { verifySendPassword } from "../services/sends/password";
 import { fromAccessId, isSendAvailable } from "../services/sends/presentation";
 import {
-  getPushRelayStatus,
   logPushRelayFailure,
   pushDeviceRegistrationFromDatabase,
+  resolvePushRelayStatus,
 } from "../services/push-relay";
 import { identityErrorResponse, jsonResponse } from "../utils/response";
 import { createSendAccessToken } from "../utils/jwt";
@@ -191,7 +191,8 @@ export const connectToken = factory.createHandlers(async (c) => {
     }
 
     const deviceInfo = readDeviceInfo(body);
-    if (!getPushRelayStatus(c.env).enabled) deviceInfo.pushToken = null;
+    if (!(await resolvePushRelayStatus(db, c.env)).enabled)
+      deviceInfo.pushToken = null;
     const session = await issueIdentitySession({
       db,
       dialect: c.get("dbDialect"),

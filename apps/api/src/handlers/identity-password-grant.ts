@@ -22,9 +22,9 @@ import {
   recordLoginFailure,
 } from "../services/login-attempts";
 import {
-  getPushRelayStatus,
   logPushRelayFailure,
   pushDeviceRegistrationFromDatabase,
+  resolvePushRelayStatus,
 } from "../services/push-relay";
 import { turnstileEnabled, verifyTurnstileToken } from "../services/turnstile";
 import { loadYubicoCredentials } from "../services/yubico-config";
@@ -65,7 +65,8 @@ export async function handlePasswordGrant(
     ""
   ).trim();
   const deviceInfo = readDeviceInfo(body);
-  if (!getPushRelayStatus(c.env).enabled) deviceInfo.pushToken = null;
+  if (!(await resolvePushRelayStatus(db, c.env)).enabled)
+    deviceInfo.pushToken = null;
 
   if (turnstileEnabled(c.env) && !requestedAuthRequestId) {
     const captchaResponse = body.captchaResponse ?? body.CaptchaResponse ?? "";

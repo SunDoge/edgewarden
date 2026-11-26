@@ -8,7 +8,8 @@ DATA_ENCRYPTION_SECRET=
 # Enter this value once when creating the first administrator account.
 BOOTSTRAP_SECRET=
 
-# Optional Bitwarden mobile Push Relay. Both credentials are required.
+# Optional Bitwarden mobile Push Relay overrides. The administration page can
+# instead store these encrypted in D1. Both credentials are required.
 # PUSH_INSTALLATION_ID=
 # PUSH_INSTALLATION_KEY=
 # PUSH_REGION=US

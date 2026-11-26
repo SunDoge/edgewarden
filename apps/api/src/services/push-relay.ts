@@ -1,5 +1,8 @@
 import { createDatabase } from "../middleware/db";
+import type { Kysely } from "kysely";
+import type { DB } from "../types/db";
 import type { WorkerBindings } from "../worker-bindings";
+import { loadSystemSetting, saveSystemSetting } from "./system-settings";
 
 type PushRegion = "US" | "EU";
 
@@ -9,6 +12,13 @@ export interface PushRelayStatus {
   installationIdConfigured: boolean;
   installationKeyConfigured: boolean;
   reason: "ready" | "missing_credentials" | "invalid_region";
+  environmentOverrides: string[];
+}
+
+export interface StoredPushRelaySettings {
+  region: PushRegion;
+  installationId: string | null;
+  installationKey: string | null;
 }
 
 interface PushRelayConfig extends PushRelayStatus {
@@ -38,14 +48,82 @@ const ENDPOINTS = {
   },
 } as const;
 
-function relayConfig(env: WorkerBindings): PushRelayConfig {
-  const requestedRegion = String(env.PUSH_REGION ?? "US")
+export const PUSH_RELAY_SETTINGS_KEY = "system.push-relay.settings.v1";
+export const DEFAULT_PUSH_RELAY_SETTINGS: StoredPushRelaySettings = {
+  region: "US",
+  installationId: null,
+  installationKey: null,
+};
+
+function validateStoredSettings(value: unknown): StoredPushRelaySettings {
+  if (!value || typeof value !== "object")
+    throw new Error("Push relay settings are invalid");
+  const input = value as Partial<StoredPushRelaySettings>;
+  if (
+    (input.region !== "US" && input.region !== "EU") ||
+    (input.installationId !== null &&
+      typeof input.installationId !== "string") ||
+    (input.installationKey !== null &&
+      typeof input.installationKey !== "string")
+  )
+    throw new Error("Push relay settings are invalid");
+  return input as StoredPushRelaySettings;
+}
+
+export async function loadStoredPushRelaySettings(
+  db: Kysely<DB>,
+  secret: string,
+): Promise<StoredPushRelaySettings> {
+  return (
+    (await loadSystemSetting(
+      db,
+      secret,
+      PUSH_RELAY_SETTINGS_KEY,
+      validateStoredSettings,
+    )) ?? structuredClone(DEFAULT_PUSH_RELAY_SETTINGS)
+  );
+}
+
+export async function saveStoredPushRelaySettings(
+  db: Kysely<DB>,
+  secret: string,
+  settings: StoredPushRelaySettings,
+): Promise<void> {
+  await saveSystemSetting(
+    db,
+    secret,
+    PUSH_RELAY_SETTINGS_KEY,
+    validateStoredSettings(settings),
+  );
+}
+
+function relayConfig(
+  env: WorkerBindings,
+  stored: StoredPushRelaySettings,
+): PushRelayConfig {
+  const environmentOverrides: string[] = [];
+  const envValue = (name: string, value: string | undefined) => {
+    const normalized = value?.trim();
+    if (normalized) environmentOverrides.push(name);
+    return normalized || undefined;
+  };
+  const requestedRegion = String(
+    envValue("region", env.PUSH_REGION) ?? stored.region,
+  )
     .trim()
     .toUpperCase();
   const validRegion = requestedRegion === "US" || requestedRegion === "EU";
   const region: PushRegion = requestedRegion === "EU" ? "EU" : "US";
-  const installationId = String(env.PUSH_INSTALLATION_ID ?? "").trim();
-  const installationKey = String(env.PUSH_INSTALLATION_KEY ?? "").trim();
+  const installationId = String(
+    envValue("installationId", env.PUSH_INSTALLATION_ID) ??
+      stored.installationId ??
+      "",
+  ).trim();
+  const installationKey = String(
+    envValue("installationKey", env.PUSH_INSTALLATION_KEY) ??
+      stored.installationKey ??
+      "",
+  ).trim();
   const installationIdConfigured = Boolean(installationId);
   const installationKeyConfigured = Boolean(installationKey);
   const enabled =
@@ -62,25 +140,73 @@ function relayConfig(env: WorkerBindings): PushRelayConfig {
         : "missing_credentials",
     installationId,
     installationKey,
+    environmentOverrides,
     ...ENDPOINTS[region],
   };
 }
 
-export function getPushRelayStatus(env: WorkerBindings): PushRelayStatus {
+export async function resolvePushRelayConfig(
+  db: Kysely<DB>,
+  env: WorkerBindings,
+): Promise<PushRelayConfig> {
+  let stored = structuredClone(DEFAULT_PUSH_RELAY_SETTINGS);
+  try {
+    stored = await loadStoredPushRelaySettings(db, env.DATA_ENCRYPTION_SECRET);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "push.settings.load_failed",
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  }
+  return relayConfig(env, stored);
+}
+
+function statusFromConfig(config: PushRelayConfig): PushRelayStatus {
   const {
     enabled,
     region,
     installationIdConfigured,
     installationKeyConfigured,
     reason,
-  } = relayConfig(env);
+    environmentOverrides,
+  } = config;
   return {
     enabled,
     region,
     installationIdConfigured,
     installationKeyConfigured,
     reason,
+    environmentOverrides,
   };
+}
+
+/** Synchronous environment-only status retained for diagnostics and unit tests. */
+export function getPushRelayStatus(env: WorkerBindings): PushRelayStatus {
+  return statusFromConfig(relayConfig(env, DEFAULT_PUSH_RELAY_SETTINGS));
+}
+
+export async function resolvePushRelayStatus(
+  db: Kysely<DB>,
+  env: WorkerBindings,
+): Promise<PushRelayStatus> {
+  return statusFromConfig(await resolvePushRelayConfig(db, env));
+}
+
+async function requestRelayConfig(
+  env: WorkerBindings,
+): Promise<PushRelayConfig> {
+  // Fully configured Worker secrets are the highest-priority compatibility
+  // path and avoid a D1 read on every notification.
+  if (env.PUSH_INSTALLATION_ID?.trim() && env.PUSH_INSTALLATION_KEY?.trim())
+    return relayConfig(env, DEFAULT_PUSH_RELAY_SETTINGS);
+  const { db } = await createDatabase(env.DB);
+  try {
+    return await resolvePushRelayConfig(db, env);
+  } finally {
+    await db.destroy();
+  }
 }
 
 async function tokenCacheKey(config: PushRelayConfig): Promise<Request> {
@@ -143,13 +269,25 @@ async function accessToken(
   return body.access_token;
 }
 
+export async function testPushRelayConnection(
+  db: Kysely<DB>,
+  env: WorkerBindings,
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
+  const config = await resolvePushRelayConfig(db, env);
+  if (!config.enabled) throw new Error("Push relay credentials are incomplete");
+  await accessToken(config, fetcher, null);
+}
+
 async function relayRequest(
   env: WorkerBindings,
   path: string,
-  body: Record<string, unknown>,
+  body:
+    | Record<string, unknown>
+    | ((config: PushRelayConfig) => Record<string, unknown>),
   options: { fetcher?: typeof fetch; cache?: Cache | null } = {},
 ): Promise<boolean> {
-  const config = relayConfig(env);
+  const config = await requestRelayConfig(env);
   if (!config.enabled) return false;
   const fetcher = options.fetcher ?? fetch;
   const cache = options.cache === undefined ? caches.default : options.cache;
@@ -161,7 +299,7 @@ async function relayRequest(
       "content-type": "application/json",
       accept: "application/json",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(typeof body === "function" ? body(config) : body),
     signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) throw new Error(`Push relay returned ${response.status}`);
@@ -176,10 +314,10 @@ export async function registerPushDevice(
   return relayRequest(
     env,
     "/push/register",
-    {
+    (config) => ({
       ...device,
-      installationId: String(env.PUSH_INSTALLATION_ID ?? "").trim(),
-    },
+      installationId: config.installationId,
+    }),
     options,
   );
 }
@@ -310,7 +448,6 @@ export async function pushDeviceRegistrationFromDatabase(
   userId: string,
   deviceIdentifier: string,
 ): Promise<boolean> {
-  if (!getPushRelayStatus(env).enabled) return false;
   const { db } = await createDatabase(env.DB);
   try {
     const device = await db

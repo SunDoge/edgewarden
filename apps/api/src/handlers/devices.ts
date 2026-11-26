@@ -24,9 +24,9 @@ import * as devicesDb from "../services/db/devices";
 import { textColumnInJson } from "../services/db/json-array";
 import * as usersDb from "../services/db/users";
 import {
-  getPushRelayStatus,
   logPushRelayFailure,
   pushDeviceRegistrationFromDatabase,
+  resolvePushRelayStatus,
   unregisterPushDevice,
 } from "../services/push-relay";
 import type { Devices } from "../types/db";
@@ -58,7 +58,6 @@ function schedulePushUnregistration(
   c: Context<HonoEnv>,
   pushUuids: Array<string | null>,
 ): void {
-  if (!getPushRelayStatus(c.env).enabled) return;
   const ids = pushUuids.filter((id): id is string => Boolean(id));
   if (!ids.length) return;
   c.executionCtx.waitUntil(
@@ -252,7 +251,7 @@ export const getDevice = factory.createHandlers(async (c) =>
 export const updateDevicePushToken = factory.createHandlers(
   vValidator("json", DevicePushTokenSchema),
   async (c) => {
-    if (!getPushRelayStatus(c.env).enabled)
+    if (!(await resolvePushRelayStatus(c.get("db"), c.env)).enabled)
       return new Response(null, { status: 200 });
     const device = c.get("device");
     await c

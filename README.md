@@ -73,9 +73,9 @@ settings rather than entering placeholder credentials.
 | `EMAIL_PROVIDER`        | Variable                                                   | Optional: `auto` (default), `cloudflare`, or `resend`. `auto` prefers the native Cloudflare Email Service binding, then Resend.                             |
 | `EMAIL_REPLY_TO`        | Variable                                                   | Optional verified reply-to address for transactional messages.                                                                                              |
 | `RESEND_API_KEY`        | Secret                                                     | Resend API key. Required only when selecting Resend or when `auto` cannot use Cloudflare Email Service.                                                     |
-| `PUSH_INSTALLATION_ID`  | Secret                                                     | Installation ID obtained from [Bitwarden](https://bitwarden.com/host/); configure together with the key below for native mobile push.                       |
-| `PUSH_INSTALLATION_KEY` | Secret                                                     | Matching Bitwarden Installation Key, not a Cloudflare API token. Without this pair, Push Relay is disabled; manual sync remains available.                  |
-| `PUSH_REGION`           | Non-sensitive setting; store as Secret for Git deployments | `US` (default; may be omitted) or `EU`, matching the installation credentials. Storing it as a secret keeps it outside repository-managed variables.        |
+| `PUSH_INSTALLATION_ID`  | Secret                                                     | Optional override for the encrypted Push Relay setting managed in the administration page. Configure together with the key below.                          |
+| `PUSH_INSTALLATION_KEY` | Secret                                                     | Optional matching override, not a Cloudflare API token. Worker settings take precedence over the encrypted D1 configuration.                              |
+| `PUSH_REGION`           | Non-sensitive setting; store as Secret for Git deployments | Optional `US` or `EU` override. The administration page stores the normal setting in D1.                                                                    |
 | `TURNSTILE_SECRET_KEY`  | Secret                                                     | Server-side secret from your Cloudflare Turnstile widget. Configure together with its site key below, or leave both unset.                                  |
 | `TURNSTILE_SITE_KEY`    | Variable (public)                                          | The same widget's public site key. Restrict the widget to your deployed hostname.                                                                           |
 | `YUBICO_CLIENT_ID`      | Secret                                                     | Yubico validation client ID; only for YubiKey OTP validation, not ordinary WebAuthn security keys. Configure with the key below.                            |
@@ -115,8 +115,9 @@ Configure it under Workers Builds as described above. See
 
 After deploying, open the web vault and register the first account using your
 `BOOTSTRAP_SECRET` as the deployment password. Confirm login and sync before
-adding optional integrations. Push Relay configuration status is visible in the
-administration page; successful deployment alone does not prove push delivery.
+adding optional integrations. Push Relay credentials can be encrypted into D1
+from the administration page, which also tests the Bitwarden identity connection.
+Successful deployment alone does not prove push delivery.
 
 Optional deployment settings are documented in [apps/api/README.md](apps/api/README.md#optional-worker-configuration). Most deployments should leave the WebAuthn RP settings unset so passkeys derive the RP ID and origin from the request hostname.
 
