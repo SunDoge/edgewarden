@@ -1180,5 +1180,11 @@
   "ui_save_email_settings": "Save email settings",
   "ui_send_test_to_my_account": "Send test to my account",
   "ui_loading_email_settings": "Loading email settings…",
-  "ui_resend_key_configured_placeholder": "Configured — leave blank to keep"
+  "ui_resend_key_configured_placeholder": "Configured — leave blank to keep",
+  "ui_push_credential_configured_placeholder": "Configured — leave blank to keep",
+  "ui_enter_push_installation_key": "Enter the installation key",
+  "ui_remove_stored_installation_id": "Remove stored installation ID",
+  "ui_remove_stored_installation_key": "Remove stored installation key",
+  "ui_save_push_relay_settings": "Save push relay settings",
+  "ui_test_push_relay_connection": "Test connection"
 }

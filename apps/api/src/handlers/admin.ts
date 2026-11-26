@@ -5,11 +5,15 @@ export {
   listAdminInvites,
 } from "./admin/invites";
 export {
-  getAdminPushRelayStatus,
   getAdminRegistrationPolicy,
   listAdminUsers,
   updateAdminRegistrationPolicy,
 } from "./admin/settings";
+export {
+  getAdminPushRelaySettings,
+  testAdminPushRelaySettings,
+  updateAdminPushRelaySettings,
+} from "./admin/push-relay-settings";
 export { deleteAdminUser, setAdminUserStatus } from "./admin/users";
 export {
   getAuditSettings,

@@ -49,6 +49,7 @@ describe("Bitwarden push relay", () => {
       installationIdConfigured: false,
       installationKeyConfigured: false,
       reason: "missing_credentials",
+      environmentOverrides: [],
     });
     expect(
       getPushRelayStatus(

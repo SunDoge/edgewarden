@@ -21,7 +21,6 @@ import {
   hashCredential,
 } from "../../services/credential-protection";
 import { conditionalRefreshTokenDeletionQuery } from "../../services/db/batch";
-import { getPushRelayStatus } from "../../services/push-relay";
 import {
   loadRegistrationPolicy,
   REGISTRATION_CONFIG_KEY,

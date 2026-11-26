@@ -17,6 +17,7 @@ export interface AdminPushRelayStatus {
   installationIdConfigured: boolean;
   installationKeyConfigured: boolean;
   reason: "ready" | "missing_credentials" | "invalid_region";
+  environmentOverrides: string[];
 }
 
 export interface AdminEmailSettings {
@@ -42,6 +43,33 @@ export async function getAdminRegistrationPolicyApi(): Promise<AdminRegistration
 
 export async function getAdminPushRelayStatusApi(): Promise<AdminPushRelayStatus> {
   return rpcJson(await rpc.api.admin["push-relay"].$get());
+}
+
+export async function updateAdminPushRelaySettingsApi(
+  masterPasswordHash: string,
+  settings: {
+    region: "US" | "EU";
+    installationId?: string;
+    installationKey?: string;
+    clearInstallationId?: boolean;
+    clearInstallationKey?: boolean;
+  },
+): Promise<AdminPushRelayStatus> {
+  return rpcJson(
+    await rpc.api.admin["push-relay"].$put({
+      json: { masterPasswordHash, ...settings },
+    }),
+  ) as Promise<AdminPushRelayStatus>;
+}
+
+export async function testAdminPushRelaySettingsApi(
+  masterPasswordHash: string,
+): Promise<void> {
+  rpcVoid(
+    await rpc.api.admin["push-relay"].test.$post({
+      json: { masterPasswordHash },
+    }),
+  );
 }
 
 export async function getAdminEmailSettingsApi(): Promise<AdminEmailSettings> {

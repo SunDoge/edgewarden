@@ -29,7 +29,7 @@ import {
   deleteAdminInvite,
   deleteAdminInvites,
   deleteAdminUser,
-  getAdminPushRelayStatus,
+  getAdminPushRelaySettings,
   getAdminRegistrationPolicy,
   getAdminEmailSettings,
   getAuditSettings,
@@ -40,6 +40,8 @@ import {
   updateAdminRegistrationPolicy,
   updateAdminEmailSettings,
   testAdminEmailSettings,
+  testAdminPushRelaySettings,
+  updateAdminPushRelaySettings,
   updateAuditSettings,
 } from "../handlers/admin";
 import {
@@ -294,10 +296,12 @@ const adminRoutes = new Hono<HonoEnv>()
   .get("/api/admin/users", ...listAdminUsers)
   .get("/api/admin/registration", ...getAdminRegistrationPolicy)
   .get("/api/admin/email", ...getAdminEmailSettings)
-  .get("/api/admin/push-relay", ...getAdminPushRelayStatus)
+  .get("/api/admin/push-relay", ...getAdminPushRelaySettings)
   .put("/api/admin/registration", ...updateAdminRegistrationPolicy)
   .put("/api/admin/email", ...updateAdminEmailSettings)
   .post("/api/admin/email/test", ...testAdminEmailSettings)
+  .put("/api/admin/push-relay", ...updateAdminPushRelaySettings)
+  .post("/api/admin/push-relay/test", ...testAdminPushRelaySettings)
   .put("/api/admin/users/:id/status", ...setAdminUserStatus)
   .delete("/api/admin/users/:id", ...deleteAdminUser)
   .get("/api/admin/invites", ...listAdminInvites)

@@ -1180,5 +1180,11 @@
   "ui_save_email_settings": "保存邮件设置",
   "ui_send_test_to_my_account": "向我的账号发送测试邮件",
   "ui_loading_email_settings": "正在加载邮件设置…",
-  "ui_resend_key_configured_placeholder": "已配置——留空则保留"
+  "ui_resend_key_configured_placeholder": "已配置——留空则保留",
+  "ui_push_credential_configured_placeholder": "已配置——留空则保留",
+  "ui_enter_push_installation_key": "输入 Installation Key",
+  "ui_remove_stored_installation_id": "删除已保存的 Installation ID",
+  "ui_remove_stored_installation_key": "删除已保存的 Installation Key",
+  "ui_save_push_relay_settings": "保存推送中继设置",
+  "ui_test_push_relay_connection": "测试连接"
 }

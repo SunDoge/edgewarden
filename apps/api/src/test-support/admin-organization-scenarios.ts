@@ -160,6 +160,51 @@ export function registerAdminOrganizationScenarios(
       .run();
   });
 
+  test("stores push relay credentials encrypted and never returns them", async () => {
+    const headers = {
+      authorization: `Bearer ${context.accessToken}`,
+      "content-type": "application/json",
+    };
+    const saved = await request("/api/admin/push-relay", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        masterPasswordHash: MASTER_PASSWORD_HASH,
+        region: "EU",
+        installationId: "installation-secret-id",
+        installationKey: "installation-super-secret-key",
+      }),
+    });
+    assert.equal(saved.status, 200, await saved.clone().text());
+    const response = await saved.json<{
+      enabled: boolean;
+      region: string;
+      installationIdConfigured: boolean;
+      installationKeyConfigured: boolean;
+    }>();
+    assert.equal(response.enabled, true);
+    assert.equal(response.region, "EU");
+    assert.equal(response.installationIdConfigured, true);
+    assert.equal(response.installationKeyConfigured, true);
+    assert.doesNotMatch(JSON.stringify(response), /super-secret|secret-id/);
+    const stored = await context.database
+      .prepare(
+        "SELECT value FROM config WHERE key = 'system.push-relay.settings.v1'",
+      )
+      .first<{ value: string }>();
+    assert.ok(stored);
+    assert.doesNotMatch(stored.value, /super-secret|secret-id/);
+
+    const read = await request("/api/admin/push-relay", {
+      headers: { authorization: `Bearer ${context.accessToken}` },
+    });
+    assert.equal(read.status, 200);
+    assert.doesNotMatch(await read.text(), /super-secret|secret-id/);
+    await context.database
+      .prepare("DELETE FROM config WHERE key = 'system.push-relay.settings.v1'")
+      .run();
+  });
+
   test("manages users and one-time invites with admin password re-verification", async () => {
     const adminAuth = { authorization: `Bearer ${context.accessToken}` };
     const memberDenied = await request("/api/admin/users", {
@@ -190,7 +235,8 @@ export function registerAdminOrganizationScenarios(
       installationIdConfigured: false,
       installationKeyConfigured: false,
       reason: "missing_credentials",
-      object: "pushRelayStatus",
+      environmentOverrides: [],
+      object: "pushRelaySettings",
     });
 
     const wrongPassword = await request("/api/admin/invites", {

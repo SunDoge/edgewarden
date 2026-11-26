@@ -183,7 +183,7 @@ official Bitwarden Server parity:
   relationship validation.
 - D1-backed immutable audit tombstones and administrative security logs.
 - Administration UI for users, registration, invitations, backup, storage,
-  audit, and Push Relay status.
+  audit, and encrypted Push Relay configuration and connection testing.
 
 ## Compatibility policy
 
