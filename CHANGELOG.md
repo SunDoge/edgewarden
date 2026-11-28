@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.9.0](https://github.com/SunDoge/edgewarden/compare/v0.8.0...v0.9.0) (2026-11-28)
+
+
+### Features
+
+* manage push relay settings in admin ([6c1faf6](https://github.com/SunDoge/edgewarden/commit/6c1faf6f3248be154f4f2ddedf3206297549bb19))
+* manage push relay settings in admin ([86ea10c](https://github.com/SunDoge/edgewarden/commit/86ea10c53abe0d18c3b760efa16e6b347d47a0aa))
+
+
+### Bug Fixes
+
+* **auth:** make refresh sessions resilient ([7a943c2](https://github.com/SunDoge/edgewarden/commit/7a943c22b29566bb3b9701db5254d57363f48308))
+* **auth:** make refresh sessions resilient ([8adab47](https://github.com/SunDoge/edgewarden/commit/8adab471e2e0a7e75eb9a0febd19ec39aa8bfc56))
+* **compat:** align vault APIs with official server ([7baebf0](https://github.com/SunDoge/edgewarden/commit/7baebf09d3fa96fe43a7efb6cfd48752e3623811))
+* **compat:** align vault APIs with official server ([7c2f2b3](https://github.com/SunDoge/edgewarden/commit/7c2f2b37cff5f2cf47cfabbc4f92ae769068942b))
+* **web:** align Vitest with jest-dom 8 ([f174de0](https://github.com/SunDoge/edgewarden/commit/f174de076237f86b570b42a14342e620fb67f814))
+
 ## [0.8.0](https://github.com/SunDoge/edgewarden/compare/v0.7.1...v0.8.0) (2026-11-18)
 
 
