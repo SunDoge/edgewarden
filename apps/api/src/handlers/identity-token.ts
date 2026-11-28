@@ -63,7 +63,7 @@ export const connectToken = factory.createHandlers(async (c) => {
   const body = c.get("tokenRequest");
   const grantType = body.grant_type;
 
-  // Match Vaultwarden: refresh tokens are high-entropy, rotating credentials,
+  // Match Vaultwarden: refresh tokens are high-entropy session credentials,
   // not password guesses. Counting routine refreshes against the login bucket
   // can lock every client behind one NAT out of sync.
   const rateLimitScope = identityGrantRateLimitScope(grantType);
@@ -250,11 +250,27 @@ export const connectToken = factory.createHandlers(async (c) => {
   }
 
   if (grantType === "refresh_token") {
+    const startedAt = Date.now();
+    const requestId = c.req.header("cf-ray") ?? crypto.randomUUID();
     const webClient = isWebClient(body);
+    const clientId = String(body.client_id ?? (webClient ? "web" : "unknown"))
+      .trim()
+      .slice(0, 64);
     const rawToken =
       body.refresh_token ||
       (webClient ? getCookie(c, webRefreshCookieName(c.req.url)) : undefined);
     if (!rawToken) {
+      console.warn(
+        JSON.stringify({
+          event: "auth.refresh.completed",
+          requestId,
+          clientId,
+          tokenSource: "missing",
+          outcome: "rejected",
+          reason: "missing_refresh_token",
+          durationMs: Date.now() - startedAt,
+        }),
+      );
       return identityErrorResponse(
         "Refresh token is required",
         "invalid_grant",
@@ -262,13 +278,41 @@ export const connectToken = factory.createHandlers(async (c) => {
       );
     }
 
-    const refreshed = await refreshIdentitySession({
-      db,
-      dialect: c.get("dbDialect"),
-      rawToken,
-      jwtSecret: secret,
-    });
+    let refreshed: Awaited<ReturnType<typeof refreshIdentitySession>>;
+    try {
+      refreshed = await refreshIdentitySession({
+        db,
+        dialect: c.get("dbDialect"),
+        rawToken,
+        jwtSecret: secret,
+      });
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: "auth.refresh.completed",
+          requestId,
+          clientId,
+          tokenSource: body.refresh_token ? "body" : "cookie",
+          outcome: "failed",
+          reason: "internal_error",
+          durationMs: Date.now() - startedAt,
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        }),
+      );
+      throw error;
+    }
     if (!refreshed.ok) {
+      console.warn(
+        JSON.stringify({
+          event: "auth.refresh.completed",
+          requestId,
+          clientId,
+          tokenSource: body.refresh_token ? "body" : "cookie",
+          outcome: "rejected",
+          reason: refreshed.reason,
+          durationMs: Date.now() - startedAt,
+        }),
+      );
       const message =
         refreshed.reason === "invalid_refresh_token"
           ? "Refresh token is invalid or expired"
@@ -278,6 +322,16 @@ export const connectToken = factory.createHandlers(async (c) => {
       return identityErrorResponse(message, "invalid_grant", 400);
     }
 
+    console.log(
+      JSON.stringify({
+        event: "auth.refresh.completed",
+        requestId,
+        clientId,
+        tokenSource: body.refresh_token ? "body" : "cookie",
+        outcome: "succeeded",
+        durationMs: Date.now() - startedAt,
+      }),
+    );
     if (webClient) setWebRefreshCookie(c, refreshed.refreshToken);
     return c.json(
       buildTokenResponse(

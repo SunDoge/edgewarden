@@ -4,7 +4,7 @@ import { identityGrantRateLimitScope } from "./identity-token";
 import { organizationRoleType, supportsSshKeys } from "./sync";
 
 describe("mobile client compatibility", () => {
-  it("does not spend the login rate limit on refresh token rotation", () => {
+  it("does not spend the login rate limit on refresh token reuse", () => {
     expect(identityGrantRateLimitScope("refresh_token")).toBeNull();
     expect(identityGrantRateLimitScope("password")).toBe("identity");
     expect(identityGrantRateLimitScope("webauthn")).toBe("identity");

@@ -16,7 +16,7 @@ import {
   conditionalWebauthnEncryptionUpdateQuery,
 } from "../services/db/batch";
 import * as webauthnDb from "../services/db/webauthn";
-import { refreshTokenRotationInsertQuery } from "../services/identity-refresh";
+import { refreshTokenReuseQuery } from "../services/identity-refresh";
 import { issueIdentitySession } from "../services/identity-session";
 import {
   clearLoginFailures,
@@ -772,7 +772,7 @@ export function registerAuthReliabilityScenarios(
     }
   });
 
-  test("revalidates account and device state during refresh rotation", async () => {
+  test("revalidates account and device state during refresh reuse", async () => {
     const { db, dialect } = await createDatabase(context.database);
     const timestamp = Math.floor(Date.now() / 1000);
     const userId = crypto.randomUUID();
@@ -780,7 +780,6 @@ export function registerAuthReliabilityScenarios(
     const deviceId = `refresh-device-${crypto.randomUUID()}`;
     const originalDeviceStamp = crypto.randomUUID();
     const oldTokenHash = `old-refresh-${crypto.randomUUID()}`;
-    const insertedHashes: string[] = [];
     const insertOldToken = () =>
       db
         .insertInto("refresh_tokens")
@@ -792,19 +791,16 @@ export function registerAuthReliabilityScenarios(
           device_session_stamp: originalDeviceStamp,
         })
         .execute();
-    const rotate = async (newTokenHash: string) => {
-      insertedHashes.push(newTokenHash);
-      const [inserted] = await dialect.batch([
-        refreshTokenRotationInsertQuery(db, {
-          oldTokenHash,
-          newTokenHash,
+    const reuse = async () => {
+      const [updated] = await dialect.batch([
+        refreshTokenReuseQuery(db, {
+          tokenHash: oldTokenHash,
           userId,
           expectedSecurityStamp: originalStamp,
           sessionTime: timestamp,
         }),
-        db.deleteFrom("refresh_tokens").where("token", "=", oldTokenHash),
       ]);
-      return inserted.numAffectedRows ?? 0n;
+      return updated.numAffectedRows ?? 0n;
     };
     try {
       await db
@@ -844,21 +840,20 @@ export function registerAuthReliabilityScenarios(
         .set({ security_stamp: crypto.randomUUID() })
         .where("id", "=", userId)
         .execute();
-      assert.equal(await rotate(`new-user-${crypto.randomUUID()}`), 0n);
+      assert.equal(await reuse(), 0n);
 
       await db
         .updateTable("users")
         .set({ security_stamp: originalStamp })
         .where("id", "=", userId)
         .execute();
-      await insertOldToken();
       await db
         .updateTable("devices")
         .set({ session_stamp: crypto.randomUUID() })
         .where("user_id", "=", userId)
         .where("device_identifier", "=", deviceId)
         .execute();
-      assert.equal(await rotate(`new-device-${crypto.randomUUID()}`), 0n);
+      assert.equal(await reuse(), 0n);
 
       await db
         .updateTable("devices")
@@ -866,14 +861,12 @@ export function registerAuthReliabilityScenarios(
         .where("user_id", "=", userId)
         .where("device_identifier", "=", deviceId)
         .execute();
-      await insertOldToken();
-      const validHash = `new-valid-${crypto.randomUUID()}`;
-      assert.equal(await rotate(validHash), 1n);
+      assert.equal(await reuse(), 1n);
       assert.deepEqual(
         await db
           .selectFrom("refresh_tokens")
           .select(["user_id", "device_identifier", "device_session_stamp"])
-          .where("token", "=", validHash)
+          .where("token", "=", oldTokenHash)
           .executeTakeFirstOrThrow(),
         {
           user_id: userId,
@@ -884,7 +877,7 @@ export function registerAuthReliabilityScenarios(
     } finally {
       await db
         .deleteFrom("refresh_tokens")
-        .where("token", "in", [oldTokenHash, ...insertedHashes])
+        .where("token", "=", oldTokenHash)
         .execute();
       await db.deleteFrom("users").where("id", "=", userId).execute();
       await db.destroy();

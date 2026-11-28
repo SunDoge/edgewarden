@@ -256,9 +256,9 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
     }
   });
 
-  test("rotates refresh tokens and rejects replay", async () => {
+  test("reuses refresh tokens so a lost response can be retried", async () => {
     const previousRefreshToken = context.refreshToken;
-    const rotated = await request("/identity/connect/token", {
+    const refreshed = await request("/identity/connect/token", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -266,16 +266,16 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
         refresh_token: previousRefreshToken,
       }),
     });
-    assert.equal(rotated.status, 200, await rotated.clone().text());
-    const tokens = await rotated.json<{
+    assert.equal(refreshed.status, 200, await refreshed.clone().text());
+    const tokens = await refreshed.json<{
       access_token: string;
       refresh_token: string;
     }>();
     context.accessToken = tokens.access_token;
     context.refreshToken = tokens.refresh_token;
-    assert.notEqual(context.refreshToken, previousRefreshToken);
+    assert.equal(context.refreshToken, previousRefreshToken);
 
-    const replay = await request("/identity/connect/token", {
+    const retry = await request("/identity/connect/token", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -283,10 +283,10 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
         refresh_token: previousRefreshToken,
       }),
     });
-    assert.equal(replay.status, 400);
+    assert.equal(retry.status, 200, await retry.clone().text());
   });
 
-  test("allows only one concurrent refresh-token rotation", async () => {
+  test("allows concurrent refreshes with the same reusable token", async () => {
     const previousRefreshToken = context.refreshToken;
     const rotate = () =>
       request("/identity/connect/token", {
@@ -299,17 +299,16 @@ export function registerAuthScenarios(context: AuthScenarioContext): void {
       });
     const responses = await Promise.all([rotate(), rotate()]);
     assert.deepEqual(
-      responses.map((response) => response.status).sort(),
-      [200, 400],
+      responses.map((response) => response.status),
+      [200, 200],
     );
-    const winner = responses.find((response) => response.status === 200);
-    assert.ok(winner);
-    const tokens = await winner.json<{
+    const tokens = await responses[0].json<{
       access_token: string;
       refresh_token: string;
     }>();
     context.accessToken = tokens.access_token;
     context.refreshToken = tokens.refresh_token;
+    assert.equal(context.refreshToken, previousRefreshToken);
   });
 
   test("keeps concurrent first logins for one device valid", async () => {

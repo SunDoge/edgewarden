@@ -2,7 +2,7 @@ import type { D1Dialect } from "./db/d1-dialect";
 import { type Kysely, type Selectable, sql } from "kysely";
 import { LIMITS } from "../config";
 import type { DB, Users } from "../types/db";
-import { createRefreshToken, hashRefreshToken } from "../utils/jwt";
+import { hashRefreshToken } from "../utils/jwt";
 import { now } from "../utils/time";
 import { generateAccessToken } from "./auth";
 import * as devicesDb from "./db/devices";
@@ -24,33 +24,28 @@ export type RefreshIdentitySessionResult =
     }
   | { ok: false; reason: RefreshIdentitySessionFailure };
 
-export function refreshTokenRotationInsertQuery(
+export function refreshTokenReuseQuery(
   db: Kysely<DB>,
   args: {
-    oldTokenHash: string;
-    newTokenHash: string;
+    tokenHash: string;
     userId: string;
     expectedSecurityStamp: string;
     sessionTime: number;
   },
 ) {
   return sql`
-		INSERT INTO refresh_tokens (
-			token, user_id, expires_at, device_identifier, device_session_stamp
-		)
-		SELECT
-			${args.newTokenHash}, current_token.user_id,
-			${args.sessionTime + LIMITS.auth.refreshTokenTtlSeconds},
-			current_token.device_identifier,
-			current_token.device_session_stamp
-		FROM refresh_tokens current_token
-		INNER JOIN users current_user ON current_user.id = current_token.user_id
-		WHERE current_token.token = ${args.oldTokenHash}
+		UPDATE refresh_tokens AS current_token
+		SET expires_at = ${args.sessionTime + LIMITS.auth.refreshTokenTtlSeconds}
+		WHERE current_token.token = ${args.tokenHash}
 		  AND current_token.user_id = ${args.userId}
 		  AND current_token.expires_at > ${args.sessionTime}
-		  AND current_user.status = 'active'
-		  AND current_user.deletion_requested_at IS NULL
-		  AND current_user.security_stamp = ${args.expectedSecurityStamp}
+		  AND EXISTS (
+		    SELECT 1 FROM users current_user
+		    WHERE current_user.id = current_token.user_id
+		      AND current_user.status = 'active'
+		      AND current_user.deletion_requested_at IS NULL
+		      AND current_user.security_stamp = ${args.expectedSecurityStamp}
+		  )
 		  AND (
 		    (
 		      current_token.device_identifier IS NULL
@@ -112,27 +107,23 @@ export async function refreshIdentitySession(args: {
     };
   }
 
-  const refreshToken = createRefreshToken();
   const sessionTime = now();
-  const oldTokenHash = await hashRefreshToken(args.rawToken);
-  const newTokenHash = await hashRefreshToken(refreshToken);
-  const [inserted] = await args.dialect.batch([
-    refreshTokenRotationInsertQuery(args.db, {
-      oldTokenHash,
-      newTokenHash,
+  const tokenHash = await hashRefreshToken(args.rawToken);
+  const [updated] = await args.dialect.batch([
+    refreshTokenReuseQuery(args.db, {
+      tokenHash,
       userId: user.id,
       expectedSecurityStamp: user.security_stamp,
       sessionTime,
     }),
-    args.db.deleteFrom("refresh_tokens").where("token", "=", oldTokenHash),
   ]);
-  if (Number(inserted.numAffectedRows ?? 0n) !== 1) {
+  if (Number(updated.numAffectedRows ?? 0n) !== 1) {
     return { ok: false, reason: "invalid_refresh_token" };
   }
   return {
     ok: true,
     user,
     accessToken: await generateAccessToken(user, deviceSession, args.jwtSecret),
-    refreshToken,
+    refreshToken: args.rawToken,
   };
 }
