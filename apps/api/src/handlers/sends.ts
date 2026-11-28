@@ -330,10 +330,10 @@ export const removeSendAuth = removeSendAuthentication;
 export {
   createFileSend,
   getSendFileUpload,
+  uploadSendFile,
 } from "./sends-file";
 export {
   accessSendFileWithToken,
   accessSendWithToken,
   downloadSendFile,
-  uploadPublicSendFile,
 } from "./sends-public";

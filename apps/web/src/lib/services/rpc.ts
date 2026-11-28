@@ -138,6 +138,13 @@ async function authenticatedFetch(
   );
 }
 
+export function authenticatedApiFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  return authenticatedFetch(input, init, fetch, getMemoryAccessToken);
+}
+
 const apiOrigin =
   typeof window === "undefined" ? "http://localhost" : window.location.origin;
 

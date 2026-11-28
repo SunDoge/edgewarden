@@ -228,23 +228,50 @@ export function registerSendScenarios(context: SendScenarioContext): void {
     assert.equal(created.status, 200, await created.clone().text());
     const metadata = await created.json<{
       url: string;
+      fileUploadType: number;
       sendResponse: {
         id: string;
         accessId: string;
         file: { id: string };
       };
     }>();
+    assert.equal(metadata.fileUploadType, 0);
     const uploadUrl = new URL(metadata.url);
-    const upload = (bytes: Uint8Array) =>
-      request(`${uploadUrl.pathname}${uploadUrl.search}`, {
-        method: "PUT",
-        headers: {
-          "content-type": "application/octet-stream",
-          "content-length": String(bytes.byteLength),
-        },
-        body: bytes,
+    assert.equal(uploadUrl.search, "");
+    const upload = (bytes: Uint8Array) => {
+      const form = new FormData();
+      form.set("data", new File([bytes], "encrypted-file-name"));
+      return request(uploadUrl.pathname, {
+        method: "POST",
+        headers: { authorization: auth.authorization },
+        body: form,
       });
-    assert.equal((await upload(firstBytes)).status, 201);
+    };
+    const unauthenticatedUpload = new FormData();
+    unauthenticatedUpload.set(
+      "data",
+      new File([firstBytes], "encrypted-file-name"),
+    );
+    assert.equal(
+      (
+        await request(uploadUrl.pathname, {
+          method: "POST",
+          body: unauthenticatedUpload,
+        })
+      ).status,
+      401,
+    );
+    const legacyUpload = await request(uploadUrl.pathname, {
+      method: "PUT",
+      headers: {
+        authorization: auth.authorization,
+        "content-type": "application/octet-stream",
+      },
+      body: firstBytes,
+    });
+    assert.equal(legacyUpload.status, 404);
+    const directUpload = await upload(firstBytes);
+    assert.equal(directUpload.status, 201, await directUpload.clone().text());
 
     const sendAccessToken = await issueSendAccessToken(
       metadata.sendResponse.accessId,
@@ -500,14 +527,16 @@ export function registerSendScenarios(context: SendScenarioContext): void {
     assert.ok(before);
 
     await context.database
-      .prepare(`
+      .prepare(
+        `
 				CREATE TRIGGER test_fail_atomic_send_delete_audit
 				BEFORE INSERT ON audit_logs
 				WHEN NEW.action = 'send.delete'
 				BEGIN
 					SELECT RAISE(ABORT, 'simulated audit outage');
 				END
-			`)
+			`,
+      )
       .run();
     try {
       const failed = await request(`/api/sends/${sendId}`, {

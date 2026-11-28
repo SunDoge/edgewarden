@@ -5,6 +5,7 @@ import {
   deleteAttachment,
   getAttachment,
   renewAttachmentUpload,
+  uploadAttachment,
 } from "../../handlers/attachments";
 import {
   archiveCipher,
@@ -115,6 +116,12 @@ export const attachmentRoutes = new Hono<HonoEnv>()
     requireCipher,
     requireCipherWrite,
     ...renewAttachmentUpload,
+  )
+  .post(
+    "/api/ciphers/:id/attachment/:attachmentId",
+    requireCipher,
+    requireCipherWrite,
+    ...uploadAttachment,
   )
   .get(
     "/api/ciphers/:id/attachment/:attachmentId",

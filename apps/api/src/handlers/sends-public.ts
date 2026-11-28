@@ -1,15 +1,9 @@
-import { LIMITS } from "../config";
 import { factory } from "../http/factory";
-import { discardUnpublishedBlob } from "../services/blob-gc";
 import {
-  createSendFileUploadObjectKey,
   getBlobObject,
-  getBlobStorageMaxBytes,
   getStoredSendFileObjectKey,
-  putBlobObject,
 } from "../services/blob-store";
 import * as sendsDb from "../services/db/sends";
-import { publishSendFileObject } from "../services/sends/file-storage";
 import { getSafeSendJwtSecret } from "../services/sends/jwt-secret";
 import {
   getCreatorIdentifier,
@@ -18,12 +12,10 @@ import {
   parseStoredSendData,
   sendToAccessResponse,
 } from "../services/sends/presentation";
-import { parseDirectUploadPayload } from "../utils/direct-upload";
 import {
   createSendFileDownloadToken,
   verifySendAccessToken,
   verifySendFileDownloadToken,
-  verifySendFileUploadToken,
 } from "../utils/jwt";
 import { errorResponse } from "../utils/response";
 
@@ -164,73 +156,4 @@ export const downloadSendFile = factory.createHandlers(async (c) => {
   c.header("Cache-Control", "private, no-cache");
 
   return c.body(object.body as any);
-});
-
-export const uploadPublicSendFile = factory.createHandlers(async (c) => {
-  const db = c.get("db");
-  const secret = getSafeSendJwtSecret(c.env);
-  if (!secret) return errorResponse("Server configuration error", 500);
-
-  const token = c.req.query("token") || c.req.query("t");
-  if (!token) return errorResponse("Token required", 401);
-
-  const claims = await verifySendFileUploadToken(token, secret);
-  if (!claims) return errorResponse("Invalid or expired token", 401);
-
-  const sendId = c.req.param("id");
-  const fileId = c.req.param("fileId");
-  if (claims.sendId !== sendId || claims.fileId !== fileId) {
-    return errorResponse("Token mismatch", 401);
-  }
-
-  const send = await sendsDb.getSendById(db, sendId);
-  if (!send || send.user_id !== claims.userId) {
-    return errorResponse("Send not found. Unable to save the file.", 404);
-  }
-
-  const maxFileSize = getBlobStorageMaxBytes(
-    c.env,
-    LIMITS.send.maxFileSizeBytes,
-  );
-  const sendData = parseStoredSendData(send);
-
-  const upload = await parseDirectUploadPayload(c.req.raw, {
-    expectedSize: parseInteger(sendData.size),
-    expectedFileName: String(sendData.fileName || ""),
-    maxFileSize,
-    tooLargeMessage: "Send storage limit exceeded with this file",
-  });
-
-  if (upload instanceof Response) {
-    return upload;
-  }
-
-  const candidateKey = createSendFileUploadObjectKey(send.id, fileId);
-  try {
-    await putBlobObject(c.env, candidateKey, upload.body, {
-      size: upload.size,
-      contentType: upload.contentType,
-      customMetadata: {
-        sendId: send.id,
-        fileId,
-      },
-    });
-    const publication = await publishSendFileObject(c.env.DB, {
-      sendId: send.id,
-      userId: claims.userId,
-      fileId,
-      storageKey: candidateKey,
-      expectedStorageKey: send.storage_key,
-    });
-    if (publication !== "published") {
-      await discardUnpublishedBlob(c.env, candidateKey);
-      return publication === "conflict"
-        ? errorResponse("Send file changed during upload.", 409)
-        : errorResponse("Send not found. Unable to save the file.", 404);
-    }
-  } catch (error) {
-    await discardUnpublishedBlob(c.env, candidateKey).catch(() => undefined);
-    throw error;
-  }
-  return new Response(null, { status: 201 });
 });

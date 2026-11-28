@@ -13,9 +13,12 @@ import {
 import { safeWriteAuditEvent } from "../services/audit";
 import { hashPasswordServer, invalidateUserCache } from "../services/auth";
 import { cipherToResponse } from "../services/ciphers/presentation";
+import * as attachmentsDb from "../services/db/attachments";
 import { revisionQuery } from "../services/db/batch";
 import { emergencyAccessEmail } from "../services/emergency-access-email";
 import { scheduleTransactionalEmail } from "../services/email";
+import { buildDirectUploadUrl, getSafeJwtSecret } from "../utils/direct-upload";
+import { createAttachmentDownloadToken } from "../utils/jwt";
 import { errorResponse } from "../utils/response";
 import { now, toIso } from "../utils/time";
 
@@ -169,6 +172,39 @@ export const listGrantedEmergencyAccess = factory.createHandlers(async (c) => {
     })),
     object: "list",
     continuationToken: null,
+  });
+});
+
+export const getEmergencyAccess = factory.createHandlers(async (c) => {
+  const row = await c
+    .get("db")
+    .selectFrom("emergency_access as access")
+    .innerJoin("users as grantee", "grantee.id", "access.grantee_id")
+    .select([
+      "access.id",
+      "access.status",
+      "access.type",
+      "access.wait_time_days",
+      "access.recovery_initiated_at",
+      "access.created_at",
+      "access.updated_at",
+      "access.grantor_id",
+      "access.grantee_id",
+      "access.key_encrypted",
+      "grantee.email",
+      "grantee.name",
+    ])
+    .where("access.id", "=", String(c.req.param("id") ?? ""))
+    .where("access.grantor_id", "=", c.get("user").id)
+    .executeTakeFirst();
+  if (!row) return errorResponse("Emergency access not found.", 404);
+  return c.json({
+    ...baseResponse(row),
+    granteeId: row.grantee_id,
+    email: row.email,
+    name: row.name,
+    avatarColor: null,
+    object: "emergencyAccessGranteeDetails",
   });
 });
 
@@ -505,6 +541,57 @@ export const viewEmergencyAccess = factory.createHandlers(async (c) => {
     object: "emergencyAccessView",
   });
 });
+
+export const getEmergencyAccessAttachment = factory.createHandlers(
+  async (c) => {
+    const access = await approvedAccess(c, 0);
+    if (!access)
+      return errorResponse(
+        "Emergency access is not approved for viewing.",
+        403,
+      );
+    const cipherId = String(c.req.param("cipherId") ?? "");
+    const attachmentId = String(c.req.param("attachmentId") ?? "");
+    const cipher = await c
+      .get("db")
+      .selectFrom("ciphers")
+      .select("id")
+      .where("id", "=", cipherId)
+      .where("user_id", "=", access.grantor_id)
+      .where("org_id", "is", null)
+      .executeTakeFirst();
+    if (!cipher) return errorResponse("Attachment not found.", 404);
+    const attachment = await attachmentsDb.getById(c.get("db"), attachmentId);
+    if (
+      !attachment ||
+      attachment.cipher_id !== cipher.id ||
+      !attachment.storage_key
+    )
+      return errorResponse("Attachment not found.", 404);
+    const secret = getSafeJwtSecret(c.env);
+    if (!secret) return errorResponse("Server configuration error", 500);
+    const token = await createAttachmentDownloadToken(
+      c.get("user").id,
+      cipher.id,
+      attachment.id,
+      attachment.storage_key,
+      secret,
+    );
+    return c.json({
+      object: "attachment",
+      id: attachment.id,
+      url: buildDirectUploadUrl(
+        c.req.raw,
+        "/api/ciphers/attachment/download",
+        token,
+      ),
+      fileName: attachment.file_name,
+      key: attachment.key,
+      size: String(attachment.size),
+      sizeName: attachment.size_name,
+    });
+  },
+);
 
 export const takeoverEmergencyAccess = factory.createHandlers(async (c) => {
   const access = await approvedAccess(c, 1);

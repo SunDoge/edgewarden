@@ -158,7 +158,7 @@ export const createAttachment = factory.createHandlers(
     return c.json({
       object: "attachment-fileUpload",
       attachmentId: id,
-      fileUploadType: 1,
+      fileUploadType: 0,
       cipherResponse: cipherToResponse(
         cipher,
         [...attachments, pendingAttachment],
@@ -175,12 +175,36 @@ export const createAttachment = factory.createHandlers(
   },
 );
 
-export const uploadAttachment = factory.createHandlers(async (c) => {
+export const uploadAttachment = factory.createHandlers(async (c, next) => {
   const secret = getSafeJwtSecret(c.env);
   if (!secret) return errorResponse("Server configuration error", 500);
   const token = c.req.query("token");
-  if (!token) return errorResponse("Upload token required", 401);
-  const claims = await verifyAttachmentUploadToken(token, secret);
+  const authenticatedUser = c.get("user");
+  if (!token && !authenticatedUser && c.req.method === "POST") return next();
+  if (!token && !authenticatedUser)
+    return errorResponse("Upload token required", 401);
+  const pendingWithoutToken = token
+    ? null
+    : await attachmentUploadsDb.getPendingAttachmentUpload(
+        c.get("db"),
+        String(c.req.param("attachmentId") ?? ""),
+        String(c.req.param("id") ?? ""),
+        now(),
+      );
+  const claims = token
+    ? await verifyAttachmentUploadToken(token, secret)
+    : pendingWithoutToken && authenticatedUser
+      ? {
+          userId: authenticatedUser.id,
+          cipherId: pendingWithoutToken.cipher_id,
+          attachmentId: pendingWithoutToken.id,
+          fileName: pendingWithoutToken.file_name,
+          key: pendingWithoutToken.key,
+          fileSize: pendingWithoutToken.size,
+          typ: "attachment_upload" as const,
+          exp: now() + LIMITS.attachment.pendingUploadTtlSeconds,
+        }
+      : null;
   if (
     !claims ||
     claims.cipherId !== c.req.param("id") ||
@@ -313,7 +337,7 @@ export const renewAttachmentUpload = factory.createHandlers(async (c) => {
   );
   return c.json({
     object: "attachment-fileUpload",
-    fileUploadType: 1,
+    fileUploadType: 0,
     url: buildDirectUploadUrl(
       c.req.raw,
       `/api/ciphers/${cipher.id}/attachment/${pending.id}`,
@@ -342,7 +366,11 @@ export const getAttachment = factory.createHandlers(async (c) => {
   return c.json({
     object: "attachment",
     id: attachment.id,
-    url: buildDirectUploadUrl(c.req.raw, "/api/attachments/download", token),
+    url: buildDirectUploadUrl(
+      c.req.raw,
+      "/api/ciphers/attachment/download",
+      token,
+    ),
     fileName: attachment.file_name,
     key: attachment.key,
     size: String(attachment.size),

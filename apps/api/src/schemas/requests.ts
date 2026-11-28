@@ -12,6 +12,32 @@ export const DeviceNameSchema = v.object({
   name: v.pipe(nonEmptyString, v.maxLength(128)),
 });
 
+export const DeviceSchema = v.pipe(
+  v.looseObject({
+    type: v.optional(deviceType),
+    Type: v.optional(deviceType),
+    name: v.optional(v.pipe(nonEmptyString, v.maxLength(50))),
+    Name: v.optional(v.pipe(nonEmptyString, v.maxLength(50))),
+    identifier: v.optional(v.pipe(nonEmptyString, v.maxLength(50))),
+    Identifier: v.optional(v.pipe(nonEmptyString, v.maxLength(50))),
+    pushToken: v.optional(v.pipe(v.string(), v.maxLength(255))),
+    PushToken: v.optional(v.pipe(v.string(), v.maxLength(255))),
+  }),
+  v.transform((body) => ({
+    type: body.type ?? body.Type,
+    name: body.name ?? body.Name ?? "",
+    identifier: body.identifier ?? body.Identifier ?? "",
+    pushToken: body.pushToken ?? body.PushToken ?? null,
+  })),
+  v.check(
+    (body) =>
+      body.type !== undefined &&
+      body.name.length > 0 &&
+      body.identifier.length > 0,
+    "Device type, name and identifier are required",
+  ),
+);
+
 export const DevicePushTokenSchema = v.pipe(
   v.looseObject({
     pushToken: v.optional(v.string()),

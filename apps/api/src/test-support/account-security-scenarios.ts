@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import * as OTPAuth from "otpauth";
-import { test } from "vitest";
+import { test, vi } from "vitest";
 import { createDatabase } from "../middleware/db";
 import { invalidateUserCache } from "../services/auth";
 import { encryptCredential } from "../services/credential-protection";
@@ -31,6 +31,79 @@ export function registerAccountSecurityScenarios(
   const MEMBER_EMAIL = context.memberEmail;
   const MASTER_PASSWORD_HASH = context.masterPasswordHash;
   const DATA_ENCRYPTION_SECRET = context.dataEncryptionSecret;
+
+  test("supports current official device create, update and lost-trust routes", async () => {
+    const headers = {
+      authorization: `Bearer ${context.memberAccessToken}`,
+      "content-type": "application/json",
+    };
+    const identifier = `official-device-${crypto.randomUUID()}`.slice(0, 50);
+    const created = await request("/api/devices", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        type: 14,
+        name: "Official client",
+        identifier,
+      }),
+    });
+    assert.equal(created.status, 200, await created.clone().text());
+    const device = await created.json<{
+      id: string;
+      identifier: string;
+      name: string;
+      type: number;
+      object: string;
+    }>();
+    assert.equal(device.identifier, identifier);
+    assert.equal(device.name, "Official client");
+    assert.equal(device.type, 14);
+    assert.equal(device.object, "device");
+
+    const updated = await request(`/api/devices/${device.id}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        type: 15,
+        name: "Updated official client",
+        identifier,
+      }),
+    });
+    assert.equal(updated.status, 200, await updated.clone().text());
+    assert.deepEqual(
+      await updated.json<{ name: string; type: number }>().then((body) => ({
+        name: body.name,
+        type: body.type,
+      })),
+      { name: "Updated official client", type: 15 },
+    );
+
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      const lostTrust = await request("/api/devices/lost-trust", {
+        method: "POST",
+        headers,
+      });
+      assert.equal(lostTrust.status, 204);
+      const entry = error.mock.calls
+        .map(
+          ([message]) => JSON.parse(String(message)) as Record<string, unknown>,
+        )
+        .find((candidate) => candidate.event === "device.trust.lost");
+      assert.ok(entry);
+      assert.equal("userId" in entry, false);
+    } finally {
+      error.mockRestore();
+    }
+
+    const removed = await request(`/api/devices/${device.id}`, {
+      method: "DELETE",
+      headers,
+    });
+    assert.equal(removed.status, 200, await removed.clone().text());
+  });
 
   test("requires current user verification for authenticator secrets", async () => {
     const headers = {
@@ -1076,9 +1149,7 @@ export function registerAccountSecurityScenarios(
     });
     assert.equal(deleted.status, 204, await deleted.clone().text());
     const tombstone = await context.database
-      .prepare(
-        "SELECT status, deletion_requested_at FROM users WHERE id = ?",
-      )
+      .prepare("SELECT status, deletion_requested_at FROM users WHERE id = ?")
       .bind(deletingUser.id)
       .first<{ status: string; deletion_requested_at: number | null }>();
     assert.equal(tombstone?.status, "banned");
