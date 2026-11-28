@@ -2406,7 +2406,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
       url: string;
     }>();
     assert.equal(renewedMetadata.object, "attachment-fileUpload");
-    assert.equal(renewedMetadata.fileUploadType, 1);
+    assert.equal(renewedMetadata.fileUploadType, 0);
     const uploadUrl = new URL(renewedMetadata.url);
     const wrongSize = await request(
       `${uploadUrl.pathname}${uploadUrl.search}`,
@@ -2421,13 +2421,12 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     );
     assert.equal(wrongSize.status, 400);
 
-    const uploaded = await request(`${uploadUrl.pathname}${uploadUrl.search}`, {
-      method: "PUT",
-      headers: {
-        "content-type": "application/octet-stream",
-        "content-length": String(encryptedBytes.byteLength),
-      },
-      body: encryptedBytes,
+    const uploadForm = new FormData();
+    uploadForm.set("data", new File([encryptedBytes], "attachment.bin"));
+    const uploaded = await request(uploadUrl.pathname, {
+      method: "POST",
+      headers: auth,
+      body: uploadForm,
     });
     assert.equal(uploaded.status, 201, await uploaded.clone().text());
     assert.equal(
@@ -2463,6 +2462,7 @@ export function registerVaultScenarios(context: VaultScenarioContext): void {
     );
     assert.equal(downloaded.status, 200, await downloaded.clone().text());
     const downloadUrl = new URL((await downloaded.json<{ url: string }>()).url);
+    assert.equal(downloadUrl.pathname, "/api/ciphers/attachment/download");
     assert.equal((await request("/api/attachments/download")).status, 401);
     const tamperedDownloadUrl = new URL(downloadUrl);
     tamperedDownloadUrl.searchParams.set(

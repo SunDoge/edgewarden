@@ -2,21 +2,24 @@ import { vValidator } from "@hono/valibot-validator";
 import { LIMITS } from "../config";
 import { factory } from "../http/factory";
 import { CreateFileSendSchema } from "../schemas/sends";
+import { discardUnpublishedBlob } from "../services/blob-gc";
 import {
+  createSendFileUploadObjectKey,
   getBlobStorageMaxBytes,
   getSendFileObjectKey,
+  putBlobObject,
 } from "../services/blob-store";
 import { executeBatch, revisionQuery } from "../services/db/batch";
-import { getSafeSendJwtSecret } from "../services/sends/jwt-secret";
+import { publishSendFileObject } from "../services/sends/file-storage";
 import { setSendPassword } from "../services/sends/password";
 import {
   parseDateSeconds,
   parseInteger,
+  parseStoredSendData,
   sendToResponse,
   serializeSendEmails,
 } from "../services/sends/presentation";
-import { buildDirectUploadUrl } from "../utils/direct-upload";
-import { createSendFileUploadToken } from "../utils/jwt";
+import { parseDirectUploadPayload } from "../utils/direct-upload";
 import { errorResponse } from "../utils/response";
 import { now } from "../utils/time";
 
@@ -25,9 +28,6 @@ export const createFileSend = factory.createHandlers(
   async (c) => {
     const db = c.get("db");
     const user = c.get("user");
-    const secret = getSafeSendJwtSecret(c.env);
-    if (!secret) return errorResponse("Server configuration error", 500);
-
     const body = c.req.valid("json");
     const type = parseInteger(body.type ?? body.Type);
     if (type !== 1) {
@@ -120,48 +120,68 @@ export const createFileSend = factory.createHandlers(
       revisionQuery(db, user.id, ts),
     ]);
 
-    const uploadToken = await createSendFileUploadToken(
-      user.id,
-      send.id,
-      fileId,
-      secret,
-    );
-
     return c.json({
-      fileUploadType: 1,
+      fileUploadType: 0,
       object: "send-fileUpload",
-      url: buildDirectUploadUrl(
-        c.req.raw,
+      url: new URL(
         `/api/sends/${send.id}/file/${fileId}`,
-        uploadToken,
-      ),
+        c.req.url,
+      ).toString(),
       sendResponse: sendToResponse(send),
     });
   },
 );
 
 export const getSendFileUpload = factory.createHandlers(async (c) => {
-  const user = c.get("user");
-  const secret = getSafeSendJwtSecret(c.env);
-  if (!secret) return errorResponse("Server configuration error", 500);
-
   const send = c.get("send");
   const fileId = c.get("sendFileId");
-  const uploadToken = await createSendFileUploadToken(
-    user.id,
-    send.id,
-    fileId,
-    secret,
-  );
 
   return c.json({
-    fileUploadType: 1,
+    fileUploadType: 0,
     object: "send-fileUpload",
-    url: buildDirectUploadUrl(
-      c.req.raw,
-      `/api/sends/${send.id}/file/${fileId}`,
-      uploadToken,
-    ),
+    url: new URL(`/api/sends/${send.id}/file/${fileId}`, c.req.url).toString(),
     sendResponse: sendToResponse(send),
   });
+});
+
+export const uploadSendFile = factory.createHandlers(async (c) => {
+  const user = c.get("user");
+  const send = c.get("send");
+  const fileId = c.get("sendFileId");
+  const maxFileSize = getBlobStorageMaxBytes(
+    c.env,
+    LIMITS.send.maxFileSizeBytes,
+  );
+  const upload = await parseDirectUploadPayload(c.req.raw, {
+    expectedSize: parseInteger(parseStoredSendData(send).size),
+    maxFileSize,
+    tooLargeMessage: "Send storage limit exceeded with this file",
+  });
+  if (upload instanceof Response) return upload;
+
+  const candidateKey = createSendFileUploadObjectKey(send.id, fileId);
+  try {
+    await putBlobObject(c.env, candidateKey, upload.body, {
+      size: upload.size,
+      contentType: upload.contentType,
+      customMetadata: { sendId: send.id, fileId },
+    });
+    const publication = await publishSendFileObject(c.env.DB, {
+      sendId: send.id,
+      userId: user.id,
+      fileId,
+      storageKey: candidateKey,
+      expectedStorageKey: send.storage_key,
+    });
+    if (publication !== "published") {
+      await discardUnpublishedBlob(c.env, candidateKey);
+      return publication === "conflict"
+        ? errorResponse("Send file changed during upload.", 409)
+        : errorResponse("Send not found. Unable to save the file.", 404);
+    }
+  } catch (error) {
+    await discardUnpublishedBlob(c.env, candidateKey).catch(() => undefined);
+    throw error;
+  }
+  return new Response(null, { status: 201 });
 });

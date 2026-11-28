@@ -19,9 +19,6 @@
   import VaultHeader from "#lib/components/vault/VaultHeader.svelte";
   import AuthRequestBanner from "#lib/components/vault/AuthRequestBanner.svelte";
   import { showBrowserNotification } from "#lib/services/browser-notifications.ts";
-  import { NetworkStatusMonitor, type NetworkStatus } from "#lib/services/network-status.ts";
-  import { Badge } from "#lib/components/ui/badge/index.js";
-  import { Wifi, WifiOff } from "@lucide/svelte";
   import * as m from "#lib/paraglide/messages.js";
 
   let { children } = $props();
@@ -29,7 +26,6 @@
   let preferencesVersion = $state(0);
   let mobileNavigationOpen = $state(false);
   let authRequestRefreshVersion = $state(0);
-  let networkStatus = $state<NetworkStatus>("checking");
 
   async function handleLogout() {
     await logout();
@@ -69,38 +65,6 @@
       disposed = true;
       window.removeEventListener(CLIENT_PREFERENCES_CHANGED_EVENT, preferencesChanged);
       window.removeEventListener("storage", storageChanged);
-    };
-  });
-
-  onMount(() => {
-    const monitor = new NetworkStatusMonitor({
-      probe: async () => {
-        const response = await fetch("/api/health", {
-          cache: "no-store",
-          signal: AbortSignal.timeout(5_000),
-        });
-        if (!response.ok) throw new Error("Service unavailable");
-      },
-      onStatus: (status) => {
-        networkStatus = status;
-      },
-    });
-    const check = () => void monitor.check();
-    const offline = () => void monitor.check(false);
-    const visible = () => {
-      if (document.visibilityState === "visible") check();
-    };
-    monitor.start();
-    window.addEventListener("online", check);
-    window.addEventListener("offline", offline);
-    window.addEventListener("focus", check);
-    document.addEventListener("visibilitychange", visible);
-    return () => {
-      monitor.stop();
-      window.removeEventListener("online", check);
-      window.removeEventListener("offline", offline);
-      window.removeEventListener("focus", check);
-      document.removeEventListener("visibilitychange", visible);
     };
   });
 
@@ -195,10 +159,3 @@
     </div>
   {/if}
 {/if}
-<div class="fixed bottom-3 right-3 z-50" aria-live="polite">
-  <Badge variant={networkStatus === "offline" ? "destructive" : "outline"}>
-    {#if networkStatus === "offline"}<WifiOff class="size-3" />{m.network_offline()}{:else}<Wifi
-        class="size-3"
-      />{networkStatus === "checking" ? m.network_checking() : m.network_online()}{/if}
-  </Badge>
-</div>

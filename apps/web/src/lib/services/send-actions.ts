@@ -16,6 +16,7 @@ import {
   type DecryptedSend,
 } from "#lib/services/send-crypto.ts";
 import type { SendMutationPayload } from "#lib/services/send-types.ts";
+import { authenticatedApiFetch } from "#lib/services/rpc.ts";
 
 export function validateSendDraft(form: SendEditorDraft, isCreating: boolean) {
   if (!form.name.trim()) throw new Error(m.ui_name_is_required_2());
@@ -115,10 +116,16 @@ async function createAndUploadFileSend(
   };
   payload.fileLength = encryptedFileBytes.length;
   const response = await createFileSendApi(payload);
-  const uploadResponse = await fetch(response.url, {
-    method: "PUT",
-    body: new Blob([encryptedFileBytes as BlobPart]),
-    headers: { "Content-Type": "application/octet-stream" },
+  const uploadForm = new FormData();
+  uploadForm.set(
+    "data",
+    new File([encryptedFileBytes as BlobPart], file.name, {
+      type: "application/octet-stream",
+    }),
+  );
+  const uploadResponse = await authenticatedApiFetch(response.url, {
+    method: "POST",
+    body: uploadForm,
   });
   if (!uploadResponse.ok) {
     throw new Error(

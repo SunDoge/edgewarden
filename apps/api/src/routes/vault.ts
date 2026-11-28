@@ -66,14 +66,17 @@ import {
 import { getEmptyCompatibilityList } from "../handlers/compatibility";
 import {
   clearDevicePushToken,
+  createDevice,
   deleteAllDevices,
   deleteDevice,
   deleteDevices,
   getDevice,
   getKnownDevice,
   listDevices,
+  reportLostDeviceTrust,
   untrustDevices,
   updateDeviceKeys,
+  updateDevice,
   updateDeviceName,
   updateDevicePushToken,
   updateDevicesTrust,
@@ -84,6 +87,8 @@ import {
   confirmEmergencyContact,
   deleteEmergencyAccess,
   emergencyAccessPolicies,
+  getEmergencyAccess,
+  getEmergencyAccessAttachment,
   initiateEmergencyAccess,
   inviteEmergencyContact,
   listGrantedEmergencyAccess,
@@ -118,6 +123,7 @@ import {
   listSends,
   removeSendAuth,
   removeSendPassword,
+  uploadSendFile,
   updateSend,
 } from "../handlers/sends";
 import { sync } from "../handlers/sync";
@@ -218,6 +224,7 @@ const folderAndDeviceRoutes = new Hono<HonoEnv>()
   .put("/api/folders/:id", requireFolder, ...updateFolder)
   .delete("/api/folders/:id", requireFolder, ...deleteFolder)
   .get("/api/devices", ...listDevices)
+  .post("/api/devices", ...createDevice)
   .post("/api/edgewarden/devices/delete", ...deleteDevices)
   .get("/api/devices/knowndevice", ...getKnownDevice)
   .get(
@@ -226,6 +233,7 @@ const folderAndDeviceRoutes = new Hono<HonoEnv>()
     ...getDevice,
   )
   .get("/api/devices/:id", requireDevice, ...getDevice)
+  .put("/api/devices/:id", requireDevice, ...updateDevice)
   .put(
     "/api/devices/identifier/:identifier/token",
     requireDeviceByIdentifier,
@@ -245,6 +253,7 @@ const folderAndDeviceRoutes = new Hono<HonoEnv>()
   )
   .post("/api/devices/update-trust", ...updateDevicesTrust)
   .post("/api/devices/untrust", ...untrustDevices)
+  .post("/api/devices/lost-trust", ...reportLostDeviceTrust)
   .delete("/api/edgewarden/devices", ...deleteAllDevices);
 
 const requestAndSettingsRoutes = new Hono<HonoEnv>()
@@ -261,20 +270,23 @@ const emergencyAccessRoutes = new Hono<HonoEnv>()
   .get("/api/emergency-access/trusted", ...listTrustedEmergencyContacts)
   .get("/api/emergency-access/granted", ...listGrantedEmergencyAccess)
   .post("/api/emergency-access/invite", ...inviteEmergencyContact)
+  .get("/api/emergency-access/:id", ...getEmergencyAccess)
   .put("/api/emergency-access/:id", ...updateEmergencyContact)
-  .post("/api/emergency-access/:id", ...updateEmergencyContact)
   .post("/api/emergency-access/:id/confirm", ...confirmEmergencyContact)
   .post("/api/emergency-access/:id/initiate", ...initiateEmergencyAccess)
   .post("/api/emergency-access/:id/approve", ...approveEmergencyAccess)
   .post("/api/emergency-access/:id/reject", ...rejectEmergencyAccess)
   .post("/api/emergency-access/:id/view", ...viewEmergencyAccess)
+  .get(
+    "/api/emergency-access/:id/:cipherId/attachment/:attachmentId",
+    ...getEmergencyAccessAttachment,
+  )
   .post("/api/emergency-access/:id/takeover", ...takeoverEmergencyAccess)
   .post(
     "/api/emergency-access/:id/password",
     ...takeoverEmergencyAccessPassword,
   )
   .get("/api/emergency-access/:id/policies", ...emergencyAccessPolicies)
-  .post("/api/emergency-access/:id/delete", ...deleteEmergencyAccess)
   .delete("/api/emergency-access/:id", ...deleteEmergencyAccess);
 
 const backupRoutes = new Hono<HonoEnv>()
@@ -356,6 +368,12 @@ const sendRoutes = new Hono<HonoEnv>()
     requireSend,
     requireSendFile,
     ...getSendFileUpload,
+  )
+  .post(
+    "/api/sends/:id/file/:fileId",
+    requireSend,
+    requireSendFile,
+    ...uploadSendFile,
   );
 
 export const vaultRouter = new Hono<HonoEnv>()

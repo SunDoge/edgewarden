@@ -7,7 +7,6 @@ export type JwtPurpose =
   | "attachment-upload"
   | "attachment-download"
   | "send-file-download"
-  | "send-file-upload"
   | "send-access"
   | "account-passkey"
   | "two-factor-authenticator"
@@ -78,13 +77,6 @@ const SendFileDownloadClaimsSchema = v.object({
   exp: v.number(),
 });
 
-const SendFileUploadClaimsSchema = v.object({
-  userId: v.pipe(v.string(), v.minLength(1)),
-  sendId: v.pipe(v.string(), v.minLength(1)),
-  fileId: v.pipe(v.string(), v.minLength(1)),
-  exp: v.number(),
-});
-
 const SendAccessTokenClaimsSchema = v.object({
   sub: v.pipe(v.string(), v.minLength(1)),
   typ: v.literal("send_access"),
@@ -120,9 +112,6 @@ export type AttachmentDownloadClaims = v.InferOutput<
 >;
 export type SendFileDownloadClaims = v.InferOutput<
   typeof SendFileDownloadClaimsSchema
->;
-export type SendFileUploadClaims = v.InferOutput<
-  typeof SendFileUploadClaimsSchema
 >;
 export type SendAccessTokenClaims = v.InferOutput<
   typeof SendAccessTokenClaimsSchema
@@ -370,36 +359,6 @@ export async function verifySendFileDownloadToken(
     token,
     await deriveJwtPurposeSecret(secret, "send-file-download"),
     SendFileDownloadClaimsSchema,
-  );
-}
-
-export async function createSendFileUploadToken(
-  userId: string,
-  sendId: string,
-  fileId: string,
-  secret: string,
-): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const payload: SendFileUploadClaims = {
-    userId,
-    sendId,
-    fileId,
-    exp: now + LIMITS.auth.fileDownloadTokenTtlSeconds,
-  };
-  return sign(
-    { ...payload },
-    await deriveJwtPurposeSecret(secret, "send-file-upload"),
-  );
-}
-
-export async function verifySendFileUploadToken(
-  token: string,
-  secret: string,
-): Promise<SendFileUploadClaims | null> {
-  return verifyJwtClaims(
-    token,
-    await deriveJwtPurposeSecret(secret, "send-file-upload"),
-    SendFileUploadClaimsSchema,
   );
 }
 

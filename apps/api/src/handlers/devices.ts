@@ -9,6 +9,7 @@ import {
   DeviceKeysSchema,
   DeviceNameSchema,
   DevicePushTokenSchema,
+  DeviceSchema,
   UntrustDevicesSchema,
   UpdateDevicesTrustSchema,
 } from "../schemas/requests";
@@ -247,6 +248,122 @@ export const untrustDevices = factory.createHandlers(
 export const getDevice = factory.createHandlers(async (c) =>
   c.json(deviceToResponse(c.get("device"))),
 );
+
+export const createDevice = factory.createHandlers(
+  vValidator("json", DeviceSchema),
+  async (c) => {
+    const body = c.req.valid("json");
+    const db = c.get("db");
+    const timestamp = now();
+    const pushEnabled = (await resolvePushRelayStatus(db, c.env)).enabled;
+    try {
+      await db
+        .insertInto("devices")
+        .values({
+          id: crypto.randomUUID(),
+          user_id: c.get("user").id,
+          device_identifier: body.identifier,
+          name: body.name,
+          type: body.type!,
+          session_stamp: null,
+          push_token: pushEnabled ? body.pushToken : null,
+          push_uuid: pushEnabled && body.pushToken ? crypto.randomUUID() : null,
+          last_seen_at: timestamp,
+          created_at: timestamp,
+          updated_at: timestamp,
+          mutation_token: crypto.randomUUID(),
+        })
+        .execute();
+    } catch (error) {
+      if (String(error).toLowerCase().includes("unique"))
+        return errorResponse("Device already exists", 409);
+      throw error;
+    }
+    const created = await devicesDb.getDevice(
+      db,
+      c.get("user").id,
+      body.identifier,
+    );
+    if (!created) return errorResponse("Unable to create device", 500);
+    if (created.push_token)
+      c.executionCtx.waitUntil(
+        pushDeviceRegistrationFromDatabase(
+          c.env,
+          c.get("user").id,
+          created.device_identifier,
+        ).catch((error) =>
+          logPushRelayFailure("push.device.create-register.failed", error),
+        ),
+      );
+    return c.json(deviceToResponse(created));
+  },
+);
+
+export const updateDevice = factory.createHandlers(
+  vValidator("json", DeviceSchema),
+  async (c) => {
+    const body = c.req.valid("json");
+    const device = c.get("device");
+    if (body.identifier !== device.device_identifier)
+      return errorResponse("Device identifier cannot be changed", 400);
+    const pushEnabled = (await resolvePushRelayStatus(c.get("db"), c.env))
+      .enabled;
+    const result = await c
+      .get("db")
+      .updateTable("devices")
+      .set({
+        name: body.name,
+        type: body.type!,
+        push_token: pushEnabled ? body.pushToken : null,
+        push_uuid:
+          pushEnabled && body.pushToken
+            ? (device.push_uuid ?? crypto.randomUUID())
+            : null,
+        updated_at: sql<number>`MAX(updated_at + 1, ${now()})`,
+        mutation_token: crypto.randomUUID(),
+      })
+      .where("id", "=", device.id)
+      .where("user_id", "=", c.get("user").id)
+      .where(sql<boolean>`mutation_token IS ${device.mutation_token}`)
+      .executeTakeFirst();
+    if (result.numUpdatedRows !== 1n)
+      return errorResponse("Device changed during update", 409);
+    const updated = await devicesDb.getDeviceById(
+      c.get("db"),
+      c.get("user").id,
+      device.id,
+    );
+    if (!updated) return errorResponse("Device not found", 404);
+    if (updated.push_token)
+      c.executionCtx.waitUntil(
+        pushDeviceRegistrationFromDatabase(
+          c.env,
+          c.get("user").id,
+          updated.device_identifier,
+        ).catch((error) =>
+          logPushRelayFailure("push.device.update-register.failed", error),
+        ),
+      );
+    else schedulePushUnregistration(c, [device.push_uuid]);
+    return c.json(deviceToResponse(updated));
+  },
+);
+
+export const reportLostDeviceTrust = factory.createHandlers(async (c) => {
+  const identifier = c.get("payload").did;
+  const device = identifier
+    ? await devicesDb.getDevice(c.get("db"), c.get("user").id, identifier)
+    : null;
+  console.error(
+    JSON.stringify({
+      event: "device.trust.lost",
+      requestId: c.req.header("cf-ray") ?? crypto.randomUUID(),
+      hasDeviceIdentifier: Boolean(identifier),
+      deviceType: device?.type ?? null,
+    }),
+  );
+  return new Response(null, { status: 204 });
+});
 
 export const updateDevicePushToken = factory.createHandlers(
   vValidator("json", DevicePushTokenSchema),

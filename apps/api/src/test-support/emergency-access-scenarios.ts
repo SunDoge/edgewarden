@@ -38,6 +38,37 @@ export function registerEmergencyAccessScenarios(context: Context): void {
     };
     assert.equal(trusted.data[0].status, 1);
     const id = trusted.data[0].id;
+    const details = await context.request(`/api/emergency-access/${id}`, {
+      headers: grantorAuth,
+    });
+    assert.equal(details.status, 200, await details.clone().text());
+    const detailBody = await details.json<{
+      id: string;
+      granteeId: string;
+      email: string;
+      status: number;
+      type: number;
+      waitTimeDays: number;
+      object: string;
+    }>();
+    assert.equal(detailBody.id, id);
+    assert.ok(detailBody.granteeId);
+    assert.equal(detailBody.email, context.memberEmail);
+    assert.equal(detailBody.status, 1);
+    assert.equal(detailBody.type, 0);
+    assert.equal(detailBody.waitTimeDays, 1);
+    assert.equal(detailBody.object, "emergencyAccessGranteeDetails");
+    for (const obsolete of [
+      `/api/emergency-access/${id}`,
+      `/api/emergency-access/${id}/delete`,
+    ]) {
+      const response = await context.request(obsolete, {
+        method: "POST",
+        headers: grantorAuth,
+        body: JSON.stringify({ type: 0, waitTimeDays: 1 }),
+      });
+      assert.equal(response.status, 404);
+    }
     const confirm = await context.request(
       `/api/emergency-access/${id}/confirm`,
       {
@@ -75,6 +106,11 @@ export function registerEmergencyAccessScenarios(context: Context): void {
     };
     assert.equal(payload.keyEncrypted, "4.client-encrypted-user-key");
     assert.ok(Array.isArray(payload.ciphers));
+    const missingAttachment = await context.request(
+      `/api/emergency-access/${id}/${crypto.randomUUID()}/attachment/${crypto.randomUUID()}`,
+      { headers: granteeAuth },
+    );
+    assert.equal(missingAttachment.status, 404);
     const remove = await context.request(`/api/emergency-access/${id}`, {
       method: "DELETE",
       headers: grantorAuth,

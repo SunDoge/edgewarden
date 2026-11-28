@@ -30,7 +30,6 @@ import {
   accessSendFileWithToken,
   accessSendWithToken,
   downloadSendFile,
-  uploadPublicSendFile,
 } from "../handlers/sends";
 import { recoverTwoFactor } from "../handlers/two-factor";
 import {
@@ -67,11 +66,12 @@ export const publicRouter = new Hono<HonoEnv>()
   .get("/.well-known/assetlinks/check", ...checkDigitalAssetLink)
   .get("/icons/:host/icon.png", ...getWebsiteIcon)
   .put("/api/ciphers/:id/attachment/:attachmentId", ...uploadAttachment)
+  .post("/api/ciphers/:id/attachment/:attachmentId", ...uploadAttachment)
   .get("/api/attachments/download", ...downloadAttachment)
+  .get("/api/ciphers/attachment/download", ...downloadAttachment)
   .post("/api/sends/access", ...accessSendWithToken)
   .post("/api/sends/access/file/:fileId", ...accessSendFileWithToken)
   .get("/api/sends/:idOrAccessId/:fileId", ...downloadSendFile)
-  .put("/api/sends/:id/file/:fileId", ...uploadPublicSendFile)
   // Edgewarden owns this flow (bootstrap secret, invite code, and Turnstile).
   // Current Bitwarden registration instead uses identity email verification.
   .post("/api/edgewarden/accounts/register", ...registerAccount)
